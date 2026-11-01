@@ -38,7 +38,7 @@ This file is how lessons reach the next agent. When the user corrects you on som
 
 - The product is a Unity 6 app for iOS and Android and the only client; there is no web build (`specs/00` decisions 31-32). Keep the sim Unity-safe (netstandard2.1, C# 9).
 - Code names are `HeroCat.*`; "Whisker Hero" is only the product's working title (`specs/00` decision 30).
-- Unity cannot run in cloud sessions. Only the client's engine-free `unity/HeroCatClient/Assets/HeroCat.Client/Core/` is compiled and tested (inside `HeroCat.Runtime.Tests`); `Boot/` and `Screens/` are only type-checked against Unity API stubs by `tools/unity_typecheck`, which proves nothing about behaviour in Unity. Say so when you change them.
+- Unity cannot run in cloud sessions. Only the client's engine-free `unity/HeroCatClient/Assets/HeroCat.Client/Core/` is compiled and tested (inside `HeroCat.Runtime.Tests`); `Boot/`, `Screens/` and `Editor/ContentPreBuild.cs` are only type-checked against Unity API stubs by `tools/unity_typecheck`, which proves nothing about behaviour in Unity. Say so when you change them.
 - Cloud sessions install the .NET 8 SDK through `.claude/hooks/session-start.sh`. If `dotnet` is missing, run that script with `CLAUDE_CODE_REMOTE=true`, then the full `./check.sh`.
 - The acceptance sweep is report-only until the balance decision #249 lands (`REWRITE_REPORT_ONLY=1`, agreed with the user); golden checks are hard again. Report the sweep's result honestly; never regenerate targets or thresholds to hide a regression.
 - When a task is blocked on a user decision, ask (or file the decision issue) and keep going with other unblocked work; do not sit idle waiting for the answer.
