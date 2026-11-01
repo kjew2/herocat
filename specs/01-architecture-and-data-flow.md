@@ -97,7 +97,7 @@ public static Services Build(BackendMode mode, string dataDir, ContentDb db, Sim
         Inbox    = new InboxClient(api),
         Receipts = new ReceiptClient(api),
         Config   = new ConfigClient(api, cacheDir),
-        Dungeons = new DungeonSeedClient(api),                       // POST /v1/dungeon/seed
+        Dungeons = new DungeonSeedClient(api),                       // POST /dungeon/seed
     };
 }
 ```
@@ -144,19 +144,26 @@ Concrete commands (`VerbNoun`, 00 section 5.1) and the events they emit. Full fi
 | `EquipSkill` | `string skillId, int slot` | 04 | `ItemEquipped` |
 | `UnequipSkill` | `int slot` | 04 | `ItemEquipped` (slot cleared) |
 | `EquipCompanion` | `string companionId, int slot` | 04 | `ItemEquipped` |
+| `UnequipCompanion` | `int slot` | 04 | `ItemEquipped` (slot cleared) |
+| `AutoEquipBestWeapon`, `AutoEquipBestSkills`, `AutoEquipBestCompanions` | none | 04 | `ItemEquipped` per changed slot |
+| `LimitBreak` | `string itemId` | 04 | `ItemLimitBroken`, `CurrencyChanged(ROCK_CANDY, LIMIT_BREAK)` |
 | `ApplySummonResult` | `SummonResultPayload payload` (the service output, 2.5) | 04 | `ItemAcquired` x N, `CurrencyChanged(..., SUMMON)`, `BannerLeveledUp?` |
 | `ReleaseFish` | none | 05 | `FishReleased`, `FishDiscovered?` |
 | `ReleaseMax` | none | 05 | one `FishReleased` per fish |
 | `MergeFish` | `int fromCell, int toCell` | 05 | `FishMerged` (carries the missile size), `FishDiscovered?`, `CurrencyChanged(FISH_COIN)` |
 | `MergeAll` | none | 05 | one `FishMerged` per merge |
+| `MoveFish` | `int source, int target` | 05 | `FishMoved` |
+| `DiscardFish` | `int cell` | 05 | `FishDiscarded`, `CurrencyChanged(FISH_COIN, FISH_MERGE)` |
 | `TapZap` | `int count` | 03 | `TapZapped`; taps above `TAP_ZAP_MAX_PER_SEC` are dropped |
 | `AttemptBoss` | none | 03 | `EnemySpawned` (the boss) |
-| `SelectStage` | `int? stage` (farm target `<= HighestCleared`, any completed stage per 02; null returns to the frontier; `Stage.Stage` stays the frontier and keeps its kills and boss phase, issue #35) | 03 | `StageChanged` |
+| `SelectStage` | `int? stage` (farm target `<= HighestCleared`, any completed stage per 02; null returns to the frontier; `Combat.Stage` stays the frontier and keeps its kills and boss phase, issue #35) | 03 | `StageChanged` |
 | `ClaimOfflineReward` | none | 06 | `OfflineRewardClaimed`, `CurrencyChanged(GOLD, OFFLINE)`, `CurrencyChanged(HERO_EXP, OFFLINE)` |
-| `StartDungeon` | `Dungeon kind, int floor, ulong seed, bool localSeed` | 06 | `DungeonStarted` |
+| `StartDungeon` | `Dungeon kind, int floor, ulong seed, string grantId, bool localSeed` | 06 | `DungeonStarted` |
 | `SweepDungeon` | `Dungeon kind` | 06 | `DungeonSwept`, `CurrencyChanged(..., DUNGEON)` |
 | `ClaimQuest` | `string questId` | 06 | `QuestClaimed`, `CurrencyChanged(..., QUEST)` |
 | `ClaimAllQuests` | `QuestKind kind` | 06 | one `QuestClaimed` per quest |
+| `ClaimDailyGift` | none | 06 | `CurrencyChanged(TICKET_SUMMON_WEAPON, DAILY_GIFT)` |
+| `ExchangeItem` | `string offerId, int qty` | 06 | `CurrencyChanged(..., SHOP_EXCHANGE)` |
 | `Awaken` | none | 03 | `Awakened`, `CurrencyChanged(ROCK_CANDY, AWAKENING)` |
 | `Research` | `string nodeId` | 03 | `ResearchLeveled`, `CurrencyChanged(FISH_COIN, RESEARCH)` |
 | `ApplyInboxGrant` | `InboxGrantPayload grant` | 06/08 | `CurrencyChanged(..., IAP or MAIL)`, `ItemAcquired?` |
@@ -263,7 +270,7 @@ This payload is the only summon contract (issue #13); 04 and 08 use it. `ApplySu
 
 ### 2.6 Command log
 
-`HeroCat.Runtime.CommandLog` appends every applied command, system commands included, as one JSONL line `{tick, type, fields...}` to `saves/cmdlog.jsonl`, rotating at `CMDLOG_MAX_BYTES = 1 MiB` (oldest dropped). It is uploaded with the save in MVP (02 section 7) only when the server asks for it (08 anti-cheat spot check), never routinely. The bot harness keeps it in memory and uses it for the golden-file determinism test (10); the golden command log uses the same JSONL format, so one parser serves runtime upload, server re-simulation and golden replay (issue #28).
+`HeroCat.Runtime.CommandLog` appends every applied command, system commands included, as one JSONL line `{tick, type, fields...}` to `saves/cmdlog.jsonl`, rotating at `CMDLOG_MAX_BYTES = 1 MiB` (oldest dropped). It is uploaded with the save in MVP (02 section 9.2) only when the server asks for it (08 anti-cheat spot check), never routinely. The bot harness keeps it in memory and uses it for the golden-file determinism test (10); the golden command log uses the same JSONL format, so one parser serves runtime upload, server re-simulation and golden replay (issue #28).
 
 ### 2.7 What is not in the sim
 
@@ -358,13 +365,13 @@ Tick cost target: one `Advance(1)` under 0.1 ms on a 2019 mid-range Android (Sna
 |---|---|---|---|
 | App goes to background | `applicationDidEnterBackground` -> Unity `OnApplicationPause(true)` | `onPause`/`onStop` -> `OnApplicationPause(true)` | `OnPause()` |
 | App returns | `applicationWillEnterForeground` -> `OnApplicationPause(false)` | `onResume` -> `OnApplicationPause(false)` | `OnResume()` |
-| App killed by user or OS | No callback guaranteed | No callback guaranteed | None. Last save stands (at most `AUTOSAVE_INTERVAL_SEC` lost, 02 section 5). |
+| App killed by user or OS | No callback guaranteed | No callback guaranteed | None. Last save stands (at most `AUTOSAVE_INTERVAL_SEC` lost, 02 section 8). |
 | App quit via back button (Android) | n/a | `OnApplicationQuit` | `OnQuit()` |
 | Low memory | `didReceiveMemoryWarning` -> `Application.lowMemory` | `onTrimMemory` -> `Application.lowMemory` | `SaveNow(Pause)` then client unloads Addressables for non-visible screens. |
 | Focus lost but visible (split screen, notification shade, incoming call) | `OnApplicationFocus(false)` | `OnApplicationFocus(false)` | Nothing. Ticks continue. The sim keeps running while visible. |
 | Screen locked | `OnApplicationPause(true)` | `OnApplicationPause(true)` | `OnPause()` |
 
-Unity's `OnApplicationPause(true)` runs before the process is suspended; the save must complete synchronously inside it (02 section 5). Budget: under 50 ms for serialize + write of a 20-40 KB save.
+Unity's `OnApplicationPause(true)` runs before the process is suspended; the save must complete synchronously inside it (02 section 8.1). Budget: under 50 ms for serialize + write of a 20-40 KB save.
 
 The client requests `Screen.sleepTimeout = NeverSleep` while on `SCR_MAIN` (idle-on-desk mode, 00 pillar 1) and `SystemSetting` elsewhere.
 
@@ -389,6 +396,8 @@ Rule: nothing off the main thread holds a reference to `GameState` or `Simulatio
 ## 5. Network layer
 
 ### 5.1 `ApiClient`
+
+Route paths in this spec are relative to 08's `/v1` base URL (08 section 1.1), as in 02 and 08.
 
 ```csharp
 public sealed class ApiClient
@@ -429,17 +438,18 @@ Responses are classified by `(status, code)`, code first (issue #30). 08's wire 
 |---|---|---|---|---|
 | n/a | (DNS failure, `HttpRequestException`) | `Offline` | Only if `Idempotent` | `NET_OFFLINE`. |
 | n/a | (timeout, `HTTP_TIMEOUT_S = 10`) | `Timeout` | Only if `Idempotent` | `NET_TIMEOUT`. |
-| 401 | `TOKEN_EXPIRED` | `AuthExpired` | Refresh token once (`POST /v1/auth/refresh`), replay the request once | A second 401 -> `SCR_TITLE`. |
+| 401 | `TOKEN_EXPIRED` | `AuthExpired` | Refresh token once (`POST /auth/refresh`), replay the request once | A second 401 -> `SCR_TITLE`. |
 | 401 | `UNAUTHENTICATED`, `TOKEN_REVOKED`, `TOKEN_REUSED` | `AuthExpired` | No | Clear tokens, `SCR_TITLE`. |
 | 402 | `INSUFFICIENT_FUNDS` | `Rejected` | No | Refresh balances; modal. |
 | 403 | `ACCOUNT_BANNED` | `Fatal` | No | Full screen with the appeal url from the body. |
 | 409 | `IDEMPOTENCY_IN_FLIGHT` | `Retryable` | After `retryAfterSec`, same `requestId` | None visible. |
 | 409 | `PAYMENT_MISMATCH` | `Rejected` (silent) | No | Refresh balances and re-quote (8.5.2 step 1); nothing charged. |
-| 409 | `SAVE_CONFLICT` | `Conflict` | No | Resolve per 02 section 7.3 (8.10). |
+| 409 | `SAVE_CONFLICT` | `Conflict` | No | Resolve per 02 section 9.3 (8.10). |
 | 409 | `SAVE_STALE` | `Rejected` (silent) | No | Drop that blob; the latest local save uploads at the next trigger. |
-| 409 | `SAVE_ROLLED_BACK` | `Conflict` | No | Download the server save (`GET /v1/save`), replace local, show the rollback notice (08 section 7). |
+| 409 | `SAVE_ROLLED_BACK` | `Conflict` | No | Download the server save (`GET /save`), replace local, show the rollback notice (08 section 7). |
 | 409 | `CONTENT_TOO_OLD` | `Rejected` | No | Modal "Update ready, restart to continue"; the newer bundle applies at cold boot (8.12). |
 | 409 | `INBOX_ALREADY_CLAIMED` | `Ok` (success-equivalent) | No | Apply the carried grants if the id is not in `Inbox.ClaimedIds` (8.9 step 6). |
+| 409 | `INBOX_NOT_AVAILABLE` | `Rejected` (silent) | No | Scheduled portion not yet available (08 section 3.2, issue #51); refresh the inbox list. |
 | 409 | `PROVIDER_ALREADY_LINKED` | `Rejected` | No | Account choice flow (8.13 step 4). |
 | 409 | `BANNER_CLOSED`, `SKU_NOT_AVAILABLE` | `Rejected` | No | Modal. |
 | 426 | `CLIENT_TOO_OLD` | `Rejected` | No | Update-only block with store link. |
@@ -487,7 +497,7 @@ Every user-visible failure maps to one of these classes. The class picks the pre
 | `Offline` | Non-blocking card in the action-strip position (07), auto-hides on reconnect; keeps the combat viewport clear | `NET_OFFLINE` | Automatic. |
 | `Timeout` / `ServerError` | Toast "Could not reach the server. Retrying..." then modal after retries exhausted with Retry / Later | `NET_TIMEOUT` (a summon timeout uses it too; there is no `SUMMON_TIMEOUT`), `SRV_5XX` | Button. |
 | `Rejected` (server) | Modal with a specific message | `INSUFFICIENT_FUNDS`, `RECEIPT_INVALID`, `PROVIDER_ALREADY_LINKED`, `CLIENT_TOO_OLD`, `CONTENT_TOO_OLD`, `BANNER_CLOSED`, `SUMMON_DISABLED`; client-side `IAP_PENDING` (store reports a deferred payment; the pending receipt is kept, 8.9) | Depends; `CLIENT_TOO_OLD` has only "Update". |
-| `Conflict` | Dedicated choice modal: the conflict modal (02 section 7.4) for `SAVE_CONFLICT`; [Restore from cloud] / [Reset profile] for `SAVE_CORRUPT` (local save unreadable, a cloud or backup copy exists); a rollback notice for `SAVE_ROLLED_BACK` | `SAVE_CONFLICT`, `SAVE_CORRUPT`, `SAVE_ROLLED_BACK` | Player chooses (rollback: acknowledge). |
+| `Conflict` | Dedicated choice modal: the conflict modal (02 section 9.4) for `SAVE_CONFLICT`; [Restore from cloud] / [Reset profile] for `SAVE_CORRUPT` (local save unreadable, a cloud or backup copy exists); a rollback notice for `SAVE_ROLLED_BACK` | `SAVE_CONFLICT`, `SAVE_CORRUPT`, `SAVE_ROLLED_BACK` | Player chooses (rollback: acknowledge). |
 | `Maintenance` | Full-screen block on `SCR_BOOT`/`SCR_TITLE` with the message from config and an ETA | `MAINTENANCE` | Automatic poll every `MAINT_POLL_S = 60`. |
 | `Fatal` | Full-screen with support id; app cannot continue | `SAVE_TOO_NEW`, `CONTENT_CORRUPT`, `SAVE_CORRUPT_ALL` (no readable copy anywhere), `ACCOUNT_BANNED` (appeal url) | Reinstall / contact support. |
 
@@ -508,12 +518,12 @@ sequenceDiagram
     participant Sim
     participant Main as SCR_MAIN
     Boot->>RT: ContentLoader.LoadBundled()
-    RT->>API: GET /v1/config (3 s timeout; cached JWT if any)
+    RT->>API: GET /config (3 s timeout; cached JWT if any)
     API-->>RT: config {minClientVersion, contentVersion, maintenance, killSwitches}
-    RT->>API: POST /v1/auth/guest or /v1/auth/refresh
+    RT->>API: POST /auth/guest or /auth/refresh
     API-->>RT: {accessJwt, refreshJwt, playerId, serverTime}
     RT->>RT: ServerClock.Observe
-    RT->>API: GET /v1/config again with the fresh JWT (background; server applies the rollout bucket)
+    RT->>API: GET /config again with the fresh JWT (background; server applies the rollout bucket)
     RT->>RT: compare content version; schedule download if newer
     RT->>RT: LocalSaveStore.Load + CloudSaveClient.Fetch (5 s)
     RT->>RT: pick save (02 conflict rules) / migrate / validate
@@ -527,9 +537,9 @@ sequenceDiagram
 Steps:
 
 1. **Content load** (Runtime `ContentLoader`): read `StreamingAssets/content/manifest.json`, verify each table's hash, parse into DTOs, hand DTOs to `ContentDb.Build(dtos)` (sim). If a cached newer bundle exists in `persistentDataPath/content/<version>/` and its manifest hash verifies, use it instead. Failure of both -> `Fatal CONTENT_CORRUPT`. Target under 300 ms.
-2. **Config fetch** (`ConfigClient`): `GET /v1/config` with `CONFIG_FETCH_TIMEOUT_S = 3`, sending the cached access JWT if one exists (it may be expired). The server applies the content rollout bucket only for a valid JWT; without one it returns the non-rollout default (08; issue #31). After step 3 succeeds, `ConfigClient` re-fetches config once in the background with the fresh JWT; this fetch is off the boot critical path, and any newer bundle it names applies at the next cold boot (8.12). On success: if `minClientVersion > clientVersion` -> `CLIENT_TOO_OLD` block with store link; if `maintenance.active` -> `Maintenance` block; store kill switches; if `contentVersion` newer than loaded -> start background download (8.12). On timeout/offline: use cached config if under `CONFIG_CACHE_MAX_AGE_S = 86400`, else defaults (everything enabled, no gate). Local mode skips this step.
-3. **Auth** (`AuthClient`): if a refresh token exists, `POST /v1/auth/refresh`; else if no account at all, `POST /v1/auth/guest` with the device id. Store tokens in secure storage. On offline: continue with cached `playerId` if any; else create a local guest profile with `playerId = null` and link it on first successful connection (08 section 3). First `X-Server-Time` observation makes `ServerClock.IsAuthoritative = true`.
-4. **Save load** (`CloudSaveClient.LoadAsync`): local load per 02 section 6 in parallel with `GET /v1/save/meta` (5 s). Resolve per 02 section 7.3; a `Conflict` result shows the conflict modal before `SCR_MAIN`. No save anywhere -> `GameState.NewProfile(playerId, now)` with `TUTORIAL_DIAMONDS` granted via `Wallet.Apply(+1500 DIAMOND, TUTORIAL)` and the starter weapon `TUTORIAL_WEAPON_ID` (both from 09's `tut_welcome` grants; issue #46), tutorial step 0.
+2. **Config fetch** (`ConfigClient`): `GET /config` with `CONFIG_FETCH_TIMEOUT_S = 3`, sending the cached access JWT if one exists (it may be expired). The server applies the content rollout bucket only for a valid JWT; without one it returns the non-rollout default (08; issue #31). After step 3 succeeds, `ConfigClient` re-fetches config once in the background with the fresh JWT; this fetch is off the boot critical path, and any newer bundle it names applies at the next cold boot (8.12). On success: if `minClientVersion > clientVersion` -> `CLIENT_TOO_OLD` block with store link; if `maintenance.active` -> `Maintenance` block; store kill switches; if `contentVersion` newer than loaded -> start background download (8.12). On timeout/offline: use cached config if under `CONFIG_CACHE_MAX_AGE_S = 86400`, else defaults (everything enabled, no gate). Local mode skips this step.
+3. **Auth** (`AuthClient`): if a refresh token exists, `POST /auth/refresh`; else if no account at all, `POST /auth/guest` with the device id. Store tokens in secure storage. On offline: continue with cached `playerId` if any; else create a local guest profile with `playerId = null` and link it on first successful connection (08 section 3). First `X-Server-Time` observation makes `ServerClock.IsAuthoritative = true`.
+4. **Save load** (`CloudSaveClient.LoadAsync`): local load per 02 section 8.3 in parallel with `GET /save/meta` (5 s). Resolve per 02 section 9.3; a `Conflict` result shows the conflict modal before `SCR_MAIN`. No save anywhere -> `GameState.NewProfile(playerId, now)` with `TUTORIAL_DIAMONDS` granted via `Wallet.Apply(+1500 DIAMOND, TUTORIAL)` and the starter weapon `TUTORIAL_WEAPON_ID` (both from 09's `tut_welcome` step grant, the only grant path, applied once and guarded by `Tutorial.TutorialDiamondsGranted`, 02; issue #46), tutorial step 0.
 5. **Offline catch-up**: issue the logged system commands `ApplyServerTime(now)` (day/week rollover first, so a new day's quests exist before anything is credited), then `ComputeOfflineCatchup(now)`, which runs `Catchup.Compute` inside `Apply`, stores or sums the result into `state.Offline.Pending` and stamps `LastTickServerTime = now` (8.7; issue #6). Save immediately.
 6. **Main screen**: `SCR_BOOT` hands over to `SCR_MAIN`; `SCR_MAIN` opens `SCR_OFFLINE_REWARD` if `Offline.Pending != null`, then the tutorial overlay if `Tutorial.Step < TUTORIAL_DONE` (`TUTORIAL_DONE` = row count of `tutorial_steps`, 09; issue #46). Ticks start on the first `OnFrame` after `SCR_MAIN` is shown (not during the modal, so the modal's numbers are exactly what gets credited).
 
@@ -554,10 +564,10 @@ sequenceDiagram
     RT-->>R: clock sync lands (later frame); ServerClock adjusts offset
 ```
 
-1. `ResumeFromGap` runs synchronously inside the callback using the extrapolated server time (monotonic offset from the last sync, 02 section 8). The sync request is fired but not awaited.
+1. `ResumeFromGap` runs synchronously inside the callback using the extrapolated server time (monotonic offset from the last sync, 02 section 11). The sync request is fired but not awaited.
 2. If the sync later reports a server time that differs from the extrapolation by more than `CLOCK_JUMP_WARN_SEC = 300`, emit `clock_anomaly` and, if the real elapsed time was *longer*, credit the difference as a second catch-up window (`ApplyServerTime` then `ComputeOfflineCatchup` with the corrected now; it sums into the pending record and the effective cap applies to the sum, 8.7). If shorter, nothing is taken back (the discrepancy is bounded by the cap and logged).
 3. Pending summon or IAP intents in `state.Pending` are resolved (8.5, 8.9) after the offline modal closes.
-4. Cloud save: `CloudSaveClient` fetches `GET /v1/save/meta`; if the server's `saveSeq` is ahead of local and from another device -> conflict modal (02 section 7.4), otherwise nothing. This is the only time a conflict is detected mid-session.
+4. Cloud save: `CloudSaveClient` fetches `GET /save/meta`; if the server's `saveSeq` is ahead of local and from another device -> conflict modal (02 section 9.4), otherwise nothing. This is the only time a conflict is detected mid-session.
 
 ### 8.3 Tick loop (kill -> loot -> wallet -> events -> view-model)
 
@@ -655,7 +665,7 @@ sequenceDiagram
     participant S as SCR_SUMMON
     participant F as SummonFlow
     participant C as SummonClient
-    participant API as POST /v1/summon/pull
+    participant API as POST /summon/pull
     participant Sim
     participant RS as SCR_SUMMON_RESULT
     U->>S: tap "10x Weapon"
@@ -663,7 +673,7 @@ sequenceDiagram
     F->>F: Pending.Summon = {requestId,...}; Save
     F->>RS: open pre-roll (SUMMON_PREROLL_MS)
     opt unsynced earnings (diamonds or tickets)
-        F->>API: PUT /v1/save now (server credits the earned delta, 08 section 3.1)
+        F->>API: PUT /save now (server credits the earned delta, 08 section 3.1)
     end
     F->>C: PullAsync(req)
     C->>API: {requestId, banner, count, payment, clientContentVersion}
@@ -683,8 +693,8 @@ sequenceDiagram
 ```
 
 1. Steps 1-2 as M0. Payment quote: the client sends `payment: "DIAMOND" | "TICKET"` per the 06 priority rule; the server rejects a mismatch with `409 PAYMENT_MISMATCH` (5.2: client refreshes balances and re-quotes, no charge).
-   **Sync before pull** (issue #49): diamonds and tickets earned client-side (login, quests, first clears, achievements, tutorial, daily gift) reach the server ledgers only through `PUT /v1/save`, which credits the per-reason delta since the last upload into `diamond_ledger` / `ticket_ledger` (`ref_type = save_reconcile`, clamped to the per-day allowance; 02, 08 section 3.1). The server charges only what has been uploaded, so when the save's per-reason earned counters (02 `Stats`) are ahead of the last acknowledged upload (`CloudSaveClient.HasUnsyncedEarnings`), `SummonFlow` uploads immediately and awaits the 200 before `PullAsync`. The round trip runs inside the pre-roll. If that upload fails, the pull is still sent; a `402 INSUFFICIENT_FUNDS` then follows step 6.
-2. `SummonClient.PullAsync` -> `POST /v1/summon/pull` (08 section 4). The reveal overlay opens immediately with the pre-roll loop (`SUMMON_PREROLL_MS = 800`). A result inside that window feels instant.
+   **Sync before pull** (issue #49): diamonds and tickets earned client-side (login, quests, first clears, achievements, tutorial, daily gift) reach the server ledgers only through `PUT /save`, which credits the per-reason delta since the last upload into `diamond_ledger` / `ticket_ledger` (`ref_type = save_reconcile`, clamped to the per-day allowance; 02, 08 section 3.1). The server charges only what has been uploaded, so when the save's per-reason earned counters (02 `Stats`) are ahead of the last acknowledged upload (`CloudSaveClient.HasUnsyncedEarnings`), `SummonFlow` uploads immediately and awaits the 200 before `PullAsync`. The round trip runs inside the pre-roll. If that upload fails, the pull is still sent; a `402 INSUFFICIENT_FUNDS` then follows step 6.
+2. `SummonClient.PullAsync` -> `POST /summon/pull` (08 section 4). The reveal overlay opens immediately with the pre-roll loop (`SUMMON_PREROLL_MS = 800`). A result inside that window feels instant.
 3. On 200: `Apply(ApplySummonResult)` with the server's items, pity, banner level and **balances** (`BalancesAfter` replace the local values, 2.5; safe because unsynced earnings were uploaded first). Clear pending, save, reveal.
 4. On retryable failure (5.2, including `409 IDEMPOTENCY_IN_FLIGHT`): retry with the same `requestId`. After `SUMMON_SLOW_MS = 3000` the overlay adds "Taking longer than usual". After retries are exhausted (about 15 s): close the overlay, show toast `SUMMON_PENDING_SAVED` ("Your summon is saved and will be revealed when you are back online"), the button becomes "Pending..." and calls `Resolve()`.
 5. `Resolve()`: at boot/resume or on the pending button, re-send with the saved `requestId`. The server either replays the stored result (it completed) or executes it (it never arrived). Both are a 200 and are applied identically.
@@ -754,7 +764,7 @@ sequenceDiagram
     participant U
     participant S as SCR_DUNGEONS
     participant F as DungeonFlow
-    participant API as POST /v1/dungeon/seed
+    participant API as POST /dungeon/seed
     participant Sim
     participant Run as SCR_DUNGEON_RUN
     U->>S: tap "Enter Fish Coin Dungeon floor 7"
@@ -762,17 +772,17 @@ sequenceDiagram
     F->>F: requestId; Pending.Dungeon = {requestId, kind, floor}; Save
     F->>API: {requestId, kind, floor, clientContentVersion}
     API-->>F: {seed, grantId, expiresAt}
-    F->>Sim: Apply(StartDungeon{kind, floor, seed})
+    F->>Sim: Apply(StartDungeon{kind, floor, seed, grantId})
     Sim->>Run: DungeonStarted; main-loop ticks run the fight on the temporary `dungeon_run` stream
     Sim->>F: DungeonCleared{kind, floor, rewards} (debits one ticket) or DungeonFailed (costs nothing)
     F->>F: Pending = null; Save
-    F->>API: (next save upload carries Dungeon.RecentRuns for seed correlation, 08)
+    F->>API: (next save upload carries Dungeons.RecentRuns for seed correlation, 08)
 ```
 
-1. Precondition in the view-model: ticket available (`Wallet.DungeonTicket[kind] >= 1`), floor unlocked (`floor <= Dungeons.BestFloor[kind] + 1`), no boss attempt active (the sim rejects `StartDungeon` with `(NotAvailable, BOSS_ATTEMPT_ACTIVE)` during a boss and the screen asks the player to finish the fight first; there is no `RetreatFromBoss` in MVP, issue #11; confirmed by issue #42). `SCR_DUNGEONS` labels the floor "Clearable" from `Simulation.PreviewDungeon` (06), which runs the same fight headlessly on a cloned state.
-2. Seeds come from the `IDungeonSeedService` seam (issue #25). MVP (`DungeonSeedClient`): `POST /v1/dungeon/seed` returns a server seed bound to `(playerId, kind, floor, dayKey)` with `expiresAt = now + DUNGEON_SEED_TTL_S = 600`. The server records the issue in `dungeon_seeds` so the save upload can be checked (08). M0: `LocalDungeonSeedService` reads the next `dungeon` stream draw without advancing it and returns it with `localSeed = true`; `Apply(StartDungeon)` then consumes that one draw, so the service never writes state (as for summons, issue #6) and bots and M0 work without a server.
-3. `StartDungeon` (sim; ticked run model, issue #42): reject with 06 section 6.2's reasons: `(Locked, DUNGEON_LOCKED)` before the dungeon unlock, `(Locked, DUNGEON_FLOOR_NOT_UNLOCKED)` for a floor not yet unlocked, `(CannotAfford, NOT_ENOUGH_TICKET_<kind>)` without a ticket (for example `NOT_ENOUGH_TICKET_FISH_COIN`; issue #244), `(NotAvailable, DUNGEON_RUN_IN_PROGRESS)` if a run is already active. Else validate only: no ticket is spent at start (00 decision 16). Swap the combat context to the dungeon fight (`Combat.Mode = Dungeon`, 02 `Combat.DungeonRun`), reseed a *temporary* `dungeon_run` stream with the server seed (the persistent `dungeon` stream is untouched in MVP). `SCR_DUNGEON_RUN` replaces the combat viewport. The Fish Board is hidden and frozen for the run (issue #40): passive `FISH_BOARD_DPS_PCT` only, no fish missiles or Tap Zap, the tank keeps refilling, and board commands are rejected while `Combat.Mode == Dungeon` (05 owns the reason).
-4. The fight is one boss enemy per floor from `dungeon_floors` (09; `DungeonRun.EnemyIndex` is always 0 in MVP) run by the normal tick loop for at most `BOSS_TIME_TICKS`. Outcome `DungeonCleared` debits one ticket (`Wallet.Apply(-1, DUNGEON)`), grants the floor's reward table through `Wallet.Apply(..., DUNGEON)` and updates `Dungeons.BestFloor[kind]`; `DungeonFailed` grants nothing and costs nothing (00 decision 16). Either way the run is appended to `Dungeon.RecentRuns` (`{grantId, kind, floor, cleared}`, 02; issue #52) and `Combat.Mode = Stage` resumes at the same stage and kills.
+1. Precondition in the view-model: ticket available (`Wallet.DungeonTicket[kind] >= 1`), floor unlocked (`floor <= Dungeons.BestFloor[kind] + 1`), no boss attempt active (the sim rejects `StartDungeon` with `(NotAvailable, BOSS_ATTEMPT_IN_PROGRESS)` during a boss and the screen asks the player to finish the fight first; there is no `RetreatFromBoss` in MVP, issue #11; confirmed by issue #42). `SCR_DUNGEONS` labels the floor "Clearable" from `Simulation.PreviewDungeon` (06), which runs the same fight headlessly on a cloned state.
+2. Seeds come from the `IDungeonSeedService` seam (issue #25). MVP (`DungeonSeedClient`): `POST /dungeon/seed` returns a server seed bound to `(playerId, kind, floor, dayKey)` with `expiresAt = now + DUNGEON_SEED_TTL_S = 600`. The server records the issue in `dungeon_seeds` so the save upload can be checked (08). M0: `LocalDungeonSeedService` reads the next `dungeon` stream draw without advancing it and returns it with `localSeed = true`; `Apply(StartDungeon)` then consumes that one draw, so the service never writes state (as for summons, issue #6) and bots and M0 work without a server.
+3. `StartDungeon` (sim; ticked run model, issue #42): reject with 06 section 6.2's reasons: `(Locked, DUNGEON_LOCKED)` before the dungeon unlock, `(Locked, DUNGEON_FLOOR_NOT_UNLOCKED)` for a floor not yet unlocked, `(CannotAfford, NOT_ENOUGH_TICKET_<kind>)` without a ticket (for example `NOT_ENOUGH_TICKET_FISH_COIN`; issue #244), `(NotAvailable, DUNGEON_RUN_IN_PROGRESS)` if a run is already active, `(NotAvailable, BOSS_ATTEMPT_IN_PROGRESS)` during a boss fight. Else validate only: no ticket is spent at start (00 decision 16). Swap the combat context to the dungeon fight (`Combat.Mode = Dungeon`, 02 `Combat.DungeonRun`), reseed a *temporary* `dungeon_run` stream with the server seed (the persistent `dungeon` stream is untouched in MVP). `SCR_DUNGEON_RUN` replaces the combat viewport. The Fish Board is hidden and frozen for the run (issue #40): passive `FISH_BOARD_DPS_PCT` only, no fish missiles or Tap Zap, the tank keeps refilling, and board commands are rejected while `Combat.Mode == Dungeon` (05 owns the reason).
+4. The fight is one boss enemy per floor from `dungeon_floors` (09; `DungeonRun.EnemyIndex` is always 0 in MVP) run by the normal tick loop for at most `BOSS_TIME_TICKS`. Outcome `DungeonCleared` debits one ticket (`Wallet.Apply(-1, DUNGEON)`), grants the floor's reward table through `Wallet.Apply(..., DUNGEON)` and updates `Dungeons.BestFloor[kind]`; `DungeonFailed` grants nothing and costs nothing (00 decision 16). Either way the run is appended to `Dungeons.RecentRuns` (`{GrantId, Kind, Floor, Cleared}`, 02; issue #52) and `Combat.Mode = Stage` resumes at the same stage and kills.
 5. Sweep: `SweepDungeon(kind)` grants `RewardOf(kind, BestFloor)` instantly with no fight and debits one ticket; no seed needed (deterministic by content). Rejected `(NotAvailable, NOTHING_TO_SWEEP)` when `BestFloor == 0` (06). Works offline.
 6. Failure: seed request offline -> `NET_OFFLINE` banner, nothing spent. Seed request times out -> retry same `requestId`; the server replays the same seed. App dies mid-run -> on load `Combat.Mode == Dungeon` with a run in progress is abandoned (02 recovery rule P16): mode reset, nothing to refund because no ticket was spent. The server sees a seed issued with no matching `RecentRuns` entry and ignores it (expiry). Validation is correlation only in MVP (08 `DUNGEON_WITHOUT_SEED`; no replay, issue #52): the server matches `RecentRuns` clears to issued seeds, and soft-currency rewards stay bounded by 08's `GOLD_DELTA_BOUND` and `RESEARCH_WITHOUT_COINS` checks.
 
@@ -785,7 +795,7 @@ sequenceDiagram
     participant F as PurchaseFlow
     participant Store as StoreKit2 / Play Billing
     participant RC as ReceiptClient
-    participant API as POST /v1/iap/validate
+    participant API as POST /iap/validate
     participant IB as InboxClient
     participant Sim
     U->>S: tap "Diamond pack 3 ($9.99)"
@@ -799,20 +809,20 @@ sequenceDiagram
     API-->>RC: {status: GRANTED, inboxItemId}
     F->>Store: finishTransaction / acknowledge
     F->>F: Pending.Receipts -= it; Save
-    F->>IB: GET /v1/inbox
+    F->>IB: GET /inbox
     IB-->>F: items
     U->>S: SCR_INBOX "Claim"
-    F->>API: POST /v1/inbox/claim {requestId, inboxItemId}
+    F->>API: POST /inbox/claim {requestId, inboxItemId}
     API-->>F: {grant lines, balances}
     F->>Sim: Apply(ApplyInboxGrant)
 ```
 
 1. Purchase through Unity IAP (StoreKit 2 on iOS, Play Billing 6 on Android). The store transaction is **not** finished/acknowledged until the server has confirmed the grant; an unacknowledged Play purchase is auto-refunded after 3 days, so step 4 must happen before then and the pending receipt list guarantees retries.
 2. Persist the receipt intent (`Pending.Receipts`, a list, not a single slot: a player can complete a second purchase while the first validation is in flight) and save before calling the server.
-3. `POST /v1/iap/validate` (08 section 6). Server verifies the signed payload with the store API, checks the `transactionId` has not been granted before, writes `purchases` and `inbox_items` in one transaction, returns `GRANTED` (or `ALREADY_GRANTED` with the same `inboxItemId`, which the client treats identically).
+3. `POST /iap/validate` (08 section 6). Server verifies the signed payload with the store API, checks the `transactionId` has not been granted before, writes `purchases` and `inbox_items` in one transaction, returns `GRANTED` (or `ALREADY_GRANTED` with the same `inboxItemId`, which the client treats identically).
 4. On 200: finish/acknowledge the store transaction, remove the pending receipt, save. On retryable failure: keep the pending receipt, retry with the same `requestId` on resume and every `RECEIPT_RETRY_S = 60` while in the foreground. On `400 RECEIPT_INVALID`: remove pending, do **not** finish the transaction (let the store's own refund path handle it), show `err.RECEIPT_INVALID` with a support id, analytics `iap_invalid`. A store-side deferred payment (Ask to Buy, pending card) shows `IAP_PENDING` and keeps the pending receipt.
 5. The grant lands in the Inbox, never directly in the wallet. `SCR_SHOP` shows a toast "Sent to your Inbox" and the inbox badge increments. First-purchase doubling is applied server-side when writing the inbox item (06).
-6. Claim: `POST /v1/inbox/claim {requestId, inboxItemId}` -> `Apply(ApplyInboxGrant(payload))` -> `Wallet.Apply(+diamonds, IAP)`; `Inbox.ClaimedIds += id`. Replay-safe by `requestId`; a double claim returns `409 INBOX_ALREADY_CLAIMED` carrying the original grants, which the client treats as success (5.2): it applies them only if the id is not already in `ClaimedIds`.
+6. Claim: `POST /inbox/claim {requestId, inboxItemId}` -> `Apply(ApplyInboxGrant(payload))` -> `Wallet.Apply(+diamonds, IAP)`; `Inbox.ClaimedIds += id`. Replay-safe by `requestId`; a double claim returns `409 INBOX_ALREADY_CLAIMED` carrying the original grants, which the client treats as success (5.2): it applies them only if the id is not already in `ClaimedIds`.
 7. Restore purchases (`SCR_SETTINGS`): query the store for owned non-consumed transactions, run step 3 for each. Server deduplicates on `transactionId`.
 8. Refund/chargeback (08): server marks the purchase `REFUNDED`, writes a negative inbox item or applies a negative balance adjustment on next save upload with reason `REFUND`. The client shows "A purchase was refunded; N diamonds were removed" once.
 
@@ -823,18 +833,18 @@ sequenceDiagram
     participant R as SessionRunner
     participant CS as CloudSaveClient
     participant LS as LocalSaveStore
-    participant API as /v1/save
+    participant API as /save
     participant U
     R->>CS: Save(state, trigger)
     CS->>LS: write (atomic, 02)
     CS->>CS: enqueue upload (coalesce CLOUD_UPLOAD_MIN_SEC; immediate on Pause/Quit/Summon/IAP)
-    CS->>API: PUT /v1/save {If-Match: etag, meta, hmac} + blob
+    CS->>API: PUT /save {If-Match: etag, meta, hmac} + blob
     alt 200
         API-->>CS: {etag, saveSeq, serverTime, flags[]}
     else 409 SAVE_CONFLICT
         API-->>CS: {serverMeta}
-        CS->>API: GET /v1/save (blob)
-        CS->>CS: resolve per 02 section 7.3
+        CS->>API: GET /save (blob)
+        CS->>CS: resolve per 02 section 9.3
         alt auto-resolvable
             CS->>LS: write winner; PUT again with new etag
         else needs player
@@ -846,9 +856,9 @@ sequenceDiagram
     end
 ```
 
-1. Every `Save` writes locally first (02 section 6). Upload is coalesced to at most one per `CLOUD_UPLOAD_MIN_SEC = 60` except on `Pause`, `Quit`, after a summon apply and after an inbox claim, which upload immediately (the player saw something they must not lose), and before a summon pull with unsynced earnings, which uploads and awaits the 200 (8.5.2 step 1, issue #49).
-2. `PUT /v1/save` carries `If-Match: <etag>` of the last server version this device saw, the metadata (`saveSeq`, `lastSavedServerTime`, `deviceId`, `schemaVersion`, `contentVersion`, `progressScore`, `sha256`) and the HMAC envelope (02 section 8). The blob goes to S3 via the API (08). Response returns the new `etag` and any plausibility `flags`.
-3. `409 SAVE_CONFLICT` means another device wrote since (`SAVE_STALE` and `SAVE_ROLLED_BACK` follow their 5.2 rows). Download the server blob and resolve per 02 section 7.3: same device lineage -> higher `saveSeq` wins silently; different devices -> higher `lastSavedServerTime` wins unless the loser's `progressScore` is higher by more than `CONFLICT_PROGRESS_MARGIN` (02), in which case the conflict modal shows both. The modal never appears during a boss or a reveal; it waits for `SCR_MAIN` idle.
+1. Every `Save` writes locally first (02 section 8.2). Upload is coalesced to at most one per `CLOUD_UPLOAD_MIN_SEC = 60` except on `Pause`, `Quit`, after a summon apply and after an inbox claim, which upload immediately (the player saw something they must not lose), and before a summon pull with unsynced earnings, which uploads and awaits the 200 (8.5.2 step 1, issue #49).
+2. `PUT /save` carries `If-Match: <etag>` of the last server version this device saw, the metadata (`saveSeq`, `lastSavedServerTime`, `deviceId`, `schemaVersion`, `contentVersion`, `progressScore`, `sha256`) and the HMAC envelope (02 section 10). The blob goes to S3 via the API (08). Response returns the new `etag` and any plausibility `flags`.
+3. `409 SAVE_CONFLICT` means another device wrote since (`SAVE_STALE` and `SAVE_ROLLED_BACK` follow their 5.2 rows). Download the server blob and resolve per 02 section 9.3: same device lineage -> higher `saveSeq` wins silently; different devices -> higher `lastSavedServerTime` wins unless the loser's `progressScore` is higher by more than `CONFLICT_PROGRESS_MARGIN` (02), in which case the conflict modal shows both. The modal never appears during a boss or a reveal; it waits for `SCR_MAIN` idle.
 4. Download at boot (8.1 step 4) uses the same resolution with `L` = local and `R` = server.
 5. Offline: the queue holds the latest blob only; a failed upload is retried at the next trigger. A device that stays offline for days uploads once on reconnect and may hit 409 then; the resolution is identical.
 
@@ -870,7 +880,7 @@ sequenceDiagram
 ```
 
 1. Rollover is tick-driven (06): the tick whose virtual server time crosses a day key runs `EnsureDay`. `ApplyServerTime` is issued and logged only at sync points (3.1; issue #5); it re-anchors the virtual clock and runs the same key check, which handles a jump. Between syncs the check is a two-integer comparison per tick. `dayKey = floor(now / DAY_SECONDS)`, `weekKey = floor((now - WEEK_EPOCH_OFFSET) / (7 * DAY_SECONDS))` (06 fixes the week start; default Monday 00:00 UTC, `WEEK_EPOCH_OFFSET = 4 * DAY_SECONDS` because 1970-01-01 was a Thursday).
-2. Rollover is forward-only: `if newKey <= Time.DayKey return`. A backwards clock never resets the day (02 section 8.3).
+2. Rollover is forward-only: `if newKey <= Time.DayKey return`. A backwards clock never resets the day (02 section 11.3).
 3. What resets: daily quest progress and claimed flags, dungeon tickets to the daily grant, daily free gift, login diamonds granted once per day key (`LOGIN_DIAMONDS` auto-granted with reason `LOGIN`, guarded by `Time.LoginDayKey`; `d_login` is a counting row that pays nothing, issue #20). What persists: everything else. A boss attempt or dungeon run in progress is not interrupted; the quest it would complete counts toward the new day, and a dungeon run that clears debits its ticket from the new day's allotment (06).
 4. A rollover during `SCR_QUESTS` re-renders the list in place with a toast `NEW_DAY`. A `ClaimQuest` for a stale quest id returns `StaleRequest` and the UI refreshes.
 5. Skipped days: a 3-day absence rolls once (the day key jumps); daily quests are not retroactively granted. Login diamonds are once per *key change*, not per day skipped.
@@ -881,11 +891,11 @@ sequenceDiagram
 sequenceDiagram
     participant Boot as SCR_BOOT
     participant CC as ConfigClient
-    participant API as GET /v1/config, CDN
+    participant API as GET /config, CDN
     participant CL as ContentLoader
     participant Sim
     Boot->>CC: Fetch()
-    CC->>API: GET /v1/config (Authorization: cached JWT if any)
+    CC->>API: GET /config (Authorization: cached JWT if any)
     API->>API: apply rollout bucket server-side (JWT present) else non-rollout default
     API-->>CC: {contentVersion: "2026.11.10", contentUrl, sha256, minClientVersion, rolloutPct, inBucket?, killSwitches, hotApplyTables}
     CC->>CL: DownloadAsync(contentUrl, sha256) (thread pool)
@@ -896,7 +906,7 @@ sequenceDiagram
 1. Config is fetched at boot (8.1 step 2) and re-fetched every `CONFIG_REFRESH_S = 1800` in the foreground and on every resume. Kill switches (`shopEnabled`, `summonEnabled[banner]`, `dungeonsEnabled`, `cloudSaveEnabled`, `adsEnabled`) apply **immediately**: a view-model reads `IConfigService.Flags` and disables the button with `FEATURE_DISABLED`. A kill switch never touches `GameState`.
 2. Content bundles apply **only at the next cold boot**, never mid-session (sibling 08 section 7 rule 1): kill times, catch-up arithmetic and the wall condition would change under a running sim. The downloaded bundle is validated (manifest hash, per-table hash, 09 validator) on the thread pool and marked ready; `SCR_SETTINGS` shows "Update ready, restarts on next launch". Exception: a bundle whose manifest sets `hot_apply: true` is swapped at a safe point (no modal open, not in a boss). The exporter (09) sets it only when the diff touches nothing but the four hot-apply tables of 00 contract 3: `localization`, `shop_products`, `shop_packages`, `inbox_templates` (issue #54). None is read by the sim; the Shop and Inbox view-models re-read their tables on swap. The manifest bool is the single source; config's `hotApplyTables` (08) only echoes the exporter's constant and the client does not act on it.
 3. `minClientVersion` above the running client -> `CLIENT_TOO_OLD` full block with store link, checked at boot and at every config refresh (a mid-session block waits for `SCR_MAIN` idle and saves first).
-4. Rollout buckets are computed by the server only (issue #31): `GET /v1/config` returns the version for the caller's bucket when the request carries a valid JWT, and the non-rollout default otherwise. The client never hashes `playerId`; `rolloutPct` and `inBucket` in the response are informational. A guest with `playerId = null` gets the default until its first auth. `maintenance: {active, message, until}` blocks at boot and shows a banner mid-session with a countdown; at `until` the client re-fetches config.
+4. Rollout buckets are computed by the server only (issue #31): `GET /config` returns the version for the caller's bucket when the request carries a valid JWT, and the non-rollout default otherwise. The client never hashes `playerId`; `rolloutPct` and `inBucket` in the response are informational. A guest with `playerId = null` gets the default until its first auth. `maintenance: {active, message, until}` blocks at boot and shows a banner mid-session with a countdown; at `until` the client re-fetches config.
 5. Server-side minimum content version per client version (09) means an old client is never handed a bundle it cannot parse.
 
 ### 8.13 Logout and account switch
@@ -913,7 +923,7 @@ sequenceDiagram
     S->>F: Logout()
     F->>CS: Save(Quit) + upload now (await, 10 s)
     alt upload ok or user confirms "log out anyway"
-        F->>API: POST /v1/auth/logout {refreshToken}
+        F->>API: POST /auth/logout {refreshToken}
         F->>F: clear tokens; move saves/ to saves.<playerId>.archived/ (kept ARCHIVE_KEEP_DAYS)
         F->>Boot: restart to SCR_TITLE
     else upload failed and user cancels
@@ -924,13 +934,13 @@ sequenceDiagram
 
 1. Logout requires the current save to be uploaded (await up to `LOGOUT_UPLOAD_TIMEOUT_S = 10`). If it fails, the modal `LOGOUT_UNSYNCED` warns that unsynced progress on this device will be unavailable on other devices and offers "Log out anyway" / "Cancel".
 2. Tokens are cleared from secure storage; the local save directory is archived under the old `playerId` (not deleted) for `ARCHIVE_KEEP_DAYS = 30` so a mistaken logout is recoverable from `SCR_TITLE` ("Found a local save for another account").
-3. `SCR_TITLE` sign-in: Apple / Google Play Games -> `POST /v1/auth/link-login`; the server returns the `playerId` for that platform account. Boot continues at 8.1 step 4 with no local save, so the cloud copy is downloaded.
+3. `SCR_TITLE` sign-in: Apple / Google Play Games -> `POST /auth/link-login`; the server returns the `playerId` for that platform account. Boot continues at 8.1 step 4 with no local save, so the cloud copy is downloaded.
 4. Linking a guest to a platform account that already owns a different `playerId` is the `409 PROVIDER_ALREADY_LINKED` case (`details.otherSummary`, 08): the modal shows both `SaveSummary` cards (this device's guest vs the account's cloud save) and the player picks which to keep. The loser is archived server-side (08).
-5. Delete account (`SCR_SETTINGS`): `POST /v1/account/delete` -> server starts the GDPR flow (02 section 11); the client wipes local saves and tokens and restarts.
+5. Delete account (`SCR_SETTINGS`): `POST /account/delete` -> server starts the GDPR flow (02 section 13.2); the client wipes local saves and tokens and restarts.
 
 ## Open questions
 
-1. Resolved: the tutorial overlay keeps ticks running except during steps 1-2; `SetTutorialStep` advances `GameState.Tutorial.Step` when a step's `expect_event` has fired `expect_count` times (09 `tutorial_steps`; issue #46).
+1. Resolved: the tutorial overlay keeps ticks running except during step 1; `SetTutorialStep` advances `GameState.Tutorial.Step` when a step's `expect_event` has fired `expect_count` times (09 `tutorial_steps`; issue #46).
 2. **Second catch-up window after clock correction** (8.2 step 2). Credits extra time when the real gap was longer than the extrapolation. Owner: 06. Default: credit it into the same pending record, capped by the effective cap on the sum (8.7, issue #21), because the alternative punishes a player whose device clock drifted.
 3. **Command log upload policy.** 2.6 uploads only on server request. Should MVP upload the last 1 MiB with every save so plausibility checks can replay without a round trip? Owner: 08. Default: no; bandwidth at 100k DAU is not worth it until flags exceed 1%.
 4. Resolved: hot-apply allowlist is 00 contract 3's four tables, carried by the manifest `hot_apply` bool (8.12 step 2; issue #54).
@@ -946,7 +956,7 @@ sequenceDiagram
 4. A frame gap of 25 s produces `25 * TICK_HZ` ticks over at most 3 frames with `TICK_BUDGET_MS` disabled; a gap of 31 s produces 0 ticks and one logged `ComputeOfflineCatchup` covering 31 s.
 5. `SessionRunner.OnPause` completes a save synchronously in under 50 ms on the reference low device with a 40 KB state (perf test, 10).
 6. Golden determinism: the same seed and command log (including the `ApplySummonResult`, `ApplyServerTime` and `ComputeOfflineCatchup` system commands; replaying a Local-mode summon reproduces the debit and the `summon_<banner>` counter) produce byte-identical `GameState` hashes on x64 .NET, ARM64 IL2CPP and the bot harness (10).
-7. Summon idempotency: a `POST /v1/summon/pull` that times out after the server committed, then is retried with the same `requestId`, yields exactly one debit, one audit row and the identical payload (server test, 08; client test with a fault-injecting `ApiClient`).
+7. Summon idempotency: a `POST /summon/pull` that times out after the server committed, then is retried with the same `requestId`, yields exactly one debit, one audit row and the identical payload (server test, 08; client test with a fault-injecting `ApiClient`).
 8. Killing the process at any point of the summon flow (before save, after intent save, after server 200, after apply) and relaunching results in exactly one of: no charge and no items, or one charge and the items. Never partial (fault-injection test over the five points).
 9. Offline reward: `Catchup.Compute` then kill before claim, relaunch: the modal shows the same numbers and the window is not credited twice (`LastTickServerTime` is stamped at compute time).
 10. Day rollover with the app open resets daily quests exactly once at the key boundary, and a clock that goes back one day resets nothing (FakeClock test).

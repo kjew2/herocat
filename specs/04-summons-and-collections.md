@@ -194,7 +194,7 @@ Past level 10 a copy cannot raise the level. The reference game's answer is a li
 LimitBreak(itemId):                                         # command, from SCR_ITEM_DETAIL
   item = col.Items[itemId]                     # absent key == not owned
   if item is null:                               return Reject(NotOwned, "ITEM_NOT_OWNED")
-  if item.LimitBreaks >= LIMIT_BREAK_RANKS (5):  return Reject(Capped, "LIMIT_BREAK_MAX")
+  if item.LimitBreaks >= LIMIT_BREAK_RANKS (5):  return Reject(Capped, "LIMIT_BREAK_CAPPED")
   cost = LIMIT_BREAK_COST[rarity(itemId)] * (item.LimitBreaks + 1)   # rarities.limit_break_cost (09)
   if Wallet.RockCandy < cost:                    return Reject(CannotAfford, "NOT_ENOUGH_ROCK_CANDY")
   Wallet.Apply(-cost ROCK_CANDY, LIMIT_BREAK)
@@ -461,7 +461,7 @@ Changes:
 6. `--vectors` writes `Fixtures/Summon/vectors.json` (section 3.4: the 16 named cases plus 08's row and batch vectors), which the C# sim and server tests only read, so the tests and the tool cannot drift (issues #14, #24). It also checks that its SplitMix64 reproduces the C# stream-sequence fixture in `Fixtures/Summon/`.
 7. `--mc N --seed S` runs N pulls on the Python SplitMix64 reference (sibling 03 section 5.4) with the exact `Pull` logic and prints observed C/R/E/L/M frequencies, guarantee fire rate and the L+ gap histogram, for vectors 13 and 14.
 
-It must print, in this order: the pity block (section 3.1 numbers), the soft ramp table, the ten-row rate table with `P(E+)` and guarantee numbers per level, the collection fill curve, the cadence block. `S` constants it validates: `BANNER_EXP_PER_PULL` and `BANNER_LVL_EXP` (F2P reaches weapon level 4 between day 20 and day 35 at the computed cadence; retuned from this output, issue #38), the shift constants (level 10 `P(E+) <= 0.20` so the paid E+ edge stays under 1.7x), pool sizes (a specific Common reaches level 5 inside 30 days of F2P weapon pulls; a specific Legendary does not reach level 3 inside 60 days), `COMPANION_SLOTS` and the companion `dps_pct` defaults (together with `power_curve_model.py`, the companion layer passes 5% by day 7), `WEAPON_PASSIVE_PCT` (passive is between 10% and 40% of the weapon layer on days 7 and 30).
+It must print, in this order: the pity block (section 3.1 numbers), the soft ramp table, the ten-row rate table with `P(E+)` and guarantee numbers per level, the collection fill curve, the cadence block. `S` constants it validates: `BANNER_EXP_PER_PULL` and `BANNER_LVL_EXP` (F2P reaches weapon level 4 between day 20 and day 35 at the computed cadence; retuned from this output, issue #38), the shift constants (level 10 `P(E+) <= 0.20` so the paid E+ edge stays under 1.7x), pool sizes (a specific Common reaches level 5 inside 30 days of F2P weapon pulls, pending the tool's numbers: at the current pool size this needs roughly 270 pulls and may be unreachable, open question 8 in section 15; a specific Legendary does not reach level 3 inside 60 days), `COMPANION_SLOTS` and the companion `dps_pct` defaults (together with `power_curve_model.py`, the companion layer passes 5% by day 7), `WEAPON_PASSIVE_PCT` (passive is between 10% and 40% of the weapon layer on days 7 and 30).
 
 ## 15. Open questions
 
@@ -469,9 +469,10 @@ It must print, in this order: the pity block (section 3.1 numbers), the soft ram
 2. **Tickets before diamonds** on the diamond button. Default: yes, with the button label showing which; 07 may prefer two buttons.
 3. **Rate-up banners share pity with the parent** (industry norm for standard pools, not for limited banners). Owner: 06/08 for P1 events. Default: shared.
 4. **Auto-equip after summon** for skills and companions too, or weapons only? Default: weapons only; skills and companions show a "better skill available" badge, since slot order is a player choice.
-5. **Tutorial grants**: the starter weapon grant is resolved: 09's first tutorial step grants `TUTORIAL_WEAPON_ID` before the first pull (issue #46). Still open: whether the 1,500 tutorial diamonds are pre-spent as a scripted weapon 10-pull (fixed results for a controlled first minute) or rolled. Owner: 07. Default: rolled on the real algorithm, with the 10-pull guarantee making an Epic certain.
+5. **Tutorial grants**: the starter weapon grant is resolved: 09's `tut_welcome` step grant gives `TUTORIAL_WEAPON_ID` (with `TUTORIAL_DIAMONDS`) at profile creation, before the first pull (issue #46). Still open: whether the 1,500 tutorial diamonds are pre-spent as a scripted weapon 10-pull (fixed results for a controlled first minute) or rolled. Owner: 07. Default: rolled on the real algorithm, with the 10-pull guarantee making an Epic certain.
 6. **Soft-pity disclosure**: show the exact ramp or "rates increase after 50 pulls". Default: show the ramp on the rate table screen; it is friendlier and simplifies the Japan and Belgium notes in 08.
 7. **`DUPE_OVERFLOW_ROCK_CANDY` values** are placeholders; nobody reaches 160 copies in the 30-day window, so the tool cannot validate them. Default: keep until live data.
+8. **Common level-5 target (pending tool).** Section 14's "a specific Common reaches level 5 inside 30 days of F2P weapon pulls" looks unreachable at the current Common pool size (about 270 pulls). Not decided: `gacha_model.py` reports the real day, then the target or the pool size is set from it.
 
 ## 16. Acceptance criteria
 

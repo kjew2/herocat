@@ -146,7 +146,7 @@ public sealed class CollectionState
 public sealed class OwnedItem
 {
     public int Copies      { get; set; }   // 1..DUPE_LVL_CUM[10] (160); a copy past 160 converts to Rock Candy at pull time and is not stored (04 section 5.3). Level is derived from Copies at read time, never stored (04)
-    public int LimitBreaks { get; set; }   // 0..LIMIT_BREAK_MAX (5); 04 section 5.2
+    public int LimitBreaks { get; set; }   // 0..LIMIT_BREAK_RANKS (5); 04 section 5.2
     public long FirstAcquiredServerTime { get; init; }
 }
 
@@ -357,7 +357,7 @@ public sealed class LifetimeStats
 | Name | Consumer | Draws per event | Tier | Invariant checked by validator |
 |---|---|---|---|---|
 | `combat` | reserved (03) | 0 in MVP | M0 | `Counter == 0` in MVP |
-| `crit` | crit roll per hero hit | 1 per hero hit | M0 | `Counter == Stats.HeroHits` |
+| `crit` | crit roll per stage-fight hero hit | 1 per stage-fight hero hit (dungeon hits use `dungeon_run` and are not in `Stats.HeroHits`) | M0 | `Counter == Stats.HeroHits` |
 | `fish_spawn` | `ReleaseFish` cell pick | 1 per release | M0 | `Counter == Stats.FishReleased` |
 | `dungeon` | M0 dungeon seed derivation (`IDungeonSeedService` local implementation); MVP unused for new runs | 1 per M0 run | M0 | none |
 | `dungeon_run` | dungeon fight draws (hero crit) while `Combat.Mode == Dungeon` (03, 06; issue #42) | per 03 | MVP | Temporary: not in `Rng`; seed `DungeonRun.Seed`, counter `DungeonRun.StreamCounter`; discarded when the run ends |
@@ -587,7 +587,7 @@ Repair:
 | P11 | `Banners[b].Pity` outside `[0, PITY_HARD-1]`; `Exp < 0` | Clamp. Missing banner for a banner the content defines -> add default. |
 | P12 | Quest id unknown to content; `Progress < 0` | Drop the entry; clamp to 0. A quest with no entry reads as `IN_PROGRESS` with progress 0. |
 | P13 | `Research.Level` key unknown or value `< 1` or `> maxLevel` | Remove / clamp. |
-| P14 | `OwnedItem.Copies > DUPE_LVL_CUM[10]` (160); `LimitBreaks` outside `[0, LIMIT_BREAK_MAX]` | Clamp (no Rock Candy is granted on load; conversion happens only at pull time, 04). |
+| P14 | `OwnedItem.Copies > DUPE_LVL_CUM[10]` (160); `LimitBreaks` outside `[0, LIMIT_BREAK_RANKS]` | Clamp (no Rock Candy is granted on load; conversion happens only at pull time, 04). |
 | P15 | Stream counter invariants (3.4): `combat.Counter != 0` (MVP), `crit.Counter != Stats.HeroHits`, `loot.Counter != Stats.BossKills`, `fish_spawn.Counter != Stats.FishReleased`, Local mode `summon_x.Counter != 3 * TotalPulls` | Set the counter from the stat. The player-visible count is the source of truth for "which draw is next". |
 | P16 | `Combat.DungeonRun != null` on load | `Mode = Stage`, `DungeonRun = null`, emit `DungeonAbandoned`. No refund: tickets are debited on clear only (06 section 6), so an abandoned run never spent one. |
 | P17 | `Pending.Summon` or `Pending.Dungeon` older than `PENDING_STALE_DAYS = 7` | Clear it (the server's idempotency record is gone after 24 h anyway; a 7-day-old intent is dead). Receipts are never auto-cleared. |
@@ -749,7 +749,7 @@ Recovery order, from best to worst outcome: (1) `slot0.sav`, (2) `slot0.prev.sav
 | `device_key` | 32 random bytes for HMAC (section 10) | Secure storage (Keychain / Android Keystore-wrapped), excluded from backup. |
 | `tokens.json` | JWTs | Secure storage. |
 | `profile.json` | `Profile` cache | Included; harmless. |
-| `client_prefs.json` | `ClientPrefs`: NEW badges, coach marks seen, sort/filter/step prefs, settings toggles (07; issue #47). Never cloud-synced, never in `GameState`; written atomically like the save (tmp + rename), and a missing or unreadable file means defaults | Included; harmless (losing it only resets NEW dots and coach marks). |
+| `client_prefs.json` | `ClientPrefs` (fields are 07's): new-item badges, `SeenCoachMarks`, sort/filter prefs, `TrainStep`, `Notify*`, `Locale`, `Sound`, `Music`, `Haptics`, `ReducedMotion`, `LargeText`, `TargetFps` (issue #47). Never cloud-synced, never in `GameState`; written atomically like the save (tmp + rename), and a missing or unreadable file means defaults | Included; harmless (losing it only resets NEW dots and coach marks). |
 | `config_cache.json` | last remote config | Included. |
 | `content/<version>/` | downloaded bundles | Excluded (re-downloadable). |
 | `saves/cmdlog.jsonl` | command log (01 section 2.6) | Excluded. |
@@ -1363,4 +1363,4 @@ The backend `events` table and its nightly `currency_daily` materialized view (0
 
 All are engineering constants (code-resident). None needs the tuning tool; 10's fault-injection, conflict-table and perf tests are the check.
 
-Used from 00 by name: `TICK_HZ`, `KILLS_PER_STAGE`, `BOSS_EVERY`, `BOSS_TIME_TICKS`, `STAGE_CAP`, `TAP_ZAP_MAX_PER_SEC`, `DAY_SECONDS`, `OFFLINE_RATE`, `OFFLINE_CAP_H`, `OFFLINE_MIN_S`, `LOGIN_DIAMONDS`, `TUTORIAL_DIAMONDS`, `DIAMONDS_PER_DAY_F2P`, `PULL_COST[*]`, `PITY_HARD`, `SKILL_SLOTS`, `COMPANION_SLOTS`, `RUNE_SLOTS`, `DUPE_LVL_CUM`, `LIMIT_BREAK_MAX`, `BANNER_LVL_EXP`, `SPAWN_DELAY_TICKS`, `FISH_BOARD_W`, `FISH_BOARD_H`, `FISH_MAX_LVL0`, `TANK_CAP0`, `TANK_REFILL_S0`, `AWAKEN_STAGES`. From 01: `AUTOSAVE_INTERVAL_SEC`, `CMDLOG_MAX_BYTES`, `WEEK_EPOCH_OFFSET`, `WALL_CLOCK_SYNC_SEC`. From 03 (declared there): `TRAIN_CAP[stat]`. From 04: `TUTORIAL_WEAPON_ID`. From 05: `FISH_MAX_LVL_HARD`. From 09: `TUTORIAL_DONE` (row count of `tutorial_steps`).
+Used from 00 by name: `TICK_HZ`, `KILLS_PER_STAGE`, `BOSS_EVERY`, `BOSS_TIME_TICKS`, `STAGE_CAP`, `TAP_ZAP_MAX_PER_SEC`, `DAY_SECONDS`, `OFFLINE_RATE`, `OFFLINE_CAP_H`, `OFFLINE_MIN_S`, `LOGIN_DIAMONDS`, `TUTORIAL_DIAMONDS`, `DIAMONDS_PER_DAY_F2P`, `PULL_COST[*]`, `PITY_HARD`, `SKILL_SLOTS`, `COMPANION_SLOTS`, `RUNE_SLOTS`, `DUPE_LVL_CUM`, `LIMIT_BREAK_RANKS`, `BANNER_LVL_EXP`, `SPAWN_DELAY_TICKS`, `FISH_BOARD_W`, `FISH_BOARD_H`, `FISH_MAX_LVL0`, `TANK_CAP0`, `TANK_REFILL_S0`, `AWAKEN_STAGES`. From 01: `AUTOSAVE_INTERVAL_SEC`, `CMDLOG_MAX_BYTES`, `WEEK_EPOCH_OFFSET`, `WALL_CLOCK_SYNC_SEC`. From 03 (declared there): `TRAIN_CAP[stat]`. From 04: `TUTORIAL_WEAPON_ID`. From 05: `FISH_MAX_LVL_HARD`. From 09: `TUTORIAL_DONE` (row count of `tutorial_steps`).

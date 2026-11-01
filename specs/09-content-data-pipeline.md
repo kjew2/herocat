@@ -462,7 +462,7 @@ A one-row rule table rather than a per-level table: hero level is unbounded and 
 | `max_level` | int | `>= 1`. |
 | `cost0` | double | `RES_COST0`; `> 0`. |
 | `cost_g` | double | `RES_COST_G`; `> 1`. |
-| `unlock_awaken_rank` | int | `>= 0`; `1` for every MVP node (03: locked before rank 1). Must be `>= feature_unlocks[research].threshold` (`E063`): a node never opens before the Research screen. |
+| `unlock_awaken_rank` | int | Per-node extra gate on top of `feature_unlocks[RESEARCH]` (the screen gate); `>= 0`; `1` for every MVP node (03: locked before rank 1). Must be `>= feature_unlocks[RESEARCH].threshold` (`E063`): a node never opens before the Research screen. |
 | `layout_row`, `layout_col` | int | Unique pair (`E046`); drawn by `SCR_RESEARCH`. |
 | `tier` | enum(Tier) | |
 | `name_key`, `desc_key` | key | |
@@ -479,11 +479,11 @@ Example: `{"id": "res_fish_cap", "effect": "FISH_CAP", "effect_per_level": 1.0, 
 | `level` | int | Key. Exactly `1..N` (`E060`); `N >= FISH_MAX_LVL0 + max research cap` (`E038`). |
 | `discovery_coins` | long | `FISH_DISCOVERY_COINS[n]`; strictly increasing (`E031`). Sheet formula `10 * 2^(n-1)`. |
 | `missile_pct` | double | `FISH_MISSILE_PCT[n]`; strictly increasing. Sheet formula `5 * 1.5^(n-1)`. |
-| `sprite` | asset | MVP art covers 12 distinct fish sprites plus a crown overlay (07); higher levels reuse a lower level's sprite with a `tint` (issue #48). |
+| `sprite` | asset | MVP art covers `UI_FISH_SPRITE_LEVELS` (12, 07) distinct fish sprites plus a crown overlay; higher levels reuse a lower level's sprite with a `tint` (issue #48). |
 | `tint` | color? | Empty when the row has its own sprite; set when `sprite` repeats a lower row's value (`W013`). |
 | `name_key` | key | "Guppy", "Koi"... |
 
-Warning `W013`: a reachable fish level (`<= FISH_MAX_LVL0 + research[FISH_CAP].effect_per_level * max_level`) reuses a lower level's `sprite` with no `tint`, i.e. content can exceed the art set (issue #48).
+Warning `W013`: a reachable fish level (`<= FISH_MAX_LVL0 + research[FISH_CAP].effect_per_level * max_level`) above `UI_FISH_SPRITE_LEVELS` (07), or one that reuses a lower level's `sprite`, has no `tint`, i.e. content can exceed the art set (issue #48). With the current rows, levels 13-20 need tints.
 
 Derived at build: `MergeCoins = discovery_coins * FISH_MERGE_COINS_PCT` as an unrounded `double` (no rounding, no minimum; the UI floors the display, issue #16), `BoardDpsPct = FISH_BOARD_DPS_FACTOR * missile_pct`. Example: `{"level": 5, "discovery_coins": 160, "missile_pct": 25.3125, "sprite": "spr_fish_05", "tint": null, "name_key": "fish.05.name"}`.
 
@@ -544,7 +544,6 @@ Example: `{"id": "ach_merges_04", "ladder": "merges", "rung": 4, "goal": "LIFETI
 | `kind` | enum(Dungeon)? | Required for the three MVP rows; empty for `tower` (`E054`). Unique. |
 | `ticket_currency` | enum(Currency)? | `TICKET_*` of the kind (`E059`); empty for `tower`. |
 | `tickets_per_day` | int | `DUNGEON_TICKETS_PER_DAY`; `>= 0`. |
-| `unlock_stage` | int | `DUNGEON_UNLOCK_STAGE`; `>= 1`. |
 | `floor_stage_step` | int | `DUNGEON_FLOOR_STAGE_STEP`; floor `f` fights at stage-equivalent `f * floor_stage_step`; `>= 1`. |
 | `floors` | int | `DUNGEON_FLOORS_MVP`; must equal the `dungeon_floors` row count for this dungeon (`E034`). |
 | `sweep_allowed` | bool | |
@@ -675,18 +674,18 @@ Every table with a `tier` column is filtered at build: `ContentDb.Build(dtos, Ti
 
 ### 5.34 `feature_unlocks`
 
-One gate per feature, read both by sim rejections (`ResearchLocked`, `DUNGEON_LOCKED`, ...) and by the client's Locked states, so they cannot disagree (issue #45). `ContentDb.IsUnlocked(feature, state)` is the single evaluator.
+One gate per feature, read both by sim rejections (`RESEARCH_LOCKED`, `DUNGEON_LOCKED`, `QUESTS_LOCKED`, ...) and by the client's Locked states, so they cannot disagree (issue #45). `ContentDb.IsUnlocked(feature, state)` is the single evaluator.
 
 | Column | Type | Constraint |
 |---|---|---|
-| `feature` | id | Key. MVP rows: `research`, `companions`, `quests`, `dungeons`, `shop`. |
+| `feature` | id | Key, UPPER_SNAKE feature id (the form 06's `QUESTS_LOCKED` / `DUNGEON_LOCKED` checks name). MVP rows: `RESEARCH`, `COMPANIONS`, `QUESTS`, `DUNGEONS`, `SHOP`. |
 | `condition` | enum(FeatureCondition) | `STAGE_HIGHEST`: `Progress.HighestCleared >= threshold`; `AWAKEN_RANK`: `Hero.AwakenRank >= threshold`; `ALWAYS`: never locked. |
 | `threshold` | int? | Required for `STAGE_HIGHEST` and `AWAKEN_RANK` (`>= 1`), empty for `ALWAYS` (`E054`). |
 | `screen` | string | `SCR_*` id the gate locks (`E021` against `SCREEN_IDS`). |
 | `locked_text_key` | key? | "Unlocks at ..." text; empty for `ALWAYS`. |
 | `tier` | enum(Tier) | |
 
-MVP seed: `research` `AWAKEN_RANK` 1 (00 decision 11), `companions` `ALWAYS` (04: slot 1 open from the start), `quests` `STAGE_HIGHEST` 10, `dungeons` `STAGE_HIGHEST` = `DUNGEON_UNLOCK_STAGE` (30), `shop` `ALWAYS` (the Shop is never locked). Rule `E063`: `feature_unlocks[shop].condition = ALWAYS`; every `research.unlock_awaken_rank >= feature_unlocks[research].threshold`; every MVP `dungeons.unlock_stage >= feature_unlocks[dungeons].threshold`.
+MVP seed: `RESEARCH` `AWAKEN_RANK` 1 (00 decision 11), `COMPANIONS` `ALWAYS` (04: slot 1 open from the start), `QUESTS` `STAGE_HIGHEST` 10, `DUNGEONS` `STAGE_HIGHEST` 30 (all three dungeons; it replaces the former `DUNGEON_UNLOCK_STAGE` constant and `dungeons.unlock_stage` column), `SHOP` `ALWAYS` (the Shop is never locked). Rule `E063`: `feature_unlocks[SHOP].condition = ALWAYS`; every `research.unlock_awaken_rank >= feature_unlocks[RESEARCH].threshold`.
 
 ### 5.35 `awakening_targets`
 
@@ -699,11 +698,11 @@ The Awakening cadence target as data, read by `power_curve_model.py` (03) and th
 
 ### 5.36 `plausibility_stage_bound` (generated)
 
-The whale stage curve 08's `STAGE_VS_TIME` check multiplies by `STAGE_BOUND_MULT` (issue #60). Not authored in the Sheet: `HeroCat.Bots compare --bots whale --seeds 1-20 --days 60` writes `content_src/plausibility_stage_bound.csv` (p95 `HighestCleared` over seeds per day; 10 owns the verb and the CI drift check), and `pull` never touches it. It is regenerated in the same PR as any sim-affecting content change (section 12 rule 3); no sim or bot code reads it, so one regeneration converges.
+The whale stage curve 08's `STAGE_VS_TIME` check multiplies by `STAGE_BOUND_MULT` (issue #60). Not authored in the Sheet: `HeroCat.Bots stage-bound --update` (whale bot, seeds 1-20, 60 days) writes `content_src/plausibility_stage_bound.csv` (p95 `HighestCleared` over seeds per day; 10 owns the verb and the CI drift check), and `pull` never touches it. It is regenerated in the same PR as any sim-affecting content change (section 12 rule 3); no sim or bot code reads it, so one regeneration converges.
 
 | Column | Type | Constraint |
 |---|---|---|
-| `day` | int | Key. Exactly `1..60` (`E060`). Days past the last row use the last row. |
+| `day` | int | Key. Exactly `1..60` (`E060`). Past the last row 08 does not run the check. |
 | `stage` | int | `>= 1`; non-decreasing (`E048`). |
 
 ## 6. JSON layout, manifest and versioning
@@ -881,7 +880,7 @@ CONTENT <code> <location>: <message>
 | `E060` | index columns | `{column} must be exactly 1..{n} in row order, got {values}` |
 | `E061` | dupe_levels | `cum_copies for level 1 must be 1, got {value}` |
 | `E062` | tutorial_steps | `exactly one PROFILE_CREATED step at order 1 required` |
-| `E063` | feature_unlocks vs research, dungeons | `{table}[{id}] unlocks at {value}, before feature '{feature}' ({threshold})` / `feature 'shop' must be ALWAYS` |
+| `E063` | feature_unlocks vs research | `{table}[{id}] unlocks at {value}, before feature '{feature}' ({threshold})` / `feature 'SHOP' must be ALWAYS` |
 | `E064` | quests_daily | `missing or unreachable daily bonus rows ({detail})` |
 | `E065` | achievements | `{goal} target {target} must be below the pool size {pool} (pillar 4)` |
 
@@ -1157,7 +1156,7 @@ public sealed partial class ContentDb
     public IReadOnlyDictionary<string, FeatureUnlockDef> FeatureUnlocks { get; }
     public bool IsUnlocked(string feature, GameState s);                          // the one gate evaluator (section 5.34)
     public IReadOnlyList<AwakeningTargetDef> AwakeningTargets { get; }            // by Rank; tools and bots only
-    public int PlausibleStage(int day);                                           // plausibility_stage_bound, clamps past the last day; 08 only
+    public int? PlausibleStage(int day);                                          // plausibility_stage_bound; null past the last day (08 skips the check); 08 only
 }
 ```
 
@@ -1334,7 +1333,7 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 18. **Culture invariance.** `Build` under `CultureInfo.CurrentCulture = de-DE` yields `EnemyHp.Growth == 1.07`.
 19. **Reconcile.** Covered by 02's load-validator tests (P10-P14, issue #56): a save that references `weapon_e_99` (not in content) loses that entry and keeps everything else; a level-12 fish under content with a lower reachable cap stays level 12 (issue #41).
 20. **Exporter parity on messages.** For every fixture in criterion 6, the Python and C# messages are string-equal, including the `repr` of doubles.
-21. **New-table rules.** Fixtures prove `E063` (Research node below the Research gate; `shop` not `ALWAYS`), `E064` (no `DAILIES_COMPLETED` row), `E065` (`OWN_WEAPONS` target equal to the weapon row count), and that the shipped `E039` sum equals 06 section 2's 400 within 10%.
+21. **New-table rules.** Fixtures prove `E063` (Research node below the Research gate; `SHOP` not `ALWAYS`), `E064` (no `DAILIES_COMPLETED` row), `E065` (`OWN_WEAPONS` target equal to the weapon row count), and that the shipped `E039` sum equals 06 section 2's 400 within 10%.
 
 ## Constants introduced
 

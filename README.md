@@ -31,7 +31,7 @@ Tools (Python 3.9+, stdlib only unless noted):
 Milestones (spec 00 section 11):
 
 - **M0 vertical slice**: sim core, local weapon/skill summons, fish board, offline catch-up, local save, seven placeholder-art screens; bots print the day table and two simulated weeks land within tolerance; one person plays 20 minutes on device unprompted.
-- **MVP**: everything tagged MVP, backend (auth, cloud save, server summons, IAP, inbox, config), analytics, tutorial, EN + one locale; closed beta of 50 with D7 measured and zero save-loss reports.
+- **MVP**: everything tagged MVP, backend (auth, cloud save, server summons, IAP, inbox, config), analytics, tutorial, EN shipped (with `ja` translated in the pipeline); closed beta of 50 with D7 measured and zero save-loss reports.
 - **Soft launch**: store checklist complete, staged rollout in two small markets; D1 >= 40%, D7 >= 15%, crash-free >= 99.5%, no P0 economy exploit.
 - **P1**: runes, research expansion, tower, guild, rewarded ads, events, leaderboards, coupons, auto merge; scheduled by soft-launch data.
 - **P2**: siege, raid, costumes; not scheduled.

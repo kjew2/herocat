@@ -48,7 +48,7 @@ Grouped by what they protect. Each group names the fixtures it uses; fixtures ar
 |---|---|---|
 | Serializer round trip | 20 | 02 section 6: `Encode(Decode(x)) == x` bytes for every fixture; doubles round-trip (`R` format); enums as strings; unknown fields ignored on read and dropped on write; `de-DE` culture; `DefaultValueHandling.Include` writes zeros. |
 | Migrations | 1 per version + 8 | 02 M1-M7: every `Fixtures/Saves/v{n}.json` migrates to `Current` with zero repairs; a `v{Current+1}` body raises `SaveTooNewException`; each step is idempotent; the migration log names every step. The "every fixture migrates" test is parameterised over the directory so adding `v{n+1}.json` is the only step when the schema bumps. |
-| `LocalSaveStore` | 24 | 02 section 7: atomic write via temp + rename (kill the process between write and rename with a fault-injecting `IFileSystem` and reload); two slots rotate; checksum mismatch falls to `prev`; both corrupt -> `SaveCorruptException` with both files preserved under `corrupt/`; `SAVE_REPAIR_MAX` repairs then reject; a write fails `SAVE_FAIL_WARN_COUNT` times -> warning event. |
+| `LocalSaveStore` | 24 | 02 section 8: atomic write via temp + rename (kill the process between write and rename with a fault-injecting `IFileSystem` and reload); two slots rotate; checksum mismatch falls to `prev`; both corrupt -> `SaveCorruptException` with both files preserved under `corrupt/`; `SAVE_REPAIR_MAX` repairs then reject; a write fails `SAVE_FAIL_WARN_COUNT` times -> warning event. |
 | `CloudSaveClient` | 26 | 02 section 9: upload triggers and `CLOUD_UPLOAD_MIN_SEC` debounce; `If-Match` ETag flow (`If-Match: *` on first upload, metadata in `X-Save-Meta`, body the raw save file; issue #34); conflict table (higher server time wins unless local `progressScore` exceeds by `CONFLICT_PROGRESS_MARGIN`); the user-facing conflict decision is surfaced exactly once; a 409 with a newer server save never overwrites the local without the decision; HMAC envelope present and valid. |
 | Clock seams | 18 | 02 section 11: `ServerClock` keeps a monotonic offset, a backwards wall clock does not move `Now`; `CLOCK_JUMP_WARN_SEC`; `CLOCK_RESYNC_SEC` triggers a `/time` call; `FakeClock` is the only clock the bots see; `IClock.Now` is never read inside `HeroCat.Sim` (analyzer test). |
 | `SessionRunner` | 22 | 01 section 3.2: `MAX_TICKS_PER_FRAME` cap; pause on background, catch-up on resume; `ApplyServerTime` is issued and logged only at boot, resume, gap recovery and every `WALL_CLOCK_SYNC_SEC` (never per frame), and the day rolls on the tick that crosses midnight (issue #5); replaying the command log reproduces `StateHash`, including catch-up and local summon debits (issue #6); `IN_APP_GAP_SEC` rule; autosave every `AUTOSAVE_INTERVAL_SEC`; command log capped at `CMDLOG_MAX_BYTES`; events delivered on the main thread only. |
@@ -72,7 +72,7 @@ Integration tests run against real Postgres and Redis in containers; unit tests 
 | Config and content | 10 | `GET /config` body, `minContentVersion` map, rollout bucket computed server-side and stable per player, a request without a JWT gets the non-rollout default (issue #31), maintenance flag, kill switches. |
 | Rate limits | 8 | per-route limits from 08 enforced via Redis, 429 body shape. |
 | Inbox and mail | 12 | grant, expiry at `INBOX_EXPIRY_DAYS`, claim-all idempotent, admin mail blast to a segment. |
-| Dungeon seed | 8 | seed issued once per ticket, `DUNGEON_SEED_TTL_S`; correlation only (issue #52): the uploaded save's `Dungeon.RecentRuns` entries are matched to issued seeds by `grantId`, a clear with no issued seed is flagged `DUNGEON_WITHOUT_SEED`, and dungeon rewards stay inside `GOLD_DELTA_BOUND` / `RESEARCH_WITHOUT_COINS`. No replay in MVP (a P1 follow-up if soft-launch data shows dungeon reward abuse). |
+| Dungeon seed | 8 | seed issued once per ticket, `DUNGEON_SEED_TTL_S`; correlation only (issue #52): the uploaded save's `Dungeons.RecentRuns` entries are matched to issued seeds by `grantId`, a clear with no issued seed is flagged `DUNGEON_WITHOUT_SEED`, and dungeon rewards stay inside `GOLD_DELTA_BOUND` / `RESEARCH_WITHOUT_COINS`. No replay in MVP (a P1 follow-up if soft-launch data shows dungeon reward abuse). |
 
 ### 1.4 Unity PlayMode smoke (4 tests, nightly and release)
 
@@ -252,6 +252,7 @@ Targets are read from `ContentDb.ProgressTargets` (09 section 5.31) and `Content
   "shareFloorExempt": { "M0": ["Research", "Companions"] },
   "firstWallMinStage": 60, "firstWallMaxStage": 200,
   "maxWallActiveMinutesThroughDay14": 240,
+  "lateWallMaxActiveMinutes": null,
   "lazyFraction": { "day7": 0.55, "day30": 0.60 },
   "whaleGapStagesDay7": [25, 60],
   "diamondsPerDayTolerance": 0.15,
@@ -264,7 +265,7 @@ Targets are read from `ContentDb.ProgressTargets` (09 section 5.31) and `Content
 | AC1 | For each day in `stageCheckDays`: median stage within `+/- tolerance` of `progress_targets[day]` | 00 section 6.6 (+/-20%) |
 | AC2 | For each seed: every layer share `<= shareMax` on each day in `shareMaxCheckDays`, and every layer share with a non-zero multiplier `>= shareMin` on each day in `shareMinCheckDays` (issue #12). `Base` and `Speed` are never floor-checked (speed is permanently exempt: it cannot reach 5% once `ATK_SPD` is capped, issue #36); crit is. Layers in `shareFloorExempt[tier]` that miss the floor print `WARN` and do not fail; the ceiling always gates. The M0 exemptions are removed at MVP once 03's retune lands (levers chosen from `power_curve_model.py` output, pending the tool, issue #36) | 00 section 7 (40% / 5% rule), 03 section 8.5 |
 | AC3 | For each seed: `FirstWallStage` at day 30 in `[60, 200]` | 03 section 8.6 |
-| AC4 | For each seed: every wall opened by day 14 has active minutes `<= 240`; walls opened on days 15-30 are bounded by 03 AC18's day-14-to-30 limit, whose value `power_curve_model.py` sets (pending the tool; until then they print `WARN`, issue #36) | 03 section 8.6, AC18 |
+| AC4 | For each seed: every wall opened by day 14 has active minutes `<= 240`; walls opened on days 15-30 have active minutes `<= lateWallMaxActiveMinutes` (03 AC18), whose value `power_curve_model.py` sets (pending the tool; until then the key is `null` and they print `WARN`, issue #36) | 03 section 8.6, AC18 |
 | AC5 | Median `DiamondsEarned` per day over days 2-30 within `diamondsPerDayTolerance` of `DIAMONDS_PER_DAY_F2P` | 06 section 2 |
 | AC6 | `lazy-f2p` median stage at day 7 and 30 is at least `lazyFraction` of `greedy-f2p`'s | 00 pillar 1 |
 | AC7 | `whale` minus `greedy-f2p` median stage at day 7 in `whaleGapStagesDay7` | 00 pillar 4: paying is sooner, not elsewhere |
@@ -291,7 +292,7 @@ day  stageMed  goldEarnedMed  diaEarnedMed  diaSpentMed  pulls  highestRarity  f
 - `report --layer-shares`: the section 3.5 shares at days 1, 3, 7, 14, 30 as a table, median over seeds, with the 40% / 5% bounds marked; the tool that validates 03 section 8.5.
 - `report --diamonds`: earned by `Reason` per day, so 06's budget table can be checked against what the sim actually paid.
 - `compare --bots greedy-f2p,lazy-f2p,light-spender,whale`: median stage per day per bot and the gaps.
-- `stage-bound --update | --check`: runs `whale` for seeds 1-20 and 60 days on the given content and writes the p95 over seeds of `HighestCleared` per day as the `plausibility_stage_bound (day, stage)` source CSV (09 owns the schema and validation; 08's `STAGE_VS_TIME` reads it from the bundle, so the server runs no bot code; issue #60). `--check` regenerates into scratch and fails on any difference, so a sim-affecting content change must regenerate the table in the same PR (as with goldens). The sim never reads the table, so regenerating it cannot change bot results.
+- `stage-bound --update | --check`: runs `whale` for seeds 1-20 and 60 days on the given content and writes the p95 over seeds of `HighestCleared` per day as the `plausibility_stage_bound (day, stage)` source CSV `content_src/plausibility_stage_bound.csv` (09 section 5.36 owns the schema and validation; 08's `STAGE_VS_TIME` reads it from the bundle, so the server runs no bot code; issue #60). `--check` regenerates into scratch and fails on any difference, so a sim-affecting content change must regenerate the table in the same PR (as with goldens). The sim never reads the table, so regenerating it cannot change bot results.
 - `golden --check | --update | --replay`: section 2 plus the four golden run tables (`run-greedy-f2p-seed7-30d.txt`, `run-lazy-f2p-seed7-30d.txt`, `run-whale-seed7-30d.txt`, `sweep-greedy-f2p-seeds1-20-30d.txt`).
 
 ### 3.8 CLI

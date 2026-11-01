@@ -106,10 +106,10 @@ Band budget: 120 + 800 + 100 + 640 + 160 = 1,820 rp. The remaining 100 rp of a 1
 
 - A screen is a uGUI prefab with a `ScreenBase` subclass. `Bind(vm)` resolves references once; `Refresh()` writes only changed values through change-only setters (`NumberLabel`, `IntLabel`, `TextKeyLabel`, `BarFill`, `BadgeDot`); `OnEvent(Event e)` handles the events listed per screen.
 - View-models live in `HeroCat.Client.Core` (`Assets/HeroCat.Client/Core/`, section 16), one class per screen named `<Screen>Vm` (`MainVm`, `HeroVm`, ...). They are plain C#, no `UnityEngine`. They are filled from `Simulation.Snapshot()` after any tick that ran and from events as they drain (01).
-- A view-model field listed as `bind` is read-only display; `cmd` means the element sends that `Command` through `Commands.Send(cmd)`; a rejection comes back as `Rejected(category, reason)` (01's `RejectCode` category plus a reason from the owning spec's closed list, issue #11) and renders as 01's `Reject` presentation (issue #30): a button shake plus a short toast anchored under the pressed button with the localized reason `reject.<reason>`; the category only picks the toast styling. `err.<code>` keys are for 01's error taxonomy (`SCR_ERROR`), not for rejections; `<code>` is spelled exactly as 01 section 7 lists it (08's wire codes, issue #30).
+- A view-model field listed as `bind` is read-only display; `cmd` means the element sends that `Command` through `Commands.Send(cmd)`; a rejection comes back as `ApplyResult.Reject(code, reason)` (01's `RejectCode` category plus a reason from the owning spec's closed list, issue #11) and renders as 01's `Reject` presentation (issue #30): a button shake plus a short toast anchored under the pressed button with the localized reason `reject.<reason>`; the category only picks the toast styling. `err.<code>` keys are for 01's error taxonomy (`SCR_ERROR`), not for rejections; `<code>` is spelled exactly as 01 section 7 lists it (08's wire codes, issue #30).
 - States every screen implements unless the section says otherwise: **Loading** (skeleton rows, shimmer, no spinner longer than 2 s before a retry link), **Empty** (illustration key + one-line copy + the primary action that fills it), **Error** (inline card from 01 taxonomy with Retry), **Locked** (greyed content, lock icon, unlock condition text, no interaction), **First-time** (one coach-mark overlay pointing at the primary action, shown once, stored in `ClientPrefs.SeenCoachMarks`).
 - `ClientPrefs` (issue #47) is a Runtime store, a local JSON file next to the save, never cloud-synced and never in `GameState`. It holds everything in this spec that does not change a game number: seen coach marks, new-item badges (issue #7), sort/filter and Training-step choices, and the `SCR_SETTINGS` toggles. Losing it on reinstall is acceptable.
-- Locked conditions come from the 09 `feature_unlocks` table (issue #45), the same rows the sim's rejections read, so a Locked state and the sim always agree. The table's MVP seed: Research at Awakening rank 1 (00 decision 11), Quests at stage 10, Dungeons at stage 30 (`DUNGEON_UNLOCK_STAGE`); Companions (banner and slot 1, 04) and Shop are never locked.
+- Locked conditions come from the 09 `feature_unlocks` table (issue #45), the same rows the sim's rejections read, so a Locked state and the sim always agree. The table's MVP seed: Research at Awakening rank 1 (00 decision 11), Quests at stage 10, Dungeons at stage 30 (row `DUNGEONS`); Companions (banner and slot 1, 04) and Shop are never locked.
 
 ## 4. Screens
 
@@ -206,7 +206,7 @@ Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them
 | Avatar | `Profile.AvatarId` | tap: push `SCR_PROFILE` |
 | Inbox icon | `Inbox.UnclaimedCount` badge | tap: push `SCR_INBOX` |
 | Settings gear | | tap: push `SCR_SETTINGS` |
-| Stage label | `Combat.Stage`, `Combat.Chapter`, `Combat.SelectedStage` | tap: push `SCR_STAGE_SELECT` (MVP; M0 no-op); while farming a side stage it reads "Farming 95 · frontier 100" (issue #35) |
+| Stage label | `Combat.Stage`, `Combat.Chapter`, `Combat.Selected` | tap: push `SCR_STAGE_SELECT` (MVP; M0 no-op); while farming a side stage it reads "Farming 95 · frontier 100" (issue #35) |
 | Kill counter | `Combat.KillsInStage / KILLS_PER_STAGE` | red when `IsWalled` |
 | WALL badge | `Combat.IsWalled` | |
 | Enemy sprite, HP bar | `Combat.EnemyId`, `EnemyIsBoss`, `EnemyHp`, `EnemyMaxHp` | HP bar text "1.2M / 1.7M" |
@@ -404,7 +404,7 @@ Purpose: the diamond sink. One tab per banner; 1x and 10x; rates, pity and banne
 | Summon x1 / x10 | `PullCost`, `CanPull1`, `CanPull10` (diamond balance); `cmd Summon(banner, count: 1 or 10, payment: DIAMOND, requestId)` |
 | Use ticket | `TicketCount`; `cmd Summon(banner, 1, payment: TICKET, requestId)`; hidden when 0 |
 
-MVP server path (01): the button shows a spinner on the pressed button for up to 10 s while the request is in flight, which also covers the save upload 01 runs before a pull when there are unsynced local earnings (issue #49); the HUD diamond chip does not change until the server result lands (04 payload); on `SUMMON_TIMEOUT` (01's `Timeout` class, issue #30) the client shows the "Retrying..." toast and retries the same `requestId` twice, then shows the `SCR_ERROR` modal with `[Retry]` / `[Later]` and "Your diamonds were not charged unless the result appears in your collection" (the server replays by `requestId`). M0 local path returns synchronously.
+MVP server path (01): the button shows a spinner on the pressed button for up to 10 s while the request is in flight, which also covers the save upload 01 runs before a pull when there are unsynced local earnings (issue #49); the HUD diamond chip does not change until the server result lands (04 payload); on a timeout (`NET_TIMEOUT`, 01's `Timeout` class; there is no `SUMMON_TIMEOUT` code, issue #30) the client shows the "Retrying..." toast and retries the same `requestId` (01 section 5.2), and once retries are exhausted closes the overlay with the `SUMMON_PENDING_SAVED` toast and a "Pending..." button that resolves the summon by replay (01 section 8.5 step 4; the server replays by `requestId`). M0 local path returns synchronously.
 
 Summon results are not a sim event: the `SummonResultPayload` returned by `ISummonService` (01 section 2.5) is applied through `ApplySummonResult` and then pushes `SCR_SUMMON_RESULT` (issues #11, #13). Events: `ItemAcquired` x N, `BannerLeveledUp` (banner bar fill, toast "Banner level 4: rates improved"), `CurrencyChanged(DIAMOND)`.
 
@@ -470,7 +470,7 @@ Purpose: the three daily dungeons and the Tower card (P1).
 
 Events: `DungeonCleared`, `DungeonFailed`, `DungeonFloorFirstCleared`, `DayRolledOver` (tickets refresh), `CurrencyChanged(TICKET_*)`.
 
-States: Locked before its `feature_unlocks` condition (stage 30, `DUNGEON_UNLOCK_STAGE`; issue #45): whole screen greyed, "Unlocks at stage 30". Empty tickets: buttons disabled, "More tickets in the Shop" link to `SCR_SHOP` exchange tab. Error: none (local sim; seed fetch failure in MVP falls back to a retry toast and the button re-enables).
+States: Locked before its `feature_unlocks` condition (row `DUNGEONS`, stage 30; issue #45): whole screen greyed, "Unlocks at stage 30". Empty tickets: buttons disabled, "More tickets in the Shop" link to `SCR_SHOP` exchange tab. Error: none (local sim; seed fetch failure in MVP falls back to a retry toast and the button re-enables).
 
 ### 4.13 `SCR_DUNGEON_RUN` (Full, MVP)
 
@@ -500,7 +500,7 @@ Events: `DungeonStarted`, `HitLanded`, `SkillCast`, `CompanionAbilityUsed`, `Dun
 
 ### 4.14 `SCR_STAGE_SELECT` (Modal, MVP)
 
-Purpose: farm a cleared side stage (an easier stage for `GOLD_GAIN`-tuned kill rates, or to let a weak loadout breathe) without losing the frontier, and challenge the frontier boss from anywhere. Side-stage farming (issue #35, 03): `Stage.Stage` stays the frontier and keeps its `KillsInStage` and walled state; `Stage.Selected` is the farm target; kills there pay that stage's gold and EXP and never advance progress; returning resumes the frontier exactly where it was.
+Purpose: farm a cleared side stage (an easier stage for `GOLD_GAIN`-tuned kill rates, or to let a weak loadout breathe) without losing the frontier, and challenge the frontier boss from anywhere. Side-stage farming (issue #35, 03): `Combat.Stage` stays the frontier and keeps its `KillsInStage` and walled state; `Combat.Selected` is the farm target; kills there pay that stage's gold and EXP and never advance progress; returning resumes the frontier exactly where it was.
 
 ```
 +----------------------------------------------+
@@ -517,10 +517,10 @@ Purpose: farm a cleared side stage (an easier stage for `GOLD_GAIN`-tuned kill r
 |---|---|
 | Chapter dropdown | `Chapters[]` (`CHAPTER_WIDTH` groups up to `Progress.HighestCleared`) |
 | Stage chips | `Stages[]`: `Number`, `IsBoss`, `IsFrontier`, `IsSelected`, `Cleared`; tap: `cmd SelectStage(n)` for `n <= Progress.HighestCleared` (02's meaning: highest stage of any kind completed, issue #35); tapping the frontier chip equals Return |
-| Return to frontier | `cmd SelectStage(null)`; shown while `Combat.SelectedStage != null` |
+| Return to frontier | `cmd SelectStage(null)`; shown while `Combat.Selected != null` |
 | Challenge boss | `cmd AttemptBoss` for the frontier boss only (only when walled) |
 
-Rules the modal makes visible: offline gold and dungeon floor difficulty read `Progress.HighestCleared` and first-clear diamonds read `Progress.HighestFirstClearBoss`, never the selected stage (06, 03 and 02; issue #35), so a lower stage is never a loophole; the modal says "Rewards for offline time use your highest stage". Events: `StageChanged` (from `SelectStage`), `StageCleared`; the selected stage is read from the snapshot (`Combat.SelectedStage`, null = frontier), there is no `StageSelected` event (issue #11).
+Rules the modal makes visible: offline gold and dungeon floor difficulty read `Progress.HighestCleared` and first-clear diamonds read `Progress.HighestFirstClearBoss`, never the selected stage (06, 03 and 02; issue #35), so a lower stage is never a loophole; the modal says "Rewards for offline time use your highest stage". Events: `StageChanged` (from `SelectStage`), `StageCleared`; the selected stage is read from the snapshot (`Combat.Selected`, null = frontier), there is no `StageSelected` event (issue #11).
 
 ### 4.15 `SCR_QUESTS` (Full, MVP)
 
@@ -876,7 +876,7 @@ Goal: by minute three the player has trained, merged, summoned and seen a boss, 
 
 | Step | Spotlight | Caption key | Waits for (`expect_event` x `expect_count`) | Grant |
 |---|---|---|---|---|
-| 1 | combat viewport | `tut.1.tap` "Tap the monster!" | 3 x `TapZap` accepted | |
+| 1 | combat viewport | `tut.1.tap` "Tap the monster!" | 3 x `TapZap` accepted | row `tut_welcome` (09, trigger `PROFILE_CREATED`): its `TUTORIAL_DIAMONDS` and `TUTORIAL_WEAPON_ID` grants are applied once at profile creation, guarded by `Tutorial.TutorialDiamondsGranted` (02) |
 | 2 | `SCR_MAIN` gold chip after first kills | `tut.2.gold` | `EnemyKilled` x3 | |
 | 3 | Hero tab | `tut.3.hero` "Make your cat stronger" | `SCR_HERO` pushed | |
 | 4 | ATK `[+]` | `tut.4.train` | `StatTrained` | |
@@ -937,7 +937,7 @@ Fish art is a fixed set of `UI_FISH_SPRITE_LEVELS` (12) sprites (issue #48). A l
 - **`ScreenRouter`** (`HeroCat.Client.Navigation`): a stack of `ScreenEntry { ScreenId, Type, Instance, Args }`. `Push(id, args)`, `Replace(id, args)` (tab bar), `Pop()`, `PopTo(id)`, `ShowModal(id, args)` (queues if a modal is visible), `ShowOverlay(id)`. It owns the Android back-button mapping (section 1) and the LRU cache of three Full screens. Screens are loaded through Addressables by `ScreenId` and released when evicted.
 - **Engine-free core** (issue #23): view-models and every piece of client logic that does not need the engine live in `Assets/HeroCat.Client/Core/` (asmdef `HeroCat.Client.Core`, `noEngineReferences: true`, namespace `HeroCat.Client.Core`), which `src/HeroCat.Runtime.Tests` compiles and tests under dotnet without Unity. That is: one vm per screen plus `HudVm`, `BadgesVm`, `ToastQueue`, `RevealSequencer`, and the logic of `ScreenRouter` (stack, modal queue, Android back mapping, LRU), the Fish Board interaction state machine, the Tap Zap throttle, the damage-number pool, badge rules, tutorial step logic and `SafeAreaMath`. MonoBehaviours, prefabs and uGUI code only adapt these to the engine. `GameViewModel` owns them and is the only client type holding a `Simulation` reference besides `SessionRunner`. `Refresh()` runs on frames where a tick ran, an event arrived or a command marked dirty (01); screens update from their vm with change-only setters.
 - **Binding approach**: explicit. No reflection binding, no per-frame polling of properties. A screen's `Refresh()` is a flat list of setter calls; `OnEvent` is a `switch` on event type. Reasons: zero allocation is easy to audit, and the bot harness's view-model tests (10) run without Unity.
-- **Commands**: `Commands.Send(Command)` -> `Simulation.Apply` on the main thread between frames; result `Accepted` or `Rejected(category, reason)`; the screen toasts `reject.<reason>` (section 3). Server-backed commands (summon, inbox, shop) go through `HeroCat.Runtime` clients and return a `Task<Result>`; the vm sets `InFlight` flags for spinners.
+- **Commands**: `Commands.Send(Command)` -> `Simulation.Apply` on the main thread between frames; result `ApplyResult.Accepted` or `ApplyResult.Reject(code, reason)`; the screen toasts `reject.<reason>` (section 3). Server-backed commands (summon, inbox, shop) go through `HeroCat.Runtime` clients and return a `Task<Result>`; the vm sets `InFlight` flags for spinners.
 - **Addressables groups**: `always` (`SCR_MAIN`, HUD, tab bar, fish atlas, `ui_icons`, `ui_frames`, chapter 1 skin, hero), one group per Full screen prefab + its atlas, `chapters` (one bundle per chapter skin, downloaded ahead when the player enters the previous chapter), `audio_sfx`, `audio_music` (one bundle per loop), `collection_icons` (three icon atlases, loaded on first collection screen).
 - **Input**: Input System package; `TapZap` from a full-viewport `IPointerClickHandler` behind the combat UI; Fish Board drag through `IBeginDragHandler` / `IDragHandler` / `IEndDragHandler` on cells; back button via `Keyboard.current.escapeKey`.
 - **Safe area**: one `SafeAreaFitter` on the root `RectTransform`; bands are children with fixed heights and the combat band `flexibleHeight = 1`. Details in section 17.2.

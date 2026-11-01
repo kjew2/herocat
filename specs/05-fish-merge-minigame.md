@@ -94,16 +94,16 @@ P1: tank level upgrades (released fish start at level 2, then 3) would halve the
 
 ## 4. Commands
 
-Board lock (issue #40): the board is hidden and frozen while a dungeon run is active (`Combat.Mode == Dungeon`, 06 and 07). Every board command (`ReleaseFish`, `ReleaseMax`, `MergeFish`, `MergeAll`, `MoveFish`, `DiscardFish`) checks this first, before any other rejection, and returns `Rejected(Locked, "BOARD_LOCKED")`. P1 Auto Merge does not run during a run. The tank keeps refilling (`TickTank` runs every tick) and the passive `FISH_BOARD_DPS_PCT` still applies to the dungeon fight; no missiles are enqueued or fired (section 5.1).
+Board lock (issue #40): the board is hidden and frozen while a dungeon run is active (`Combat.Mode == Dungeon`, 06 and 07). Every board command (`ReleaseFish`, `ReleaseMax`, `MergeFish`, `MergeAll`, `MoveFish`, `DiscardFish`) checks this first, before any other rejection, and returns `Reject(Locked, "BOARD_LOCKED")`. P1 Auto Merge does not run during a run. The tank keeps refilling (`TickTank` runs every tick) and the passive `FISH_BOARD_DPS_PCT` still applies to the dungeon fight; no missiles are enqueued or fired (section 5.1).
 
 ### 4.1 `ReleaseFish`
 
 ```
 ReleaseFish():                                # one fish per command; ReleaseMax loops it (section 6.1)
-  if Combat.Mode == Dungeon:                             return Rejected(Locked, "BOARD_LOCKED")     # issue #40
-  if Fish.TankCount == 0:                                return Rejected(TankEmpty, "TANK_EMPTY")
+  if Combat.Mode == Dungeon:                             return Reject(Locked, "BOARD_LOCKED")     # issue #40
+  if Fish.TankCount == 0:                                return Reject(TankEmpty, "TANK_EMPTY")
   empties = count of Cells == 0
-  if empties == 0:                                       return Rejected(BoardFull, "BOARD_FULL")
+  if empties == 0:                                       return Reject(BoardFull, "BOARD_FULL")
   u = fish_spawn.NextDouble()                            # exactly one draw per successful release
   k = (int)(u * empties)                                 # 0 .. empties-1
   cell = index of the k-th empty cell in row-major order
@@ -124,12 +124,12 @@ Rejections consume no draw. The draw happens only on success so `fish_spawn.Coun
 
 ```
 MergeFish(source, target):                    # cell indices 0..19
-  if Combat.Mode == Dungeon:                             return Rejected(Locked, "BOARD_LOCKED")     # issue #40
-  if source == target or either index out of range:      return Rejected(BadArgument, "BAD_CELL")   # client bug; Apply never throws (issue #11)
+  if Combat.Mode == Dungeon:                             return Reject(Locked, "BOARD_LOCKED")     # issue #40
+  if source == target or either index out of range:      return Reject(BadArgument, "BAD_CELL")   # client bug; Apply never throws (issue #11)
   a = Cells[source]; b = Cells[target]
-  if a == 0 or b == 0:                                   return Rejected(InvalidTarget, "EMPTY_CELL")
-  if a != b:                                             return Rejected(LevelMismatch, "LEVEL_MISMATCH")
-  if a >= FishMaxLvl:                                    return Rejected(Capped, "FISH_AT_LEVEL_CAP")
+  if a == 0 or b == 0:                                   return Reject(InvalidTarget, "EMPTY_CELL")
+  if a != b:                                             return Reject(LevelMismatch, "LEVEL_MISMATCH")
+  if a >= FishMaxLvl:                                    return Reject(Capped, "FISH_AT_LEVEL_CAP")
   n = a + 1
   Cells[target] = n; Cells[source] = 0; Fish.TotalMerges += 1; Stats.Merges += 1
   discovered = Discover(n)                               # true and pays FISH_DISCOVERY_COINS[n] the first time
@@ -159,9 +159,9 @@ Two fish at `FishMaxLvl` cannot merge (`Capped`, `FISH_AT_LEVEL_CAP`). They stay
 
 ```
 DiscardFish(cell):
-  if Combat.Mode == Dungeon:                             return Rejected(Locked, "BOARD_LOCKED")     # issue #40
-  if cell out of range:                                  return Rejected(BadArgument, "BAD_CELL")
-  if Cells[cell] == 0:                                   return Rejected(InvalidTarget, "EMPTY_CELL")
+  if Combat.Mode == Dungeon:                             return Reject(Locked, "BOARD_LOCKED")     # issue #40
+  if cell out of range:                                  return Reject(BadArgument, "BAD_CELL")
+  if Cells[cell] == 0:                                   return Reject(InvalidTarget, "EMPTY_CELL")
   n = Cells[cell]; Cells[cell] = 0; Stats.FishDiscards += 1
   coins = FISH_DISCARD_COINS_PCT (0.10) * FISH_DISCOVERY_COINS[n]
   Wallet.Apply(+coins FISH_COIN, FISH_MERGE)             # same reason as a repeat merge: it is salvage, not discovery
@@ -176,10 +176,10 @@ Discard is the escape hatch for a jammed board (section 11) and is reached by lo
 
 ```
 MoveFish(source, target):
-  if Combat.Mode == Dungeon:                             return Rejected(Locked, "BOARD_LOCKED")     # issue #40
-  if source == target or either index out of range:      return Rejected(BadArgument, "BAD_CELL")
-  if Cells[source] == 0:                                 return Rejected(InvalidTarget, "EMPTY_CELL")
-  if Cells[target] != 0:                                 return Rejected(InvalidTarget, "CELL_OCCUPIED")   # equal level is a MergeFish, not a move
+  if Combat.Mode == Dungeon:                             return Reject(Locked, "BOARD_LOCKED")     # issue #40
+  if source == target or either index out of range:      return Reject(BadArgument, "BAD_CELL")
+  if Cells[source] == 0:                                 return Reject(InvalidTarget, "EMPTY_CELL")
+  if Cells[target] != 0:                                 return Reject(InvalidTarget, "CELL_OCCUPIED")   # equal level is a MergeFish, not a move
   Cells[target] = Cells[source]; Cells[source] = 0
   publish FishMoved(source, target, Cells[target])
   return Ok()
@@ -251,13 +251,13 @@ Rules: touch targets are the full cell (minimum 64 px on a 360 px wide layout, 0
 
 ```
 ReleaseMax():
-  if Combat.Mode == Dungeon:                             return Rejected(Locked, "BOARD_LOCKED")     # issue #40
+  if Combat.Mode == Dungeon:                             return Reject(Locked, "BOARD_LOCKED")     # issue #40
   n = 0
   while ReleaseFish().Ok: n += 1                         # each release draws from fish_spawn as in 4.1
   return Ok(n)                                            # 0 is not a rejection; the client disables the button on 0
 
 MergeAll():
-  if Combat.Mode == Dungeon:                             return Rejected(Locked, "BOARD_LOCKED")     # issue #40
+  if Combat.Mode == Dungeon:                             return Reject(Locked, "BOARD_LOCKED")     # issue #40
   merges = 0
   loop:
     found = false
