@@ -219,6 +219,21 @@ namespace HeroCat.Sim.Tests
             Assert.That(s.WithPendingInboxCount(3).PendingInboxCount, Is.EqualTo(3));
         }
 
+        [Test]
+        public void Snapshot_CarriesTheSelectedStage_NullAtTheFrontier()   // 01 section 2.4, issue #254
+        {
+            var sim = TestContent.NewSim();
+            sim.Advance(1);
+            Assert.That(sim.GetSnapshot().SelectedStage, Is.Null);
+            sim.State.Combat.Stage = 12;
+            sim.State.Progress.HighestCleared = 11;
+            sim.State.Combat.Selected = 5;
+            sim.Advance(0);
+            var s = sim.GetSnapshot();
+            Assert.That((s.Stage, s.SelectedStage), Is.EqualTo((12, (int?)5)), "Stage stays the frontier");
+            Assert.That(s.WithPendingInboxCount(2).SelectedStage, Is.EqualTo(5));
+        }
+
         static long AllocatedBy(Simulation sim)
         {
             long best = long.MaxValue;

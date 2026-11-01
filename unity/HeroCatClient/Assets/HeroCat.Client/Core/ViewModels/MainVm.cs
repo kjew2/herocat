@@ -155,7 +155,7 @@ namespace HeroCat.Client.Core
             var k = _c.K;
             Stage.Set(s.Stage);
             Chapter.Set(s.Chapter);
-            int? sel = st.Combat.Selected;
+            int? sel = s.SelectedStage;
             if (sel.HasValue) StageLabel.Set(UiKeys.MainStageFarming, sel.Value, s.Stage);
             else StageLabel.Set(UiKeys.MainStage, s.Stage, s.Chapter);
             Kills.Set(s.KillsInStage);

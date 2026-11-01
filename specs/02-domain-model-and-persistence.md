@@ -951,7 +951,7 @@ As built (issues #78, #149): `ServerClock.cs` holds both clocks. `SystemClock` i
 | `now < Offline.Pending.ComputedServerTime` at load | P18 clears the pending reward (it was never credited). |
 | `now < Pending.Summon.RequestedServerTime` | Irrelevant; the server's idempotency store decides. |
 | Resync shows the server is *ahead* of the extrapolation by more than `CLOCK_JUMP_WARN_SEC` | Extra elapsed time is credited as a second catch-up window (01 section 8.2 step 2), capped by the 24 h sum. |
-| Resync shows the server is *behind* by more than `CLOCK_BACKWARDS_TOLERANCE_S` | Nothing is taken back; `clock_anomaly{resync, negative}`; the save's `LastTickServerTime` keeps its larger value, which simply shortens the next window. |
+| Resync shows the server is *behind* the extrapolation by more than `CLOCK_JUMP_WARN_SEC` (the same 300 s threshold as *ahead*; 11.1, 01 section 8.2 step 2; issue #257) | Nothing is taken back; `clock_anomaly{resync, negative}`; the save's `LastTickServerTime` keeps its larger value, which simply shortens the next window. A smaller backwards correction emits no `resync` event: the next `ApplyServerTime` re-anchor (at most `WALL_CLOCK_SYNC_SEC` later) reports it as `clock_anomaly{backwards}` once it exceeds `CLOCK_BACKWARDS_TOLERANCE_S` (once per session). |
 | Device clock set years ahead, then back (offline) | At most one `OFFLINE_CAP_H` window and one daily reset were gained while unauthoritative; the next authoritative upload carries `CLOCK_AHEAD` and the server's ledger reconciliation (08) corrects diamonds. |
 
 ## 12. Server-side relational schema (PostgreSQL 16)

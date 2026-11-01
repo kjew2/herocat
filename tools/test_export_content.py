@@ -79,6 +79,23 @@ class ExporterTests(unittest.TestCase):
         ex.check_dto_names(errs)
         self.assertEqual(list(errs), [])
 
+    def test_enums_mirror_the_sim_enums(self):   # Enums.cs says ENUMS mirrors it; Locale/ConstantType are tool-only
+        src = open(os.path.join(REPO, "src", "HeroCat.Sim", "Content", "Enums.cs"), encoding="utf-8").read()
+        src = re.sub(r"//[^\n]*|/\*.*?\*/", "", src, flags=re.S)
+        sim = {m.group(1): [v.split("=")[0].strip() for v in m.group(2).split(",") if v.strip()]
+               for m in re.finditer(r"public enum (\w+)(?:\s*:\s*\w+)?\s*\{([^}]*)\}", src)}
+        self.assertEqual(set(ex.ENUMS) - set(sim), {"Locale", "ConstantType"})
+        for name, members in sim.items():
+            self.assertEqual(ex.ENUMS.get(name), members, name)
+
+    def test_quest_goal_has_train_levels(self):   # 06 section 5.1 order; weekly w_train uses it (issue #256)
+        goals = ex.ENUMS["QuestGoal"]
+        self.assertEqual(goals.index("TRAIN_LEVELS"), goals.index("CLEAR_DUNGEON") + 1)
+        errs = ex.Errors()
+        self.assertEqual(ex.parse_cell("enum(QuestGoal)", "TRAIN_LEVELS", "quests_weekly[w_train].goal", errs),
+                         "TRAIN_LEVELS")
+        self.assertEqual(list(errs), [])
+
 
 class ErrorCodeTests(unittest.TestCase):
     def setUp(self):
