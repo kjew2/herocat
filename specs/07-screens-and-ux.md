@@ -997,7 +997,7 @@ Rules: only `Boot/` and `Screens/` hold `MonoBehaviour`s; nothing outside `Boot/
 
 `SessionRunner` (01 section 3) is the only `Update()` that touches the sim. The client adds these rules:
 
-1. **Frame rate and sleep.** At boot: `Application.targetFrameRate = ClientPrefs.TargetFps` (60, or 30 with Battery saver), `QualitySettings.vSyncCount = 0`, `Screen.sleepTimeout = SleepTimeout.NeverSleep` (the phone-on-the-desk idle mode depends on it).
+1. **Frame rate and sleep.** At boot: `Application.targetFrameRate = ClientPrefs.TargetFps` (60, or 30 with Battery saver), `QualitySettings.vSyncCount = 0`, `Screen.sleepTimeout = SleepTimeout.NeverSleep` while `SCR_MAIN` is the top Full screen (a modal over it included) and `SleepTimeout.SystemSetting` elsewhere (01 section 3.3; `ScreenRouter.KeepScreenAwake`, applied by `GameRoot` on change). The phone-on-the-desk idle mode depends on it.
 2. **Unscaled time only.** The tick accumulator uses `Time.unscaledDeltaTime`; `Time.timeScale` is never changed. `MAX_TICKS_PER_FRAME`, `TICK_BUDGET_MS` and `AUTOSAVE_INTERVAL_SEC` are 01's; the client does not redefine them.
 3. **Commands between frames.** Commands come only from UI callbacks on the main thread, which never interleave with `Advance`. `OnEvent` never sends a command; anything a feedback item wants from the sim is queued to the next frame.
 4. **Time enters through logged commands.** The client never reads `DateTime.Now`. Server time reaches the sim only as the logged `ApplyServerTime` system command at boot, resume, gap recovery and every `WALL_CLOCK_SYNC_SEC` (60 s) while open; between syncs the sim's tick-driven clock rolls the day (issue #5). Offline catch-up also runs through `Simulation.Apply`, never by writing state (issue #6).

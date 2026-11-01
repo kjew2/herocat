@@ -128,7 +128,7 @@ namespace UnityEngine
         public static int height => 0;
         public static int sleepTimeout { get; set; }
     }
-    public static class SleepTimeout { public const int NeverSleep = -1; }
+    public static class SleepTimeout { public const int NeverSleep = -1; public const int SystemSetting = -2; }
     public static class QualitySettings { public static int vSyncCount { get; set; } }
     public static class Time { public static float unscaledDeltaTime => 0; public static float unscaledTime => 0; }
     public static class Application
