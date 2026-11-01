@@ -328,6 +328,12 @@ namespace HeroCat.Client.Screens
             float step = _cell + UiConstants.BoardGap;
             UiKit.Place(_grid, UiConstants.TankColumn, 8, b.Width * step - UiConstants.BoardGap, b.Height * step - UiConstants.BoardGap);
             _grid.gameObject.AddComponent<BoardInput>().Init(this, _grid);
+            // The drag ghost exists before the cells: Bind draws each cell at once, and DrawCell touches the ghost.
+            _ghost = UiKit.CirclePanel("DragGhost", _grid, Color.white);
+            _ghost.rectTransform.sizeDelta = new Vector2(_fish * 1.15f, _fish * 1.15f);   // lift 1.15
+            _ghostText = UiKit.Text("Level", _ghost.rectTransform, UiKit.Title, 0x121212, TextAlignmentOptions.Center, bold: true);
+            UiKit.Fill(_ghostText.rectTransform);
+            _ghost.gameObject.SetActive(false);
             for (int i = 0; i < b.CellCount && i < _cellFish.Length; i++)
             {
                 int col = i % b.Width, row = i / b.Width;
@@ -344,12 +350,7 @@ namespace HeroCat.Client.Screens
                 int cell = i;
                 b.Cells[i].Bind(new ActionSink<CellLook>(look => DrawCell(cell, look)));
             }
-
-            _ghost = UiKit.CirclePanel("DragGhost", _grid, Color.white);
-            _ghost.rectTransform.sizeDelta = new Vector2(_fish * 1.15f, _fish * 1.15f);   // lift 1.15
-            _ghostText = UiKit.Text("Level", _ghost.rectTransform, UiKit.Title, 0x121212, TextAlignmentOptions.Center, bold: true);
-            UiKit.Fill(_ghostText.rectTransform);
-            _ghost.gameObject.SetActive(false);
+            _ghost.transform.SetAsLastSibling();   // drawn above the cells
 
             // Long-press info popover (07 section 5 Info row); a tap outside closes it.
             var blocker = UiKit.Panel("InfoBlocker", _board, Palette.Scrim, 0.3f, raycast: true);
@@ -368,8 +369,8 @@ namespace HeroCat.Client.Screens
             UiKit.Place(discard.GetComponent<RectTransform>(), 80, 300, 700, 128);
             b.InfoDiscard.Bind(UiKit.LabelOf(discard).Sink());
             Anchor(FishBoardVm.AnchorDiscard, discard.GetComponent<RectTransform>());
-            b.InfoVisible.Bind(new ActiveSink(_info.gameObject));
             _info.gameObject.SetActive(false);
+            b.InfoVisible.Bind(new ActiveSink(_info.gameObject));   // after the hide: Bind pushes the current value
 
             _discovery = UiKit.Panel("Discovery", _board, Palette.Gold, 0.95f).rectTransform;
             UiKit.Place(_discovery, 240, 200, 720, 200);
