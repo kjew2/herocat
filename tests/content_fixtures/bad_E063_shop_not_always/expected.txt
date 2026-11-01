@@ -1,0 +1,1 @@
+CONTENT E063 feature_unlocks[SHOP].condition: feature 'SHOP' must be ALWAYS

@@ -1,0 +1,1 @@
+CONTENT E092 meta[min_client_version]: schema changed (new required column / removed enum value) but min_client_version 0.1.0 did not increase

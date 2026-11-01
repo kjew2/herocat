@@ -1,0 +1,1 @@
+CONTENT E010 curves[enemy_hp].base: expected double, got '20x'

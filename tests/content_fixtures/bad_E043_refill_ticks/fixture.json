@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "tank",
+      "default,10,6.0",
+      "default,10,6.05"
+    ]
+  ],
+  "csharp": true
+}

@@ -1,0 +1,6 @@
+id,rarity,atk_pct,passive_pct,element,tier,name_key,desc_key,icon,sprite
+weapon_c_01,COMMON,20.0,1.0,NONE,M0,weapon.c_01.name,weapon.c_01.desc,icon_weapon_c_01,spr_weapon_c_01
+weapon_r_01,RARE,50.0,2.0,LIGHT,M0,weapon.r_01.name,weapon.r_01.desc,icon_weapon_r_01,spr_weapon_r_01
+weapon_e_01,EPIC,120.0,4.0,NONE,M0,weapon.e_01.name,weapon.e_01.desc,icon_weapon_e_01,spr_weapon_e_01
+weapon_l_01,LEGENDARY,300.0,8.0,NONE,M0,weapon.l_01.name,weapon.l_01.desc,icon_weapon_l_01,spr_weapon_l_01
+weapon_m_01,MYTHIC,700.0,16.0,LIGHT,M0,weapon.m_01.name,weapon.m_01.desc,icon_weapon_m_01,spr_weapon_m_01

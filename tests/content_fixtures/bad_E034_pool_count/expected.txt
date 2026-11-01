@@ -1,0 +1,1 @@
+CONTENT E034 weapons: weapons has 1 rows of EPIC, expected 2 from banners[WEAPON].pool_e

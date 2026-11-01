@@ -11,7 +11,7 @@ namespace HeroCat.Sim.Content
         /// Validates the loader-scope rules this skeleton implements, filters rows by tier, builds derived data and returns
         /// an immutable db (09 section 9.1). Order: enums (E021), keys (E020), refs (E022), constants (E040-E042), tier
         /// filter, construct. Throws <see cref="ContentBuildException"/> with every error found.
-        /// TODO(#126): the remaining loader-scope range and cross-table rules (E030-E065) with exporter message parity.
+        /// The loader-scope table rules live in ContentDb.Rules.cs with exporter message parity (issue #126).
         /// </summary>
         public static ContentDb Build(ContentDtos dtos, Tier buildTier)
         {
@@ -22,7 +22,7 @@ namespace HeroCat.Sim.Content
             return db;
         }
 
-        sealed class Builder
+        sealed partial class Builder
         {
             readonly ContentDtos _d;
             readonly Tier _tier;
@@ -84,7 +84,13 @@ namespace HeroCat.Sim.Content
                 Required("feature_unlocks", d.FeatureUnlocks);
                 if (Errors.Count > 0) return null;
 
+                // Loader-scope validation (ContentDb.Rules.cs, issue #126): keys first, then constants, refs and the
+                // table rules sorted by table, exactly as the exporter reports them. Nothing is built from invalid rows.
+                ValidateKeys(d);
+                int ruleErrors = Errors.Count;
                 db.Constants = BuildConstants(d.Constants);
+                ValidateRules(d);
+                SortByTable(ruleErrors);
                 if (Errors.Count > 0) return null;
                 var k = db.Constants;
 
@@ -277,7 +283,6 @@ namespace HeroCat.Sim.Content
             Constants BuildConstants(ConstantRowDto[] rows)
             {
                 var values = new Dictionary<string, Constants.Value>(StringComparer.Ordinal);
-                Unique("constants", rows, r => r.Key);
                 foreach (var r in rows)
                 {
                     string loc = $"constants[{r.Key}]";
@@ -292,12 +297,17 @@ namespace HeroCat.Sim.Content
                         Err("E041", loc + ".type", $"declared type '{r.Type}' does not match required type '{req}'");
                         continue;
                     }
-                    if (TryValue(req, r.Value, out var v)) values[r.Key] = v;
+                    if (TryValue(req, r.Value, out var v))
+                    {
+                        values[r.Key] = v;
+                        ConstantRange(r.Key, req, v, loc + ".value");
+                    }
                     else Err("E010", loc + ".value", $"expected {req}, got '{r.Value}'");
                 }
                 foreach (var key in Content.Constants.RequiredKeys)
                     if (!values.ContainsKey(key) && Content.Constants.RequiredType(key) != null && !HasKey(rows, key))
                         Err("E040", "constants", $"missing required constant '{key}'");
+                ConstantBoard(values);
                 return Content.Constants.From(values);
             }
 

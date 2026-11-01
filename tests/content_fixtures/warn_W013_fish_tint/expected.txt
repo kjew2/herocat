@@ -1,0 +1,1 @@
+CONTENT W013 fish_levels[13].tint: reachable fish level 13 reuses sprite 'spr_fish_01' and has no tint

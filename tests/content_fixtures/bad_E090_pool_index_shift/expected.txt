@@ -1,0 +1,1 @@
+CONTENT E090 skills: skills: 'skill_c_01' existed in previous build 2026.11.01 and is missing or reordered; retire rows with enabled=false or tier=P2 instead

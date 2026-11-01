@@ -1,0 +1,1 @@
+CONTENT E064 quests_daily: missing or unreachable daily bonus rows (no DAILIES_COMPLETED row with tier <= MVP)

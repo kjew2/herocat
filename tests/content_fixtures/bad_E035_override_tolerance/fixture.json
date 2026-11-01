@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "weapons",
+      "weapon_e_01,EPIC,120.0",
+      "weapon_e_01,EPIC,140.0"
+    ]
+  ],
+  "csharp": true
+}

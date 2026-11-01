@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "feature_unlocks",
+      "SHOP,ALWAYS,,SCR_SHOP,,",
+      "SHOP,STAGE_HIGHEST,5,SCR_SHOP,feature.quests.locked,"
+    ]
+  ],
+  "csharp": true
+}

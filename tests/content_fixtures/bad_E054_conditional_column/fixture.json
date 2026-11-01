@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "skills",
+      "skill_c_01,COMMON,10.0,INSTANT,80,,",
+      "skill_c_01,COMMON,10.0,INSTANT,80,40,"
+    ]
+  ],
+  "csharp": true
+}

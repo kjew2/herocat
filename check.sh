@@ -102,6 +102,21 @@ content_python() {
   fi
   echo "content/ and the DTO file match a fresh build"
 
+  # 09 section 6.3 (issue #123): a branch that changes content must bump content_version and must not delete ids, shift
+  # pool indices or shrink the B5 tables. Compared against the merge base's content/ (CONTENT_BASE_REF, default
+  # origin/main); skipped when that ref is unknown or its content/ predates the manifest format.
+  step "Content: version rules against the merge base's content/ (E090-E093)"
+  local base_ref="${CONTENT_BASE_REF:-origin/main}" base prev
+  if base=$(git merge-base HEAD "$base_ref" 2>/dev/null) && git cat-file -e "$base:content/manifest.json" 2>/dev/null; then
+    prev=$(mktemp -d)
+    git archive "$base" content | tar -x -C "$prev"
+    $PY tools/export_content.py build --previous "$prev/content" --out "$prev/new" --dto-out "$prev/dto.cs" >/dev/null
+    rm -rf "$prev"
+    echo "content/ follows the version rules against $base_ref ($base)"
+  else
+    echo "skipped: no content/manifest.json at the merge base with $base_ref"
+  fi
+
   step "Tools: fish_model.py S-constant checks (05 section 9)"
   $PY tools/fish_model.py --quiet
 

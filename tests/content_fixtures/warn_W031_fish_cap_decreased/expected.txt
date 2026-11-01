@@ -1,0 +1,1 @@
+CONTENT W031 constants[FISH_MAX_LVL0].value: FISH_MAX_LVL0 decreased from 10 to 9 (saved fish keep their level, issue #41)

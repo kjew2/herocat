@@ -1,0 +1,1 @@
+CONTENT E090 tutorial_steps: tutorial_steps: 'tut_hero_tab' existed in previous build 2026.11.01 and is missing or reordered; retire rows with enabled=false or tier=P2 instead

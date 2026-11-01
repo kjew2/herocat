@@ -1,0 +1,1 @@
+CONTENT E003 dupe_levels: unknown column 'extra' (remove it or add it to SCHEMA)

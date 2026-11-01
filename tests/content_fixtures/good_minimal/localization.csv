@@ -1,0 +1,79 @@
+key,en,ja,ko,zh_hans,max_chars,plural
+awakening.rank_1.name,Awakened 1,Awakened 1,Awakened 1,Awakened 1,24,false
+awakening.rank_2.name,Awakened 2,Awakened 2,Awakened 2,Awakened 2,24,false
+awakening.rank_3.name,Awakened 3,Awakened 3,Awakened 3,Awakened 3,24,false
+awakening.rank_4.name,Awakened 4,Awakened 4,Awakened 4,Awakened 4,24,false
+awakening.rank_5.name,Awakened 5,Awakened 5,Awakened 5,Awakened 5,24,false
+banner.companion.name,Companion Summon,Companion Summon,Companion Summon,Companion Summon,24,false
+banner.rune.name,Rune Summon,Rune Summon,Rune Summon,Rune Summon,24,false
+banner.skill.name,Skill Summon,Skill Summon,Skill Summon,Skill Summon,24,false
+banner.weapon.name,Weapon Summon,Weapon Summon,Weapon Summon,Weapon Summon,24,false
+chapter.01.name,Dreamland 1,Dreamland 1,Dreamland 1,Dreamland 1,24,false
+chapter.02.name,Dreamland 2,Dreamland 2,Dreamland 2,Dreamland 2,24,false
+feature.dungeons.locked,Unlocks at stage 30,Unlocks at stage 30,Unlocks at stage 30,Unlocks at stage 30,32,false
+feature.quests.locked,Unlocks at stage 10,Unlocks at stage 10,Unlocks at stage 10,Unlocks at stage 10,32,false
+feature.research.locked,Unlocks at Awakening 1,Unlocks at Awakening 1,Unlocks at Awakening 1,Unlocks at Awakening 1,32,false
+fish.01.name,Fish 1,Fish 1,Fish 1,Fish 1,24,false
+fish.02.name,Fish 2,Fish 2,Fish 2,Fish 2,24,false
+fish.03.name,Fish 3,Fish 3,Fish 3,Fish 3,24,false
+fish.04.name,Fish 4,Fish 4,Fish 4,Fish 4,24,false
+fish.05.name,Fish 5,Fish 5,Fish 5,Fish 5,24,false
+fish.06.name,Fish 6,Fish 6,Fish 6,Fish 6,24,false
+fish.07.name,Fish 7,Fish 7,Fish 7,Fish 7,24,false
+fish.08.name,Fish 8,Fish 8,Fish 8,Fish 8,24,false
+fish.09.name,Fish 9,Fish 9,Fish 9,Fish 9,24,false
+fish.10.name,Fish 10,Fish 10,Fish 10,Fish 10,24,false
+fish.11.name,Fish 11,Fish 11,Fish 11,Fish 11,24,false
+fish.12.name,Fish 12,Fish 12,Fish 12,Fish 12,24,false
+fish.13.name,Fish 13,Fish 13,Fish 13,Fish 13,24,false
+fish.14.name,Fish 14,Fish 14,Fish 14,Fish 14,24,false
+fish.15.name,Fish 15,Fish 15,Fish 15,Fish 15,24,false
+fish.16.name,Fish 16,Fish 16,Fish 16,Fish 16,24,false
+fish.17.name,Fish 17,Fish 17,Fish 17,Fish 17,24,false
+fish.18.name,Fish 18,Fish 18,Fish 18,Fish 18,24,false
+fish.19.name,Fish 19,Fish 19,Fish 19,Fish 19,24,false
+fish.20.name,Fish 20,Fish 20,Fish 20,Fish 20,24,false
+rarity.common.name,Common,Common,Common,Common,24,false
+rarity.epic.name,Epic,Epic,Epic,Epic,24,false
+rarity.legendary.name,Legendary,Legendary,Legendary,Legendary,24,false
+rarity.mythic.name,Mythic,Mythic,Mythic,Mythic,24,false
+rarity.rare.name,Rare,Rare,Rare,Rare,24,false
+skill.c_01.desc,A common instant skill.,A common instant skill.,A common instant skill.,A common instant skill.,0,false
+skill.c_01.name,Common Skill 1,Common Skill 1,Common Skill 1,Common Skill 1,24,false
+skill.e_08.desc,A epic buff skill.,A epic buff skill.,A epic buff skill.,A epic buff skill.,0,false
+skill.e_08.name,Epic Skill 8,Epic Skill 8,Epic Skill 8,Epic Skill 8,24,false
+skill.l_01.desc,A legendary instant skill.,A legendary instant skill.,A legendary instant skill.,A legendary instant skill.,0,false
+skill.l_01.name,Legendary Skill 1,Legendary Skill 1,Legendary Skill 1,Legendary Skill 1,24,false
+skill.m_02.desc,A mythic buff skill.,A mythic buff skill.,A mythic buff skill.,A mythic buff skill.,0,false
+skill.m_02.name,Mythic Skill 2,Mythic Skill 2,Mythic Skill 2,Mythic Skill 2,24,false
+skill.r_08.desc,A rare dot skill.,A rare dot skill.,A rare dot skill.,A rare dot skill.,0,false
+skill.r_08.name,Rare Skill 8,Rare Skill 8,Rare Skill 8,Rare Skill 8,24,false
+stat.atk.desc,Raises Attack.,Raises Attack.,Raises Attack.,Raises Attack.,0,false
+stat.atk.name,Attack,Attack,Attack,Attack,24,false
+stat.atk_spd.desc,Raises Attack Speed.,Raises Attack Speed.,Raises Attack Speed.,Raises Attack Speed.,0,false
+stat.atk_spd.name,Attack Speed,Attack Speed,Attack Speed,Attack Speed,24,false
+stat.crit_dmg.desc,Raises Crit Damage.,Raises Crit Damage.,Raises Crit Damage.,Raises Crit Damage.,0,false
+stat.crit_dmg.name,Crit Damage,Crit Damage,Crit Damage,Crit Damage,24,false
+stat.crit_rate.desc,Raises Crit Rate.,Raises Crit Rate.,Raises Crit Rate.,Raises Crit Rate.,0,false
+stat.crit_rate.name,Crit Rate,Crit Rate,Crit Rate,Crit Rate,24,false
+stat.def.desc,Raises Defense.,Raises Defense.,Raises Defense.,Raises Defense.,0,false
+stat.def.name,Defense,Defense,Defense,Defense,24,false
+stat.exp_gain.desc,Raises EXP Gain.,Raises EXP Gain.,Raises EXP Gain.,Raises EXP Gain.,0,false
+stat.exp_gain.name,EXP Gain,EXP Gain,EXP Gain,EXP Gain,24,false
+stat.gold_gain.desc,Raises Gold Gain.,Raises Gold Gain.,Raises Gold Gain.,Raises Gold Gain.,0,false
+stat.gold_gain.name,Gold Gain,Gold Gain,Gold Gain,Gold Gain,24,false
+stat.hp.desc,Raises Health.,Raises Health.,Raises Health.,Raises Health.,0,false
+stat.hp.name,Health,Health,Health,Health,24,false
+tut.1.tap,Tap the monster!,Tap the monster!,Tap the monster!,Tap the monster!,48,false
+tut.2.gold,Monsters drop gold.,Monsters drop gold.,Monsters drop gold.,Monsters drop gold.,48,false
+tut.3.hero,Make your cat stronger,Make your cat stronger,Make your cat stronger,Make your cat stronger,48,false
+weapon.c_01.desc,A common weapon.,A common weapon.,A common weapon.,A common weapon.,0,false
+weapon.c_01.name,Common Weapon 1,Common Weapon 1,Common Weapon 1,Common Weapon 1,24,false
+weapon.e_01.desc,A epic weapon.,A epic weapon.,A epic weapon.,A epic weapon.,0,false
+weapon.e_01.name,Epic Weapon 1,Epic Weapon 1,Epic Weapon 1,Epic Weapon 1,24,false
+weapon.l_01.desc,A legendary weapon.,A legendary weapon.,A legendary weapon.,A legendary weapon.,0,false
+weapon.l_01.name,Legendary Weapon 1,Legendary Weapon 1,Legendary Weapon 1,Legendary Weapon 1,24,false
+weapon.m_01.desc,A mythic weapon.,A mythic weapon.,A mythic weapon.,A mythic weapon.,0,false
+weapon.m_01.name,Mythic Weapon 1,Mythic Weapon 1,Mythic Weapon 1,Mythic Weapon 1,24,false
+weapon.r_01.desc,A rare weapon.,A rare weapon.,A rare weapon.,A rare weapon.,0,false
+weapon.r_01.name,Rare Weapon 1,Rare Weapon 1,Rare Weapon 1,Rare Weapon 1,24,false

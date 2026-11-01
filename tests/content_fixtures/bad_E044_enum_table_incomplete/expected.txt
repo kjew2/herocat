@@ -1,0 +1,1 @@
+CONTENT E044 stats: missing row for Stat value 'HP'

@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "banners",
+      "EPIC,1,1,banner.skill.name",
+      "EPIC,1,0,banner.skill.name"
+    ]
+  ],
+  "csharp": true
+}

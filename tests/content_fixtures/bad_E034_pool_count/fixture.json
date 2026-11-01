@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "banners",
+      "TICKET_SUMMON_WEAPON,1,1,1,1,1",
+      "TICKET_SUMMON_WEAPON,1,1,2,1,1"
+    ]
+  ],
+  "csharp": true
+}

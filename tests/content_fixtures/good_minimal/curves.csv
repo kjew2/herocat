@@ -1,0 +1,4 @@
+id,base,growth,x_offset
+enemy_hp,20,1.04,0
+gold_per_kill,2,1.03,0
+exp_per_kill,5,1.025,0

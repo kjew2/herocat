@@ -1,0 +1,1 @@
+CONTENT E002 hero_levels: missing required column 'level_cap'

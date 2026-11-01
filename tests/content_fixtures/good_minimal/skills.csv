@@ -1,0 +1,6 @@
+id,rarity,dps_pct,cast_type,cooldown_ticks,duration_ticks,buff_pct,tier,name_key,desc_key,icon,vfx
+skill_c_01,COMMON,10.0,INSTANT,80,,,M0,skill.c_01.name,skill.c_01.desc,icon_skill_c_01,vfx_skill_c_01
+skill_r_08,RARE,20.0,DOT,150,50,,M0,skill.r_08.name,skill.r_08.desc,icon_skill_r_08,vfx_skill_r_08
+skill_e_08,EPIC,40.0,BUFF,150,50,120.0,M0,skill.e_08.name,skill.e_08.desc,icon_skill_e_08,vfx_skill_e_08
+skill_l_01,LEGENDARY,80.0,INSTANT,80,,,M0,skill.l_01.name,skill.l_01.desc,icon_skill_l_01,vfx_skill_l_01
+skill_m_02,MYTHIC,160.0,BUFF,150,50,480.0,M0,skill.m_02.name,skill.m_02.desc,icon_skill_m_02,vfx_skill_m_02

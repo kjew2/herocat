@@ -1,0 +1,1 @@
+CONTENT E073 localization[awakening.rank_1.name].ja: key 'awakening.rank_1.name' has no ja text and ja is in ship_locales

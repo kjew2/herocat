@@ -1,0 +1,9 @@
+{
+  "append": [
+    [
+      "dupe_levels",
+      "10,200"
+    ]
+  ],
+  "csharp": true
+}

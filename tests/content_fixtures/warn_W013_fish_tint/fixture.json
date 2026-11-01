@@ -1,0 +1,17 @@
+{
+  "edits": [
+    [
+      "constants",
+      "FISH_MAX_LVL0,int,10",
+      "FISH_MAX_LVL0,int,13"
+    ],
+    [
+      "fish_levels",
+      "spr_fish_01,#FFD54F",
+      "spr_fish_01,"
+    ]
+  ],
+  "args": [
+    "--strict-warnings"
+  ]
+}

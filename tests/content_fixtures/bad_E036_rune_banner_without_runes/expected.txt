@@ -1,0 +1,1 @@
+CONTENT E036 banners[RUNE].enabled: banner RUNE is enabled but runes has no rows

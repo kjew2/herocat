@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "rarities",
+      "icon_rarity_square,50.0",
+      "icon_rarity_square,15.0"
+    ]
+  ],
+  "csharp": true
+}

@@ -1,0 +1,1 @@
+CONTENT E060 dupe_levels: level must be exactly 1..10 in row order, got 1, 2, 3, 4, 5, 6, 7, 8, 9, 11

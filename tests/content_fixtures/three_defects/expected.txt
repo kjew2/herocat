@@ -1,0 +1,3 @@
+CONTENT E043 curves[enemy_hp].growth: value 1.0 out of range (> 1)
+CONTENT E030 banner_levels[WEAPON,1].rates: rates sum to 1.0099999999999998 (abs error 0.009999999999999787), expected 1 within 1e-9
+CONTENT E061 dupe_levels[1].cum_copies: cum_copies for level 1 must be 1, got 2

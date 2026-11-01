@@ -1,0 +1,1 @@
+CONTENT E063 research[res_atk].unlock_awaken_rank: research[res_atk] unlocks at 0, before feature 'RESEARCH' (1)
