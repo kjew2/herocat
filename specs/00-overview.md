@@ -69,13 +69,13 @@ Each row maps a reference-game feature to our system name, its tier, and the spe
 
 | Layer | Choice | Why, and what was rejected |
 |---|---|---|
-| Client engine | **Unity 6 (`6000.6.7f1`, pinned in `unity/HeroCatClient/ProjectSettings/ProjectVersion.txt`)**, C#, URP 2D, uGUI + TextMeshPro (UI stack under review, issue #2), Addressables, Unity 2D Animation (Spine if budget allows) | Reference game is Unity; Unity 6 rather than 2022 LTS because 2022.3 is out of support and current Google Play requirements (target API 35, 16 KB pages) need Unity 6. 2D chibi animation, IAP, ads and analytics SDKs are all first-class. Godot 4 C# was considered: fine engine, but mobile IAP/ads SDK maturity is behind. Flutter + Flame rejected: weak for skeletal animation and particle-heavy combat. |
+| Client engine | **Unity 6 (`6000.6.7f1`, pinned in `unity/HeroCatClient/ProjectSettings/ProjectVersion.txt`)**, C#, URP 2D, uGUI + TextMeshPro, Addressables, Unity 2D Animation (Spine if budget allows) | Reference game is Unity; Unity 6 rather than 2022 LTS because 2022.3 is out of support and current Google Play requirements (target API 35, 16 KB pages) need Unity 6. 2D chibi animation, IAP, ads and analytics SDKs are all first-class. Godot 4 C# was considered: fine engine, but mobile IAP/ads SDK maturity is behind. Flutter + Flame rejected: weak for skeletal animation and particle-heavy combat. |
 | Simulation core | **`HeroCat.Sim`**, pure C# netstandard2.1, no `UnityEngine`, no IO, no clock, no JSON, no reflection | One implementation runs on device, in server validation and in bots. Determinism across x64/ARM64/IL2CPP requires no `Math.Pow/Exp/Log` on the hot path (repeated multiplication only), no floating-point reductions in unspecified order, no `DateTime.Now`. |
 | Runtime glue | **`HeroCat.Runtime`**, plain C#, references Sim + Newtonsoft.Json | Save serialization, migrations, clock, local store, HTTP clients, content loading. Shared by client and bots. No `UnityEngine`. |
 | Backend | **ASP.NET Core 8** stateless API, **PostgreSQL** (accounts, saves, purchases, guilds, mail), **Redis** (leaderboards, rate limits, sessions), **S3-compatible object store** (save blobs, content bundles), CDN in front of content | C# so the server references `HeroCat.Sim` for re-simulation and rate tables, no second implementation. Nakama/PlayFab were considered as a lighter path for a solo dev; rejected because server-authoritative summons with our own pity rules and save plausibility checks need custom code either way, and BaaS pricing scales badly with DAU. If the team is one person at M0, the backend is skipped entirely (local seams, see 01). |
 | Content | Google Sheet -> JSON tables -> versioned content bundle served via CDN, fallback copy shipped in the app | Designers edit the sheet. Exporter validates and emits JSON. Spec 09. |
 | Analytics | Event pipeline to a warehouse (Firebase Analytics for MVP, own events table on the backend for economy events) | Economy events need joins with purchases and saves, which third-party analytics cannot do. |
-| CI | GitHub Actions: Sim + Runtime tests on every PR, bot acceptance table on every content change, Unity build via self-hosted runner or Unity Cloud Build | Spec 10. |
+| CI | GitHub Actions: Sim + Runtime tests on every PR, bot acceptance table on every content change, Unity build via self-hosted runner or Unity Cloud Build | `./check.sh` is the single source of truth: it has modes (`--pr`, `--content`, `--nightly`) and every workflow is a thin wrapper that calls one, with path filters choosing which runs (issue #27). Spec 10. |
 
 Orientation: **portrait only**. Minimum targets: iOS 15, Android 8 (API 26), 2 GB RAM devices at 30 fps.
 
@@ -114,14 +114,14 @@ Authority split, which every spec must respect:
 |---|---|---|
 | Combat, stage progress, training, fish board, offline catch-up | **Client sim** | Deterministic; server can re-simulate from a prior save + command log for spot checks. |
 | Summon results | **Server** (MVP+), local `ISummonService` in M0 | Server rolls, logs, returns results; client never holds a summon RNG seed in MVP. |
-| Summon ticket balances | **Server** ledger (MVP+) | Needed so the summon endpoint can reject `PAYMENT_MISMATCH` (08 section 4.3). M0 holds them in the local `Wallet`. |
+| Summon ticket balances | **Server** ledger (MVP+) | Needed so the summon endpoint can reject `PAYMENT_MISMATCH` (08 section 4.3). M0 holds them in the local `Wallet`; in Remote mode `Wallet.SummonTicket` is a mirror of the ledger (issue #7). |
 | Wall-clock time | **Server** | Client stores last trusted server time and monotonic offset; see 02 and 06. |
 | Diamond grants from IAP, mail, coupons | **Server** | Receipt validated server-side; grant lands in Inbox; client claims. |
 | Save of record | **Server** | Client is a cache. Conflict rules in 02. |
 | Guild, leaderboards, events schedule, remote config | **Server** | |
 | Dungeon rewards | **Client sim**, server plausibility-checked | Dungeon fights are deterministic sim runs seeded by server-issued seed (MVP). Tickets are debited on clear only; a failed or abandoned run costs nothing (06 section 6). |
 
-Command/event discipline: the client never mutates `GameState`. It sends a `Command` into `Simulation`, which validates, mutates, and emits `Event`s. View-models subscribe to events. The same commands are what the bot harness and the server re-simulator feed in.
+Command/event discipline: the client never mutates `GameState`. It sends a `Command` into `Simulation`, which validates, mutates, and emits `Event`s. Runtime-originated changes (server time sync, offline catch-up, summon results) are system commands through the same door (issue #6). View-models subscribe to events. The same commands are what the bot harness and the server re-simulator feed in.
 
 ## 5. Canonical vocabulary and identifiers
 
@@ -132,8 +132,8 @@ Use these exact names in code, tables, specs and analytics. Singular for types, 
 | Name | Meaning |
 |---|---|
 | `Profile` | The account-level record: `playerId`, display name, created time, linked platforms. Not part of sim state. |
-| `GameState` | Save root. Everything the sim reads and writes. |
-| `Hero` | The player's single cat: level, EXP, awakening rank, equipped weapon id, equipped skill ids, equipped companion ids, equipped rune ids. |
+| `GameState` | Save root. Everything the sim reads and writes, including transient fight state; the save drops only what 02 section 3.3 lists. Field names and shapes are 02's (issue #7). Holds the immutable `RngRoot` (Guid) that every RNG seed derives from (issue #9). |
+| `Hero` | The player's single cat: level, EXP, awakening rank. The equipped weapon, skills, companions and runes live in `LoadoutState` (`Loadout.Weapon`, `Loadout.Skills`, ...), 02 section 3.1 (issue #7). |
 | `Stat` | One of `ATK`, `HP`, `DEF`, `CRIT_RATE`, `CRIT_DMG`, `ATK_SPD`, `GOLD_GAIN`, `EXP_GAIN`. `Training` levels are per stat. |
 | `Stage` | Integer `s >= 1`. The player farms exactly one stage at a time. Chapter = `floor((s-1)/CHAPTER_WIDTH)+1`, cosmetic only. |
 | `Boss` | Enemy at stage `s` where `s % BOSS_EVERY == 0`. Has a time limit. |
@@ -150,10 +150,10 @@ Use these exact names in code, tables, specs and analytics. Singular for types, 
 | `Dungeon` | One of `FISH_COIN`, `ROCK_CANDY`, `EXP`. Ticketed, laddered, sweepable. |
 | `Tower` (P1) | Fixed ladder of boss fights with one-time rewards. |
 | `Quest` | A tracked objective with a reward. Kinds: `DAILY`, `WEEKLY`, `ACHIEVEMENT`. |
-| `Wallet` | All currency balances. Every change goes through `Wallet.Apply(CurrencyDelta, Reason)`. |
+| `Wallet` | All currency balances. Every change goes through `Wallet.Apply(CurrencyDelta, Reason)`; a debit that would go below zero is rejected and changes nothing (issue #7). |
 | `Inbox` | Server-granted items awaiting claim (IAP, mail, coupons, compensation). |
-| `Command` | A player or system intent fed to `Simulation`. Named `VerbNoun`. The full registry is the union of each owning spec's command table (01 defines the base type); this list is the canonical vocabulary. Combat/progression (03): `TrainStat(stat, count)`, `TrainStatMax`, `AttemptBoss`, `TapZap(count)`, `Awaken`, `Research(nodeId)`, `SelectStage`. Collections (04): `Summon(banner, count, payment, requestId)`, `EquipWeapon`, `EquipSkill`, `EquipCompanion`, `LimitBreak`, `AutoEquipBest*`, P1 `CastSkill`. Fish (05): `ReleaseFish`, `ReleaseMax`, `MergeFish`, `MergeAll`, `MoveFish`, `DiscardFish`, P1 `SetAutoMerge`. Economy (06): `ClaimOfflineReward`, `StartDungeon`, `SweepDungeon`, `ClaimQuest`, `ClaimAllQuests`, `ClaimDailyGift`, `ExchangeItem`, `ClaimInbox`. |
-| `Event` | A fact emitted by the sim. Named `NounPastTense`. Combat: `HitLanded`, `EnemyKilled`, `StageCleared`, `StageFirstCleared`, `ChapterEntered`, `BossFailed`, `SkillCast`, `CompanionAbilityUsed`, `FishMissileHit`, `TapZapped`, `LevelUp`, `Awakened`, `ResearchLeveled`. Collections: `ItemAcquired`, `ItemEquipped`, `ItemLimitBroken`. Fish: `FishReleased`, `FishMerged`, `FishMoved`, `FishDiscarded`, `FishDiscovered`, `TankFishReady`. Economy: `CurrencyChanged`, `QuestCompleted`, `DayRolledOver`, `DungeonCleared`, `DungeonFailed`, `DungeonAbandoned`. |
+| `Command` | A player or system intent fed to `Simulation`. Named `VerbNoun`. The full registry is the union of each owning spec's command table (01 defines the base type); this list is the canonical vocabulary. Combat/progression (03): `TrainStat(stat, count)`, `TrainStatMax(stat)`, `AttemptBoss`, `TapZap(count)`, `Awaken`, `Research(nodeId)`, `SelectStage(stage?)`. Collections (04): `Summon(banner, count, payment, requestId)`, `EquipWeapon`, `EquipSkill`, `UnequipSkill(slot)`, `EquipCompanion`, `LimitBreak`, `AutoEquipBest*`, P1 `CastSkill`. Fish (05): `ReleaseFish`, `ReleaseMax`, `MergeFish`, `MergeAll`, `MoveFish`, `DiscardFish`, P1 `SetAutoMerge`. Economy (06): `ClaimOfflineReward`, `StartDungeon`, `SweepDungeon`, `ClaimQuest`, `ClaimAllQuests`, `ClaimDailyGift`, `ExchangeItem`, `ClaimInbox`, `ClaimAllInbox`. System (01; issued by Runtime, never by a screen, and logged like any other command): `ApplyServerTime(nowServerSeconds)`, `ComputeOfflineCatchup(nowServerSeconds)`, `ApplySummonResult(payload)` (issues #5, #6, #13). `RetreatFromBoss` is not in MVP. A refused command returns `ApplyResult.Reject(code, detail)`, mutates nothing and emits nothing: `code` is 01's small shared `RejectCode` enum, `detail` is a reason string from the owning spec's closed list, localized as `reject.<reason>`. `Apply` never throws on bad input; a malformed argument is rejected with `BadArgument` (issue #11). |
+| `Event` | A fact emitted by the sim. Named `NounPastTense`. Combat: `EnemySpawned`, `HitLanded`, `EnemyKilled`, `StageCleared`, `StageFirstCleared`, `BossCleared`, `ChapterEntered`, `BossFailed`, `StageCapReached`, `SkillCast`, `CompanionAbilityUsed`, `FishMissileHit`, `TapZapped`, `StatTrained`, `LevelUp`, `Awakened`, `ResearchLeveled`. Collections: `ItemAcquired`, `ItemEquipped`, `ItemLimitBroken`, `BannerLeveledUp`. Fish: `FishReleased`, `FishMerged`, `FishMoved`, `FishDiscarded`, `FishDiscovered`, `TankFishReady`. Economy: `CurrencyChanged`, `QuestCompleted`, `QuestClaimed`, `QuestsBulkClaimed`, `DayRolledOver`, `WeekRolledOver`, `OfflineRewardComputed`, `DungeonCleared`, `DungeonFloorFirstCleared`, `DungeonFailed`, `DungeonAbandoned`. Currency gains (boss Rock Candy included) are reported by `CurrencyChanged`, never `ItemAcquired`; there is no `FishMissileFired` (the client animates from `FishMerged`). Screens bind to these names; UI-only event names are not added (issue #11). |
 
 ### 5.2 Currencies
 
@@ -161,14 +161,17 @@ Use these exact names in code, tables, specs and analytics. Singular for types, 
 |---|---|---|---|---|
 | `GOLD` | Gold | Kills, offline catch-up | Training | Soft |
 | `DIAMOND` | Diamonds | Quests, first clears, IAP, login | Summons, shop | Hard |
-| `FISH_COIN` | Fish Coins | Fish discovery, Fish Coin Dungeon | Research | Soft |
+| `FISH_COIN` | Fish Coins | Fish discovery, repeat merges and discards (`FISH_MERGE`), Fish Coin Dungeon | Research | Soft |
 | `ROCK_CANDY` | Rock Candy | Rock Candy Dungeon, bosses, excess collectible copies past level 10 (04 section 5.3) | Awakening; limit breaks on weapons, skills and companions | Soft |
 | `HERO_EXP` | EXP | Kills, EXP Dungeon | Hero Level (auto) | Soft, never spent manually |
 | `TICKET_FISH_COIN`, `TICKET_ROCK_CANDY`, `TICKET_EXP` | Dungeon tickets | Daily reset, shop | Dungeon entry | Soft |
 | `TICKET_SUMMON_WEAPON`, `TICKET_SUMMON_SKILL`, `TICKET_SUMMON_COMPANION` | Summon tickets | Quests, events, shop | One pull each | Soft |
 | `GUILD_COIN` (P1) | Guild Coins | Guild activity | Guild shop | Soft |
+| `TICKET_SUMMON_RUNE` (P1) | Rune summon tickets | None until P1 | One rune pull | Soft |
 
 Diamonds are the only currency purchasable with money. Nothing else is ever sold for money directly.
+
+`TICKET_SUMMON_RUNE` is appended after `GUILD_COIN` in the `Currency` enum so earlier indices are unchanged; it exists in schema v1 so the disabled `RUNE` banner row has a valid ticket currency, and stays unused until P1 (issue #26).
 
 ### 5.3 Screen identifiers
 
@@ -245,21 +248,21 @@ Code must read every constant from content data (spec 09), never from a literal.
 | `PULL_COST[WEAPON/SKILL/COMPANION]` | 100 / 200 / 300 | S | Per single pull. 10-pull = 10x, no discount; discounting is done through banner level instead. Matches the reference game's pricing. |
 | `DAY_SECONDS` | 86400 | I | Day key = `floor(serverSeconds / DAY_SECONDS)`. Rollover 00:00 UTC. |
 | `OFFLINE_RATE` | 0.5 | I | Offline gold/EXP per second as a fraction of in-app kill rate at the current stage. |
-| `OFFLINE_CAP_H` | 24 | S | Reference game caps at 24 h. Sibling used 8 h; 24 h is friendlier and is what players expect in this sub-genre. |
+| `OFFLINE_CAP_H` | 24 | S | Reference game caps at 24 h. Sibling used 8 h; 24 h is friendlier and is what players expect in this sub-genre. Catch-up and 08's `offline_bound` use the effective cap `OFFLINE_CAP_H + 2 h * RES_OFFLINE_CAP level` (issue #21). |
 | `OFFLINE_MIN_S` | 60 | S | Gaps shorter than this credit nothing and show no modal. |
 | `TUTORIAL_DIAMONDS` | 1500 | S | One-time grant at profile creation. |
-| `LOGIN_DIAMONDS` | 50 | I | Once per day key. |
+| `LOGIN_DIAMONDS` | 50 | I | Once per day key, auto-granted by `EnsureDay` with reason `LOGIN`. A `constants` row; the `d_login` daily quest only counts toward the bonus thresholds and pays nothing (issue #20). |
 
 ### 6.3 Summons
 
 | Name | Value | Kind | Notes |
 |---|---|---|---|
 | Base rates | C .60 / R .28 / E .09 / L .025 / M .005 | I | Banner level 1. Sum 1.0. Higher banner levels shift weight from C to R/E (04). |
-| `PITY_SOFT_START` | 50 | I | Pulls 1-50 since last L+ use base rate. |
+| `PITY_SOFT_START` | 50 | I | Pulls 1-50 since last L+ use base rate. `pity` = pulls since the last L+ before this pull, and the pull number is `n = pity + 1` (issue #24). |
 | `PITY_SOFT_STEP` | 0.0325 | I | L+ rate on pull `n` = `min(1, 0.03 + 0.0325*(n-50))`. |
 | `PITY_HARD` | 80 | I | Forced L+. P99 is 62, so this is a published guarantee, not a design lever. |
 | `M_SHARE_OF_LPLUS` | 1/6 | I | |
-| 10-pull guarantee | at least one E+ | I | Slot 10 rerolls from the E+ sub-distribution if slots 1-9 are all below Epic. |
+| 10-pull guarantee | at least one E+ | I | If slots 1-9 are all below Epic, slot 10 runs the normal L+ check first and is Epic if it fails; never a renormalised draw over E/L/M, so the published L+ rate is unchanged. 04 owns the one pull algorithm (banner level evaluated per pull) shared by the server, `LocalSummonService` and `gacha_model.py` (issue #24). |
 | `BANNER_EXP_PER_PULL` | 1 | S | Banner level thresholds in 04. |
 | `SKILL_SLOTS` | 6 | I | |
 | `COMPANION_SLOTS` | 4 | S | |
@@ -278,7 +281,7 @@ Code must read every constant from content data (spec 09), never from a literal.
 | `TANK_REFILL_S0` | 6 | S | Seconds per fish at Research 0. |
 | `FISH_MAX_LVL0` | 10 | S | Highest fish level reachable before Research raises the cap. |
 | `FISH_DISCOVERY_COINS[n]` | `10 * 2^(n-1)` | S | Fish Coins the first time a level-`n` fish is created. |
-| `FISH_MERGE_COINS_PCT` | 0.02 | S | Each merge pays 2% of that level's discovery value. |
+| `FISH_MERGE_COINS_PCT` | 0.02 | S | Each merge pays 2% of that level's discovery value, unrounded (`FISH_COIN` is a `double`; the UI floors the display) (issue #16). |
 | `FISH_MISSILE_PCT[n]` | `5 * 1.5^(n-1)` | S | Damage of a fish missile fired when a level-`n` fish is created, as % of one hero hit. |
 | `FISH_BOARD_DPS_FACTOR` | 0.5 | S | Named so 09 can hold it as a `constants` row. |
 | `FISH_BOARD_DPS_PCT` | `sum over board of FISH_BOARD_DPS_FACTOR * FISH_MISSILE_PCT[level]` | S | Passive DPS% contributed by fish sitting on the board. Design lever so the board matters when idle. |
@@ -298,7 +301,7 @@ Code must read every constant from content data (spec 09), never from a literal.
 
 ### 6.6 Session model and targets
 
-Assumed F2P player: 2 h active per day (the bot harness splits it into two 60-minute sessions so weekly keys and the 00:00 UTC rollover are both exercised; 10 section 4), offline the rest. Targets the bot harness must land within +/-20%:
+Assumed F2P player: 2 h active per day (the bot harness splits it into two 60-minute sessions so weekly keys and the 00:00 UTC rollover are both exercised, with the gap lengths alternating so that on alternate days a session is open across 00:00 UTC (issue #29); 10 section 3.3), offline the rest. Targets the bot harness must land within +/-20%:
 
 | Day | Stage |
 |---|---|
@@ -321,31 +324,33 @@ DPS(s) = BASE_ATK
        * (1 + equippedWeaponPct + sum_owned weaponPassivePct) # Weapons, summon-driven
        * (1 + sum_equipped skillDpsPct)                      # Skills, burst and auto-cast
        * (1 + mpSufficiency * sum_equipped companionDpsPct)  # Companions, MP-gated (03 section 3)
-       * (1 + FISH_BOARD_DPS_PCT + missileUptime)            # Fish Board, active layer
+       * (1 + (FISH_BOARD_DPS_PCT + missileDpsPct) / 100)   # Fish Board; missileDpsPct is rated-only
        * (1 + RES_ATK_pct)                                   # Research, direct DPS node (03 section 6)
        * (1 + runePct)                                       # Runes (P1)
        * AWAKEN_MULT ^ awakenRank                            # milestone layer
        * critFactor(CRIT_RATE, CRIT_DMG) * speedFactor(ATK_SPD)
 ```
 
-Enemy HP grows `HP_G^s`. The budget for each layer's share of the residual is set in `03`. Rule of thumb from pillar 2: no layer above 40% of log-power at day 30, no layer below 5% so it still feels worth upgrading. 03's day-30 shares under the current constants: Hero 26%, Training 14%, Fish 15%, Weapons 10%, Skills 8%, Companions 7%, Awakening 6%, crit 6%, Research 4%, speed 3%. Research and speed miss the 5% floor; 03 section 8 lists the levers.
+This is the **rated** DPS: the expected value used by `Query`, the wall check, layer shares, the bots, the tools and 08's plausibility bound. It excludes transient buffs. The tick loop deals damage differently: a hero hit carries only the layers that have no discrete event (Training, Hero, Weapons, passive board DPS, Research, Runes, Awakening, active buffs), and skills, companions, fish missiles and Tap Zap deal their own multiples of that hit, so no layer is counted twice. `missileDpsPct` never enters the live hit; a live display number, if any, is a runtime-only rolling average kept out of the save and `StateHash`. 03 section 7.1 owns the decomposition and tests that measured DPS over a long fight matches the rated value within 1% (issues #10, #15).
+
+Enemy HP grows `HP_G^s`. The budget for each layer's share of the residual is set in `03`. Rule of thumb from pillar 2: no layer above 40% of log-power at day 30, no layer below 5% so it still feels worth upgrading. The bots check the 40% ceiling on days 1, 7 and 30 and the 5% floor on days 7 and 30 only; `Base` is not a layer for the floor (crit and speed are), and per-tier floor exemptions (M0: Research, Companions, speed) live in `acceptance-targets.json` and report `WARN` instead of failing (issue #12). 03's day-30 shares under the current constants: Hero 26%, Training 14%, Fish 15%, Weapons 10%, Skills 8%, Companions 7%, Awakening 6%, crit 6%, Research 4%, speed 3%. Research and speed miss the 5% floor; 03 section 8 lists the levers.
 
 The hero cannot die. `HP` and `DEF` remain in the `Stat` enum but are not trainable in MVP; their P1 job is Tower survival (03 section 4).
 
 ## 8. Cross-spec contracts
 
 1. **Sim is pure.** `HeroCat.Sim` has no `UnityEngine`, IO, clock, JSON, reflection, `Math.Pow/Exp/Log`. Curves are evaluated by repeated multiplication from tables. Everything that needs IO lives in `HeroCat.Runtime`.
-2. **Named RNG streams.** Each consumer owns a stream `(seed, counter)` persisted in the save: `combat`, `crit` (one draw per hero hit), `fish_spawn` (one draw per successful release), `dungeon`, `loot` (one draw per boss kill), plus `summon_weapon`, `summon_skill`, `summon_companion` (three draws per pull). The summon streams are consumed only by `LocalSummonService` (M0 and bots); in Remote mode (MVP+) their counters are ignored, not removed, so schema v1 is one shape for every mode (02 section 3.4). Invariants: `loot.Counter == Stats.Kills`-derived, `fish_spawn.Counter == Stats.FishReleased`, Local-mode `summon_x.Counter == 3 * TotalPulls`. Enemy skins are chosen by hashing `(stage, killIndex)` and consume no stream (09 section 5.6).
+2. **Named RNG streams.** Each consumer owns a stream `(seed, counter)` persisted in the save: `combat` (reserved, no draws in MVP), `crit` (one draw per hero hit), `fish_spawn` (one draw per successful release), `dungeon`, `loot` (one draw per boss kill), plus `summon_weapon`, `summon_skill`, `summon_companion` (three draws per pull). 03 owns the combat draw order. Every seed is the first 8 bytes of SHA-256(`RngRoot` ++ UTF-8 stream name), derived in Runtime (the sim stays hash-free). `RngRoot` is an immutable Guid set once at profile creation (`PlayerId` if known, else a fresh random Guid) and never re-derived, so seeds do not change when an account is linked; a migration that adds a stream derives its seed from `RngRoot` inside the step (issue #9). The summon streams are drawn only by `LocalSummonService` (M0 and bots), which rolls on a clone and returns the counter after the pull in the payload; `ApplySummonResult` sets it (issue #6). In Remote mode (MVP+) their counters are ignored, not removed, so schema v1 is one shape for every mode (02 section 3.4). Invariants, checked by the validator and 08: `combat.Counter == 0` (MVP), `crit.Counter == Stats.HeroHits`, `loot.Counter == Stats.BossKills`, `fish_spawn.Counter == Stats.FishReleased`, Local-mode `summon_x.Counter == 3 * TotalPulls` (issue #8). Enemy skins are chosen by hashing `(stage, killIndex)` and consume no stream (09 section 5.6).
 3. **Content is data.** Every number in section 6 is a row in a table from spec 09. Code receives a `ContentDb` and never a literal. Content versions are `YYYY.MM.DD[.N]` with no major/minor semantics; breaking changes are expressed through `min_client_version` plus `schema_version` in the manifest. Content applies at the next cold boot, except the hot-apply allowlist `localization`, `shop_products`, `shop_packages`, `inbox_templates` (01 section on content hot update).
 4. **Save schema is versioned from v1** with forward-only migrations and a fixture per version (02).
-5. **Commands in, events out.** The client, bots and server re-simulator only talk to the sim through `Simulation.Apply(Command)` and `Simulation.Advance(ticks)`, and only observe it through `Event`s and read-only snapshots.
+5. **Commands in, events out.** The client, bots and server re-simulator only talk to the sim through `Simulation.Apply(Command)` and `Simulation.Advance(ticks)`, and only observe it through `Event`s and read-only snapshots. Nothing else mutates `GameState`: server time sync, offline catch-up and summon results enter as the logged system commands `ApplyServerTime`, `ComputeOfflineCatchup` and `ApplySummonResult`, so replaying the command log reproduces the state exactly. `ApplySummonResult(payload)` is the only summon mutator in both modes: it debits in Local mode and replaces balances with the server's in Remote mode (issues #6, #13).
 6. **Every currency change has a reason.** `Wallet.Apply(delta, reason)` where `reason` is from a closed enum: `KILL`, `BOSS`, `OFFLINE`, `LOGIN`, `TUTORIAL`, `FIRST_CLEAR`, `QUEST`, `ACHIEVEMENT`, `DAILY_GIFT`, `DAILY_RESET`, `SUMMON`, `TRAINING`, `RESEARCH`, `AWAKENING`, `LIMIT_BREAK`, `IAP`, `MAIL`, `DUNGEON`, `FISH_DISCOVERY`, `FISH_MERGE`, `SHOP_EXCHANGE`, `REFUND`, `ADMIN`. `ADMIN` is reserved for operator interventions; game grants always have their own code. The analytics event for every currency change carries it.
-7. **Server time is the only trusted time.** `IClock` with `ServerClock` (MVP) and `FakeClock` (bots, tests). Day keys, offline gaps, dungeon resets and banner schedules all derive from it. `dayKey = floor(serverSeconds / DAY_SECONDS)`; `weekKey = floor((dayKey - 4) / 7)`, weeks start Monday 00:00 UTC. Clock going backwards grants nothing twice (02, 06). Offline catch-up is two-phase: `Catchup.Compute` stamps `LastTickServerTime` and stores `Offline.Pending` immediately, `ClaimOfflineReward` credits it; a second gap while a reward is pending sums into the same record, so the window is consumed at compute time, never at claim time.
+7. **Server time is the only trusted time.** `IClock` with `ServerClock` (MVP) and `FakeClock` (bots, tests). Day keys, offline gaps, dungeon resets and banner schedules all derive from it. `dayKey = floor(serverSeconds / DAY_SECONDS)`; `weekKey = floor((dayKey - 4) / 7)`, weeks start Monday 00:00 UTC. Clock going backwards grants nothing twice (02, 06). Between syncs the sim advances a virtual server clock per tick and rolls the day on the tick that crosses midnight; Runtime issues `ApplyServerTime` only at boot, resume, gap recovery and every `WALL_CLOCK_SYNC_SEC = 60` s (a `RuntimeConfig` constant), which re-anchors the clock and handles any jump (issue #5). Offline catch-up is two-phase: `ComputeOfflineCatchup` runs `Catchup.Compute`, stamps `Time.LastTickServerTime` and stores `Offline.Pending` immediately, `ClaimOfflineReward` credits it; ticks are paused while `SCR_OFFLINE_REWARD` is open, so the numbers shown are exactly what is credited. A second gap while a reward is pending sums into the same record (keeping the latest stage for display), so the window is consumed at compute time, never at claim time. The Magic Tank fill is computed at compute time with 05's `CatchUpTank` over the credited ticks and applied at claim (issue #21).
 8. **Screens bind to view-models, view-models subscribe to events.** No screen reads `GameState` directly and no screen polls per frame except the combat viewport and HUD counters, which read a per-tick snapshot.
-9. **Curve-valued numbers are `double`** guarded by `STAGE_CAP`: `GOLD`, `FISH_COIN`, `Hero.Exp`, HP, damage. Counted currencies are `long`: `DIAMOND`, `ROCK_CANDY`, every ticket. `HERO_EXP` is `Hero.Exp`, not a `Wallet` balance, though it still flows through `Wallet.Apply` for the reason code. Display formatting uses the suffix ladder K, M, B, T, aa, ab, ac... (07). Never show more than 4 significant digits.
+9. **Curve-valued numbers are `double`** guarded by `STAGE_CAP`: `GOLD`, `FISH_COIN`, `Hero.Exp`, HP, damage. Counted currencies are `long`: `DIAMOND`, `ROCK_CANDY`, every ticket. `HERO_EXP` is `Hero.Exp`, not a `Wallet` balance, though it still flows through `Wallet.Apply` for the reason code. Display formatting uses the suffix ladder K, M, B, T, aa, ab, ac... (07): round to 3 significant digits first, then choose the suffix (`999.4 -> 999`, `999.5 -> 1.00K`); multipliers use the ladder too (`x1.50K`); NaN and infinity show `?`. The one exception is integer counts below 1e6, shown in full with locale grouping (issue #22).
 10. **All user-visible text is a localization key.** No literal strings in prefabs or code (07, 09).
-11. **Server-sensitive operations go through an interface** with a local implementation for M0 and a documented remote contract: `IClock`, `ISummonService`, `ISaveStore`, `IInboxService`, `IReceiptValidator`, `IConfigService` (01, 08).
-12. **The bot harness is the acceptance test** for any balance change (10). A content PR that moves the day-30 stage outside the tolerance band fails CI.
+11. **Server-sensitive operations go through an interface** with a local implementation for M0 and a documented remote contract: `IClock`, `ISummonService`, `ISaveStore`, `IInboxService`, `IReceiptValidator`, `IConfigService`, `IDungeonSeedService` (01, 08). The seventh seam issues dungeon run seeds: locally one `dungeon` stream draw (M0), the server endpoint from MVP (issue #25).
+12. **The bot harness is the acceptance test** for any balance change (10). A content PR that moves the day-30 stage outside the tolerance band fails CI. `StateHash` is SHA-256 over the canonical binary state encoding, and the golden command log is JSONL in the same format as 01's runtime command log, so one parser serves upload, server re-sim and golden replay (issue #28).
 13. **Idempotency for every server mutation.** Each client-originated mutating request carries a client-generated `requestId`; the server stores results keyed by it for 24 h and replays them on retry (01, 08).
 
 ## 9. Spec writing conventions
@@ -378,8 +383,9 @@ herocat/
     10-testing-release-and-ops.md      test pyramid, bots, CI/CD, store release, KPIs, runbooks, roadmap
   tools/
     power_curve_model.py               (to write) greedy F2P bot across all layers, prints the day table
-    gacha_model.py                     (copy from idle-rng-game, rename streams) pity distribution
+    gacha_model.py                     (copy from idle-rng-game, rename streams) pity distribution; --vectors writes Fixtures/Summon/vectors.json
     fish_model.py                      (to write) tank/merge throughput, coin and DPS income per active minute
+    export_content.py                  sheet exporter, verb CLI (pull/build/check/diff/...), spec 09
 ```
 
 Planned source layout:
@@ -394,8 +400,9 @@ src/HeroCat.Bots/           headless harness (spec 10)
 src/HeroCat.Server/         ASP.NET Core API (spec 08)
 src/HeroCat.Server.Tests/
 unity/                      Unity project; Assets/HeroCat.Client references Sim + Runtime as local packages
-content/                    JSON tables exported from the sheet (spec 09)
-tools/                      Python models and the sheet exporter
+content/                    JSON tables exported from the sheet (spec 09); lowercase, replaces today's Content/ (issue #1)
+tools/                      Python models and the sheet exporter (export_content.py replaces content_build.py)
+Fixtures/Summon/            summon vectors (Python-generated) and the C# stream-sequence determinism golden (issue #14)
 ```
 
 ## 11. Milestones
@@ -441,7 +448,7 @@ These were open or contradictory across the writer-produced specs and are now se
 22. **`MoveFish` is accepted** (MVP): cosmetic reposition of a fish to an empty cell, consumes no stream, emits `FishMoved`. 05 should add the command and its rejection reasons.
 23. **Content versioning** is `YYYY.MM.DD[.N]`; hot-apply allowlist as in contract 3; `hero_levels` and `tank` are one-row rule tables; `progress_targets` is a content table (09).
 24. **Enemy skins hash `(stage, killIndex)`** rather than consuming a sixth stream (09 section 5.6).
-25. **Bot harness epoch** is a Monday 09:00 UTC with two 60-minute sessions per day, so both weekly keys and the UTC rollover are exercised in a 30-day run; diamond income defaults to the sim's own quests, with a flat `DIAMONDS_PER_DAY_F2P` mode kept only for parity with `power_curve_model.py` (10).
+25. **Bot harness epoch** is a Monday 09:00 UTC with two 60-minute sessions per day, so both weekly keys and the UTC rollover are exercised in a 30-day run; gap lengths alternate so that on alternate days the evening session runs across 00:00 UTC and the in-session rollover is exercised too (amended by decision 61, issue #29); diamond income defaults to the sim's own quests, with a flat `DIAMONDS_PER_DAY_F2P` mode kept only for parity with `power_curve_model.py` (10).
 26. **Plausibility checks use the Tap Zap upper bound** `DPS * (1 + TAP_ZAP_DMG_PCT * TAP_ZAP_MAX_PER_SEC)` for the stage-versus-time check, not the idle bot's DPS (08).
 27. **Save files are excluded from OS backup**; cloud save (including guests) is the backup (02).
 28. **`IDEMPOTENCY_TTL_H = 24`**; a pending summon older than that executes fresh rather than replaying (02, 08).
@@ -455,3 +462,31 @@ Known stale spots left for the next pass rather than patched blind: early-day st
 31. **Unity 6 (`6000.6.7f1`)**, not 2022 LTS. Issue #2.
 32. **No web prototype.** The WebAssembly playtest build (`web/`, `src/HeroCat.Web`, `play.sh`) is removed; the Unity client is the only client. Issue #3.
 33. **Clean replacement of the old design.** The previous prototype's systems (hero party gacha, gear, class advances, gems, chest timer) are deleted, not migrated. Nothing has shipped, so the new `GameState` is schema v1 from scratch, old dev saves are not migrated, and golden files and acceptance targets are regenerated from the new bots. Infrastructure (RNG, clock, replay, state hasher, save store, bot harness, content build) is reused. Issue #4.
+34. **Content directory and exporter names follow 09/10**: lowercase `content/` and `tools/export_content.py` with the verb CLI replace `Content/` and `tools/content_build.py`; the code rename lands with the exporter rewrite. Issue #1.
+35. **UI stack is uGUI + TextMeshPro** on Unity 6 (decision 31). The existing UI Toolkit screens are old design and are rewritten. Issue #2.
+36. **One spec 07.** The still-valid Unity setup from the old `07-client-unity-prototype.md` (version pin, Dev/Release build profiles, safe area, frame loop and sim bridge, Android/iOS build steps, device QA checklist) moved into `07-screens-and-ux.md`; the old file is deleted. Issue #3.
+37. **Server time enters by tick-driven virtual clock.** The sim rolls the day on the tick that crosses midnight; Runtime issues a logged `ApplyServerTime` only at boot, resume, gap recovery and every `WALL_CLOCK_SYNC_SEC = 60` s (contract 7). Issue #5.
+38. **No mutation outside `Apply`.** Offline catch-up is the system command `ComputeOfflineCatchup(nowServerSeconds)`; `ApplySummonResult` debits in both modes and, in Local mode, sets the summon stream counter carried in the payload, so `LocalSummonService` reads state but never writes it (contract 5). Issue #6.
+39. **02 owns `GameState` names and shapes**; feature specs' newer semantics are adopted into it: `OwnedItem.LimitBreaks`, `Copies` capped at 160 with level derived, banner level derived from cumulative `BannerExp`, three-state quest records whose progress counts past target, `ShopState`, `Stats.HeroHits`/`FishDiscards`/`FirstWallStage`, `BossPhase` (None/Pending/Walled) instead of `BossActive`, a persisted `Combat.MissileQueue`, `Wallet.Apply` rejecting overdrafts, `Wallet.SummonTicket` a server mirror in Remote mode, equipped items in `LoadoutState`, new-item badges outside sim state. Issue #7.
+40. **RNG draw rules and invariants are 03's**: `combat` reserved (`Counter == 0`), `crit` one per hero hit (`== Stats.HeroHits`), `loot` one per boss kill (`== Stats.BossKills`) (contract 2). Issue #8.
+41. **Seeds derive from an immutable `RngRoot`** in `GameState` (SHA-256 in Runtime), never from `PlayerId`/`DeviceId` at load time; migrations that add a stream derive its seed from `RngRoot` inside the step. Issue #9.
+42. **Rated vs realised damage are split.** Section 7's `DPS` is the rated value; hero hits exclude the skill, companion and missile layers, which deal their own multiples of the hit (03 section 7.1). Issue #10.
+43. **00's command and event names win, extended** with the names owner specs define (section 5.1); rejects use 01's `RejectCode` plus a closed per-spec reason string; malformed input is rejected with `BadArgument`, never thrown; ids `res_*`, constant `TRAIN_CAP`; `RetreatFromBoss` is out of MVP. Issue #11.
+44. **Layer-share gate**: 40% ceiling on days 1, 7 and 30; 5% floor on days 7 and 30 with per-tier exemptions as data in `acceptance-targets.json` reported as `WARN` (section 7). Issue #12.
+45. **01's `SummonResultPayload` is the summon contract**, extended per pull with `CopiesAfter` and `OverflowRockCandy`; `ApplySummonResult(payload)` is the only mutator; `LocalSummonService` rolls on cloned state and checks the wallet first; Remote mode takes the server's balances; event `BannerLeveledUp`; one merged `summon` analytics schema. Issue #13.
+46. **Summon vectors**: `gacha_model.py --vectors` owns the scripted-`u` vectors in `Fixtures/Summon/`; the C# stream-sequence fixture stays as a determinism golden that Python's SplitMix64 must reproduce. Issue #14.
+47. **`missileDpsPct` is rated-only** and never enters the live hit; any live display average is runtime-only, outside the save and `StateHash`. Issue #15.
+48. **Fish Coin merge payouts are unrounded `double`s** (05's values); 09 stops rounding them. Issue #16.
+49. **Jammed board**: a full board is jammed iff every level below the cap appears at most once; cap fish still do not merge (05 open question 7 default) and `DiscardFish` stays M0. Issue #17.
+50. **Fish Board gestures**: 05 owns behaviour, commands and events (discard entry, `LONG_PRESS_MS`); 07 owns presentation; the UI constants live in 07's constants list. Issue #18.
+51. **Spec 05 errata applied** (and the 00 formula units and `FISH_COIN` sources). Issue #19.
+52. **Login diamonds are auto-granted** by `EnsureDay` with reason `LOGIN`; `d_login` pays nothing and only counts toward bonus thresholds, keeping the 400/day budget. Issue #20.
+53. **Offline catch-up details**: ticks pause behind `SCR_OFFLINE_REWARD`; the tank count uses 05's `CatchUpTank` over credited ticks at compute and applies at claim; a second gap sums into the pending record with the latest stage shown; the effective cap includes `RES_OFFLINE_CAP` (contract 7). Issue #21.
+54. **Number formatting**: 3 significant digits on the suffix ladder, rounded before the suffix is chosen; integer counts below 1e6 in full (contract 9). Issue #22.
+55. **07 acceptance criteria run engine-free first**: screen logic lives in the client's `Core/` and is tested in `HeroCat.Runtime.Tests`; only rect, prefab and profiler checks wait for a Unity CI job. 07 marks each AC engine-free or Unity-only. Issue #23.
+56. **One summon pull algorithm, 04's**: forced 10th slot is Epic only after a failed normal L+ check; `pity` = pulls since last L+ before this pull, `n = pity + 1`; banner level evaluated per pull; one vectors file `Fixtures/Summon/vectors.json` (section 6.3). Issue #24.
+57. **`IDungeonSeedService` is the seventh server-sensitive seam** (contract 11). Issue #25.
+58. **`TICKET_SUMMON_RUNE` is in the `Currency` enum from schema v1**, appended after `GUILD_COIN` and unused until P1 (section 5.2); rune `ATK_PCT` maps to `Stat.ATK`. Issue #26.
+59. **CI wraps `check.sh`**: `./check.sh` gains `--pr`, `--content` and `--nightly` modes and the workflows are thin path-filtered wrappers, so a green `./check.sh` still means green CI (section 3). Issue #27.
+60. **`StateHash` stays SHA-256**; the golden command log is JSONL in 01's command-log format (contract 12). Issue #28.
+61. **Bot sessions sometimes span the rollover**: gap lengths alternate so the evening session runs across 00:00 UTC on alternate days, keeping 120 active minutes in two sessions (amends decision 25; 10 section 3.3). Issue #29.

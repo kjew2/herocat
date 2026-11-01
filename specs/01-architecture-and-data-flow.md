@@ -22,8 +22,8 @@ flowchart TB
         Runner["SessionRunner"]
         Save["SaveSerializer, Migrations, LocalSaveStore, CloudSaveClient"]
         Clock["ServerClock, FakeClock"]
-        Net["ApiClient, SummonClient, InboxClient, ConfigClient, ReceiptClient"]
-        Local["LocalSummonService, LocalInboxService, LocalConfigService"]
+        Net["ApiClient, SummonClient, InboxClient, ConfigClient, ReceiptClient, DungeonSeedClient"]
+        Local["LocalSummonService, LocalInboxService, LocalConfigService, LocalDungeonSeedService"]
         Content["ContentLoader"]
         Analytics["Analytics sinks"]
     end
@@ -64,11 +64,11 @@ flowchart TB
 |---|---|
 | `HeroCat.Sim` references nothing but `netstandard2.1`. No `UnityEngine`, `System.IO`, `System.Net`, `Newtonsoft`, `System.Reflection`, `System.DateTime`/`DateTimeOffset.Now`, `Stopwatch`, `Math.Pow/Exp/Log`. | `HeroCat.Sim.csproj` has no package references; a CI source grep (10) fails the build on any of the banned identifiers. |
 | `HeroCat.Runtime` references `HeroCat.Sim` and `Newtonsoft.Json`. No `UnityEngine`. | asmdef in Unity marks it `noEngineReferences: true`; the .NET csproj has no Unity reference. |
-| `HeroCat.Client` references `HeroCat.Sim` and `HeroCat.Runtime` as local UPM packages (`unity/Packages/com.whisker.sim`, `com.whisker.runtime`, both `file:` references to `src/`). | Unity asmdef `references`. |
+| `HeroCat.Client` references `HeroCat.Sim` and `HeroCat.Runtime` as local UPM packages (`com.herocat.sim`, `com.herocat.runtime` in `unity/HeroCatClient/Packages/manifest.json`, both `file:` references to `src/`). | Unity asmdef `references`. |
 | Screens never reference `GameState` or `Simulation`. They reference a `ViewModel`. | asmdef split: `HeroCat.Client.Screens` references `HeroCat.Client.ViewModels` only; `ViewModels` references Runtime + Sim. |
 | `HeroCat.Server` references `HeroCat.Sim` for `ContentDb`, rate tables and re-simulation. It never references `HeroCat.Runtime` (the server has its own persistence). | csproj. |
 | `HeroCat.Bots` references `HeroCat.Sim` and `HeroCat.Runtime` (for `SessionRunner`, `FakeClock`, `LocalSummonService`). | csproj. |
-| Server-sensitive operations go through the six interfaces of 00 section 8.11 (`IClock`, `ISummonService`, `ISaveStore`, `IInboxService`, `IReceiptValidator`, `IConfigService`). Interfaces live in `HeroCat.Runtime.Services`. Local and remote implementations live beside them. The sim never sees any of them. | Code review; `HeroCat.Sim` cannot reference `Runtime`, so the sim cannot see them by construction. |
+| Server-sensitive operations go through the seven interfaces of 00 section 8.11 (`IClock`, `ISummonService`, `ISaveStore`, `IInboxService`, `IReceiptValidator`, `IConfigService`, `IDungeonSeedService`; issue #25). Interfaces live in `HeroCat.Runtime.Services`. Local and remote implementations live beside them. The sim never sees any of them. | Code review; `HeroCat.Sim` cannot reference `Runtime`, so the sim cannot see them by construction. |
 
 The composition root (`Bootstrapper`, Unity `MonoBehaviour` on `SCR_BOOT`) picks implementations from a build-time `BackendMode`:
 
@@ -81,11 +81,12 @@ public static Services Build(BackendMode mode, string dataDir, ContentDb db, Sim
         return new Services
         {
             Clock    = new ServerClock(timeApi: null),               // serves device clock floored at last save; IsAuthoritative = false
-            Summon   = new LocalSummonService(sim, db),              // same algorithm as the server (04, 08)
+            Summon   = new LocalSummonService(sim, db),              // same algorithm as the server (04, 08); reads state, never writes it
             Saves    = new LocalSaveStore(Path.Combine(dataDir, "saves")),
             Inbox    = new LocalInboxService(),                      // empty inbox, grants from tutorial only
             Receipts = new DisabledReceiptValidator(),
             Config   = new LocalConfigService(),                     // bundled content only
+            Dungeons = new LocalDungeonSeedService(sim),             // peeks the next `dungeon` draw; StartDungeon consumes it (8.8)
         };
     var api = new ApiClient(opts.BaseUrl, tokenStore);
     return new Services
@@ -96,6 +97,7 @@ public static Services Build(BackendMode mode, string dataDir, ContentDb db, Sim
         Inbox    = new InboxClient(api),
         Receipts = new ReceiptClient(api),
         Config   = new ConfigClient(api, cacheDir),
+        Dungeons = new DungeonSeedClient(api),                       // POST /v1/dungeon/seed
     };
 }
 ```
@@ -117,49 +119,54 @@ public abstract record Event
     public long Tick { get; init; }              // sim tick at emission
 }
 
-public enum RejectCode
+public enum RejectCode                           // category: picks the UI presentation (section 7)
 {
     None, CannotAfford, InvalidTarget, Locked, Cooldown, Capped, AlreadyClaimed, NotOwned,
     SlotOccupied, BoardFull, TankEmpty, LevelMismatch, NotAvailable, RateLimited, BadArgument, StaleRequest
 }
 
-public readonly record struct ApplyResult(bool Ok, RejectCode Code, string? Detail)
+public readonly record struct ApplyResult(bool Ok, RejectCode Code, string? Reason)
 {
     public static readonly ApplyResult Accepted = new(true, RejectCode.None, null);
-    public static ApplyResult Reject(RejectCode c, string? d = null) => new(false, c, d);
+    public static ApplyResult Reject(RejectCode c, string? reason = null) => new(false, c, reason);
 }
 ```
+
+A reject is two-level (issue #11): `Code` is the category from this enum, and `Reason` is a stable key from the owning spec's closed reason list (for example 06's `DUNGEON_FLOOR_NOT_UNLOCKED` under `Locked`, 03's `StatAtCap` under `Capped`), localized as `reject.<reason>`. 01 owns the type; each owning spec owns its reason list, and its tests assert both values.
 
 Concrete commands (`VerbNoun`, 00 section 5.1) and the events they emit. Full field lists are in the owning spec; this table fixes the inventory and the owning assembly path.
 
 | Command | Fields | Owner | Emits on success |
 |---|---|---|---|
-| `TrainStat` | `Stat stat, int steps` (1/10/100, or `int.MaxValue` for Max) | 03 | `StatTrained`, `CurrencyChanged(GOLD, TRAINING)` |
-| `EquipWeapon` | `string weaponId` | 04 | `LoadoutChanged` |
-| `EquipSkill` | `string skillId, int slot` | 04 | `LoadoutChanged` |
-| `UnequipSkill` | `int slot` | 04 | `LoadoutChanged` |
-| `EquipCompanion` | `string companionId, int slot` | 04 | `LoadoutChanged` |
-| `ApplySummonResult` | `SummonResultPayload payload` (the service output, 2.5) | 04 | `ItemAcquired` x N, `CurrencyChanged`, `BannerLevelUp?` |
-| `ReleaseFish` | none | 05 | `FishReleased`, `FishDiscovered?`, `FishMissileFired?` |
-| `ReleaseMaxFish` | none | 05 | one `FishReleased` per fish |
-| `MergeFish` | `int fromCell, int toCell` | 05 | `FishMerged`, `FishDiscovered?`, `FishMissileFired`, `CurrencyChanged(FISH_COIN)` |
-| `MergeAllFish` | none | 05 | one `FishMerged` per merge |
-| `TapZap` | none | 03 | `EnemyDamaged`; silently dropped above `TAP_ZAP_MAX_PER_SEC` |
-| `AttemptBoss` | none | 03 | `BossStarted` |
-| `RetreatFromBoss` | none | 03 | `BossFailed(voluntary: true)` |
-| `JumpToStage` | `int stage` (<= highest cleared) | 03 | `StageChanged` |
+| `TrainStat` | `Stat stat, int count` (1/10/100) | 03 | `StatTrained`, `CurrencyChanged(GOLD, TRAINING)` |
+| `TrainStatMax` | `Stat stat` | 03 | `StatTrained`, `CurrencyChanged(GOLD, TRAINING)` |
+| `EquipWeapon` | `string weaponId` | 04 | `ItemEquipped` |
+| `EquipSkill` | `string skillId, int slot` | 04 | `ItemEquipped` |
+| `UnequipSkill` | `int slot` | 04 | `ItemEquipped` (slot cleared) |
+| `EquipCompanion` | `string companionId, int slot` | 04 | `ItemEquipped` |
+| `ApplySummonResult` | `SummonResultPayload payload` (the service output, 2.5) | 04 | `ItemAcquired` x N, `CurrencyChanged(..., SUMMON)`, `BannerLeveledUp?` |
+| `ReleaseFish` | none | 05 | `FishReleased`, `FishDiscovered?` |
+| `ReleaseMax` | none | 05 | one `FishReleased` per fish |
+| `MergeFish` | `int fromCell, int toCell` | 05 | `FishMerged` (carries the missile size), `FishDiscovered?`, `CurrencyChanged(FISH_COIN)` |
+| `MergeAll` | none | 05 | one `FishMerged` per merge |
+| `TapZap` | `int count` | 03 | `TapZapped`; taps above `TAP_ZAP_MAX_PER_SEC` are dropped |
+| `AttemptBoss` | none | 03 | `EnemySpawned` (the boss) |
+| `SelectStage` | `int? stage` (<= highest cleared; null returns to the frontier) | 03 | `StageChanged` |
 | `ClaimOfflineReward` | none | 06 | `OfflineRewardClaimed`, `CurrencyChanged(GOLD, OFFLINE)`, `CurrencyChanged(HERO_EXP, OFFLINE)` |
-| `StartDungeon` | `Dungeon kind, int floor, ulong seed` | 06 | `DungeonStarted` |
+| `StartDungeon` | `Dungeon kind, int floor, ulong seed, bool localSeed` | 06 | `DungeonStarted` |
 | `SweepDungeon` | `Dungeon kind` | 06 | `DungeonSwept`, `CurrencyChanged(..., DUNGEON)` |
 | `ClaimQuest` | `string questId` | 06 | `QuestClaimed`, `CurrencyChanged(..., QUEST)` |
 | `ClaimAllQuests` | `QuestKind kind` | 06 | one `QuestClaimed` per quest |
-| `Awaken` | none | 03 | `Awakened`, `CurrencyChanged(ROCK_CANDY, ...)` |
-| `BuyResearch` | `string researchId` | 03 | `ResearchBought`, `CurrencyChanged(FISH_COIN, RESEARCH)` |
+| `Awaken` | none | 03 | `Awakened`, `CurrencyChanged(ROCK_CANDY, AWAKENING)` |
+| `Research` | `string nodeId` | 03 | `ResearchLeveled`, `CurrencyChanged(FISH_COIN, RESEARCH)` |
 | `ApplyInboxGrant` | `InboxGrantPayload grant` | 06/08 | `CurrencyChanged(..., IAP or MAIL)`, `ItemAcquired?` |
-| `ApplyServerTime` | `long serverSeconds` | 02/06 | `DayRolledOver?`, `WeekRolledOver?` |
+| `ApplyServerTime` | `long serverSeconds` | 02/06 | `DayRolledOver?`, `WeekRolledOver?` (re-anchors the sim's virtual server clock, 3.1) |
+| `ComputeOfflineCatchup` | `long nowServerSeconds` | 06 | `OfflineRewardComputed?` (stores or sums into `Offline.Pending`, stamps `LastTickServerTime`; 8.7) |
 | `SetTutorialStep` | `int step` | 07 | `TutorialStepChanged` |
 
-System commands (`ApplySummonResult`, `ApplyInboxGrant`, `ApplyServerTime`) are issued by `HeroCat.Runtime`, never by a screen. They exist so that a server result enters the sim through the same validated door as a tap, which is what lets the re-simulator replay a command log that includes them.
+The other commands in 00 section 5.1 (`MoveFish`, `DiscardFish`, `LimitBreak`, `AutoEquipBest*`, `ClaimDailyGift`, `ExchangeItem`) follow the same rules; their rows live in the owning spec. `RetreatFromBoss` is not in MVP (issue #11): a boss attempt ends by kill or timer.
+
+System commands (`ApplySummonResult`, `ApplyInboxGrant`, `ApplyServerTime`, `ComputeOfflineCatchup`) are issued by `HeroCat.Runtime`, never by a screen. They exist so that a server result, a clock re-anchor or an offline catch-up enters the sim through the same validated door as a tap, which is what lets the re-simulator replay a command log that includes them. No Runtime code writes `GameState` directly (issue #6).
 
 ### 2.2 `Simulation` surface
 
@@ -181,10 +188,10 @@ public sealed class Simulation
 
 Rules:
 
-1. `Apply` is the only mutation entry point besides `Advance`. Every branch of `Apply` either returns a reject with no state change, or mutates and emits. A reject never emits an `Event`; the caller reports it through the UI (section 7).
+1. `Apply` is the only mutation entry point besides `Advance`, including for offline catch-up and the summon debit (issue #6). Every branch of `Apply` either returns a reject with no state change, or mutates and emits. A reject never emits an `Event`; the caller reports it through the UI (section 7).
 2. Validation is total: `Apply` on a command with an unknown id, a negative slot, or a stage past `STAGE_CAP` returns `BadArgument`, it never throws. Throwing is reserved for programmer errors (null command, `ContentDb` missing a table), which are bugs and should crash in development.
-3. `Apply` is synchronous and completes within one tick. A command that needs the server (`SummonWeapon`) is not a `Command`; it is a `Runtime` flow that ends with a system command.
-4. Commands are recorded in the command log (2.6) before they are applied so the log can be replayed.
+3. `Apply` is synchronous and completes within one tick. An intent that needs the server (00's `Summon(banner, count, payment, requestId)`) is never passed to `Apply`; it is a `Runtime` flow (`SummonFlow`, 8.5) that ends with a system command.
+4. Commands, system commands included, are recorded in the command log (2.6) before they are applied so the log can be replayed.
 
 ### 2.3 Event buffering
 
@@ -212,7 +219,7 @@ public readonly struct Snapshot
 {
     public long   Tick;
     public int    Stage, KillsInStage, Chapter;
-    public bool   BossActive; public int BossTicksLeft;
+    public BossPhase BossPhase; public int BossTicksLeft;   // 02 `Combat.BossPhase` (None/Pending/Walled), issue #7
     public double EnemyHp, EnemyHpMax;
     public double HeroDps;                      // the 00 section 7 formula evaluated this tick
     public double Gold, Diamonds, FishCoin, RockCandy, HeroExp, HeroExpToNext;
@@ -238,20 +245,25 @@ public sealed record SummonResultPayload(
     SummonPull[] Pulls,               // length == Count
     int    PityAfter,                 // pulls since last L+ after this batch
     int    BannerLevelAfter, int BannerExpAfter,
-    CurrencyDelta[] Debits,           // what the server (or local service) charged: DIAMOND or a ticket
+    CurrencyDelta[] Debits,           // what the pull costs: DIAMOND or a ticket; ApplySummonResult performs the debit
+    CurrencyDelta[]? BalancesAfter,   // Remote: the server's balances for the debited currencies; null in Local
+    long?  StreamCounterAfter,        // Local: summon_<banner>.Counter after the pull; null in Remote
     long   ServerTimeSec);
 
-public sealed record SummonPull(string ItemId, Rarity Rarity, bool IsNew, int LevelBefore, int LevelAfter, bool GuaranteeApplied);
+public sealed record SummonPull(string ItemId, Rarity Rarity, bool IsNew, int LevelBefore, int LevelAfter,
+    int CopiesAfter,                  // capped at 160 (04 section 5.3)
+    long OverflowRockCandy,           // Rock Candy from a copy past the cap, else 0
+    bool GuaranteeApplied);
 
 public sealed record InboxGrantPayload(string InboxItemId, GrantLine[] Lines, CurrencyReason Reason);   // Reason in {IAP, MAIL, REFUND, ADMIN}
 public sealed record GrantLine(string Kind, string Id, long Amount);   // Kind: "currency" | "item"
 ```
 
-`ApplySummonResult` validates that `Debits` are affordable in the local wallet in Local mode (the local service already charged, so the check is a consistency assertion) and in Remote mode replaces the local `DIAMOND` balance with the server's returned balance rather than subtracting, because the server ledger wins (00 section 4).
+This payload is the only summon contract (issue #13); 04 and 08 use it. `ApplySummonResult` is the only summon mutator in both modes (issue #6): it adds items and Rock Candy overflow, sets pity and banner level/EXP, and performs the debit. In Local mode it rejects `CannotAfford` if `Debits` are not covered, subtracts them, and sets `summon_<banner>.Counter = StreamCounterAfter` (so 00 contract 2's `Counter == 3 * TotalPulls` holds and a replay of the logged command is exact). In Remote mode it applies `Debits`, then replaces those balances with `BalancesAfter`, because the server ledger wins (00 section 4); if the local result disagreed it emits the `summon_reconcile` analytics event.
 
 ### 2.6 Command log
 
-`HeroCat.Runtime.CommandLog` appends every applied command as one NDJSON line `{tick, type, fields...}` to `saves/cmdlog.ndjson`, rotating at `CMDLOG_MAX_BYTES = 1 MiB` (oldest dropped). It is uploaded with the save in MVP (02 section 7) only when the server asks for it (08 anti-cheat spot check), never routinely. The bot harness keeps it in memory and uses it for the golden-file determinism test (10).
+`HeroCat.Runtime.CommandLog` appends every applied command, system commands included, as one JSONL line `{tick, type, fields...}` to `saves/cmdlog.jsonl`, rotating at `CMDLOG_MAX_BYTES = 1 MiB` (oldest dropped). It is uploaded with the save in MVP (02 section 7) only when the server asks for it (08 anti-cheat spot check), never routinely. The bot harness keeps it in memory and uses it for the golden-file determinism test (10); the golden command log uses the same JSONL format, so one parser serves runtime upload, server re-simulation and golden replay (issue #28).
 
 ### 2.7 What is not in the sim
 
@@ -261,14 +273,16 @@ public sealed record GrantLine(string Kind, string Id, long Amount);   // Kind: 
 
 ### 3.1 Responsibilities
 
-Lives in `HeroCat.Runtime`. Owns one `Simulation`, drives ticks from a monotonic clock, applies lifecycle transitions, schedules autosaves, and drains events. The Unity side forwards four callbacks and nothing else.
+Lives in `HeroCat.Runtime`. Owns one `Simulation`, drives ticks from a monotonic clock, applies lifecycle transitions, schedules autosaves, and drains events. The Unity side forwards four callbacks and nothing else. Every command, player or system, goes through `Issue`, so the command log holds exactly what was applied.
+
+Server time reaches the sim only through logged `ApplyServerTime` commands at sync points: boot, resume, gap recovery and every `WALL_CLOCK_SYNC_SEC = 60` of foreground time (issue #5). Between them the sim advances a virtual server clock with its ticks (`anchor + (Tick - anchorTick) / TICK_HZ`), so a day rollover happens on a tick and is a pure function of the logged inputs (06).
 
 ```csharp
 public sealed class SessionRunner
 {
     readonly Simulation sim; readonly Services svc; readonly EventBus bus; readonly CommandLog log;
     readonly double tickDt;                   // 1.0 / TICK_HZ
-    double acc; long lastMono; long lastSaveMono; bool dirty; int saveFailures;
+    double acc; long lastMono; long lastSaveMono; long lastClockSyncMono; bool dirty; int saveFailures;
     readonly Queue<Command> pending = new();
 
     public SessionRunner(Simulation sim, Services svc, EventBus bus, CommandLog log);
@@ -281,14 +295,17 @@ public sealed class SessionRunner
 
         if (dt > IN_APP_GAP_SEC) { ResumeFromGap(); acc = 0; return; }    // frozen without a pause callback (debugger, OS freeze)
 
-        while (pending.Count > 0) { var c = pending.Dequeue(); log.Append(c); var r = sim.Apply(c); if (!r.Ok) bus.PublishReject(c, r); }
+        while (pending.Count > 0) Issue(pending.Dequeue());
 
         acc = Math.Min(acc + dt, IN_APP_GAP_SEC);
         int n = 0;
         while (acc >= tickDt && n < MAX_TICKS_PER_FRAME) { sim.Advance(1); acc -= tickDt; n++; }
         if (n > 0) dirty = true;
 
-        sim.Apply(new ApplyServerTime(svc.Clock.NowServerSeconds));    // day/week key check, cheap when nothing changes
+        if ((mono - lastClockSyncMono) / (double)MonoClock.Frequency >= WALL_CLOCK_SYNC_SEC)
+        {   // re-anchor the sim's virtual server clock; between syncs the sim derives server time from ticks (issue #5)
+            Issue(new ApplyServerTime(svc.Clock.NowServerSeconds)); lastClockSyncMono = mono;
+        }
         bus.Publish(sim.DrainEvents());
 
         if (dirty && (mono - lastSaveMono) / (double)MonoClock.Frequency >= AUTOSAVE_INTERVAL_SEC) SaveNow(SaveTrigger.Periodic);
@@ -298,16 +315,21 @@ public sealed class SessionRunner
     public void OnResume() { ResumeFromGap(); }
     public void OnQuit()   { SaveNow(SaveTrigger.Quit);  svc.Analytics.Flush(); }
 
+    void Issue(Command c)                                              // the one path into the sim: log, then apply
+    {
+        log.Append(c); var r = sim.Apply(c); if (!r.Ok) bus.PublishReject(c, r);
+    }
+
     void ResumeFromGap()
     {
         _ = svc.Clock.SyncAsync();                                     // fire and forget; the result lands on a later frame
-        sim.Apply(new ApplyServerTime(svc.Clock.NowServerSeconds));
-        var r = Catchup.Compute(sim.State, svc.Clock.NowServerSeconds, sim.Db);   // 06 algorithm; does NOT credit yet
-        if (r.CreditedSec >= OFFLINE_MIN_S) sim.State.Offline.Pending = r;         // SCR_OFFLINE_REWARD shows and ClaimOfflineReward credits
-        sim.State.Time.LastTickServerTime = svc.Clock.NowServerSeconds;           // the window is consumed even before the claim (02)
+        long now = svc.Clock.NowServerSeconds;
+        Issue(new ApplyServerTime(now));                               // re-anchor; day/week rollover first
+        Issue(new ComputeOfflineCatchup(now));                         // 06 algorithm inside Apply; stores or sums into Offline.Pending
+                                                                       // and stamps LastTickServerTime; does NOT credit yet (8.7)
         bus.Publish(sim.DrainEvents());
         SaveNow(SaveTrigger.Resume);
-        lastMono = MonoClock.Ticks();
+        lastMono = MonoClock.Ticks(); lastClockSyncMono = lastMono;
     }
 
     void SaveNow(SaveTrigger t)
@@ -325,6 +347,7 @@ public sealed class SessionRunner
 | `MAX_TICKS_PER_FRAME` | 100 | At most 10 s of sim per frame. A 25 s hitch is caught up over 3 frames. |
 | `IN_APP_GAP_SEC` | 30 | A frame gap above this is treated as an offline interval and goes through `Catchup`, not ticks. |
 | `AUTOSAVE_INTERVAL_SEC` | 30 | Periodic save while dirty. |
+| `WALL_CLOCK_SYNC_SEC` | 60 | Foreground cadence of the logged `ApplyServerTime` re-anchor (3.1). |
 | `TICK_BUDGET_MS` | 8 | Soft budget: if the tick loop has already used this much wall time this frame, stop at the current `n` even below `MAX_TICKS_PER_FRAME`. Keeps 30 fps on 2 GB devices during catch-up bursts. The remainder stays in `acc`. |
 
 Tick cost target: one `Advance(1)` under 0.1 ms on a 2019 mid-range Android (Snapdragon 665 class) with zero GC allocation (10 perf budget). The fish board, skills and companions all run inside the same tick.
@@ -473,7 +496,7 @@ sequenceDiagram
     RT->>RT: LocalSaveStore.Load + CloudSaveClient.Fetch (5 s)
     RT->>RT: pick save (02 conflict rules) / migrate / validate
     RT->>Sim: new Simulation(state, db)
-    RT->>Sim: ApplyServerTime(now); Catchup.Compute
+    RT->>Sim: Apply ApplyServerTime(now), ComputeOfflineCatchup(now)
     RT->>Boot: ready(pendingOffline?)
     Boot->>Main: show SCR_MAIN
     Main->>Main: if Offline.Pending -> open SCR_OFFLINE_REWARD
@@ -485,7 +508,7 @@ Steps:
 2. **Config fetch** (`ConfigClient`): `GET /v1/config` with `CONFIG_FETCH_TIMEOUT_S = 3`. On success: if `minClientVersion > clientVersion` -> `CLIENT_TOO_OLD` block with store link; if `maintenance.active` -> `Maintenance` block; store kill switches; if `contentVersion` newer than loaded -> start background download (8.12). On timeout/offline: use cached config if under `CONFIG_CACHE_MAX_AGE_S = 86400`, else defaults (everything enabled, no gate). Local mode skips this step.
 3. **Auth** (`AuthClient`): if a refresh token exists, `POST /v1/auth/refresh`; else if no account at all, `POST /v1/auth/guest` with the device id. Store tokens in secure storage. On offline: continue with cached `playerId` if any; else create a local guest profile with `playerId = null` and link it on first successful connection (08 section 3). First `X-Server-Time` observation makes `ServerClock.IsAuthoritative = true`.
 4. **Save load** (`CloudSaveClient.LoadAsync`): local load per 02 section 6 in parallel with `GET /v1/save/meta` (5 s). Resolve per 02 section 7.3; a `Conflict` result shows the conflict modal before `SCR_MAIN`. No save anywhere -> `GameState.NewProfile(playerId, now)` with `TUTORIAL_DIAMONDS` granted via `Wallet.Apply(+1500 DIAMOND, TUTORIAL)`, tutorial step 0.
-5. **Offline catch-up**: `Sim.Apply(ApplyServerTime(now))` (day/week rollover first, so a new day's quests exist before anything is credited), then `Catchup.Compute(state, now, db)`. If `CreditedSec >= OFFLINE_MIN_S`, store the result in `state.Offline.Pending` and stamp `LastTickServerTime = now`. Save immediately.
+5. **Offline catch-up**: issue the logged system commands `ApplyServerTime(now)` (day/week rollover first, so a new day's quests exist before anything is credited), then `ComputeOfflineCatchup(now)`, which runs `Catchup.Compute` inside `Apply`, stores or sums the result into `state.Offline.Pending` and stamps `LastTickServerTime = now` (8.7; issue #6). Save immediately.
 6. **Main screen**: `SCR_BOOT` hands over to `SCR_MAIN`; `SCR_MAIN` opens `SCR_OFFLINE_REWARD` if `Offline.Pending != null`, then the tutorial overlay if `Tutorial.Step < TUTORIAL_DONE`. Ticks start on the first `OnFrame` after `SCR_MAIN` is shown (not during the modal, so the modal's numbers are exactly what gets credited).
 
 Boot target: under 4 s to `SCR_MAIN` on the reference low device with warm cache (10). Failures in steps 2-4 degrade per section 6; only step 1 is fatal.
@@ -502,7 +525,7 @@ sequenceDiagram
     OS->>R: OnApplicationPause(false)
     R->>RT: Clock.SyncAsync() (async)
     R->>Sim: ApplyServerTime(clock.Now)
-    R->>Sim: Catchup.Compute -> Offline.Pending if >= OFFLINE_MIN_S
+    R->>Sim: ComputeOfflineCatchup(clock.Now) -> Offline.Pending if >= OFFLINE_MIN_S
     R->>RT: Saves.Save(Resume)
     R->>Main: publish events (DayRolledOver?, OfflinePending)
     Main->>Main: open SCR_OFFLINE_REWARD if pending
@@ -510,7 +533,7 @@ sequenceDiagram
 ```
 
 1. `ResumeFromGap` runs synchronously inside the callback using the extrapolated server time (monotonic offset from the last sync, 02 section 8). The sync request is fired but not awaited.
-2. If the sync later reports a server time that differs from the extrapolation by more than `CLOCK_JUMP_WARN_SEC = 300`, emit `clock_anomaly` and, if the real elapsed time was *longer*, credit the difference as a second catch-up window (`Catchup.Compute` with the corrected now; the cap applies to the sum). If shorter, nothing is taken back (the discrepancy is bounded by the cap and logged).
+2. If the sync later reports a server time that differs from the extrapolation by more than `CLOCK_JUMP_WARN_SEC = 300`, emit `clock_anomaly` and, if the real elapsed time was *longer*, credit the difference as a second catch-up window (`ApplyServerTime` then `ComputeOfflineCatchup` with the corrected now; it sums into the pending record and the effective cap applies to the sum, 8.7). If shorter, nothing is taken back (the discrepancy is bounded by the cap and logged).
 3. Pending summon or IAP intents in `state.Pending` are resolved (8.5, 8.9) after the offline modal closes.
 4. Cloud save: `CloudSaveClient` fetches `GET /v1/save/meta`; if the server's `saveSeq` is ahead of local and from another device -> conflict modal (02 section 7.4), otherwise nothing. This is the only time a conflict is detected mid-session.
 
@@ -525,7 +548,7 @@ sequenceDiagram
     participant HUD
     R->>Sim: Advance(1) x n (n <= MAX_TICKS_PER_FRAME)
     Note over Sim: hero attack, skills, companions, fish missiles, tap zap -> enemy HP
-    Note over Sim: enemy HP <= 0: Loot.Roll(loot stream) -> Wallet.Apply(GOLD, KILL), Wallet.Apply(HERO_EXP, KILL)
+    Note over Sim: enemy HP <= 0: Loot.Roll(loot stream, boss only) -> Wallet.Apply(GOLD, KILL), Wallet.Apply(HERO_EXP, KILL)
     Note over Sim: KillsInStage++ ; == KILLS_PER_STAGE -> StageCleared, Stage++
     Note over Sim: emit EnemyKilled, CurrencyChanged, StageCleared, LevelUp
     R->>Sim: DrainEvents()
@@ -536,11 +559,11 @@ sequenceDiagram
 
 Per tick, in this order (03 owns the bodies):
 
-1. `Time.Tick++`. Boss timer decrement if `BossActive`.
+1. `Time.Tick++`; the virtual server clock advances with it and `EnsureDay` runs on the tick that crosses a day key (8.11). Boss timer decrement while a boss fight is on.
 2. Spawn: if no enemy and `SpawnDelayLeft == 0`, spawn for `Stage` (`HP0 * HP_G^Stage` by table lookup, x `BOSS_HP_MULT` for a boss).
-3. Damage sources, fixed order: hero auto-attack (every `ATTACK_INTERVAL_TICKS` scaled by `ATK_SPD`), skill auto-casts, companion abilities (MP check), queued fish missiles, queued tap zaps (capped). Each draws from its named stream in a fixed order so the `combat` and `crit` counters advance deterministically regardless of frame rate.
-4. Death: `Loot.Roll` on the `loot` stream (boss Rock Candy chance), `Wallet.Apply(GOLD, KILL)`, `Wallet.Apply(HERO_EXP, KILL)`, quest counters (`defeat monsters`), `KillsInStage++`.
-5. Stage advance / boss resolution; `StageCleared` carries `firstClear` and the diamond grant when `Stage % BOSS_EVERY == 0`.
+3. Damage sources, fixed order: hero auto-attack (every `ATTACK_INTERVAL_TICKS` scaled by `ATK_SPD`), skill auto-casts, companion abilities (MP check), queued fish missiles, queued tap zaps (capped). Draws follow 03's fixed order so stream counters advance deterministically regardless of frame rate: one `crit` draw per hero hit (`crit.Counter == Stats.HeroHits`); `combat` is reserved and takes no draws in MVP (issue #8).
+4. Death: on a boss kill only, one `loot` draw (boss Rock Candy chance; `loot.Counter == Stats.BossKills`, issue #8); then `Wallet.Apply(GOLD, KILL)`, `Wallet.Apply(HERO_EXP, KILL)`, quest counters (`defeat monsters`), `KillsInStage++`.
+5. Stage advance / boss resolution; `StageCleared` carries `firstClear` and the diamond grant (reason `FIRST_CLEAR`) when `Stage % BOSS_EVERY == 0`.
 6. Magic Tank refill tick (05); passive `FISH_BOARD_DPS_PCT` is recomputed only when the board changes, not per tick.
 7. Snapshot refresh.
 
@@ -557,7 +580,7 @@ sequenceDiagram
     participant Sim
     U->>S: tap "ATK +10"
     S->>VM: Train(ATK, 10)
-    VM->>R: Enqueue(TrainStat{ATK, 10})
+    VM->>R: Enqueue(TrainStat{ATK, 10}) (or TrainStatMax{ATK})
     R->>Sim: Apply (next frame)
     Sim-->>R: Accepted or Reject(CannotAfford)
     Sim->>R: events StatTrained, CurrencyChanged(GOLD, -cost, TRAINING)
@@ -566,8 +589,8 @@ sequenceDiagram
 ```
 
 1. The button label shows the bulk cost: `sum_{i=n}^{n+k-1} TRAIN_COST0 * TRAIN_COST_G^i`, computed by the view-model from `ContentDb` curves (repeated multiplication, 00 section 8.1), and greys out when `Gold < cost` for 1 step. "Max" shows the largest `k` affordable, computed by the same walk.
-2. `TrainStat` validation: stat exists; `steps >= 1`; current level + steps <= `TRAIN_MAX_LVL[stat]` (03) else `Capped` (the sim clamps `Max`, rejects explicit overshoot); affordable else `CannotAfford`. Partial purchase is never applied: "x100" with gold for 37 is a reject, "Max" buys 37.
-3. Mutation: `Wallet.Apply(-cost, TRAINING)`, `Training[stat] += steps`, DPS cache invalidated. Emits `StatTrained(stat, from, to, cost)` and the `CurrencyChanged`.
+2. `TrainStat` validation: stat exists; `count >= 1`; current level + count <= `TRAIN_CAP[stat]` (03) else `Capped`; affordable else `CannotAfford` (03's reasons in `Reason`). `TrainStatMax` buys the largest affordable count, clamped at the cap. Partial purchase is never applied: "x100" with gold for 37 is a reject, "Max" buys 37.
+3. Mutation: `Wallet.Apply(-cost, TRAINING)`, `Training.Level[stat] += count`, DPS cache invalidated. Emits `StatTrained(stat, from, to, cost)` and the `CurrencyChanged`.
 4. Analytics: `currency_changed` (06/02 schema) with `reason = TRAINING`; one `training` event per command, not per level.
 5. Failure UX: `CannotAfford` is an inline shake; it should be rare because the button was grey. A race (gold spent on another screen in the same frame) is the only path.
 
@@ -916,6 +939,7 @@ Engineering constants, code-resident in `HeroCat.Runtime.RuntimeConfig` (not bal
 | `MAX_TICKS_PER_FRAME` | 100 | I | 3.2 |
 | `IN_APP_GAP_SEC` | 30 | I | 3.2 |
 | `AUTOSAVE_INTERVAL_SEC` | 30 | I | 3.2 |
+| `WALL_CLOCK_SYNC_SEC` | 60 | I | 3.1, 3.2, 8.11 |
 | `TICK_BUDGET_MS` | 8 | S | 3.2 |
 | `SAVE_FAIL_WARN_COUNT` | 3 | I | 3.1 |
 | `EVENT_BUFFER_MAX` | 4096 | S | 2.3 |

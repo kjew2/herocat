@@ -14,12 +14,13 @@ Depends on: 00 (sections 6.6, 8, 11), 01 (`SessionRunner`, network layer, error 
 | Runtime unit | `src/HeroCat.Runtime.Tests` | ~180 | every PR | < 20 s |
 | Server unit + integration | `src/HeroCat.Server.Tests` (Testcontainers Postgres + Redis) | ~160 | every PR touching `src/HeroCat.Server` or Sim | < 3 min |
 | Bot acceptance + golden | `src/HeroCat.Bots.Tests` | 6 ACs + 4 goldens + 28 unit | every PR touching Sim, content or bots | < 4 min |
-| Unity EditMode | `unity/Assets/Tests/EditMode` | ~60 (view-model binding, formatting, `ScreenRouter`) | every PR touching `unity/` | < 2 min |
-| Unity PlayMode smoke | `unity/Assets/Tests/PlayMode` | 4 | nightly and release builds | < 6 min |
+| Client core (engine-free) | `unity/HeroCatClient/Assets/HeroCat.Client/Core/`, compiled into `src/HeroCat.Runtime.Tests` | ~60 (view-model binding, formatting, `ScreenRouter`, modal queue, back mapping, reveal sequencer, board interaction, tap throttle, damage pool, badges, tutorial steps) | every PR | < 20 s |
+| Unity EditMode | `unity/HeroCatClient/Assets/Tests/EditMode` | layout, rect and prefab checks only (07 ACs marked Unity-only, issue #23) | every PR touching `unity/`, once the Unity CI job exists | < 2 min |
+| Unity PlayMode smoke | `unity/HeroCatClient/Assets/Tests/PlayMode` | 4 | nightly and release builds | < 6 min |
 | Device-farm smoke | Firebase Test Lab / AWS Device Farm, 4 devices | 1 scripted run per device | release candidates | < 30 min |
 | Load | `src/HeroCat.Server.LoadTests` (k6 scripts) | 3 profiles | weekly on stage, before every server release | 20 min |
 
-Counts are targets at MVP exit; `pr.yml` fails if a project's test count drops below 90% of the number recorded in `tests/counts.json` (someone deleted tests to go green).
+Unity cannot run in cloud sessions or on hosted CI, so 07's view logic lives in the engine-free `Core/` and its ACs run in `HeroCat.Runtime.Tests` today; only rect/prefab/profiler checks wait for the Unity job (issue #23). Counts are targets at MVP exit; `pr.yml` fails if a project's test count drops below 90% of the number recorded in `tests/counts.json` (someone deleted tests to go green).
 
 ### 1.1 `HeroCat.Sim.Tests`
 
@@ -28,14 +29,14 @@ Grouped by what they protect. Each group names the fixtures it uses; fixtures ar
 | Group | Tests | What they assert |
 |---|---|---|
 | Determinism | 18 | `Advance(N)` from the same state twice yields identical `StateHash`; the same with a recorded command log interleaved; parallel runs of four seeds equal sequential; no `float`, `Math.Pow/Exp/Log`, `DateTime`, `Random` symbol in the assembly (Roslyn analyzer test over the compiled IL via `Mono.Cecil`). |
-| RNG stream isolation | 14 | Drawing from `fish_spawn` never changes the next `combat` value; each stream's `(seed, counter)` after N draws equals SplitMix64 reference vectors; stream counters persist through a save round trip; summon has no client stream in MVP builds (`Rng.Streams` has exactly 5 names). |
+| RNG stream isolation | 14 | Drawing from `fish_spawn` never changes the next `combat` value; each stream's `(seed, counter)` after N draws equals SplitMix64 reference vectors; stream counters persist through a save round trip; all eight streams exist in every mode (00 decision 14); per-stream seeds derive from the immutable `RngRoot`, never from `PlayerId` or `DeviceId` (issue #9); counter invariants hold after every bot day: `loot.Counter == Stats.BossKills` (one draw per boss kill), `crit.Counter == Stats.HeroHits`, `combat.Counter == 0` in MVP (issue #8). |
 | Curve eval | 12 | `CurveDef.Eval` bit-equal to a 128-bit decimal reference for `enemy_hp`, `gold_per_kill`, `exp_per_kill`, every `training_curves` row and every `research` cost at `x` in `{0,1,2,9,10,99,100,549,550,8999,9000}`; `EvalSum` equals the loop sum within 1 ulp; `MaxAffordable` equals a linear scan. |
-| Command validation | 70 | For every `Command` in 00 section 5.1 and 07's list: every rejection reason reachable (`NotEnoughGold`, `StatAtCap`, `BoardFull`, `TankEmpty`, `NotOwned`, `SlotLocked`, `AlreadyClaimed`, `DayKeyMismatch`, `TapRateExceeded`, ...); a rejected command leaves `StateHash` unchanged and emits exactly one `CommandRejected`. |
-| Combat tick | 60 | 03 acceptance criteria 1-19 as tests: attack schedule at `ATK_SPD` 0/50/100, crit factor, skill cast order and cooldowns, MP pool and regen, fish missile damage queue, Tap Zap cap, kill -> loot -> stage advance, boss timer, wall, `AttemptBoss`, first-clear diamonds, `StageCapReached`. |
+| Command validation | 70 | For every `Command` in 00 section 5.1 (07 uses the same names, issue #11): every `(RejectCode, reason)` pair from 01's `RejectCode` and the owning spec's closed reason list is reachable (`CannotAfford`, `Capped`, `InvalidTarget`, `Locked`, `NotOwned`, `AlreadyClaimed`, `BadArgument`, ...); a malformed argument (for example a same or out-of-range fish cell) is rejected with `BadArgument` and never throws inside `Apply`; a rejected command leaves `StateHash` unchanged and emits exactly one `CommandRejected`. |
+| Combat tick | 60 | 03 acceptance criteria 1-19 as tests: attack schedule at `ATK_SPD` 0/50/100, crit factor, skill cast order and cooldowns, MP pool and regen, fish missile damage queue, Tap Zap cap, kill -> loot -> stage advance, boss timer, wall, `AttemptBoss`, first-clear diamonds, `StageCapReached`; measured DPS over a long fight with skills, companions and a board equals the rated `DPS` within 1% with crit variance off (03 section 7.1, issue #10). |
 | Economy | 40 | `Wallet.Apply` reasons, every `Reason` value emitted by at least one path, Training bulk cost closed form equals charge, Research effects via `Query`, Awakening gates, hero level-up loop, limit break (04). |
-| Summon (local) | 30 | 04 test vectors 1-16 through `LocalSummonService`: pity table, hard pity at 80, M share, 10-pull guarantee, banner level thresholds, pool index mapping, overflow Rock Candy. |
+| Summon (local) | 30 | 04's algorithm (issue #24) on `Fixtures/Summon/vectors.json` (generated by `gacha_model.py --vectors`, a superset of 04's 16 named cases) through `LocalSummonService`: pity table, hard pity at 80, M share, 10-pull guarantee, banner level thresholds, pool index mapping, overflow Rock Candy; the C# stream-sequence fixture in `Fixtures/Summon/` (seed -> 1,000 pulls) stays as a determinism golden (issue #14). |
 | Fish Board | 36 | 05 acceptance: release to random empty cell on `fish_spawn`, full board refuses, merge equal levels, cap behaviour, discovery once per level, merge coins, missile per merge, board passive DPS sum, tank refill from ticks. |
-| Catch-up arithmetic | 22 | 06 section 7: `elapsed = clamp(now - lastTick, 0, OFFLINE_CAP_H*3600)`; below `OFFLINE_MIN_S` grants nothing; gold and EXP at `OFFLINE_RATE` of the current-stage kill rate (discrete kill time from `Query.KillTimeSeconds`); tank fills; no stage, drops or quest progress; backwards clock grants nothing; `RES_OFFLINE_CAP` extends the cap; two catch-ups in a row with no elapsed time grant zero. |
+| Catch-up arithmetic | 22 | 06 section 7: `elapsed = clamp(now - lastTick, 0, effectiveCapH*3600)` with `effectiveCapH = OFFLINE_CAP_H + 2 * RES_OFFLINE_CAP level` (issue #21); compute runs only through the logged `ComputeOfflineCatchup` system command inside `Apply` (issue #6); below `OFFLINE_MIN_S` grants no currency and shows no modal, but the tank refill still ticks; gold and EXP at `OFFLINE_RATE` of the current-stage kill rate (discrete kill time from `Query.KillTimeSeconds`); tank count from 05's `CatchUpTank(credited * TICK_HZ)` at compute, stored in the pending record, applied at claim; ticks pause while the modal is open, so the modal shows exactly what is credited; a second gap while a reward is pending sums into the record and keeps the latest stage for display; no stage, drops or quest progress; backwards clock grants nothing; two catch-ups in a row with no elapsed time grant zero. |
 | Quests, dungeons, day keys | 48 | 06: `EnsureDay` resets and preserves the right fields; weekly key via `WEEK_EPOCH_OFFSET`; every `QuestGoal` increments from its event; `SetMax` goals; achievement rungs; dungeon ticket grant, run with a fixed seed is deterministic and the reward matches `dungeon_floors`; sweep rule; app open across rollover. |
 | Content | 30 | 09 acceptance 2, 5, 6 (loader scope), 7, 8, 9, 11, 12, 13, 17, 18 as listed there. |
 | Snapshot and events | 20 | Per-tick snapshot fields match state; event buffer coalescing at `EVENT_COALESCE_AT` (01); every `Event` type serialises to the analytics envelope. |
@@ -50,10 +51,10 @@ Grouped by what they protect. Each group names the fixtures it uses; fixtures ar
 | `LocalSaveStore` | 24 | 02 section 7: atomic write via temp + rename (kill the process between write and rename with a fault-injecting `IFileSystem` and reload); two slots rotate; checksum mismatch falls to `prev`; both corrupt -> `SaveCorruptException` with both files preserved under `corrupt/`; `SAVE_REPAIR_MAX` repairs then reject; a write fails `SAVE_FAIL_WARN_COUNT` times -> warning event. |
 | `CloudSaveClient` | 26 | 02 section 9: upload triggers and `CLOUD_UPLOAD_MIN_SEC` debounce; `If-Match` ETag flow; conflict table (higher server time wins unless local `progressScore` exceeds by `CONFLICT_PROGRESS_MARGIN`); the user-facing conflict decision is surfaced exactly once; a 409 with a newer server save never overwrites the local without the decision; HMAC envelope present and valid. |
 | Clock seams | 18 | 02 section 11: `ServerClock` keeps a monotonic offset, a backwards wall clock does not move `Now`; `CLOCK_JUMP_WARN_SEC`; `CLOCK_RESYNC_SEC` triggers a `/time` call; `FakeClock` is the only clock the bots see; `IClock.Now` is never read inside `HeroCat.Sim` (analyzer test). |
-| `SessionRunner` | 22 | 01 section 3.2: `MAX_TICKS_PER_FRAME` cap; pause on background, catch-up on resume; `IN_APP_GAP_SEC` rule; autosave every `AUTOSAVE_INTERVAL_SEC`; command log capped at `CMDLOG_MAX_BYTES`; events delivered on the main thread only. |
+| `SessionRunner` | 22 | 01 section 3.2: `MAX_TICKS_PER_FRAME` cap; pause on background, catch-up on resume; `ApplyServerTime` is issued and logged only at boot, resume, gap recovery and every `WALL_CLOCK_SYNC_SEC` (never per frame), and the day rolls on the tick that crosses midnight (issue #5); replaying the command log reproduces `StateHash`, including catch-up and local summon debits (issue #6); `IN_APP_GAP_SEC` rule; autosave every `AUTOSAVE_INTERVAL_SEC`; command log capped at `CMDLOG_MAX_BYTES`; events delivered on the main thread only. |
 | `ContentLoader` | 16 | 09 section 10.3 steps 2-8 with a fake HTTP layer: hash failure keeps the bundle; `min_client_version` gate; atomic rename; hot-apply swaps strings and shop only; `ContentDb` identity stable across a config refresh. |
 | Network | 20 | 01 section 5: retry/backoff (`HTTP_RETRY_*`), `requestId` reuse on retry, 426/409/503 mapping to the error taxonomy, offline-mode allow list. |
-| Local seams | 14 | `LocalSummonService` equals the server algorithm on 04's test vectors; `LocalConfigService` returns "everything on"; `LocalInboxService` claim idempotent. |
+| Local seams | 14 | `LocalSummonService` equals the server algorithm on `Fixtures/Summon/vectors.json`, rolls on cloned banner/collection state and never writes `GameState` (`ApplySummonResult` is the only mutator, issue #13); `LocalConfigService` returns "everything on"; `LocalInboxService` claim idempotent; `LocalDungeonSeedService` (the `IDungeonSeedService` seam, issue #25) draws once from the `dungeon` stream per run. |
 | Analytics | 12 | 02 section 14: envelope fields, batching at `ANALYTICS_BATCH_MAX`, queue cap, `currency_changed` carries `reason`, `playerIdHash` never raw. |
 
 ### 1.3 `HeroCat.Server.Tests`
@@ -62,7 +63,7 @@ Integration tests run against real Postgres and Redis in containers; unit tests 
 
 | Group | Tests | What they assert |
 |---|---|---|
-| Summon algorithm vs Python model | 20 | 08 section 4 pseudocode on 04's vectors; a 1,000,000-pull Monte Carlo per banner level compared to `tools/gacha_model.py` output within 0.3 pp per rarity and within 0.05 pp on L+ (the Python model is the oracle, run in CI from the same content); pity state is per banner and per player; 10-pull guarantee; the audit row count equals pulls; `rateTableHash` in the published rates endpoint equals the hash of `banner_levels` rows for that level. |
+| Summon algorithm vs Python model | 20 | 04's pull algorithm (08 keeps only the handler, issue #24) on `Fixtures/Summon/vectors.json`; a 1,000,000-pull Monte Carlo per banner level compared to `tools/gacha_model.py` output within 0.3 pp per rarity and within 0.05 pp on L+ (the Python model is the oracle, run in CI from the same content); pity state is per banner and per player; 10-pull guarantee; the audit row count equals pulls; `rateTableHash` in the published rates endpoint equals the hash of `banner_levels` rows for that level. |
 | Idempotency replay | 14 | 00 section 8 item 13: the same `requestId` twice returns the stored response and performs no second write (summon, inbox claim, save PUT, dungeon seed); a different body with the same `requestId` -> `409 IDEMPOTENCY_IN_FLIGHT` or `400 VALIDATION`; the key expires after `IDEMPOTENCY_TTL_H`. |
 | Receipt validation stubs | 18 | 08 section 5 with recorded App Store Server API and Google Developer API responses: valid, already-consumed, refunded, sandbox-on-prod, expired JWS, malformed; grant lands in `inbox_items` exactly once; refund flips the row and queues a `REFUND` wallet delta; restore purchases re-grants nothing already granted. |
 | Plausibility checks | 24 | 08 section 7, one test per named check: stage vs elapsed time vs re-simulated DPS bound, currency delta bounds, duplicate `requestId`, clock skew above `CLOCK_MAX_SKEW_ACCEPT_S`, save blob over `SAVE_BLOB_MAX_BYTES`; the action matrix (log / soft flag / rollback / ban) chosen per severity; a flagged save never silently overwrites the previous good one. |
@@ -92,11 +93,11 @@ Inputs, committed under `golden/`:
 
 | File | Content |
 |---|---|
-| `golden/seed7-commands.jsonl` | 30 bot-days of commands from `run --bot greedy-f2p --seed 7 --days 30 --record` (one `{tick, command}` per line, about 40k lines) |
+| `golden/seed7-commands.jsonl` | 30 bot-days of commands from `run --bot greedy-f2p --seed 7 --days 30 --record` (one `{tick, command}` JSON line each, the same NDJSON format as 01's runtime command log so one parser serves upload, server re-sim and golden replay; about 40k lines) |
 | `golden/seed7-hashes.txt` | `day, tick, stateHash` after each day's catch-up, plus the final hash, as produced on CI x64 Linux |
 | `golden/content-hash.txt` | the `content_hash` the run used |
 
-Procedure (`HeroCat.Bots golden --replay`): build `ContentDb`, create the seed-7 profile with `FakeClock` at the harness epoch, replay the command log by tick with `Advance` between commands, and print the day hashes. `StateHash` is a 64-bit FNV-1a over the canonical binary encoding of `GameState` that `HeroCat.Sim.Hashing` produces (doubles as `DoubleToInt64Bits`, strings UTF-8, collections in storage order); it is not the JSON, so Newtonsoft formatting cannot cause a false mismatch.
+Procedure (`HeroCat.Bots golden --replay`): build `ContentDb`, create the seed-7 profile with `FakeClock` at the harness epoch, replay the command log by tick with `Advance` between commands, and print the day hashes. `StateHash` is SHA-256 (lowercase hex) over the canonical binary encoding of `GameState` that `HeroCat.Sim.Replay.StateHasher` produces (issue #28) (doubles as `DoubleToInt64Bits`, strings UTF-8, collections in storage order); it is not the JSON, so Newtonsoft formatting cannot cause a false mismatch.
 
 Where it runs:
 
@@ -143,7 +144,11 @@ public static class HarnessConstants
 {
     public static readonly DateTimeOffset Epoch = new(2026, 1, 5, 9, 0, 0, TimeSpan.Zero);  // a Monday 09:00 UTC so weekly keys and the daily rollover (00:00 UTC) are both exercised
     public const int ActiveMinutesPerDay   = 120;   // 00 section 6.6
-    public const int SessionsPerDay        = 2;     // two 60-minute sessions, 06 section 3; the gap lands across the 00:00 UTC rollover on alternate days
+    public const int SessionsPerDay        = 2;     // two 60-minute sessions, 06 section 3
+    // Gaps after session 1 and session 2, in hours (issue #29). Odd days: 09:00-10:00 and 21:00-22:00, the second gap spans 00:00 UTC.
+    // Even days: 09:00-10:00 and 23:30-00:30, so the rollover happens inside a running session (EnsureDay while open).
+    public static readonly double[] SessionGapHoursOdd  = { 11.0, 11.0 };
+    public static readonly double[] SessionGapHoursEven = { 13.5, 8.5 };
     public const int DecisionIntervalSeconds = 60;  // policy decides once per simulated minute
     public const int DefaultDays           = 30;
     public const string DefaultSeeds       = "1-20";
@@ -165,7 +170,7 @@ public RunResult Run(IBotPolicy policy, ulong seed, int days)
     var state = GameState.NewProfile(db, PlayerIdFor(seed), seed, clock.Now);     // applies tutorial_steps grants (TUTORIAL_DIAMONDS, TUTORIAL_WEAPON_ID)
     var sink  = new BotEventSink();
     var sim   = new Simulation(db, state, clock, sink);
-    var seams = LocalSeams.For(db, seed);                                        // LocalSummonService, LocalInboxService, LocalConfigService
+    var seams = LocalSeams.For(db, seed);                                        // LocalSummonService, LocalInboxService, LocalConfigService, LocalDungeonSeedService
     var ctx   = new BotContext(sim, state, db, clock, sink, seams);
     var rows  = new DayRow[days];
     int ticksPerDecision = HarnessConstants.DecisionIntervalSeconds * db.Constants.TickHz;   // 600
@@ -176,7 +181,7 @@ public RunResult Run(IBotPolicy policy, ulong seed, int days)
         ctx.Day = day;
         for (int s = 0; s < HarnessConstants.SessionsPerDay; s++)
         {
-            sim.Resume(clock.Now);                       // Runtime path: catch-up for the gap (OFFLINE_RATE, OFFLINE_CAP_H), EnsureDay, offline modal event
+            sim.Resume(clock.Now);                       // Runtime path: logged ApplyServerTime + ComputeOfflineCatchup through Apply (issues #5, #6), EnsureDay, offline modal event
             policy.OnSessionStart(ctx);                  // claim offline reward, daily gift, claimable quests, tickets
             for (int d = 0; d < decisionsPerSession; d++)
             {
@@ -186,7 +191,7 @@ public RunResult Run(IBotPolicy policy, ulong seed, int days)
             }
             policy.OnSessionEnd(ctx);                    // spend remaining, release the tank
             sim.Suspend(clock.Now);
-            clock.Advance(SessionGap(day, s));           // 11 h, so two sessions per 24 h; the second gap spans 00:00 UTC on even days
+            clock.Advance(SessionGap(day, s));           // SessionGapHoursOdd/Even[s]; each day sums to 24 h with 120 active minutes
         }
         rows[day - 1] = Snapshot(day, sim, sink, clock);
     }
@@ -194,7 +199,7 @@ public RunResult Run(IBotPolicy policy, ulong seed, int days)
 }
 ```
 
-Facts a developer can rely on: ticks per day `ActiveMinutesPerDay * 60 * TICK_HZ` = 72,000; a 30-day run is 2.16 M ticks; 20 seeds are 43.2 M ticks, which at 1 µs/tick is 43 s single-threaded and 15-25 s across 2-4 cores. Catch-up runs twice a day with 11 h gaps, never hitting `OFFLINE_CAP_H` (a `--lapsed` option in P1 inserts skipped days). Diamonds come from the sim's own quests, first clears and login (`--diamonds content`, default); `--diamonds flat` grants `DIAMONDS_PER_DAY_F2P` at day start for parity with `power_curve_model.py`.
+Facts a developer can rely on: ticks per day `ActiveMinutesPerDay * 60 * TICK_HZ` = 72,000; a 30-day run is 2.16 M ticks; 20 seeds are 43.2 M ticks, which at 1 µs/tick is 43 s single-threaded and 15-25 s across 2-4 cores. Catch-up runs twice a day with 8.5-13.5 h gaps, never hitting `OFFLINE_CAP_H`; on even days the evening session runs across 00:00 UTC, so the in-session rollover path feeds the acceptance numbers half the time (a `--lapsed` option in P1 inserts skipped days). Diamonds come from the sim's own quests, first clears and login (`--diamonds content`, default); `--diamonds flat` grants `DIAMONDS_PER_DAY_F2P` at day start for parity with `power_curve_model.py`.
 
 ### 3.4 Policies
 
@@ -210,7 +215,7 @@ public interface IBotPolicy
 
 | Policy | `Name` | Behaviour | Spend |
 |---|---|---|---|
-| Greedy F2P | `greedy-f2p` | 03 section 8.3 verbatim: Training `Max` on ATK then the stat with the best marginal log-DPS per gold; Research by the same rule with Fish Coins; Awakening when both gates pass; weapon tickets pulled immediately; diamonds -> 10-pulls on the banner with the lowest `pullsToNextLevelOrPity`-weighted expected log-DPS gain, singles only when a 10-pull is unaffordable and pity is within 10; `AutoEquipBest*` after every pull; dungeons run as soon as tickets exist, sweep when allowed; fish: release the whole tank, `MergeFish` greedy from highest level down (05's "attentive" policy at 60 merges/min cap); `AttemptBoss` when `Query.BossClearable`; claim every quest when claimable. | 0 |
+| Greedy F2P | `greedy-f2p` | 03 section 8.3 verbatim: Training `Max` on ATK then the stat with the best marginal log-DPS per gold; Research by the same rule with Fish Coins; Awakening when both gates pass; weapon tickets pulled immediately; diamonds -> 10-pulls on the banner with the lowest `pullsToNextLevelOrPity`-weighted expected log-DPS gain, singles only when a 10-pull is unaffordable and pity is within 10; `AutoEquipBest*` after every pull; dungeons run as soon as tickets exist, sweep when allowed; fish: release the whole tank with `ReleaseMax`, then `MergeAll` (lowest level first, 05's "attentive" policy at 60 merges/min cap; issue #19); `AttemptBoss` when `Query.BossClearable`; claim every quest when claimable. | 0 |
 | Lazy F2P | `lazy-f2p` | `OnSessionStart` only: claim offline reward, daily gift, quests, run or sweep dungeons, Training `Max` on ATK, pull tickets, release and merge once, then `Decide` does nothing. Models 00 pillar 1's "logs in to claim and spend" player. | 0 |
 | Light spender | `light-spender` | Greedy F2P plus `pkg_monthly` on day 1 (drip via Inbox) and `dia_3` with first-purchase double on day 2, then `dia_2` on days 10 and 20; total `LightSpenderUsdPerMonth`. Purchases go through `LocalInboxService` so the IAP -> inbox -> claim path is exercised. | $20 |
 | Whale | `whale` | Greedy F2P plus `dia_6` on day 1 and `dia_4` every third day; always 10-pulls; buys every package once; limit-breaks as soon as affordable. | ~$300 / month |
@@ -235,13 +240,15 @@ Wall rules: a wall opens on the first `BossFailed` at a stage and closes on `Sta
 
 ### 3.6 Acceptance table and CI gate
 
-Targets are read from `ContentDb.ProgressTargets` (09 section 5.31), so a target change is a content PR like any other. Thresholds that are not in 00 live in `src/HeroCat.Bots/Acceptance/acceptance.json`:
+Targets are read from `ContentDb.ProgressTargets` (09 section 5.31), so a target change is a content PR like any other. Thresholds that are not in 00 live in `src/HeroCat.Bots/Acceptance/acceptance-targets.json`:
 
 ```json
 {
   "sweepBot": "greedy-f2p", "seeds": "1-20", "days": 30,
   "stageCheckDays": [1, 7, 30],
-  "shareCheckDays": [7, 30], "shareMax": 0.40, "shareMin": 0.05,
+  "shareMaxCheckDays": [1, 7, 30], "shareMinCheckDays": [7, 30], "shareMax": 0.40, "shareMin": 0.05,
+  "shareFloorExcluded": ["Base"],
+  "shareFloorExempt": { "M0": ["Research", "Companions", "Speed"] },
   "firstWallMinStage": 60, "firstWallMaxStage": 200,
   "maxWallActiveMinutesThroughDay14": 240,
   "lazyFraction": { "day7": 0.55, "day30": 0.60 },
@@ -254,7 +261,7 @@ Targets are read from `ContentDb.ProgressTargets` (09 section 5.31), so a target
 | Id | Check (greedy-f2p sweep unless stated) | Source |
 |---|---|---|
 | AC1 | For each day in `stageCheckDays`: median stage within `+/- tolerance` of `progress_targets[day]` | 00 section 6.6 (+/-20%) |
-| AC2 | For each seed and day in `shareCheckDays`: every layer share with a non-zero multiplier in `[shareMin, shareMax]` | 00 section 7 (40% / 5% rule), 03 section 8.5 |
+| AC2 | For each seed: every layer share `<= shareMax` on each day in `shareMaxCheckDays`, and every layer share with a non-zero multiplier `>= shareMin` on each day in `shareMinCheckDays` (issue #12). `Base` is never floor-checked; crit and speed are. Layers in `shareFloorExempt[tier]` that miss the floor print `WARN` and do not fail; the ceiling always gates. The M0 exemptions are removed at MVP once 03's retune lands | 00 section 7 (40% / 5% rule), 03 section 8.5 |
 | AC3 | For each seed: `FirstWallStage` at day 30 in `[60, 200]` | 03 section 8.6 |
 | AC4 | For each seed: every wall opened by day 14 has active minutes `<= 240` | 03 section 8.6 |
 | AC5 | Median `DiamondsEarned` per day over days 2-30 within `diamondsPerDayTolerance` of `DIAMONDS_PER_DAY_F2P` | 06 section 2 |
@@ -264,7 +271,7 @@ Targets are read from `ContentDb.ProgressTargets` (09 section 5.31), so a target
 | AC9 | Determinism: seed 7 run twice in-process is byte-identical; the golden replay (section 2) matches | 00 section 3 |
 | AC10 | Wall time of the whole sweep under `timeBudgetSeconds` | section 3.3 |
 
-The CLI prints one `PASS`/`FAIL` line per check with the measured numbers and exits 1 on any failure. `content.yml` runs it on every PR that touches `content/`, `src/HeroCat.Sim` or `src/HeroCat.Bots`; a failing AC blocks merge. The example output format is the sibling's (`PASS AC1 day 7: median stage 371 in 304..456 (target 380)`), which reviewers already read.
+The CLI prints one `PASS`/`FAIL` line per check with the measured numbers and exits 1 on any failure. `content.yml` runs it (through `./check.sh --content`) on every PR that touches `content/`, `content_src/`, `tools/`, `src/HeroCat.Sim` or `src/HeroCat.Bots`; a failing AC blocks merge. The example output format is the sibling's (`PASS AC1 day 7: median stage 371 in 304..456 (target 380)`), which reviewers already read.
 
 Acceptance table (printed by `acceptance --table`; the columns the brief asks for), illustrative shape only:
 
@@ -340,61 +347,68 @@ Trunk-based. `main` is always releasable; every change is a PR with required che
 
 ### 6.2 Workflows
 
+`./check.sh` is the single source of truth for what CI runs (issue #27). It has one mode per workflow; each workflow is a thin wrapper that checks out, sets up .NET 8 and Python, and calls its mode, and path filters decide which workflows run on a PR. Plain `./check.sh` runs `--pr` and `--content` in sequence (what a PR touching everything gets), so a green local run means green CI; `--fast` and `--no-dotnet` stay as local inner-loop options. A new kind of check is added to a mode in `check.sh`, never inline in a workflow. The only steps outside `check.sh` are those that need a Unity runner, secrets or a deploy target.
+
 `.github/workflows/pr.yml` (every PR, ~6 min):
 
 ```yaml
 on: pull_request
 jobs:
-  dotnet:
+  checks:
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4 { with: { dotnet-version: 8.0.x } }
-      - run: dotnet restore HeroCat.sln
-      - run: dotnet build HeroCat.sln -c Release --no-restore -warnaserror
-      - run: dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory!=Perf&TestCategory!=Acceptance" --logger trx
-      - run: dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory=Perf"        # separate so a perf flake reads as one
-      - run: dotnet run -c Release --no-build --project src/HeroCat.Bots -- bench --ticks 1000000 --max-ms 2000
-      - run: dotnet run -c Release --no-build --project src/HeroCat.Bots -- golden --check --replay
-      - run: python3 tools/export_content.py check                                             # committed JSON matches CSVs
-      - run: python3 -m pytest tools/tests -q                                                  # exporter fixtures
-      - run: python3 tools/ci/test_counts.py --min-ratio 0.9                                   # section 1 count guard
-      - run: python3 tools/ci/no_literals.py src/HeroCat.Sim                                   # 09 acceptance 1
+    steps: [checkout, setup-dotnet 8.0.x, setup-python, run: ./check.sh --pr]
   server:
-    if: contains(github.event.pull_request.changed_files, 'src/HeroCat.Server') || contains(..., 'src/HeroCat.Sim')
+    if: changed paths include src/HeroCat.Server or src/HeroCat.Sim
     services: { postgres: { image: postgres:16 }, redis: { image: redis:7 } }
-    steps: [checkout, setup-dotnet, dotnet test src/HeroCat.Server.Tests -c Release]
+    steps: [checkout, setup-dotnet 8.0.x, run: ./check.sh --server]
   unity-editmode:
-    if: contains(..., 'unity/')
-    runs-on: [self-hosted, unity-2022-lts]
-    steps: [checkout, game-ci/unity-test-runner@v4 with testMode EditMode]
+    if: changed paths include unity/
+    runs-on: [self-hosted, unity-6000.6.7f1]
+    steps: [checkout, game-ci/unity-test-runner@v4 with testMode EditMode]      # layout/prefab checks only (section 1)
 ```
 
-`.github/workflows/content.yml` (PRs touching `content/`, `content_src/`, `src/HeroCat.Sim`, `src/HeroCat.Bots`; ~8 min):
+`./check.sh --pr` runs, in order:
 
-```yaml
-steps:
-  - run: python3 tools/export_content.py build --src content_src --out $KIROCREW_SCRATCH/content --previous content --strict-warnings --ui-keys unity/Assets/HeroCat.Client/ui_keys.txt
-  - run: diff -r $KIROCREW_SCRATCH/content content                                            # same as check, with a readable diff
-  - run: python3 tools/gacha_model.py --content content --banner WEAPON --level 1 > gacha.txt   # the oracle for the server test
-  - run: timeout 400 dotnet run -c Release --project src/HeroCat.Bots -- acceptance --table --verbose --time-budget-s 240
-  - run: dotnet run -c Release --project src/HeroCat.Bots -- report --layer-shares --seeds 1-20 --days 30 > shares.txt
-  - run: dotnet run -c Release --project src/HeroCat.Bots -- golden --check
-  - uses: actions/upload-artifact (acceptance table, shares, golden diff, exporter diff)
-  - run: python3 tools/ci/pr_comment.py (posts the acceptance table and the day-30 median into the PR)
+```sh
+dotnet restore HeroCat.sln
+dotnet build HeroCat.sln -c Release --no-restore -warnaserror
+dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory!=Perf&TestCategory!=Acceptance" --logger trx   # includes the engine-free client Core/
+dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory=Perf"        # separate so a perf flake reads as one
+dotnet run -c Release --no-build --project src/HeroCat.Bots -- bench --ticks 1000000 --max-ms 2000
+dotnet run -c Release --no-build --project src/HeroCat.Bots -- golden --check --replay
+python3 tools/export_content.py check                                             # committed JSON matches CSVs
+python3 -m pytest tools/tests -q                                                  # exporter fixtures
+python3 tools/ci/test_counts.py --min-ratio 0.9                                   # section 1 count guard
+python3 tools/ci/no_literals.py src/HeroCat.Sim                                   # 09 acceptance 1
 ```
 
-`.github/workflows/nightly-bots.yml` (02:00 UTC):
+`./check.sh --server` runs `dotnet test src/HeroCat.Server.Tests -c Release` against the Postgres and Redis containers.
+
+`.github/workflows/content.yml` (PRs touching `content/`, `content_src/`, `tools/`, `src/HeroCat.Sim`, `src/HeroCat.Bots`; ~8 min) calls `./check.sh --content`, then uploads the artifacts (acceptance table, shares, golden diff, exporter diff, vectors diff) and runs `python3 tools/ci/pr_comment.py` (posts the acceptance table and the day-30 median into the PR). `--content` runs:
+
+```sh
+python3 tools/export_content.py build --src content_src --out $SCRATCH/content --previous content --strict-warnings --ui-keys unity/HeroCatClient/Assets/HeroCat.Client/ui_keys.txt
+diff -r $SCRATCH/content content                                                  # same as check, with a readable diff
+python3 tools/gacha_model.py --content content --vectors > $SCRATCH/vectors.json  # the oracle (issues #14, #24)
+diff $SCRATCH/vectors.json Fixtures/Summon/vectors.json
+python3 tools/gacha_model.py --check-streams Fixtures/Summon/                     # Python SplitMix64 reproduces the C# stream-sequence golden
+timeout 400 dotnet run -c Release --project src/HeroCat.Bots -- acceptance --table --verbose --time-budget-s 240
+dotnet run -c Release --project src/HeroCat.Bots -- report --layer-shares --seeds 1-20 --days 30 > $SCRATCH/shares.txt
+dotnet run -c Release --project src/HeroCat.Bots -- golden --check
+```
+
+`.github/workflows/nightly-bots.yml` (02:00 UTC) calls `./check.sh --nightly` on `ubuntu-latest`, `windows-latest` and `macos-14` (ARM64); the Linux leg runs everything below, the other two run only `golden --replay`:
 
 - `sweep` for all four bots, 30 days, seeds 1-20 and the rotating `21-40` block (Open question 2), uploaded as CSV to the metrics bucket for the balance dashboard.
-- `golden --replay` on `windows-latest` and `macos-14` (ARM64).
-- Pseudo-localized client build (`export_content.py pseudo`) + PlayMode test 2 + per-screen screenshots.
+- `golden --replay` (all three legs).
+
+Outside `check.sh`, because it needs the Unity runner: a pseudo-localized client build (`export_content.py pseudo`) + PlayMode test 2 + per-screen screenshots.
 - `report --longest-walls` diff against the previous night, posted to the team channel when a wall moved by more than 2 h.
 
 `.github/workflows/build-android.yml` and `build-ios.yml` (on `release/*` push and manual dispatch):
 
-1. `export_content.py check`; copy `content/` to `unity/Assets/StreamingAssets/content/`.
-2. Unity build via `game-ci/unity-builder` on the self-hosted runner (Android) or Unity Cloud Build / self-hosted mac with Xcode (iOS). Build number is `github.run_number`; version from `unity/version.json`.
+1. `export_content.py check`; copy `content/` to `unity/HeroCatClient/Assets/StreamingAssets/content/`.
+2. Unity build via `game-ci/unity-builder` on the self-hosted runner (Android) or Unity Cloud Build / self-hosted mac with Xcode (iOS). Build number is `github.run_number`; version from `unity/HeroCatClient/version.json`.
 3. IL2CPP, ARM64 only (plus ARMv7 for Android 8 devices under 2 GB if the device farm needs it; decided per release).
 4. Sign with the keystore / provisioning profile from GitHub secrets (never in the repo).
 5. Artifact size check (section 5); upload the AAB / IPA; trigger the device-farm smoke (section 1.5); on green, upload to Play internal testing / TestFlight automatically.
@@ -408,7 +422,7 @@ steps:
 
 | Thing | Scheme | Where it lives | Bump when |
 |---|---|---|---|
-| Client | semver `MAJOR.MINOR.PATCH` + build number (`1.2.0+345`) | `unity/version.json`, `X-Client-Version` header | MINOR per store release, PATCH per hotfix, MAJOR for a save-incompatible change |
+| Client | semver `MAJOR.MINOR.PATCH` + build number (`1.2.0+345`) | `unity/HeroCatClient/version.json`, `X-Client-Version` header | MINOR per store release, PATCH per hotfix, MAJOR for a save-incompatible change |
 | Content | `YYYY.MM.DD[.N]` (09 section 6.3) | `manifest.json`, `X-Content-Version`, `GameState.ContentVersion` | every content change |
 | Save schema | integer `SAVE_SCHEMA_VERSION` (02) | `GameState.SchemaVersion` | any field add / rename / semantic change |
 | API | path prefix `/v1` (08) | routes | a breaking contract change only; additive fields never bump |
@@ -600,7 +614,7 @@ Risks that move the dates, in order of likelihood: Unity build infrastructure (b
 
 1. **Acceptance sweep bot income mode.** Default `--diamonds content` (the sim's own quests). Keep `--diamonds flat` only as the parity mode against `power_curve_model.py` until that tool is retired. Owner guess: 03.
 2. **Seed rotation.** Seeds 1-20 are fixed for the goldens. Default: the nightly also runs 21-40 and the acceptance check on them is advisory (reported, not gating) for one month, then gating if it never flapped. Owner: eng.
-3. **Where the first-wall band lives.** `firstWallMinStage` / `firstWallMaxStage` are in `acceptance.json`; 03 section 8.6 states them. Default: move them into `progress_targets` as columns when 09 next revises the table, so a wall band change is a content PR. Owner: 03 and 09.
+3. **Where the first-wall band lives.** `firstWallMinStage` / `firstWallMaxStage` are in `acceptance-targets.json`; 03 section 8.6 states them. Default: move them into `progress_targets` as columns when 09 next revises the table, so a wall band change is a content PR. Owner: 03 and 09.
 4. **Device farm vendor.** Firebase Test Lab (Android breadth, cheap) vs AWS Device Farm (iOS too). Default: Firebase for Android nightly, two physical iPhones on the self-hosted mac for iOS. Owner: eng.
 5. **Unity Cloud Build vs self-hosted mac.** Default: self-hosted mac mini for iOS (one-off cost, no per-minute billing, Xcode control); Cloud Build as a fallback when the mac is down. Owner: eng.
 6. **Soft-launch markets.** PH + CA defaults above; if UA budget is tight, PH only with CA replaced by a Canada-only iOS launch later. Owner: PM.
@@ -609,7 +623,7 @@ Risks that move the dates, in order of likelihood: Unity build infrastructure (b
 
 ## Acceptance criteria
 
-1. `pr.yml` on a clean `main` finishes under 8 minutes with every step green; `content.yml` under 10 minutes.
+1. `pr.yml` on a clean `main` finishes under 8 minutes with every step green; `content.yml` under 10 minutes. Every check in those workflows runs through a `./check.sh` mode, so a green local `./check.sh` on the same commit means green `pr.yml` and `content.yml` (issue #27).
 2. `dotnet test` reports at least 90% of the counts in `tests/counts.json` per project; `counts.json` is updated only by a PR that adds tests.
 3. `golden --replay` yields identical day hashes on x64 Linux, x64 Windows, Apple ARM64 and the IL2CPP Android build of the same commit.
 4. `acceptance` on the shipped content and seeds 1-20 passes AC1-AC10 and prints the table of section 3.6; forcing `HP_G` to 1.10 in a scratch content dir makes AC1 fail on day 7 and day 30 with the measured medians in the message.
@@ -639,6 +653,7 @@ Harness and operations constants; none is game balance and none lives in `Conten
 | `HARNESS_EPOCH` | 2026-01-05 09:00 UTC | S | 3.2 | weekly key and rollover both exercised in a 30-day run (unit test) |
 | `ACTIVE_MINUTES_PER_DAY` | 120 | I (00 section 6.6) | 3.2 | |
 | `SESSIONS_PER_DAY` | 2 | S | 3.2 | catch-up runs twice per bot day |
+| `SESSION_GAPS_H` | 11, 11 (odd days); 13.5, 8.5 (even days) | S | 3.2 | even-day evening session spans 00:00 UTC (issue #29) |
 | `DECISION_INTERVAL_S` | 60 | I | 3.2 | |
 | `DEFAULT_SEEDS` | `1-20` | I | 3.2 | |
 | `LIGHT_SPENDER_USD_PER_MONTH` | 20 | S | 3.2 | |
@@ -664,4 +679,4 @@ Harness and operations constants; none is game balance and none lives in `Conten
 | Alarm thresholds | section 10 table | S | 10 | drill (criterion 17) |
 | Compensation ladder | section 9.7 | S | 9.7 | |
 
-Used from 00 by name: `TICK_HZ`, `BOSS_EVERY`, `BOSS_TIME_TICKS`, `HP_G`, `STAGE_CAP`, `OFFLINE_RATE`, `OFFLINE_CAP_H`, `OFFLINE_MIN_S`, `DIAMONDS_PER_DAY_F2P`, `PULL_COST[*]`, `PITY_HARD`, `TUTORIAL_DIAMONDS`, the section 6.6 targets via `progress_targets`. From 01: `MAX_TICKS_PER_FRAME`, `TICK_BUDGET_MS`, `IN_APP_GAP_SEC`, `AUTOSAVE_INTERVAL_SEC`, `CMDLOG_MAX_BYTES`, `EVENT_COALESCE_AT`, `HTTP_RETRY_*`, `CONFIG_REFRESH_S`, `RECEIPT_RETRY_S`, `DUNGEON_SEED_TTL_S`. From 02: `SAVE_SCHEMA_VERSION`, `SAVE_REPAIR_MAX`, `SAVE_FAIL_WARN_COUNT`, `CLOUD_UPLOAD_MIN_SEC`, `CONFLICT_PROGRESS_MARGIN`, `CLOCK_RESYNC_SEC`, `CLOCK_JUMP_WARN_SEC`, `CLOCK_MAX_SKEW_ACCEPT_S`, `SAVE_BLOB_MAX_BYTES`, `SAVE_HISTORY_KEEP`, `IDEMPOTENCY_TTL_H`, `GDPR_DELETE_GRACE_DAYS`, `ANALYTICS_BATCH_MAX`. From 06: `INBOX_EXPIRY_DAYS`. From 07: `UI_DAMAGE_LABEL_POOL`, `UI_MAX_PARTICLES`.
+Used from 00 by name: `TICK_HZ`, `BOSS_EVERY`, `BOSS_TIME_TICKS`, `HP_G`, `STAGE_CAP`, `OFFLINE_RATE`, `OFFLINE_CAP_H`, `OFFLINE_MIN_S`, `DIAMONDS_PER_DAY_F2P`, `PULL_COST[*]`, `PITY_HARD`, `TUTORIAL_DIAMONDS`, the section 6.6 targets via `progress_targets`. From 01: `MAX_TICKS_PER_FRAME`, `WALL_CLOCK_SYNC_SEC`, `TICK_BUDGET_MS`, `IN_APP_GAP_SEC`, `AUTOSAVE_INTERVAL_SEC`, `CMDLOG_MAX_BYTES`, `EVENT_COALESCE_AT`, `HTTP_RETRY_*`, `CONFIG_REFRESH_S`, `RECEIPT_RETRY_S`, `DUNGEON_SEED_TTL_S`. From 02: `SAVE_SCHEMA_VERSION`, `SAVE_REPAIR_MAX`, `SAVE_FAIL_WARN_COUNT`, `CLOUD_UPLOAD_MIN_SEC`, `CONFLICT_PROGRESS_MARGIN`, `CLOCK_RESYNC_SEC`, `CLOCK_JUMP_WARN_SEC`, `CLOCK_MAX_SKEW_ACCEPT_S`, `SAVE_BLOB_MAX_BYTES`, `SAVE_HISTORY_KEEP`, `IDEMPOTENCY_TTL_H`, `GDPR_DELETE_GRACE_DAYS`, `ANALYTICS_BATCH_MAX`. From 06: `INBOX_EXPIRY_DAYS`. From 07: `UI_DAMAGE_LABEL_POOL`, `UI_MAX_PARTICLES`.

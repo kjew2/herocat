@@ -10,7 +10,7 @@ Depends on: 00 (sections 4, 5, 6, 8), 01 (SessionRunner, flows, command payloads
 
 | Thing | Assembly | Why |
 |---|---|---|
-| `GameState` and every record under it, `RngStreamState`, `Catchup.Compute` | `HeroCat.Sim` | The sim reads and writes them; pure data, no serializer attributes. |
+| `GameState` and every record under it, `RngStreamState`, `Catchup.Compute` (called only from the `ComputeOfflineCatchup` system command, issue #6) | `HeroCat.Sim` | The sim reads and writes them; pure data, no serializer attributes. |
 | `Profile`, `SaveSerializer`, `SaveMigrations`, `SaveValidator`, `LocalSaveStore`, `CloudSaveClient`, `ServerClock`, `FakeClock`, `IntegrityEnvelope` | `HeroCat.Runtime` | Need Newtonsoft, IO, HTTP, clocks. |
 | Relational schema, retention jobs, GDPR flow | `HeroCat.Server` | |
 
@@ -55,6 +55,8 @@ Engineering constants in `HeroCat.Runtime.SaveConfig` (code, not `ContentDb`; mi
 
 Records are `sealed`, mutable via `set` where the sim writes them, `init` where only profile creation does. Collections default to empty. Every `double` is finite and non-negative by invariant; every id is a content id string (09). Comments give unit, range and owner spec.
 
+This tree is canonical for names and shapes (issue #7): feature specs 03-06 own what a field means in play, and their pseudocode uses the names below. All sim state lives in `GameState`, including transient fight state (`Combat.Fight`), so `DeepClone` and replay are exact; the save drops only what 3.3 lists.
+
 ```csharp
 namespace HeroCat.Sim.State;
 
@@ -63,7 +65,8 @@ public sealed class GameState
     public int    SchemaVersion   { get; set; } = SaveSchema.Current;   // SAVE_SCHEMA_VERSION; the only version field in the body
     public string ContentVersion  { get; set; } = "";                   // ContentDb.Version active at last write (09)
     public Guid   PlayerId        { get; init; }                        // server playerId; Guid.Empty for an unlinked local guest (01 open question 7)
-    public Guid   DeviceId        { get; set; }                         // install id of the device that wrote this save; cloud-save lineage (9.3)
+    public Guid   DeviceId        { get; set; }                         // install id of the device that wrote this save; cloud-save lineage only (9.3), never a seed input
+    public Guid   RngRoot         { get; init; }                        // set once by ProfileFactory: PlayerId if known, else a fresh random Guid; the only seed input (3.4, issue #9)
     public long   SaveSeq         { get; set; }                         // +1 per write; same-device tiebreak
 
     public TimeState        Time        { get; init; } = new();
@@ -74,13 +77,14 @@ public sealed class GameState
     public CollectionState  Skills      { get; init; } = new();
     public CollectionState  Companions  { get; init; } = new();
     public CollectionState  Runes       { get; init; } = new();          // P1; empty in MVP, present so no schema bump
-    public LoadoutState     Loadout     { get; init; } = new();
+    public LoadoutState     Loadout     { get; init; } = new();          // equipped weapon, skills, companions, runes (00 section 5.1 Hero row points here)
     public FishBoardState   Fish        { get; init; } = new();
     public Dictionary<Banner, BannerState> Banners { get; init; } = new();   // one entry per Banner the player has ever seen
     public CombatState      Combat      { get; init; } = new();
     public ProgressState    Progress    { get; init; } = new();
     public QuestState       Quests      { get; init; } = new();
     public DungeonState     Dungeons    { get; init; } = new();
+    public ShopState        Shop        { get; init; } = new();          // daily gift and exchange limits (06)
     public ResearchState    Research    { get; init; } = new();
     public InboxState       Inbox       { get; init; } = new();
     public OfflineState     Offline     { get; init; } = new();
@@ -97,9 +101,9 @@ public sealed class TimeState
     public long LastSavedServerTime  { get; set; }        // unix s; stamped by SaveStamp on every write
     public long LastTickServerTime   { get; set; }        // unix s; catch-up anchor; stamped when ticking stops and when Catchup.Compute runs (01 section 8.7)
     public long CreatedServerTime    { get; init; }       // unix s
-    public int  DayKey               { get; set; }        // floor(serverSeconds / DAY_SECONDS) at last rollover (06)
-    public int  WeekKey              { get; set; }        // floor((serverSeconds - WEEK_EPOCH_OFFSET) / (7 * DAY_SECONDS)) at last weekly rollover
-    public int  LoginDayKey          { get; set; }        // DayKey on which LOGIN_DIAMONDS was last granted
+    public int  DayKey               { get; set; }        // floor(serverSeconds / DAY_SECONDS) at last rollover (06); the only daily key: quests, dungeon tickets and shop all reset off it (issue #7)
+    public int  WeekKey              { get; set; }        // floor((serverSeconds - WEEK_EPOCH_OFFSET) / (7 * DAY_SECONDS)) at last weekly rollover; the only weekly key
+    public int  LoginDayKey          { get; set; }        // DayKey on which LOGIN_DIAMONDS was last granted (reason LOGIN, issue #20)
 }
 
 public sealed class HeroState
@@ -112,7 +116,7 @@ public sealed class HeroState
 public sealed class TrainingState
 {
     // Index by Stat enum ordinal: ATK, HP, DEF, CRIT_RATE, CRIT_DMG, ATK_SPD, GOLD_GAIN, EXP_GAIN. Length always 8.
-    public int[] Level { get; set; } = new int[8];        // each 0..TRAIN_MAX_LVL[stat] (03)
+    public int[] Level { get; set; } = new int[8];        // each 0..TRAIN_CAP[stat] (03)
 }
 
 public sealed class Wallet
@@ -123,29 +127,28 @@ public sealed class Wallet
     public long   RockCandy     { get; set; }             // ROCK_CANDY
     public double HeroExp       => 0;                     // HERO_EXP is not a balance; it is Hero.Exp. Present in CurrencyDelta only.
     public int[]  DungeonTicket { get; set; } = new int[3];      // index by Dungeon ordinal: FISH_COIN, ROCK_CANDY, EXP
-    public int[]  SummonTicket  { get; set; } = new int[4];      // index by Banner ordinal: WEAPON, SKILL, COMPANION, RUNE
+    public int[]  SummonTicket  { get; set; } = new int[4];      // index by Banner ordinal: WEAPON, SKILL, COMPANION, RUNE (= TICKET_SUMMON_RUNE, unused until P1; issue #26). Remote mode: mirror of the server ledger (3.2)
     public long   GuildCoin     { get; set; }             // P1
-    // Every change goes through Wallet.Apply(CurrencyDelta, CurrencyReason) (00 section 8.6), which clamps at 0, rejects NaN/inf, and emits CurrencyChanged.
+    // Every change goes through Wallet.Apply(CurrencyDelta, CurrencyReason) (00 section 8.6), which rejects a debit below 0 (nothing changes, returns false; 06), rejects NaN/inf, and emits CurrencyChanged.
 }
 
 public sealed class CollectionState
 {
     // key: content id (e.g. "wpn_017"). Absent key == not owned.
     public Dictionary<string, OwnedItem> Items { get; init; } = new();
-    public HashSet<string> NewBadges { get; init; } = new();   // ids acquired since the collection screen was last opened (07); cleared by the view-model via MarkSeen command
+    // "New" badges are not sim state: they live in the local profile/UI store (07), so viewing a screen never changes StateHash (issue #7).
 }
 
 public sealed class OwnedItem
 {
-    public int Copies { get; set; }        // total copies ever received, >= 1
-    public int Level  { get; set; }        // derived from Copies via DUPE_LVL_CUM but persisted so a table change does not silently re-level (04)
-    public int Overflow { get; set; }      // copies beyond DUPE_LVL_CUM[10]; 04 decides shards vs Rock Candy conversion
+    public int Copies      { get; set; }   // 1..DUPE_LVL_CUM[10] (160); a copy past 160 converts to Rock Candy at pull time and is not stored (04 section 5.3). Level is derived from Copies at read time, never stored (04)
+    public int LimitBreaks { get; set; }   // 0..LIMIT_BREAK_MAX (5); 04 section 5.2
     public long FirstAcquiredServerTime { get; init; }
 }
 
 public sealed class LoadoutState
 {
-    public string?  Weapon     { get; set; }                          // equipped weapon id or null
+    public string?  Weapon     { get; set; }                          // equipped weapon id; null only before the tutorial grants the first weapon (04)
     public string?[] Skills    { get; set; } = new string?[6];        // SKILL_SLOTS; null = empty slot; order = auto-cast priority (04)
     public string?[] Companions { get; set; } = new string?[4];       // COMPANION_SLOTS
     public string?[] Runes     { get; set; } = new string?[6];        // RUNE_SLOTS, P1
@@ -156,6 +159,7 @@ public sealed class FishBoardState
     public int[]  Cells          { get; set; } = new int[20];     // FISH_BOARD_W * FISH_BOARD_H, row-major; 0 = empty, n >= 1 = fish level
     public int    TankCount      { get; set; }                   // fish in the Magic Tank, 0..TankCap
     public int    TankRefillTick { get; set; }                   // ticks accumulated toward the next tank fish; 0..refillTicks-1
+    public int    TankReleaseLevel { get; set; } = 1;            // P1 upgrade level bought; content says what each level releases (05, 09 tank.release_level is the base)
     public HashSet<int> DiscoveredLevels { get; init; } = new(); // levels ever created; drives FISH_DISCOVERY_COINS
     public int    HighestLevel   { get; set; }                   // max of DiscoveredLevels, cached for the HUD
     public long   TotalMerges    { get; set; }
@@ -164,28 +168,50 @@ public sealed class FishBoardState
 
 public sealed class BannerState
 {
-    public int  Pity          { get; set; }      // pulls since last L+, 0..PITY_HARD-1. MVP: mirror of the server value, overwritten on every result.
-    public int  Level         { get; set; } = 1; // banner level (04)
-    public int  Exp           { get; set; }      // banner EXP toward next level
+    public int  Pity          { get; set; }      // pulls since last L+ before the next pull (n = Pity + 1, issue #24), 0..PITY_HARD-1. MVP: mirror of the server value, overwritten on every result.
+    public long Exp           { get; set; }      // cumulative banner EXP ever earned; banner level is derived via BANNER_LVL_EXP, never stored (04)
     public long TotalPulls    { get; set; }
-    public int  TenPullsSinceEplus { get; set; } // informational; the 10-pull guarantee is per batch, not cumulative
 }
 
 public enum CombatMode { Stage, Dungeon }
+public enum BossPhase  { None, Pending, Walled }           // Pending: next spawn is the boss; Walled: boss failed, farming mobs (03 section 2.7)
+public enum FightPhase { Spawning, Fighting }
 
 public sealed class CombatState
 {
     public CombatMode Mode          { get; set; } = CombatMode.Stage;
     public int    Stage             { get; set; } = 1;     // current farming stage, >= 1, <= STAGE_CAP
     public int    KillsInStage      { get; set; }          // 0..KILLS_PER_STAGE-1
-    public bool   BossActive        { get; set; }
-    public int    BossTicksLeft     { get; set; }          // 0..BOSS_TIME_TICKS
+    public BossPhase Boss           { get; set; }          // replaces the v1 draft's bool BossActive so a wall survives a reload (issue #7)
+    public int    BossFailsOnStage  { get; set; }          // reset on advance (03)
+    public int?   Selected          { get; set; }          // MVP SCR_STAGE_SELECT choice; null = frontier (03)
     public double Mp                { get; set; }          // shared MP pool (04); regen per tick from Research
-    public int    TapsThisSecond    { get; set; }          // TAP_ZAP_MAX_PER_SEC guard; reset each 10 ticks
-    public int[]  SkillCooldowns    { get; set; } = new int[6];   // ticks left per slot
+    public int[]  SkillCooldowns    { get; set; } = new int[6];   // ticks left per skill slot
+    public int[]  CompanionCooldowns { get; set; } = new int[4];  // ticks left per companion slot (03 section 2.4)
+    public List<double> MissileQueue { get; init; } = new();      // queued fish-missile hit fractions, FIFO; persisted so a save mid-queue loses nothing (03, 05; issue #7)
     public DungeonRunState? DungeonRun { get; set; }       // non-null only while Mode == Dungeon
-    // Not persisted: current enemy HP, spawn delay, queued missiles/taps. On load the player faces a fresh mob (3.3).
+    public FightState? Fight        { get; set; }          // transient fight state; never saved (3.3)
+    public bool ShouldSerializeFight() => false;           // Json.NET naming convention, no attribute: the serializer skips Fight
 }
+
+public sealed class FightState                              // in memory only; null after load or profile creation, and the next tick creates it as Spawning with SpawnTimer = SPAWN_DELAY_TICKS (03), so the player faces a fresh mob and a Pending boss respawns as the boss
+{
+    public FightPhase Phase         { get; set; }
+    public int    SpawnTimer        { get; set; }          // ticks until Spawn()
+    public double EnemyHp           { get; set; }
+    public double EnemyMaxHp        { get; set; }
+    public bool   EnemyIsBoss       { get; set; }
+    public int    BossTicksLeft     { get; set; }          // 0..BOSS_TIME_TICKS (03 `BossTimer`)
+    public int    AttackProgress    { get; set; }          // fixed point, ATTACK_PROGRESS_UNIT (03 section 2.1)
+    public List<DotInstance> ActiveDots { get; init; } = new();   // max 6 (03 section 2.3)
+    public double AtkBuffPct        { get; set; }          // strongest active BUFF, percentage points
+    public int    AtkBuffTicksLeft  { get; set; }
+    public int    PendingTaps       { get; set; }          // taps accepted since the last tick
+    public int    TapsThisSecond    { get; set; }          // TAP_ZAP_MAX_PER_SEC guard
+    public long   TapWindowTick     { get; set; }          // Time.Tick at which the current tap window opened
+}
+
+public sealed record DotInstance(int TicksLeft, double DamagePerTick);
 
 public sealed class DungeonRunState
 {
@@ -201,34 +227,36 @@ public sealed class ProgressState
 {
     public int  HighestCleared     { get; set; }           // highest stage whose KILLS_PER_STAGE (or boss) was completed
     public int  HighestFirstClearBoss { get; set; }        // highest boss stage that paid first-clear diamonds; first-clear set = multiples of BOSS_EVERY <= this
-    public HashSet<int> FirstClearExtra { get; init; } = new();   // boss stages cleared out of order via JumpToStage (MVP SCR_STAGE_SELECT); normally empty
+    public HashSet<int> FirstClearExtra { get; init; } = new();   // boss stages cleared out of order via SelectStage (MVP SCR_STAGE_SELECT); normally empty
     public int  StageCapReached    { get; set; }           // 0 or the tick at which STAGE_CAP was hit
 }
 
-public sealed class QuestState
+public sealed class QuestState                                          // reset off Time.DayKey / Time.WeekKey (06 EnsureDay); no keys of its own
 {
-    public int DayKey  { get; set; }                                     // day the Daily map belongs to
-    public int WeekKey { get; set; }
-    public Dictionary<string, QuestProgress> Daily       { get; init; } = new();   // key: quest id from quests_daily (09); rebuilt on rollover
-    public Dictionary<string, QuestProgress> Weekly      { get; init; } = new();
-    public Dictionary<string, QuestProgress> Achievement { get; init; } = new();   // key: achievement id; never reset
-    public bool DailyAllBonusClaimed  { get; set; }
-    public bool WeeklyAllBonusClaimed { get; set; }
+    public Dictionary<string, QuestProgress> Daily       { get; init; } = new();   // key: quest id from quests_daily (09), bonus rows (d_bonus_5, d_bonus_8) included; reset on rollover
+    public Dictionary<string, QuestProgress> Weekly      { get; init; } = new();   // w_bonus_all included
+    public Dictionary<string, QuestProgress> Achievement { get; init; } = new();   // key: rung id (ach_<ladder>_<rung>, 09), one entry per rung; never reset
 }
+
+public enum QuestStatus { IN_PROGRESS, COMPLETED, CLAIMED }              // 00 decision 17
 
 public sealed class QuestProgress
 {
-    public long Progress { get; set; }     // counter toward target; clamped at target
-    public int  Tier     { get; set; }     // achievements: ladder tier reached (0-based); daily/weekly: always 0
-    public bool Claimed  { get; set; }     // achievements: whether the current Tier's reward is claimed
+    public long        Progress { get; set; }   // counter; keeps counting past target (06)
+    public QuestStatus State    { get; set; }   // IN_PROGRESS -> COMPLETED when Progress >= target -> CLAIMED by ClaimQuest
 }
 
-public sealed class DungeonState
+public sealed class DungeonState                             // daily counters reset off Time.DayKey (06)
 {
-    public int   TicketDayKey  { get; set; }                 // day the daily ticket grant was last applied
     public int[] BestFloor     { get; set; } = new int[3];   // per Dungeon ordinal; 0 = never cleared
     public int[] EntriesToday  { get; set; } = new int[3];   // informational for the HUD; tickets are the real limiter
     public int[] SweepsToday   { get; set; } = new int[3];
+}
+
+public sealed class ShopState                                 // 06; both reset by the daily rollover
+{
+    public bool DailyGiftClaimed { get; set; }
+    public Dictionary<string, int> ExchangeCounts { get; init; } = new();   // key: exchange row id (09), value: purchases today
 }
 
 public sealed class ResearchState
@@ -244,11 +272,12 @@ public sealed class InboxState
 
 public sealed class OfflineState
 {
-    public CatchupResult? Pending { get; set; }   // non-null between Catchup.Compute and ClaimOfflineReward (01 section 8.7)
+    public CatchupResult? Pending { get; set; }   // non-null between ComputeOfflineCatchup and ClaimOfflineReward (01 section 8.7); a second gap while pending sums into it (amounts and seconds added, latest Stage/KillTimeSec kept; issue #21)
     public long LifetimeOfflineSecCredited { get; set; }
 }
 
 public sealed record CatchupResult(long ElapsedSec, long CreditedSec, bool Capped, double Gold, double Exp, int TankFill, int Stage, double KillTimeSec, long ComputedServerTime);
+// TankFill: fish from 05's CatchUpTank(CreditedSec * TICK_HZ) at compute; applied at claim as TankCount = min(TankCap, TankCount + TankFill), refill progress per 05 (issue #21).
 
 public sealed class PendingState
 {
@@ -276,7 +305,8 @@ public sealed class RngStreamState
 
 public sealed class LifetimeStats
 {
-    public long Kills, BossKills, BossFails, Taps, Pulls, Merges, FishReleased, DungeonClears, TrainingLevelsBought;
+    public long Kills, BossKills, BossFails, HeroHits, Taps, Pulls, Merges, FishReleased, FishDiscards, DungeonClears, TrainingLevelsBought;
+    public int  FirstWallStage;                   // stage of the first BossFail ever; 0 = never walled (03)
     public long ActiveSeconds;                    // ticked time; analytics only
     public double GoldEarned, GoldSpent, FishCoinEarned;
     public long DiamondsEarned, DiamondsSpent, DiamondsPurchased;
@@ -286,21 +316,24 @@ public sealed class LifetimeStats
 ### 3.2 Field notes
 
 - **`Training.Level` is an array indexed by `Stat` ordinal**, not a dictionary, so the hot path (DPS evaluation every tick) has no hashing. The `Stat` enum order is fixed in 00 section 5.1 and a reorder is a schema change.
-- **`Wallet` uses `long` for `DIAMOND` and `ROCK_CANDY`** (server-reconciled integers) and `double` for `GOLD` and `FISH_COIN` (exponential soft currencies). `HERO_EXP` is `Hero.Exp`, not a wallet balance; `CurrencyDelta` still names it so `CurrencyChanged` events and analytics are uniform.
-- **`OwnedItem.Level` is persisted** although derivable from `Copies` via `DUPE_LVL_CUM`. If the table changes, the validator recomputes and emits `save_repaired{P14}` so the change is visible rather than silent.
+- **`Wallet` uses `long` for `DIAMOND` and `ROCK_CANDY`** (server-reconciled integers) and `double` for `GOLD` and `FISH_COIN` (exponential soft currencies). `HERO_EXP` is `Hero.Exp`, not a wallet balance; `CurrencyDelta` still names it so `CurrencyChanged` events and analytics are uniform. A debit larger than the balance is rejected, not clamped (06; issue #7).
+- **`Wallet.SummonTicket` in Remote mode is a mirror** of the server ticket ledger (00 decision 15), overwritten from each `SummonResultPayload` and inbox grant, like `Banners[b].Pity`. In Local mode (M0, bots) it is the balance.
+- **Item and banner levels are derived, never stored** (issue #7). `OwnedItem` level comes from `Copies` via `DUPE_LVL_CUM` and banner level from `BannerState.Exp` via `BANNER_LVL_EXP` at read time, so retuning either table reflows every save without a migration (04).
 - **`Fish.Cells` is a flat `int[]`** of levels; the board is 20 cells and a cell is fully described by its level. Row-major: `index = y * FISH_BOARD_W + x`.
 - **`Banners[b].Pity` in MVP is a mirror.** The server holds the authoritative pity per banner (08 section 4). The client value is overwritten by every `SummonResultPayload` and exists for display and for the M0/bot path.
 - **`Combat.DungeonRun` is persisted** so a kill mid-run is detected at load and refunded (01 section 8.8 step 6), not so the run can resume.
-- **Quest maps are keyed by id**, not positional (sibling open decision 2 resolved here): a content reorder is harmless; a removed quest id is dropped by the validator.
+- **`Combat` persists the stage loop, not the fight** (issue #7). `Boss`, `BossFailsOnStage`, `Selected`, `Mp`, the skill and companion cooldowns and `MissileQueue` are saved; `Combat.Fight` (enemy HP, spawn timer, boss timer, attack progress, DOTs, buffs, taps) is in memory only, so `DeepClone` mid-boss continues identically (03 AC15) while a reload starts a fresh mob.
+- **Quest maps are keyed by id**, not positional (sibling open decision 2 resolved here): a content reorder is harmless; a removed quest id is dropped by the validator. Bonus rewards and achievement rungs are ordinary quest rows keyed by their own ids (06).
 - **`FirstClearExtra`** exists only because `SCR_STAGE_SELECT` (MVP) lets a player jump back and challenge a boss out of order. In the common case the first-clear set is `{BOSS_EVERY, 2*BOSS_EVERY, ..., HighestFirstClearBoss}`.
 - **Timestamps** are `long` unix seconds UTC from `IClock`, named `*ServerTime`.
 - **`PlayerId == Guid.Empty`** marks a local guest that has never reached the server (01 open question 7). The first successful guest auth sets it and uploads.
 
 ### 3.3 Deliberately not saved
 
-- Current enemy HP, spawn delay, queued fish missiles and tap zaps. On load the player faces a fresh normal mob at `Combat.Stage`; a boss attempt in progress is abandoned at no cost (the boss timer is the only cost).
+- `Combat.Fight`: current enemy HP, spawn timer, boss timer, attack progress, DOTs, buffs and pending tap zaps. On load the player faces a fresh mob at `Combat.Stage`; a boss attempt in progress restarts (`Boss == Pending` respawns the boss with a full timer), and a `Walled` stage stays walled. Queued fish missiles are saved (`Combat.MissileQueue`).
 - The `Event` buffer and the `Snapshot`.
-- Derived values: DPS, kill time, board passive DPS%, weapon passive total, next training cost, `FISH_BOARD_DPS_PCT`. All recomputed from `ContentDb`, so a retune reflows every save without a migration.
+- Derived values: DPS, kill time, board passive DPS%, weapon passive total, next training cost, `FISH_BOARD_DPS_PCT`, item and banner levels, and any live missile-DPS rolling average (view-model only, issue #15). All recomputed from `ContentDb`, so a retune reflows every save without a migration.
+- Collection "new" badges: local profile/UI store (07), not `GameState`.
 - Content tables; the save stores ids and counters plus `ContentVersion`.
 - Auth tokens, device key, config cache: Runtime files outside the save (section 8.4).
 
@@ -308,16 +341,16 @@ public sealed class LifetimeStats
 
 | Name | Consumer | Draws per event | Tier | Invariant checked by validator |
 |---|---|---|---|---|
-| `combat` | enemy spawn variance, skill proc ordering ties (03) | fixed per tick, 03 states it | M0 | none (per-tick consumption) |
-| `crit` | crit roll per hero hit | 1 per hit | M0 | none |
+| `combat` | reserved (03) | 0 in MVP | M0 | `Counter == 0` in MVP |
+| `crit` | crit roll per hero hit | 1 per hero hit | M0 | `Counter == Stats.HeroHits` |
 | `fish_spawn` | `ReleaseFish` cell pick | 1 per release | M0 | `Counter == Stats.FishReleased` |
-| `dungeon` | M0 dungeon seed derivation; MVP unused for new runs | 1 per M0 run | M0 | none |
-| `loot` | boss Rock Candy drop, any drop table | 1 per kill | M0 | `Counter == Stats.Kills` |
-| `summon_weapon`, `summon_skill`, `summon_companion` | `LocalSummonService` only (M0 and bots) | 3 per pull (rarity, item, guarantee reroll; 04) | M0 | `Counter == 3 * Banners[b].TotalPulls` in Local mode; ignored in Remote mode |
+| `dungeon` | M0 dungeon seed derivation (`IDungeonSeedService` local implementation); MVP unused for new runs | 1 per M0 run | M0 | none |
+| `loot` | boss Rock Candy drop | 1 per boss kill | M0 | `Counter == Stats.BossKills` (P1 drop tables add their own invariant) |
+| `summon_weapon`, `summon_skill`, `summon_companion` | `LocalSummonService` (M0 and bots) draws on a clone; the `ApplySummonResult` payload carries the counter after the pull and `Apply` sets it (issue #6) | 3 per pull (rarity, item, guarantee reroll; 04) | M0 | `Counter == 3 * Banners[b].TotalPulls` in Local mode; ignored in Remote mode |
 
-Seed derivation at profile creation: `seed(name) = first 8 bytes of SHA-256(PlayerId.ToByteArray() ++ UTF8(name))` little-endian, computed in `HeroCat.Runtime.ProfileFactory` (the sim has no hashing). For a local guest with `PlayerId == Guid.Empty`, a random `Guid` is used as the hashing input and stored as `DeviceId`; seeds are never re-derived when `PlayerId` is later assigned. Generator: SplitMix64 stateless derive, `Derive(seed, k)` (03 owns the code; same as the sibling).
+Seed derivation at profile creation: `seed(name) = first 8 bytes of SHA-256(RngRoot.ToByteArray() ++ UTF8(name))` little-endian, computed in `HeroCat.Runtime.ProfileFactory` (the sim has no hashing). `RngRoot` is `PlayerId` when the profile is created with a known player, else a fresh random `Guid`; it never changes, so seeds are independent of account linking and of which device writes the save (issue #9). Generator: SplitMix64 stateless derive, `Derive(seed, k)` (03 owns the code; same as the sibling).
 
-Summon streams exist in the save so M0, bots and the server-side re-simulator (which runs in Local mode against a save) share one schema. In Remote mode their counters stay at whatever M0 left (or 0) and the validator does not check them.
+Summon streams exist in every save, in every mode (00 decision 14), so M0, bots and the server-side re-simulator (which runs in Local mode against a save) share one schema. In Remote mode their counters stay at whatever M0 left (or 0) and the validator does not check them.
 
 ## 4. `Profile` (account level, not in sim)
 

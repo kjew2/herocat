@@ -4,11 +4,11 @@ Every currency in 00 section 5.2, where it comes from and where it goes, at what
 
 Tiers covered: M0 (Wallet, Offline Catch-up), MVP (Quests, Dungeons, Shop, Inbox, Awakening cadence), P1 (Tower, Rewarded Ads, Events, Guild Coins) in outline.
 
-Depends on: 00 (constants, names, authority split), 02 (`GameState` fields this spec writes, `IClock`), 03 (`KillTimeSeconds`, `GoldPerKill`, `ExpPerKill`, Awakening gates, Research costs), 04 (pull pricing, ticket consumption), 05 (`MagicTank.Fill`, Fish Coin income), 08 (Inbox and IAP server contracts).
+Depends on: 00 (constants, names, authority split), 02 (`GameState` fields this spec writes, `IClock`), 03 (`KillTimeSeconds`, `GoldPerKill`, `ExpPerKill`, Awakening gates, Research costs), 04 (pull pricing, ticket consumption), 05 (`CatchUpTank`, Fish Coin income), 08 (Inbox and IAP server contracts).
 
 ## 1. Currencies: sources and sinks
 
-All balances live in `GameState.Wallet`. Every mutation goes through `Wallet.Apply(CurrencyDelta, Reason)` with a reason from the closed enum in 00 section 8 item 6. There is no second path.
+All balances live in `GameState.Wallet` (02's typed fields; `HERO_EXP` is `Hero.Exp`). Every mutation goes through `Wallet.Apply(CurrencyDelta, CurrencyReason)` with a reason from the closed enum in 00 section 8 item 6. There is no second path.
 
 ```csharp
 // HeroCat.Sim
@@ -17,33 +17,34 @@ public enum Currency : byte
     GOLD, DIAMOND, FISH_COIN, ROCK_CANDY, HERO_EXP,
     TICKET_FISH_COIN, TICKET_ROCK_CANDY, TICKET_EXP,
     TICKET_SUMMON_WEAPON, TICKET_SUMMON_SKILL, TICKET_SUMMON_COMPANION,
-    GUILD_COIN   // P1, always 0 before P1
+    GUILD_COIN,          // P1, always 0 before P1
+    TICKET_SUMMON_RUNE   // P1, always 0 before P1; appended last so earlier ordinals do not move (issue #26)
 }
 
-public enum Reason : byte
+public enum CurrencyReason : byte   // the closed list of 00 section 8 item 6, in that order (issue #11)
 {
-    KILL, BOSS, OFFLINE, QUEST, SUMMON, TRAINING, RESEARCH, IAP, MAIL, DUNGEON,
-    FISH_DISCOVERY, FISH_MERGE, REFUND, ADMIN,
-    // introduced by this spec, to be lifted into 00 section 8 item 6:
-    LOGIN, FIRST_CLEAR, ACHIEVEMENT, SHOP_EXCHANGE, DAILY_GIFT, AWAKENING, DAILY_RESET
+    KILL, BOSS, OFFLINE, LOGIN, TUTORIAL, FIRST_CLEAR, QUEST, ACHIEVEMENT, DAILY_GIFT, DAILY_RESET,
+    SUMMON, TRAINING, RESEARCH, AWAKENING, LIMIT_BREAK, IAP, MAIL, DUNGEON, FISH_DISCOVERY, FISH_MERGE,
+    SHOP_EXCHANGE, REFUND, ADMIN
 }
 
 public readonly record struct CurrencyDelta(Currency Currency, double Amount);
 
-public sealed class Wallet
+// Storage is 02's typed Wallet (issue #7): double Gold, FishCoin; long Diamond, RockCandy, GuildCoin;
+// int[] DungeonTicket by Dungeon ordinal; int[] SummonTicket by Banner ordinal (WEAPON, SKILL, COMPANION, RUNE).
+// HERO_EXP is not a balance: it reads and writes Hero.Exp but still flows through Apply for the reason code (00 section 8 item 9).
+public sealed partial class Wallet
 {
-    // GOLD and HERO_EXP are double (00 section 8 item 9); everything else is a whole number held in a double
-    // so one Apply path serves all. Integer currencies are asserted whole in Debug builds.
-    readonly double[] _balance = new double[12];
-    public double Get(Currency c) => _balance[(int)c];
-    public bool CanAfford(Currency c, double amount) => _balance[(int)c] >= amount;
+    public bool CanAfford(Currency c, double amount) => Get(c) >= amount;   // Get(c) reads the typed field
 
-    // Returns false and changes nothing when a debit would go negative. Never partially applies.
-    public bool Apply(in CurrencyDelta d, Reason reason, EventSink sink)
+    // Returns false and changes nothing when a debit would go negative: it rejects, it never clamps and never
+    // partially applies. Also returns false for NaN/inf, and for a non-whole Amount on a counted (long/int) currency.
+    public bool Apply(in CurrencyDelta d, CurrencyReason reason, EventSink sink)
     {
-        double next = _balance[(int)d.Currency] + d.Amount;
+        if (!double.IsFinite(d.Amount) || (IsCounted(d.Currency) && d.Amount != Math.Floor(d.Amount))) return false;
+        double next = Get(d.Currency) + d.Amount;
         if (next < 0) return false;
-        _balance[(int)d.Currency] = next;
+        Set(d.Currency, next);                // HERO_EXP: Hero.Exp = next; 03 converts EXP to levels on the next tick
         sink.Emit(new CurrencyChanged(d.Currency, d.Amount, next, reason));
         return true;
     }
@@ -57,7 +58,7 @@ public sealed class Wallet
 | `GOLD` | M0 | Kills (`KILL`), boss kills x`BOSS_GOLD_MULT` (`BOSS`), Offline Catch-up (`OFFLINE`), EXP Dungeon side-grant none | Training (`TRAINING`) | 100% of income is spent; see section 11 |
 | `DIAMOND` | M0 | Login (`LOGIN`), daily/weekly quests (`QUEST`), boss first clears (`FIRST_CLEAR`), achievements (`ACHIEVEMENT`), tutorial grant (`TUTORIAL`), IAP via Inbox (`IAP`), mail (`MAIL`) | Summons (`SUMMON`), ticket exchange (`SHOP_EXCHANGE`) | `DIAMONDS_PER_DAY_F2P` = 400 (section 2) |
 | `FISH_COIN` | M0 source, MVP sink | Fish discovery (`FISH_DISCOVERY`), repeat merges (`FISH_MERGE`), Fish Coin Dungeon (`DUNGEON`) | Research (`RESEARCH`) | about 1,500 to 4,000, section 11 |
-| `ROCK_CANDY` | MVP | Rock Candy Dungeon (`DUNGEON`), boss kills by chance (`BOSS`, rate in 03) | Awakening (`AWAKENING`), limit breaks (`SUMMON` namespace, rules in 04) | 2 x `ROCK_CANDY_FLOOR(f)`, section 6 |
+| `ROCK_CANDY` | MVP | Rock Candy Dungeon (`DUNGEON`), boss kills by chance (`BOSS`, rate in 03) | Awakening (`AWAKENING`), limit breaks (`LIMIT_BREAK`, rules in 04) | 2 x `ROCK_CANDY_FLOOR(f)`, section 6 |
 | `HERO_EXP` | M0 | Kills (`KILL`), Offline Catch-up (`OFFLINE`), EXP Dungeon (`DUNGEON`) | Hero Level, consumed automatically by 03 | never spent manually |
 | `TICKET_FISH_COIN`, `TICKET_ROCK_CANDY`, `TICKET_EXP` | MVP | Daily reset to `DUNGEON_TICKETS_PER_DAY` (`DAILY_RESET`), exchange (`SHOP_EXCHANGE`), mail | Dungeon clear or sweep (`DUNGEON`) | 2 each, reset not stacked |
 | `TICKET_SUMMON_WEAPON` | MVP | Daily free gift (`DAILY_GIFT`), quests, weekly bonus, events, mail | One pull (`SUMMON`) | 1 per day from the gift |
@@ -69,11 +70,34 @@ Rules that hold for every row:
 1. Diamonds are the only currency money buys (00 decision 7). Packages in section 8 are diamonds on a schedule, nothing else.
 2. Tickets reset, they do not accumulate from the reset: at rollover `TICKET_*` dungeon balances are set to `max(current, DUNGEON_TICKETS_PER_DAY)`, so bought tickets survive but unused daily tickets do not stack. Summon tickets never expire.
 3. Nothing converts between currencies except the exchange offers in section 8.4, each with a daily limit.
-4. A debit that would go negative is rejected by `Wallet.Apply` before any state changes; commands check `CanAfford` first and return `Rejected(NOT_ENOUGH_<CURRENCY>)` so the UI can name the shortfall.
+4. A debit that would go negative is rejected by `Wallet.Apply` before any state changes; commands check `CanAfford` first and return `Reject(CannotAfford, "NOT_ENOUGH_<CURRENCY>")` (section 1.3) so the UI can name the shortfall.
 
 ### 1.2 M0 subset
 
 M0 ships `GOLD`, `DIAMOND`, `FISH_COIN`, `HERO_EXP`; the tutorial grant; Offline Catch-up; `LOGIN_DIAMONDS`. Quests, Dungeons, Shop, Inbox and Awakening are MVP. The M0 bot therefore earns diamonds only from login and the tutorial grant, which is why the M0 exit criterion in 00 section 11 is two weeks, not thirty days.
+
+### 1.3 Reject reasons
+
+Every economy command rejects through 01's `ApplyResult.Reject(RejectCode, Detail)`: the `RejectCode` is 01's generic category (UI styling), and `Detail` is a reason string from the closed list below, which the UI localizes as `reject.<reason>` (issue #11). A rejection changes no state and emits no event. Tests assert both the code and the reason. This spec owns this list; a new reason is added here first.
+
+| Reason (`Detail`) | `RejectCode` | Raised by |
+|---|---|---|
+| `NOT_ENOUGH_<CURRENCY>` (e.g. `NOT_ENOUGH_DIAMOND`) | `CannotAfford` | any command that debits (rule 4) |
+| `UNKNOWN_ID` | `InvalidTarget` | `ClaimQuest`, `ExchangeItem` with an id not in content |
+| `BAD_QUANTITY` | `BadArgument` | `ExchangeItem` with `qty < 1` |
+| `QUEST_NOT_COMPLETED` | `NotAvailable` | `ClaimQuest` |
+| `QUEST_ALREADY_CLAIMED` | `AlreadyClaimed` | `ClaimQuest` |
+| `NOTHING_TO_CLAIM` | `NotAvailable` | `ClaimAllQuests` |
+| `DUNGEON_LOCKED` | `Locked` | `StartDungeon`, `SweepDungeon` |
+| `DUNGEON_FLOOR_NOT_UNLOCKED` | `Locked` | `StartDungeon` |
+| `NO_TICKETS` | `CannotAfford` | `StartDungeon`, `SweepDungeon` |
+| `DUNGEON_RUN_IN_PROGRESS` | `NotAvailable` | `StartDungeon`, `SweepDungeon` |
+| `NOTHING_TO_SWEEP` | `NotAvailable` | `SweepDungeon` |
+| `DAILY_GIFT_ALREADY_CLAIMED` | `AlreadyClaimed` | `ClaimDailyGift` |
+| `EXCHANGE_LIMIT_REACHED` | `Capped` | `ExchangeItem` |
+| `NO_PENDING_OFFLINE_REWARD` | `NotAvailable` | `ClaimOfflineReward` |
+
+`Awaken` is 03's command; its reject reasons are 03's.
 
 ## 2. Diamond budget (MVP)
 
@@ -82,7 +106,7 @@ The target `DIAMONDS_PER_DAY_F2P` = 400 (S) is a steady-state floor for a player
 | Source | Rule | Amount on the reference day |
 |---|---|---|
 | Login | `LOGIN_DIAMONDS` once per day key, auto-granted on first tick of the day | 50 |
-| Daily missions | 10 missions x `QUEST_DAILY_DIAMONDS` (20). Reference day: 8 of 10 completed (the Skill and Companion summon missions need diamond pulls and are skipped on a non-pull day) | 160 |
+| Daily missions | 10 paying missions x `QUEST_DAILY_DIAMONDS` (20); `d_login` pays nothing (section 5.2). Reference day: 8 of 10 completed (the Skill and Companion summon missions need diamond pulls and are skipped on a non-pull day) | 160 |
 | Daily progress bonus | `QUEST_DAILY_BONUS_5` (30) at 5 missions, `QUEST_DAILY_BONUS_8` (70) at 8 missions | 100 |
 | First clears | `FIRST_CLEAR_DIAMONDS` (10) per boss stage cleared for the first time; reference day assumes 4 new boss stages | 40 |
 | Weekly missions, amortised | 7 missions x `QUEST_WEEKLY_DIAMONDS` (50) = 350 per week = 50 per day | 50 |
@@ -108,15 +132,15 @@ Diamond sinks on the reference day: the bot spends everything on pulls in the or
 
 ## 3. The daily loop for a 2-hour active player (MVP)
 
-Assumed session shape, matching 00 section 6.6 and what the bot in spec 10 plays: two sessions a day, roughly 12 hours apart, about 60 minutes each. The timeline below is the first session of a mid-game day; the second repeats the mid-session block.
+Assumed session shape, matching 00 section 6.6 and what the bot in spec 10 plays: two sessions a day, roughly 12 hours apart, about 60 minutes each. On alternate days the bot's evening session spans 00:00 UTC (10 section 3.3), so the in-session rollover (section 4.2 rule 2) is exercised (issue #29). The timeline below is the first session of a mid-game day; the second repeats the mid-session block.
 
 | Phase | Minute | What happens | Commands |
 |---|---|---|---|
-| Login | 0:00 | `SCR_OFFLINE_REWARD` shows the overnight gold and EXP (section 7); the Magic Tank is full (`TANK_CAP0` or Research cap). Login diamonds landed on the first tick. Red dots: Quests (login mission claimable), Shop (daily gift), Inbox if anything arrived. | `ClaimOfflineReward` |
-| First 5 minutes | 0:01 to 0:05 | Spend overnight gold: Training `Max` on ATK, then the cheapest of the other stats (bot policy in 03). Release the full tank (`ReleaseFish` x cap), merge everything (`MergeFish`), which fires missiles and starts the merge mission. Claim the daily gift (1 `TICKET_SUMMON_WEAPON`), pull it. Claim claimable quests. | `TrainStat`, `ReleaseFish`, `MergeFish`, `ClaimDailyGift`, `Summon`, `ClaimAllQuests` |
+| Login | 0:00 | `SCR_OFFLINE_REWARD` shows the overnight gold and EXP (section 7); the Magic Tank is full (`TANK_CAP0` or Research cap). Login diamonds landed on the first tick. Red dots: Quests if anything is claimable, Shop (daily gift), Inbox if anything arrived. | `ClaimOfflineReward` |
+| First 5 minutes | 0:01 to 0:05 | Spend overnight gold: Training `Max` on ATK, then the cheapest of the other stats (bot policy in 03). Release the full tank (`ReleaseMax`), merge everything (`MergeAll`), which fires missiles and starts the merge mission. Claim the daily gift (1 `TICKET_SUMMON_WEAPON`), pull it. Claim claimable quests. | `TrainStat`, `ReleaseMax`, `MergeAll`, `ClaimDailyGift`, `Summon`, `ClaimAllQuests` |
 | Dungeons | 0:05 to 0:12 | Run or sweep the three dungeons, two tickets each. Each run is a fixed fight of at most `BOSS_TIME_TICKS`, so six runs take at most 3 minutes plus result screens. Rock Candy from the dungeon goes straight into Awakening if the next rank is affordable and unlocked. | `StartDungeon`, `SweepDungeon`, `Awaken` |
-| Mid-session | 0:12 to 0:55 | Combat runs; the player merges fish as the tank refills (`TANK_REFILL_S0` 6 s per fish, 10 per minute), taps bosses (`TapZap`), spends gold every few minutes. When `DIAMOND >= 1000`, Weapon 10-pull. Research purchases when Fish Coins cover the next node. | `MergeFish`, `TapZap`, `TrainStat`, `Summon`, `BuyResearch` (03) |
-| Last minutes | 0:55 to 1:00 | Spend all gold (nothing carries value offline; offline gold is computed from stage, not banked gold). Claim all completed quests. Check that the daily progress bar is at 8 or more. Leave with the tank empty so refill time is not wasted. | `TrainStat`, `ClaimAllQuests`, `ReleaseFish` |
+| Mid-session | 0:12 to 0:55 | Combat runs; the player merges fish as the tank refills (`TANK_REFILL_S0` 6 s per fish, 10 per minute), taps bosses (`TapZap`), spends gold every few minutes. When `DIAMOND >= 1000`, Weapon 10-pull. Research purchases when Fish Coins cover the next node. | `MergeFish`, `TapZap`, `TrainStat`, `Summon`, `Research` (03) |
+| Last minutes | 0:55 to 1:00 | Spend all gold (nothing carries value offline; offline gold is computed from stage, not banked gold). Claim all completed quests. Check that the daily progress bar is at 8 or more. Leave with the tank empty so refill time is not wasted. | `TrainStat`, `ClaimAllQuests`, `ReleaseMax` |
 | Between sessions | 1:00 to 12:00 | Offline Catch-up accrues at `OFFLINE_RATE` of the kill rate; the tank refills to capacity in `TANK_CAP * TANK_REFILL_S` seconds (60 s at Research 0) and then idles. | none |
 
 What each login shows, in order: `SCR_OFFLINE_REWARD` if the gap was at least `OFFLINE_MIN_S` and the reward is not yet claimed; then any `DayRolledOver` toast; then `SCR_INBOX` badge if unclaimed items exist. No other modal is auto-opened at login (07 section 14 rule: never stack two modals).
@@ -130,11 +154,11 @@ DayKey(serverSeconds)  = floor(serverSeconds / DAY_SECONDS)                     
 WeekKey(serverSeconds) = floor((DayKey(serverSeconds) - 4) / 7)                   // Monday 00:00 UTC; day 0 (1970-01-01) was a Thursday, so day 4 is the first Monday. Same value as 02's WEEK_EPOCH_OFFSET form.
 ```
 
-`serverSeconds` is `IClock.NowServerSeconds` (02). The sim never reads device time. `GameState.Time` holds `DayKey`, `WeekKey`, `LastTickServerTime`, `LastSavedServerTime`.
+`serverSeconds` is the sim's virtual server time (issue #5). The sim never reads device time or `IClock`: the runtime issues a logged `ApplyServerTime(IClock.NowServerSeconds)` only at boot, on resume, on gap recovery and every `WALL_CLOCK_SYNC_SEC` (60 s, 01 section 3.1), which re-anchors the clock and runs `EnsureDay`; between those commands each tick advances the virtual time by `1 / TICK_HZ` s. Rollover is therefore a pure function of the command log. `GameState.Time` (02) holds `DayKey`, `WeekKey`, `LoginDayKey`, `LastTickServerTime`, `LastSavedServerTime`; these are the only day and week keys (issue #7).
 
 ### 4.2 EnsureDay
 
-Runs at session open, on every sim tick (cheap integer compare), and at the top of every quest, dungeon, shop and inbox command.
+Runs in every `ApplyServerTime`, on every sim tick against the virtual clock (cheap integer compare), and at the top of every quest, dungeon, shop and inbox command.
 
 ```csharp
 void EnsureDay(long now)
@@ -146,10 +170,9 @@ void EnsureDay(long now)
     State.Quests.ResetKind(QuestKind.DAILY);                // progress 0, state IN_PROGRESS; unclaimed rewards are forfeited (Open question 2)
     foreach (var t in DungeonTickets)                       // TICKET_FISH_COIN, TICKET_ROCK_CANDY, TICKET_EXP
         if (Wallet.Get(t) < DUNGEON_TICKETS_PER_DAY)
-            Wallet.Apply(new(t, DUNGEON_TICKETS_PER_DAY - Wallet.Get(t)), Reason.DAILY_RESET, Sink);
+            Wallet.Apply(new(t, DUNGEON_TICKETS_PER_DAY - Wallet.Get(t)), CurrencyReason.DAILY_RESET, Sink);
     State.Shop.DailyGiftClaimed = false;
     State.Shop.ExchangeCounts.Clear();
-    State.Quests.LoginGrantedDay = -1;                       // see below
 
     long week = (day + 3) / 7;
     if (week > State.Time.WeekKey)
@@ -160,9 +183,13 @@ void EnsureDay(long now)
     }
     Sink.Emit(new DayRolledOver(day));
 
-    // Login grant: once per day key, on the first tick of the day the player is present for.
-    Wallet.Apply(new(Currency.DIAMOND, LOGIN_DIAMONDS), Reason.LOGIN, Sink);
-    State.Quests.LoginGrantedDay = day;
+    // Login grant: once per day key, on the first tick of the day the player is present for. This auto-grant is the
+    // only payment of LOGIN_DIAMONDS; d_login only counts (section 5.2, issue #20).
+    if (State.Time.LoginDayKey < day)
+    {
+        Wallet.Apply(new(Currency.DIAMOND, LOGIN_DIAMONDS), CurrencyReason.LOGIN, Sink);
+        State.Time.LoginDayKey = day;
+    }
     Quests.Progress(QuestKind.DAILY, QuestGoal.LOGIN, 1);
     Quests.Progress(QuestKind.WEEKLY, QuestGoal.LOGIN_DAYS, 1);
 }
@@ -180,9 +207,9 @@ void EnsureDay(long now)
 Rules:
 
 1. **Lazy, single reset.** A player away three days gets one reset on return. Missed days' quests are gone; nothing stacks. Tickets are topped up, not added.
-2. **App open at rollover.** The tick that crosses `DAY_SECONDS` runs `EnsureDay` and emits `DayRolledOver`. The client (07) toasts "New day: missions and dungeon tickets reset" and refreshes `SCR_QUESTS` and `SCR_DUNGEONS` if they are open. A dungeon run in progress is not interrupted; if it clears, the ticket is debited from the new day's allotment and the reward is granted normally.
-3. **Backwards clock.** `ServerClock` can report a smaller value than `LastTickServerTime` after a failed re-sync or a server-side correction. `EnsureDay` is a no-op because `day <= DayKey`. Offline Catch-up clamps elapsed to 0 (section 7). `LastTickServerTime` is never moved backwards; the sim emits `ClockWentBackwards(deltaSeconds)` once per occurrence for analytics and the client shows nothing in release builds.
-4. **New profile.** `DayKey = -1`, `WeekKey = -1`, so the first `EnsureDay` grants the first login and seeds tickets. The tutorial grant (`TUTORIAL_DIAMONDS`) is separate and guarded by `Profile.TutorialGranted` (02).
+2. **App open at rollover.** The tick whose virtual time crosses `DAY_SECONDS` runs `EnsureDay` and emits `DayRolledOver`. The client (07) toasts "New day: missions and dungeon tickets reset" and refreshes `SCR_QUESTS` and `SCR_DUNGEONS` if they are open. A dungeon run in progress is not interrupted; if it clears, the ticket is debited from the new day's allotment and the reward is granted normally.
+3. **Backwards clock.** An `ApplyServerTime` can carry a smaller value than `LastTickServerTime` after a failed re-sync or a server-side correction. `EnsureDay` is a no-op because `day <= DayKey`. Offline Catch-up clamps elapsed to 0 (section 7). `LastTickServerTime` is never moved backwards; the sim emits `ClockWentBackwards(deltaSeconds)` once per occurrence for analytics and the client shows nothing in release builds.
+4. **New profile.** `DayKey = -1`, `WeekKey = -1`, `LoginDayKey = -1`, so the first `EnsureDay` grants the first login and seeds tickets. The tutorial grant (`TUTORIAL_DIAMONDS`, `CurrencyReason.TUTORIAL`) is separate and guarded by `Tutorial.TutorialDiamondsGranted` (02).
 5. **Per-region rollover** is 00 decision 8 territory and is not reopened here. The only hook needed later is an offset added to `now` before the division; the server would supply it (08).
 
 ### 4.3 Events
@@ -212,14 +239,14 @@ public sealed record QuestDef(string Id, QuestKind Kind, QuestGoal Goal, string?
                               Currency RewardCurrency, double RewardAmount, int Order);
 // Filter: banner code for SUMMON, dungeon code for CLEAR_DUNGEON, null otherwise.
 
-public sealed class QuestProgress   // one per QuestDef, in GameState.Quests.Items[questId]
+public sealed class QuestProgress   // one per QuestDef, in GameState.Quests.Daily / .Weekly / .Achievement[questId] (02, issue #7)
 {
     public long Progress;           // keeps counting past Target for display
     public QuestState State;
 }
 ```
 
-`Quests.Progress(kind, goal, delta, filter = null)` is called by the sim at the emitting site (03 on `EnemyKilled`, 04 on each pull result, 05 on `FishReleased`/`FishMerged`, this spec on dungeon clears). It increments every matching `IN_PROGRESS` quest and flips it to `COMPLETED` when `Progress >= Target`, emitting `QuestCompleted(questId)`. Rewards are granted only by `ClaimQuest(questId)` or `ClaimAllQuests(kind)`, which emit `QuestClaimed(questId, currency, amount)` and apply the delta with `Reason.QUEST` (achievements use `Reason.ACHIEVEMENT`). Offline Catch-up advances no quest.
+`Quests.Progress(kind, goal, delta, filter = null)` is called by the sim at the emitting site (03 on `EnemyKilled`, 04 on each pull result, 05 on `FishReleased`/`FishMerged`, this spec on dungeon clears). It increments every matching `IN_PROGRESS` quest and flips it to `COMPLETED` when `Progress >= Target`, emitting `QuestCompleted(questId)`. Rewards are granted only by `ClaimQuest(questId)` or `ClaimAllQuests(kind)`, which emit `QuestClaimed(questId, currency, amount)` and apply the delta with `CurrencyReason.QUEST` (achievements use `CurrencyReason.ACHIEVEMENT`). A row with reward 0 (only `d_login` today) goes straight from `IN_PROGRESS` to `CLAIMED` when it completes: it emits `QuestCompleted`, pays nothing, raises no red dot and is never counted by `ClaimAllQuests`. Offline Catch-up advances no quest.
 
 Why a claim step rather than auto-grant: the reference game and the whole sub-genre use it, the Claim All button is the daily "pay-day" tap that `SCR_QUESTS` is built around (07), and the red dot it produces is the main reason players open the quests screen. The sibling prototype auto-granted and listed this as its open decision 7; this spec takes the claim step as the default.
 
@@ -229,7 +256,7 @@ Reward per mission `QUEST_DAILY_DIAMONDS` = 20 diamonds. Order is display order 
 
 | Id | Goal | Filter | Target | Why this target |
 |---|---|---|---|---|
-| `d_login` | `LOGIN` | | 1 | Auto-completes on the day's first tick; the player still taps Claim (this is the "welcome" tap) |
+| `d_login` | `LOGIN` | | 1 | Auto-completes on the day's first tick and counts toward the bonus thresholds; reward 0, nothing to claim (issue #20) |
 | `d_kills` | `KILL_ENEMIES` | | 300 | About 10 minutes of combat at a 2 s kill time; done in the first session without trying |
 | `d_boss` | `ATTEMPT_BOSS` | | 3 | Counts attempts, not clears, so a walled player completes it. Auto-attempts on reaching a boss stage count |
 | `d_summon_weapon` | `SUMMON` | `WEAPON` | 1 | Free with the daily gift ticket (section 8.3) |
@@ -241,7 +268,7 @@ Reward per mission `QUEST_DAILY_DIAMONDS` = 20 diamonds. Order is display order 
 | `d_dungeon_candy` | `CLEAR_DUNGEON` | `ROCK_CANDY` | 1 | |
 | `d_dungeon_exp` | `CLEAR_DUNGEON` | `EXP` | 1 | |
 
-That is 11 rows including login, which is why the budget in section 2 counts "10 missions": `d_login` pays `LOGIN_DIAMONDS` (50) through `Reason.LOGIN`, not `QUEST_DAILY_DIAMONDS`. The daily progress bonus counts all 11 rows; the thresholds are 5 and 8 completed (not claimed) missions:
+That is 11 rows including login, which is why the budget in section 2 counts "10 paying missions": `d_login` is a counting row with `reward_amount` 0. The day's `LOGIN_DIAMONDS` (50, a `constants` row in 09) are paid once by `EnsureDay`'s auto-grant with `CurrencyReason.LOGIN`, never by a claim (issue #20). The daily progress bonus counts all 11 rows; the thresholds are 5 and 8 completed (not claimed) missions:
 
 | Bonus row | Threshold | Reward |
 |---|---|---|
@@ -290,7 +317,7 @@ Total ladder value 6,260 diamonds, of which a day-30 F2P player at stage 550, he
 
 | Command | Validation | Effect |
 |---|---|---|
-| `ClaimQuest(questId)` | exists; `State == COMPLETED` else `QUEST_NOT_COMPLETED` / `QUEST_ALREADY_CLAIMED` | `State = CLAIMED`; `Wallet.Apply(reward)`; `QuestClaimed` |
+| `ClaimQuest(questId)` | exists else `UNKNOWN_ID`; `State == COMPLETED` else `QUEST_NOT_COMPLETED` / `QUEST_ALREADY_CLAIMED` (section 1.3) | `State = CLAIMED`; `Wallet.Apply(reward)`; `QuestClaimed` |
 | `ClaimAllQuests(kind)` | at least one `COMPLETED` else `NOTHING_TO_CLAIM` | Claims in `Order`; one `QuestClaimed` per quest plus one `QuestsBulkClaimed(kind, count, totals[])` for the toast |
 
 ## 6. Dungeons (MVP) and Tower (P1)

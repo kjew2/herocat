@@ -11,30 +11,28 @@ Depends on: 00 (section 6.4 constants), 02 (`FishBoardState` persistence), 03 (t
 1. The board is the thing the thumb does while the cat fights. Every merge should pay out in three ways at once: a coin number, a missile crossing the screen, and a bigger fish that raises the passive DPS line.
 2. It is never mandatory. A player who only presses `Release max` and `Merge all` once per session still progresses; one who never touches it still gets the passive DPS of whatever is on the board.
 3. It is deterministic. Cell placement is the only random element and it comes from the `fish_spawn` stream; merge results, coins and missiles are pure functions of levels.
-4. It is tiny in the sim: 20 bytes of board, a stock count and a refill timer. Everything else is presentation.
+4. It is tiny in the sim: 20 cells of board, a stock count and a refill timer. Everything else is presentation.
 
 ## 2. Board and fish data
 
 ### 2.1 State
 
-```csharp
-namespace HeroCat.Sim.State
-{
-    public sealed class FishBoardState
-    {
-        public byte[] Cells;              // length FISH_BOARD_W * FISH_BOARD_H = 20; 0 = empty, n >= 1 = fish of level n; index = y * FISH_BOARD_W + x
-        public MagicTankState Tank;
-        public uint DiscoveredMask;       // bit (n-1) set once a level-n fish has ever been created; drives FishDiscovered and the fish book
-        public long LifetimeReleases, LifetimeMerges, LifetimeDiscards;
-        public double LifetimeFishCoins;  // discovery + merge + discard, for the server plausibility check (08)
-    }
+02 section 3.1 owns the shape, names, types and defaults (issue #7); this is the part 05 relies on:
 
-    public sealed class MagicTankState
-    {
-        public int Stock;                 // 0 .. TankCap
-        public int RefillProgressTicks;   // 0 .. TankRefillTicks-1; only advances while Stock < TankCap
-    }
+```csharp
+public sealed class FishBoardState                               // GameState.Fish
+{
+    public int[]  Cells;              // length FISH_BOARD_W * FISH_BOARD_H = 20; 0 = empty, n >= 1 = fish of level n; index = y * FISH_BOARD_W + x
+    public int    TankCount;          // fish in the Magic Tank, 0 .. TankCap
+    public int    TankRefillTick;     // 0 .. TankRefillTicks-1; only advances while TankCount < TankCap
+    public int    TankReleaseLevel;   // P1 tank upgrade level bought, default 1 (section 3)
+    public HashSet<int> DiscoveredLevels; // levels ever created; drives FishDiscovered and the fish book (02 serialises it as a sorted array)
+    public int    HighestLevel;       // max of DiscoveredLevels, cached for the HUD
+    public long   TotalMerges;
+    public bool   AutoMergeEnabled;   // P1
 }
+// Lifetime counters live in GameState.Stats (02): Stats.FishReleased, Stats.Merges, Stats.FishDiscards,
+// Stats.FishCoinEarned (discovery + merge + discard, for the server plausibility check, 08).
 ```
 
 `FISH_BOARD_W = 5`, `FISH_BOARD_H = 4` (00 section 6.4). The grid is drawn with (0,0) top-left; row-major order is also the order every "first empty cell" or "merge all" rule walks, so results do not depend on rendering.
@@ -61,6 +59,8 @@ One row per level in the `fish_levels` table (09). Values are the 00 formulas ev
 | 14 | 81,920 | 1,638 | 973 | 486 | 8,192 |
 | 15 | 163,840 | 3,277 | 1,459 | 730 | 16,384 |
 
+`FISH_MERGE_COINS[n]` is an unrounded `double` (00 contract 9: `FISH_COIN` is a `double`); 09 does not round it and the UI floors the display (issue #16).
+
 Columns the table also carries: `name_key`, `sprite`, `splash_vfx`, `rarity_colour` (presentation), `missile_vfx`. Levels 1-10 exist at Research 0 (`FISH_MAX_LVL0 = 10`); each `RES_FISH_CAP` level opens one more, up to 20. The table ships all 20 rows; the cap decides which are reachable.
 
 Two reading aids. Missile damage grows x1.5 per level while the fish it takes to make one grows x2, so per level-1 fish the missile value of merging higher is `(0.75)^(n-1)`: merging is for the board DPS and the discovery payout, not for the missiles. Discovery coins double per level and the fish needed double too, so discovery pays a constant 10 coins per level-1 fish on the first climb to any level, which is why the first session feels rich and why `RES_FISH_CAP` opening level 11 is a 10,240-coin event.
@@ -73,57 +73,61 @@ TankRefillS      = max(TANK_REFILL_FLOOR_S (2.0), TANK_REFILL_S0 (6.0) - RES_TAN
 TankRefillTicks  = round(TankRefillS * TICK_HZ)                                                      # 60 .. 20 ticks, integer
 
 TickTank():                                   # called by 03's Tick() each tick, before combat
-  if Tank.Stock >= TankCap: Tank.RefillProgressTicks = 0; return
-  Tank.RefillProgressTicks += 1
-  if Tank.RefillProgressTicks >= TankRefillTicks:
-    Tank.RefillProgressTicks -= TankRefillTicks; Tank.Stock += 1
-    publish TankFishReady(Tank.Stock)         # opt-in event; the HUD reads Stock from the snapshot instead
+  if Fish.TankCount >= TankCap: Fish.TankRefillTick = 0; return
+  Fish.TankRefillTick += 1
+  if Fish.TankRefillTick >= TankRefillTicks:
+    Fish.TankRefillTick -= TankRefillTicks; Fish.TankCount += 1
+    publish TankFishReady(Fish.TankCount)     # opt-in event; the HUD reads TankCount from the snapshot instead
 
-CatchUpTank(elapsedTicks):                    # called once by 06's offline catch-up, closed form, no per-tick loop
-  if Tank.Stock >= TankCap: Tank.RefillProgressTicks = 0; return
-  total = Tank.RefillProgressTicks + elapsedTicks
+CatchUpTank(elapsedTicks):                    # closed form, no per-tick loop; pure arithmetic used by 06's Catchup.Compute (section 7)
+  if Fish.TankCount >= TankCap: return (added: 0, refillTickAfter: 0)
+  total = Fish.TankRefillTick + elapsedTicks
   gained = total / TankRefillTicks                                   # integer division
-  Tank.Stock = min(TankCap, Tank.Stock + gained)
-  Tank.RefillProgressTicks = Tank.Stock >= TankCap ? 0 : total % TankRefillTicks
+  added = min(TankCap - Fish.TankCount, gained)
+  refillTickAfter = Fish.TankCount + added >= TankCap ? 0 : total % TankRefillTicks
+  return (added, refillTickAfter)
 ```
 
-The timer runs on sim ticks, not wall time, so it advances exactly as fast as combat does and offline catch-up can fill it with the same arithmetic 06 uses for gold (`elapsedTicks = creditedSeconds * TICK_HZ`). `OFFLINE_MIN_S` and the 24 h cap apply to the tank too: a player back after a weekend finds a full tank, not three days of fish. At Research 0 the tank is full one minute after it empties; with `RES_TANK_CAP` 10 and `RES_TANK_REFILL` 10 it holds 60 fish and refills in two minutes. Progress while the tank is full is discarded, which is the whole reason to release fish before closing the app.
+The timer runs on sim ticks, not wall time, so it advances exactly as fast as combat does and offline catch-up can fill it with the same arithmetic 06 uses for gold (`elapsedTicks = creditedSeconds * TICK_HZ`, credited not full gap; issue #21). The effective offline cap (`OFFLINE_CAP_H` plus `RES_OFFLINE_CAP`) applies to the tank too: a player back after a weekend finds a full tank, not three days of fish. At Research 0 the tank is full one minute after it empties; with `RES_TANK_CAP` 10 and `RES_TANK_REFILL` 10 it holds 60 fish and refills in two minutes. Progress while the tank is full is discarded, which is the whole reason to release fish before closing the app.
 
-P1: tank level upgrades (released fish start at level 2, then 3) would halve the taps per coin; reserved as `TankReleaseLevel` in `MagicTankState` with default 1, not in MVP content.
+P1: tank level upgrades (released fish start at level 2, then 3) would halve the taps per coin. State holds the upgrade level bought, `Fish.TankReleaseLevel` (default 1); content holds what each level releases, with `tank.release_level` (09) as the base value (1 in MVP) (issue #7). Not in MVP content.
 
 ## 4. Commands
 
 ### 4.1 `ReleaseFish`
 
 ```
-ReleaseFish():                                # one fish per command; the Release max button loops it
-  if Tank.Stock == 0:                                    return Rejected(TankEmpty)
+ReleaseFish():                                # one fish per command; ReleaseMax loops it (section 6.1)
+  if Fish.TankCount == 0:                                return Rejected(TankEmpty)
   empties = count of Cells == 0
   if empties == 0:                                       return Rejected(BoardFull)
   u = fish_spawn.NextDouble()                            # exactly one draw per successful release
   k = (int)(u * empties)                                 # 0 .. empties-1
   cell = index of the k-th empty cell in row-major order
-  Cells[cell] = TankReleaseLevel (1 in MVP); Tank.Stock -= 1; Lifetime.Releases += 1
-  Discover(1, viaRelease: true)                          # pays FISH_DISCOVERY_COINS[1] = 10 the very first time, then nothing
+  lvl = released level for Fish.TankReleaseLevel         # 1 in MVP (section 3)
+  Cells[cell] = lvl; Fish.TankCount -= 1; Stats.FishReleased += 1
   MarkDpsDirty()                                         # a level-1 fish adds 2.5% board DPS
-  publish FishReleased(cell, level: 1, stockAfter: Tank.Stock)
+  publish FishReleased(cell, level: lvl, stockAfter: Fish.TankCount)
+  if Discover(lvl):                                      # true only the very first time (issue #19)
+    publish FishDiscovered(lvl, FISH_DISCOVERY_COINS[lvl])
+    Wallet.Apply(+FISH_DISCOVERY_COINS[lvl] FISH_COIN, FISH_DISCOVERY)   # 10 coins for level 1
   Quests.OnFishReleased()                                # 06
   return Ok(cell)
 ```
 
-Rejections consume no draw. The draw happens only on success so `fish_spawn.Counter == LifetimeReleases`, which 02 and 08 check. Random placement (rather than first empty cell) is deliberate: it spreads fish so that merges need a drag, which is the tactile part; with first-empty placement every release would land next to the last one and the board would read as a queue.
+Rejections consume no draw. The draw happens only on success so `fish_spawn.Counter == Stats.FishReleased`, which 02 and 08 check. Random placement (rather than first empty cell) is deliberate: it spreads fish so that merges need a drag, which is the tactile part; with first-empty placement every release would land next to the last one and the board would read as a queue.
 
 ### 4.2 `MergeFish`
 
 ```
 MergeFish(source, target):                    # cell indices 0..19
-  if source == target or either index out of range:      throw ArgumentOutOfRange (client bug)
+  if source == target or either index out of range:      return Rejected(BadArgument)   # client bug; Apply never throws (issue #11)
   a = Cells[source]; b = Cells[target]
-  if a == 0 or b == 0:                                   return Rejected(EmptyCell)
+  if a == 0 or b == 0:                                   return Rejected(InvalidTarget, "EmptyCell")
   if a != b:                                             return Rejected(LevelMismatch)
-  if a >= FishMaxLvl:                                    return Rejected(FishAtLevelCap)
+  if a >= FishMaxLvl:                                    return Rejected(Capped, "FishAtLevelCap")
   n = a + 1
-  Cells[target] = n; Cells[source] = 0; Lifetime.Merges += 1
+  Cells[target] = n; Cells[source] = 0; Fish.TotalMerges += 1; Stats.Merges += 1
   discovered = Discover(n)                               # true and pays FISH_DISCOVERY_COINS[n] the first time
   coins = discovered ? FISH_DISCOVERY_COINS[n] : FISH_MERGE_COINS_PCT * FISH_DISCOVERY_COINS[n]
   Wallet.Apply(+coins FISH_COIN, discovered ? FISH_DISCOVERY : FISH_MERGE)
@@ -135,23 +139,25 @@ MergeFish(source, target):                    # cell indices 0..19
   return Ok(n)
 
 Discover(n):
-  bit = 1u << (n - 1)
-  if (DiscoveredMask & bit) != 0: return false
-  DiscoveredMask |= bit; return true
+  if Fish.DiscoveredLevels.Contains(n): return false
+  Fish.DiscoveredLevels.Add(n); Fish.HighestLevel = max(Fish.HighestLevel, n); return true
 ```
+
+Rejections use 01's `RejectCode` (`TankEmpty`, `BoardFull`, `LevelMismatch`, `InvalidTarget`, `Capped`, `BadArgument`); where the code is generic, 05's specific reason (`EmptyCell`, `FishAtLevelCap`) goes in `Detail` (issue #11). A rejection leaves `StateHash` unchanged and emits no events. Every `Wallet.Apply` of Fish Coins also adds to `Stats.FishCoinEarned`.
 
 The merged fish lands in the **target** cell (where the finger let go), and the source empties. Adjacency is not required: any two equal fish on the board can be merged, which keeps the 20-cell board from jamming and keeps `Merge all` simple. A merge pays the full discovery value the first time a level is created and 2% of it on every repeat; both go through the Wallet with their own reason so analytics (06) can tell the one-off income from the recurring one.
 
 ### 4.3 At the level cap
 
-Two fish at `FishMaxLvl` cannot merge (`FishAtLevelCap`). They stay on the board and contribute their full `0.5 * FISH_MISSILE_PCT[cap]` each. A board of 20 cap fish is the Fish Board's finished state at the current Research level: 1,920% passive at cap 10, x20.2 on the Fish Board layer. From there the player has three moves: buy `RES_FISH_CAP` (03 section 6) and start merging pairs of cap fish into the new level, discard fish to make room (4.4), or do nothing and keep the DPS. The UI shows the cap fish with a lock badge and the `Research` shortcut when `Merge all` finds nothing to merge and the tank is not empty (07).
+Two fish at `FishMaxLvl` cannot merge (`Capped`, `FishAtLevelCap`). They stay on the board and contribute their full `0.5 * FISH_MISSILE_PCT[cap]` each. A board of 20 cap fish is the Fish Board's finished state at the current Research level: 1,920% passive at cap 10, x20.2 on the Fish Board layer. From there the player has three moves: buy `RES_FISH_CAP` (03 section 6) and start merging pairs of cap fish into the new level, discard fish to make room (4.4), or do nothing and keep the DPS. The UI marks the cap fish with a cap badge (styling is 07's) and shows the `Research` shortcut when `Merge all` finds nothing to merge and the tank is not empty (07).
 
-### 4.4 `DiscardFish` (MVP)
+### 4.4 `DiscardFish` (M0)
 
 ```
 DiscardFish(cell):
-  if Cells[cell] == 0:                                   return Rejected(EmptyCell)
-  n = Cells[cell]; Cells[cell] = 0; Lifetime.Discards += 1
+  if cell out of range:                                  return Rejected(BadArgument)
+  if Cells[cell] == 0:                                   return Rejected(InvalidTarget, "EmptyCell")
+  n = Cells[cell]; Cells[cell] = 0; Stats.FishDiscards += 1
   coins = FISH_DISCARD_COINS_PCT (0.10) * FISH_DISCOVERY_COINS[n]
   Wallet.Apply(+coins FISH_COIN, FISH_MERGE)             # same reason as a repeat merge: it is salvage, not discovery
   MarkDpsDirty()
@@ -165,9 +171,9 @@ Discard is the escape hatch for a jammed board (section 11) and is reached by lo
 
 ### 5.1 Missiles
 
-Every merge that creates a level-`n` fish enqueues one missile worth `FISH_MISSILE_PCT[n]` percent of one hero hit (section 4.2). 03 section 2.5 drains the queue on the next `Fighting` tick: no crit, no RNG, never lost, surplus discarded on a kill. The client draws the missile from the merged fish's cell to the enemy when it sees `FishMerged`, timed so it arrives about when the sim applies it (07; the sim does not wait for the animation).
+Every merge that creates a level-`n` fish enqueues one missile worth `FISH_MISSILE_PCT[n]` percent of one hero hit (section 4.2). 03 section 2.5 drains the queue on the next `Fighting` tick: no crit, no RNG, never lost, surplus discarded on a kill. `Combat.MissileQueue` is persisted in the save (02), so a save taken while `Spawning` with missiles queued resumes and re-simulates identically (issue #7). The client draws the missile from the merged fish's cell to the enemy when it sees `FishMerged`, timed so it arrives about when the sim applies it (07; the sim does not wait for the animation).
 
-The rated contribution for the power formula is the trailing average `missileDpsPct`. Closed form for the bot and the tool, for a player merging at `f` level-1 fish per minute with every fish eventually merged up to level `cap`:
+`missileDpsPct` is rated-only (issue #15): it enters `Query.RatedDps` (`SCR_HERO`, layer shares, bots, the tools and 08's plausibility bound), never the tick loop's hero hit, because missiles already deal their damage as discrete hits. The sim does not keep a trailing average; if `SCR_HERO` needs a live number, the runtime/view-model keeps a 60 s rolling sum of `FishMissileHit`, outside the save and `StateHash`. Closed form for the bot and the tool, for a player merging at `f` level-1 fish per minute with every fish eventually merged up to level `cap`:
 
 ```
 missileHitsPerFish(cap) = sum over n = 2..cap of FISH_MISSILE_PCT[n] / 100 * 2^-(n-1)      # each level-n merge is shared by 2^(n-1) released fish
@@ -181,15 +187,16 @@ At Research 0 (`f = 10`, cap 10, speed 1): 1.39 hero hits per minute from missil
 ### 5.2 Passive board DPS
 
 ```
-FISH_BOARD_DPS_PCT = sum over occupied cells of FISH_BOARD_DPS_PER_FISH[level] = sum of 0.5 * FISH_MISSILE_PCT[level]
-fishMult           = 1 + (FISH_BOARD_DPS_PCT + missileDpsPct) / 100
+FISH_BOARD_DPS_PCT = sum over occupied cells of BoardDpsPct[level] = sum of FISH_BOARD_DPS_FACTOR (0.5) * FISH_MISSILE_PCT[level]
+fishMult_live      = 1 + FISH_BOARD_DPS_PCT / 100                      # in the tick loop's hero hit (03 section 7.1)
+fishMult           = 1 + (FISH_BOARD_DPS_PCT + missileDpsPct) / 100    # rated: Query.RatedDps only (issue #15)
 ```
 
-Recomputed on `MarkDpsDirty` after any board command (once per command, even `MergeAll`). Worked board states for the attentive player at Research 0 (section 8 explains the fish counts):
+Recomputed when DPS is dirty after any board command, at most once per command, even `MergeAll` (section 6.1). Worked board states for the attentive player at Research 0 (section 8 explains the fish counts):
 
 | When | Fish released so far | Board (levels) | `FISH_BOARD_DPS_PCT` | `fishMult` |
 |---|---|---|---|---|
-| End of first 10 minutes | 110 | 7, 5, 4, 3, 2, 1 (binary of 110, plus one unmerged) | 28.5 + 12.7 + 8.4 + 5.6 + 3.75 + 2.5 = 61 | x1.6 |
+| End of first 10 minutes | 110 | 7, 6, 4, 3, 2 (binary of 110 = 64 + 32 + 8 + 4 + 2) | 28.5 + 19.0 + 8.4 + 5.6 + 3.75 = 65.3 | x1.65 |
 | End of day 1 (2 h) | 1,200 | 10, 10, 8, 6, 5 | 96 + 96 + 43 + 19 + 13 = 267 | x3.7 |
 | End of day 3 | 3,600 | 10 x7, 5 | 673 + 13 = 686 | x7.9 |
 | End of day 7 | 8,400 | 10 x16, 8, 7, 5 | 1,538 + 43 + 28 + 13 = 1,622 | x17.2 |
@@ -197,7 +204,7 @@ Recomputed on `MarkDpsDirty` after any board command (once per command, even `Me
 | After `RES_FISH_CAP` 1 and 10,240 more fish | | 11 x10, 10 x10 | 1,441 + 961 = 2,402 | x25 |
 | Cap 12 board, 20 fish | 40,960 | 12 x20 | 4,322 | x44 |
 
-The idle contribution is the whole passive. A player who never merges still gets `fishMult = 1.5` from 20 level-1 fish released by `Release max` once (20 x 2.5%), and nothing more until they merge. That is the floor the design accepts for pillar 1; the tool checks that the attentive and lazy policies in section 8 differ by at least x3 on this layer at day 7, so touching the board is worth it.
+The idle contribution is the whole passive. A player who never merges still gets `fishMult = 1.25` from one `Release max` press at Research 0 (`TankCap` 10, 10 x 2.5%), `1.5` once two visits have filled the board's 20 cells, and nothing more until they merge (issue #19; final numbers from `tools/fish_model.py`). That is the floor the design accepts for pillar 1; the tool checks that the attentive and lazy policies in section 8 differ by at least x3 on this layer at day 7, so touching the board is worth it.
 
 ## 6. Interaction model (07 renders; this section is the contract)
 
@@ -205,17 +212,19 @@ Gestures on the board, in priority order when they could overlap:
 
 | Gesture | Result | Command sent | Feedback |
 |---|---|---|---|
-| Drag a fish and release over a fish of the same level | merge into the target cell | `MergeFish(source, target)` on drop | source lifts and follows the finger at 1.1x scale; valid targets pulse while dragging; on drop the two sprites snap together, splash VFX, coin number floats up, missile launches; haptic `MERGE` (light), `DISCOVER` (medium) when `FishDiscovered` follows |
-| Drag and release over a different-level fish or an empty cell | nothing | none | source springs back over 120 ms; the target cell flashes red once if it was a fish (level mismatch); haptic `INVALID` (soft) |
+| Drag a fish and release over a fish of the same level | merge into the target cell | `MergeFish(source, target)` on drop | source lifts and follows the finger (lift scale is 07's); valid targets pulse while dragging; on drop the two sprites snap together, splash VFX, coin number floats up, missile launches; haptic `MERGE` (light), `DISCOVER` (medium) when `FishDiscovered` follows |
+| Drag and release over a different-level fish or an empty cell | nothing | none | source springs back; the target cell shows the invalid-drop feedback if it was a fish (level mismatch; animation is 07's); haptic `INVALID` (soft) |
 | Drag and release outside the board | nothing | none | spring back; no haptic |
-| Tap a fish (no drag beyond 8 px) | select it; a second tap on an equal fish merges into the second | `MergeFish(first, second)` on the second tap | first fish shows a selection ring; tapping empty space or a different level clears the selection with the red flash |
+| Tap a fish (no drag beyond `UI_DRAG_START_PX`) | select it; a second tap on an equal fish merges into the second | `MergeFish(first, second)` on the second tap | first fish shows a selection ring; tapping empty space or a different level clears the selection with the invalid feedback |
 | Tap the Magic Tank | release one fish | `ReleaseFish()` | fish pops out of the tank and arcs to its cell; tank counter decrements; haptic `RELEASE` (light); on `TankEmpty` the tank wobbles and shows the refill countdown; on `BoardFull` the board edge flashes and a toast says "Board full: merge or release a fish" |
-| Long-press a fish (350 ms) | info popover: level, name, board DPS of this fish, merge count to next level, `Release back to sea (+N coins)` | `DiscardFish(cell)` only if the popover button is tapped | popover; haptic `SELECT` |
-| `Release max` button | releases until the tank is empty or the board is full | `ReleaseMax()` (section 6.1) | fish pop out at 60 ms intervals in the order the sim chose; the HUD counts; haptic once |
-| `Merge all` button | merges every mergeable pair, lowest level first | `MergeAll()` (section 6.1) | merges animate in the sim's order at 80 ms intervals; coins and missiles per merge; haptic once per `FishDiscovered`, otherwise once at the end |
+| Long-press a fish (`UI_LONG_PRESS_MS` = 350) | info popover: level, name, board DPS of this fish, merge count to next level, `Release back to sea (+N coins)` | `DiscardFish(cell)` only if the popover button is tapped | popover; haptic `SELECT` |
+| `Release max` button | releases until the tank is empty or the board is full | `ReleaseMax()` (section 6.1) | fish pop out at `UI_RELEASE_MAX_ANIM_MS` intervals in the order the sim chose; the HUD counts; haptic once |
+| `Merge all` button | merges every mergeable pair, lowest level first | `MergeAll()` (section 6.1) | merges animate in the sim's order at `UI_MERGE_ALL_ANIM_MS` intervals; coins and missiles per merge; haptic once per `FishDiscovered`, otherwise once at the end |
 | Auto Merge toggle (P1) | runs `MergeAll` every `AUTO_MERGE_INTERVAL_S` and `ReleaseMax` when the tank is full | `SetAutoMerge(bool)` | toggle state in the tank widget |
 
-Rules: touch targets are the full cell (minimum 64 px on a 360 px wide layout, 07); drag starts after 8 px of movement so a tap never becomes a drag; while a drag is in progress the combat viewport keeps running and other board input is ignored; a merge during a boss fight is allowed and its missile hits the boss; `Merge all` and `Release max` are disabled (greyed, not hidden) when they would do nothing, with the reason as the button subtitle ("Tank empty", "Nothing to merge", "Board full").
+Behaviour, commands, events and `UI_LONG_PRESS_MS` are this spec's contract; pure presentation (scales, shakes, badges, timings of animations) is 07's, and the UI constants live in 07's constants list (issue #18).
+
+Rules: touch targets are the full cell (minimum 64 px on a 360 px wide layout, 07); drag starts after `UI_DRAG_START_PX` of movement so a tap never becomes a drag; while a drag is in progress the combat viewport keeps running and other board input is ignored; a merge during a boss fight is allowed and its missile hits the boss; `Merge all` and `Release max` are disabled (greyed, not hidden) when they would do nothing, with the reason as the button subtitle ("Tank empty", "Nothing to merge", "Board full").
 
 ### 6.1 Bulk commands
 
@@ -239,15 +248,15 @@ MergeAll():
   return Ok(merges)
 ```
 
-`MergeAll` is fully determined by the board contents: lowest level first, leftmost pair first, result in the second cell. 09's content validator does not care, but 10's golden-file test does: a saved board plus `MergeAll` must give byte-identical boards on every platform. `MergeAll` calls `MarkDpsDirty` once at the end, not per merge.
+`MergeAll` is fully determined by the board contents: lowest level first, leftmost pair first, result in the second cell. 09's content validator does not care, but 10's golden-file test does: a saved board plus `MergeAll` must give byte-identical boards on every platform. Each inner `MergeFish` marks DPS dirty; the flag is idempotent, so the observable rule is that DPS is recomputed at most once per command (issue #19).
 
 ### 6.2 Auto Merge (P1)
 
-`AutoMergeEnabled` in `FishBoardState`, default false, unlocked by a one-time purchase or a P1 Research node (06 decides). While enabled and the app is in the foreground, the sim runs `MergeAll()` every `AUTO_MERGE_INTERVAL_S = 3` seconds of ticks and `ReleaseMax()` whenever `Tank.Stock == TankCap`. It never discards. It does not run during offline catch-up (the tank fills; the board does not change), so the active player keeps an edge: a 2 h session with Auto Merge equals the attentive policy; a login-only player with Auto Merge gets one tank of fish merged per session. Events are emitted exactly as for manual commands so the HUD animates them.
+`AutoMergeEnabled` in `FishBoardState`, default false, unlocked by a one-time purchase or a P1 Research node (06 decides). While enabled and the app is in the foreground, the sim runs `MergeAll()` every `AUTO_MERGE_INTERVAL_S = 3` seconds of ticks and `ReleaseMax()` whenever `Fish.TankCount == TankCap`. It never discards. It does not run during offline catch-up (the tank fills; the board does not change), so the active player keeps an edge: a 2 h session with Auto Merge equals the attentive policy; a login-only player with Auto Merge gets one tank of fish merged per session. Events are emitted exactly as for manual commands so the HUD animates them.
 
 ## 7. Persistence and offline
 
-`FishBoardState` is part of `GameState` (02) and is saved on every autosave trigger; no board command is lost on a crash because commands are applied synchronously and the save is taken after `Advance`. Offline catch-up (06) calls `CatchUpTank(elapsedTicks)` and nothing else on the board: fish do not merge, no missiles fire, no coins accrue, `DiscoveredMask` does not change. The offline reward modal (`SCR_OFFLINE_REWARD`) shows "Magic Tank refilled: +N fish" from the `Stock` delta. Save-schema notes for 02: `Cells` serialises as a 20-byte base64 string or a 20-element int array (02 picks; the migration fixture must cover both if it ever changes), `DiscoveredMask` as an unsigned int, `TankReleaseLevel` and `AutoMergeEnabled` present from v1 with defaults so P1 needs no migration.
+`FishBoardState` is part of `GameState` (02) and is saved on every autosave trigger; no board command is lost on a crash because commands are applied synchronously and the save is taken after `Advance`. `Combat.MissileQueue` is saved too (issue #7). Offline catch-up (06) uses `CatchUpTank` and touches nothing else on the board: fish do not merge, no missiles fire, no coins accrue, `DiscoveredLevels` does not change. Phases (issue #21, 00 contract 7): `Catchup.Compute` evaluates `CatchUpTank(creditedSeconds * TICK_HZ)` and stores the count in `Offline.Pending.TankFishAdded` without changing `FishBoardState`; `ClaimOfflineReward` applies `TankCount = min(TankCap, TankCount + added)` and the refill progress per section 3. The live tank keeps ticking between compute and claim (bounded by `TankCap`). A gap shorter than `OFFLINE_MIN_S` opens no modal and credits nothing, but the tank still gets its refill for that gap: the catch-up system command (01, issue #6) applies the `CatchUpTank` result directly, so quick app switches lose no refill time. The offline reward modal (`SCR_OFFLINE_REWARD`, ticks paused while it is open) shows "Magic Tank refilled: +N fish" from `TankFishAdded`. Save-schema notes for 02: `Cells` and `DiscoveredLevels` serialise as int arrays (02 owns the encoding; the migration fixture must cover it if it ever changes), `TankReleaseLevel` and `AutoMergeEnabled` present from v1 with defaults so P1 needs no migration.
 
 ## 8. Throughput math
 
@@ -272,10 +281,10 @@ Every level-1 fish eventually causes about one merge (a level-`n` fish is `2^(n-
 | Policy | Definition | Fish per day (Research 0) | Fish Coins per day at cap 10 (merges only) | `fishMult` at day 7 |
 |---|---|---|---|---|
 | Attentive | `ReleaseMax` + `MergeAll` every active minute for 120 min; discards the lowest fish when jammed | 1,200 | about 2,160 | x17 |
-| Lazy | `ReleaseMax` + `MergeAll` once per login, two logins a day | 20 | about 36 | x1.9 (20 fish, binary merged: 4, 2, 1 -> 8.4 + 3.75 + 2.5 = 15%, grows slowly) |
+| Lazy | `ReleaseMax` + `MergeAll` once per login, two logins a day | 20 | about 36 | x1.57 (140 fish by day 7, binary merged: 8, 4, 3 -> 42.7 + 8.4 + 5.6 = 56.7%, grows slowly) |
 | Never | nothing | 0 | 0 | x1.0 |
 
-The lazy player's `fishMult` is x1.5 after the first login and x1.9 after a week; the attentive player's is x17. That x9 gap at day 7 is the active-play edge the design wants on this layer, and the tool checks it stays between x3 and x12 (bigger and the board is mandatory; smaller and it is decoration).
+The lazy player's `fishMult` is x1.12 after the first login (10 fish merged: 4, 2) and about x1.57 after a week; the attentive player's is x17. That x11 gap at day 7 (inside the band but near its top; issue #19, final numbers from `tools/fish_model.py`) is the active-play edge the design wants on this layer, and the tool checks it stays between x3 and x12 (bigger and the board is mandatory; smaller and it is decoration).
 
 ### 8.3 Fish Coins per active minute
 
@@ -299,7 +308,7 @@ Inputs: `--days 30`, `--active-min 120`, `--sessions 2`, `--policy attentive|laz
 
 Model: tank stock and refill per minute; board as a count per level; the policy's release/merge/discard rules from sections 6.1 and 8.2; coins and missiles per merge from section 2.2; `FISH_BOARD_DPS_PCT` per section 5.2; offline fill per section 3.
 
-Outputs (printed and `tools/out/fish_<policy>.json`): per day, fish released, merges, discards, `FISH_BOARD_DPS_PCT`, `fishMult`, Fish Coins from discovery / merges / discards, highest fish level, board occupancy, minutes jammed; a policy comparison table (attentive vs lazy vs never) at days 1, 3, 7, 14, 30; the section 8.1 and 8.3 tables regenerated from content; a `FISHLINE day7 attentive x17.2 lazy x1.9 ratio 9.1` summary line for 03's report. `S` constants it validates: `TANK_CAP0`, `TANK_REFILL_S0` (attentive fish per day between 1,000 and 1,500 at Research 0), `FISH_MAX_LVL0` (board fills between day 6 and day 12 for the attentive policy), `FISH_DISCOVERY_COINS` and `FISH_MERGE_COINS_PCT` (day-1 Fish Coins between 8,000 and 14,000 including discovery; steady-state merge coins between 1,500 and 3,000 a day at cap 10), `FISH_MISSILE_PCT` and the 0.5 passive factor (attentive `fishMult` at day 7 between x12 and x25; attentive/lazy ratio between x3 and x12; `missileDpsPct` under 10% at every research level), `FISH_DISCARD_COINS_PCT` (discard coins under 10% of merge coins for the attentive policy), `RES_TANK_*` effects (jointly with 03's tool: `RES_TANK_REFILL` 10 at most triples fish per day), `AUTO_MERGE_INTERVAL_S` (auto policy within 10% of attentive).
+Outputs (printed and `tools/out/fish_<policy>.json`): per day, fish released, merges, discards, `FISH_BOARD_DPS_PCT`, `fishMult`, Fish Coins from discovery / merges / discards, highest fish level, board occupancy, minutes jammed; a policy comparison table (attentive vs lazy vs never) at days 1, 3, 7, 14, 30; the section 8.1 and 8.3 tables regenerated from content; a `FISHLINE day7 attentive x17.2 lazy x1.57 ratio 11.0` summary line for 03's report. `S` constants it validates: `TANK_CAP0`, `TANK_REFILL_S0` (attentive fish per day between 1,000 and 1,500 at Research 0), `FISH_MAX_LVL0` (board fills between day 6 and day 12 for the attentive policy), `FISH_DISCOVERY_COINS` and `FISH_MERGE_COINS_PCT` (day-1 Fish Coins between 8,000 and 14,000 including discovery; steady-state merge coins between 1,500 and 3,000 a day at cap 10), `FISH_MISSILE_PCT` and the 0.5 passive factor (attentive `fishMult` at day 7 between x12 and x25; attentive/lazy ratio between x3 and x12; `missileDpsPct` under 10% at every research level), `FISH_DISCARD_COINS_PCT` (discard coins under 10% of merge coins for the attentive policy), `RES_TANK_*` effects (jointly with 03's tool: `RES_TANK_REFILL` 10 at most triples fish per day), `AUTO_MERGE_INTERVAL_S` (auto policy within 10% of attentive).
 
 ## 10. Events
 
@@ -308,24 +317,24 @@ public sealed record FishReleased(long Tick, int Cell, int Level, int StockAfter
 public sealed record FishMerged(long Tick, int Source, int Target, int NewLevel, double Coins, double MissilePct, bool Discovered) : SimEvent(Tick);
 public sealed record FishDiscovered(long Tick, int Level, double Coins) : SimEvent(Tick);
 public sealed record FishDiscarded(long Tick, int Cell, int Level, double Coins) : SimEvent(Tick);
-public sealed record TankFishReady(long Tick, int Stock) : SimEvent(Tick);          // opt-in, off by default
+public sealed record TankFishReady(long Tick, int TankCount) : SimEvent(Tick);      // opt-in, off by default
 public sealed record FishMissileHit(long Tick, double HitFraction) : SimEvent(Tick); // published by 03 when the queue drains
 ```
 
-`FishMerged` and `FishDiscovered` are the two in 00 section 5.1; the rest are this spec's. `CurrencyChanged` with reasons `FISH_DISCOVERY` and `FISH_MERGE` is published by the Wallet as for every delta.
+`FishMerged` and `FishDiscovered` are the two in 00 section 5.1; the rest are this spec's. There is no `FishMissileFired`: the client animates the missile from `FishMerged.MissilePct` and shows damage from `FishMissileHit` (issue #11). `CurrencyChanged` with reasons `FISH_DISCOVERY` and `FISH_MERGE` is published by the Wallet as for every delta.
 
 ## 11. Edge cases
 
 | Case | Behaviour |
 |---|---|
 | Board full, tank has fish | `ReleaseFish` rejected `BoardFull`; tank keeps filling to cap and stops; `Release max` disabled with subtitle "Board full"; if `Merge all` would also do nothing the tank widget shows the Research shortcut (MVP) and the long-press discard hint. |
-| Tank empty | `ReleaseFish` rejected `TankEmpty`; tank shows a countdown `TankRefillTicks - RefillProgressTicks` ticks; `Release max` disabled. |
-| Jammed board: 20 fish, no two equal, tank full | Possible only with at least 11 distinct levels, so only at cap 11+ (with cap 10 there are at most 10 distinct levels and 20 cells, so a pair always exists). Resolution is discard or Research; the bot discards the lowest fish. |
+| Tank empty | `ReleaseFish` rejected `TankEmpty`; tank shows a countdown `TankRefillTicks - TankRefillTick` ticks; `Release max` disabled. |
+| Jammed board: 20 fish, no mergeable pair, tank full | A full board is jammed iff every level below `FishMaxLvl` appears at most once (cap fish cannot merge, section 4.3). At cap `c`, a full board with no fish at level `c` always has a pair (pigeonhole: 20 cells over `c - 1` levels); with cap fish it can jam at any cap, for example 20 cap fish, or 11 level-10 fish plus one each of levels 1-9 at cap 10 (issue #17). Resolution is discard or Research; the bot discards the lowest fish. |
 | Merge during a boss fight | Allowed. The missile lands on the boss on the next tick; a merge is often the thing that breaks a wall by a hair, which is the intended drama. |
 | Merge or release while `Spawning` | Allowed; the missile waits in the queue for the next enemy (03 section 2.5). |
 | App backgrounded mid-drag | The drag is client state; no command has been sent. On resume the client cancels the drag (spring back) and the board is whatever the save says. |
 | Save mid-`MergeAll` | Impossible: commands are atomic with respect to `Advance` and saves (01). |
-| Offline catch-up | Tank fills per `CatchUpTank`; nothing else changes; `fish_spawn` draws nothing. |
+| Offline catch-up | Tank fills per `CatchUpTank` at claim (section 7); nothing else changes; `fish_spawn` draws nothing. |
 | `RES_FISH_CAP` bought with two cap fish on the board | They become mergeable immediately; `Merge all` picks them up on its next pass; no retroactive discovery. |
 | Content lowers `FISH_MAX_LVL0` or a research cap below a saved fish's level | The fish stays, keeps its board DPS, cannot merge; the content validator (09) warns when a cap decreases between versions. |
 | `Cells` length differs from `FISH_BOARD_W * FISH_BOARD_H` after a content change | Board dimensions are not content-tunable after v1 without a migration (02); the validator rejects a change to `FISH_BOARD_W/H` unless the save schema version also changes. |
@@ -334,12 +343,12 @@ public sealed record FishMissileHit(long Tick, double HitFraction) : SimEvent(Ti
 
 ## 12. Determinism rules
 
-1. `fish_spawn` is drawn only in a successful `ReleaseFish`, exactly once, and `fish_spawn.Counter == LifetimeReleases` is a `Validate()` invariant (02).
+1. `fish_spawn` is drawn only in a successful `ReleaseFish`, exactly once, and `fish_spawn.Counter == Stats.FishReleased` is a `Validate()` invariant (02).
 2. The k-th empty cell is found by a row-major scan; no hash sets, no platform-dependent iteration order.
 3. `MergeAll` order is fixed by section 6.1; `ReleaseMax` is a loop of `ReleaseFish`.
 4. Coins and missile values come from the `fish_levels` table rows, never recomputed with `Math.Pow`; `FISH_DISCOVERY_COINS` doubling is pre-evaluated by the exporter (09).
-5. The board marks DPS dirty once per command; `Query.FishBoardDpsPct` sums the table values over `Cells` in index order (floating-point sum order fixed).
-6. Event order within a command: `FishMerged` then `FishDiscovered` then the `CurrencyChanged` from the Wallet; tests assert it.
+5. DPS is recomputed at most once per board command (the dirty flag is idempotent); `Query.FishBoardDpsPct` sums the table values over `Cells` in index order (floating-point sum order fixed).
+6. Event order within a command: `FishMerged` (or `FishReleased`) then `FishDiscovered` then the `CurrencyChanged` from the Wallet; tests assert it.
 7. The client never reads `Cells` to decide a gesture's validity ahead of the sim; it sends the command and animates from the result and events, so a stale view cannot produce a divergent board.
 
 ## 13. Analytics events
@@ -350,7 +359,7 @@ public sealed record FishMissileHit(long Tick, double HitFraction) : SimEvent(Ti
 | `fish_merge` | `count`, `levelsCreated[]` (histogram of `NewLevel`), `coins`, `discoveries[]`, `viaButton` (bool), `duringBoss` (bool) | per `MergeFish` or once per `MergeAll` |
 | `fish_discovered` | `level`, `coins`, `dayIndex` (days since profile creation) | per `FishDiscovered` |
 | `fish_discard` | `level`, `coins`, `boardOccupancyBefore` | per `DiscardFish` |
-| `fish_board_snapshot` | `cells[]`, `fishBoardDpsPct`, `fishMult`, `tankCap`, `tankRefillS`, `fishMaxLvl`, `autoMerge` | at session end |
+| `fish_board_snapshot` | `cells[]`, `fishBoardDpsPct`, `fishMult`, `tankCap`, `tankRefillS`, `fishMaxLvl`, `autoMerge` | at session end (also replaces 02's `fish_session`; issue #11) |
 | `currency_changed` | 02 schema with reasons `FISH_DISCOVERY`, `FISH_MERGE` | per wallet delta |
 
 Questions the dashboard should answer (10): share of sessions with at least one merge, merges per active minute distribution (attentive vs lazy in the wild), day index of first level-10 fish, `fishMult` percentile bands at day 7 versus the tool's x12-x25, discard rate, jam rate.
@@ -363,22 +372,22 @@ Questions the dashboard should answer (10): share of sessions with at least one 
 4. **Auto Merge unlock** (purchase versus Research node) and whether it should run during offline catch-up (this spec says no, to preserve the active edge). Owner: 06. Default: Research node, no offline.
 5. **Board size is not content-tunable** after v1 without a migration. Owner: 02. Default: fixed at 5 x 4; `FISH_BOARD_W/H` stay in content for the validator's sake only.
 6. **Missile animation timing versus sim application.** The sim applies on the next tick; the animation takes about 400 ms. Owner: 07. Default: the HP bar on the viewport lags the sim by one animation frame; damage numbers are shown when the missile lands, read from the event.
-7. **Should cap fish auto-convert** (two cap fish merge into coins and a big missile) instead of refusing? Default: refuse; a board full of cap fish is a visible "buy Research" prompt and the passive is the reward for getting there.
+7. **Should cap fish auto-convert** (two cap fish merge into coins and a big missile) instead of refusing? Resolved: refuse (issue #17); a board full of cap fish is a visible "buy Research" prompt and the passive is the reward for getting there, and discard stays M0 as the escape hatch.
 
 ## 15. Acceptance criteria
 
-1. `TickTank` from an empty tank at Research 0 reaches `Stock == 1` at exactly tick 60 and `Stock == 10` at tick 600, then stops advancing `RefillProgressTicks`; `CatchUpTank(36000)` from `Stock 3, progress 17` gives `Stock == TankCap` and `RefillProgressTicks == 0`; `CatchUpTank(125)` from `Stock 0, progress 0` gives `Stock 2, progress 5`.
-2. `ReleaseFish` with `Stock 0` is rejected `TankEmpty` and draws nothing; with a full board rejected `BoardFull` and draws nothing; otherwise draws exactly once and places a level-1 fish in the k-th empty cell for `u` in {0.0, 0.5, 1 - 1e-12} with 7 empty cells giving k = 0, 3, 6.
-3. The first `ReleaseFish` on a fresh profile pays 10 Fish Coins with reason `FISH_DISCOVERY` and sets bit 0 of `DiscoveredMask`; the second pays nothing.
-4. `MergeFish` of two level-3 fish creates level 4 in the target cell, empties the source, pays 80 coins (`FISH_DISCOVERY`) the first time and 1.6 coins (`FISH_MERGE`) thereafter, enqueues a missile of 0.169 hit fractions, publishes `FishMerged` then `FishDiscovered` (first time only); `MergeFish` of levels 3 and 4 is rejected `LevelMismatch`; of two cap fish `FishAtLevelCap`; of an empty cell `EmptyCell`; same cell twice throws.
+1. `TickTank` from an empty tank at Research 0 reaches `TankCount == 1` at exactly tick 60 and `TankCount == 10` at tick 600, then stops advancing `TankRefillTick`; `CatchUpTank(36000)` from `TankCount 3, TankRefillTick 17` gives `added 7` (to `TankCap`) and refill tick 0; `CatchUpTank(125)` from `TankCount 0, TankRefillTick 0` gives `added 2`, refill tick 5.
+2. `ReleaseFish` with `TankCount 0` is rejected `TankEmpty` and draws nothing; with a full board rejected `BoardFull` and draws nothing; otherwise draws exactly once and places a level-1 fish in the k-th empty cell for `u` in {0.0, 0.5, 1 - 1e-12} with 7 empty cells giving k = 0, 3, 6.
+3. The first `ReleaseFish` on a fresh profile pays 10 Fish Coins with reason `FISH_DISCOVERY`, adds 1 to `DiscoveredLevels` and publishes `FishReleased` then `FishDiscovered(1, 10)`; the second pays nothing and publishes no `FishDiscovered`.
+4. `MergeFish` of two level-3 fish creates level 4 in the target cell, empties the source, pays 80 coins (`FISH_DISCOVERY`) the first time and 1.6 coins (`FISH_MERGE`) thereafter, enqueues a missile of 0.169 hit fractions, publishes `FishMerged` then `FishDiscovered` (first time only); `MergeFish` of levels 3 and 4 is rejected `LevelMismatch`; of two cap fish `Capped` (`Detail` `FishAtLevelCap`); of an empty cell `InvalidTarget` (`Detail` `EmptyCell`); same cell twice or an out-of-range index `BadArgument`, without throwing; every rejection leaves `StateHash` unchanged and emits no events.
 5. `MergeAll` on the board `[1,1,1,1,2,2,0,...]` merges cells (0->1) and (2->3) into level 2, then (1->3) and (4->5) into level 3, then (3->5) into level 4; the final board has a single level-4 fish in cell 5, `merges == 5`, and the event sequence is five `FishMerged` in that order; the result is byte-identical on x64, ARM64 and IL2CPP.
-6. `ReleaseMax` with `Stock 10` and 7 empty cells releases 7 and returns 7; with `Stock 3` releases 3.
-7. `DiscardFish` on a level-10 fish pays 512 coins with reason `FISH_MERGE`, empties the cell and publishes `FishDiscarded`; on an empty cell rejected `EmptyCell`.
+6. `ReleaseMax` with `TankCount 10` and 7 empty cells releases 7 and returns 7; with `TankCount 3` releases 3.
+7. `DiscardFish` on a level-10 fish pays 512 coins with reason `FISH_MERGE`, empties the cell and publishes `FishDiscarded`; on an empty cell rejected `InvalidTarget` (`Detail` `EmptyCell`).
 8. `Query.FishBoardDpsPct` for the board `[10,10,8,6,5,0...]` equals `96.1 + 96.1 + 42.7 + 19.0 + 12.7 = 266.6` from the table within 1e-9, and `fishMult` with `missileDpsPct 0` equals 3.666.
 9. A missile queued during `Spawning` applies on the first `Fighting` tick of the next enemy; one queued during a boss fight hits the boss; `crit.Counter` is unchanged by missiles.
-10. `fish_spawn.Counter == LifetimeReleases` after a 200,000-command fuzz run mixing all five board commands; `Validate()` never throws.
-11. Offline: a 3 h catch-up changes only `Tank.Stock` and `Tank.RefillProgressTicks` in `FishBoardState`; `Cells`, `DiscoveredMask`, the Wallet's Fish Coins and `fish_spawn.Counter` are unchanged.
-12. With cap 10 and 20 occupied cells there is always at least one mergeable pair (pigeonhole); a property test over 10,000 random full boards finds `MergeAll` returns >= 1.
+10. `fish_spawn.Counter == Stats.FishReleased` after a 200,000-command fuzz run mixing all five board commands; `Validate()` never throws.
+11. Offline: for a 3 h gap, `Catchup.Compute` changes nothing in `FishBoardState` and stores `Offline.Pending.TankFishAdded`; `ClaimOfflineReward` changes only `TankCount` and `TankRefillTick`; `Cells`, `DiscoveredLevels`, the Wallet's Fish Coins and `fish_spawn.Counter` are unchanged by both. A gap under `OFFLINE_MIN_S` opens no modal and still advances the tank refill.
+12. A property test over 10,000 random full boards with levels in `1..cap-1` finds `MergeAll` returns >= 1 (pigeonhole); a board of 20 cap fish gives `MergeAll == 0` and the bot discards (issue #17).
 13. `tools/fish_model.py --policy attentive` reports between 1,000 and 1,500 fish on day 1 at Research 0, a full cap-10 board between day 6 and day 12, `fishMult` at day 7 between x12 and x25; `--policy lazy` reports `fishMult` at day 7 between x1.5 and x3; the ratio is between x3 and x12.
 14. `tools/fish_model.py` and the C# `HeroCat.Bots` fish policy agree on day-7 `fishMult` within 5% for the attentive policy (10's cross-check).
 15. PlayMode (07): dragging a fish onto an equal fish sends exactly one `MergeFish(source, target)` with `target` the cell under the release point; dropping on a mismatched fish sends nothing and plays the spring-back; a tap-tap on two equal fish sends one `MergeFish`; `Merge all` with nothing to merge is disabled and shows "Nothing to merge".
@@ -387,15 +396,15 @@ Questions the dashboard should answer (10): share of sessions with at least one 
 
 | Name | Value | Kind | Section | Note |
 |---|---|---|---|---|
-| `TANK_REFILL_FLOOR_S` | 2.0 | S | 3 | Lower bound after `RES_TANK_REFILL`. |
-| `RES_TANK_CAP_PER_LVL` | 5 | S | 3 | Priced in 03 section 6. |
-| `RES_TANK_REFILL_PER_LVL` | 0.4 s | S | 3 | Priced in 03 section 6. |
-| `TankReleaseLevel` | 1 (MVP; P1 upgrades) | S | 3 | State field with default, not a constant row. |
+| `TANK_REFILL_FLOOR_S` | 2.0 | S | 3 | Not a `constants` row: 09's `tank.refill_floor_s`, equal to `research[res_tank_refill].effect_floor` (issue #19). |
+| `RES_TANK_CAP_PER_LVL` | 5 | S | 3 | Not a `constants` row: 09's `research[res_tank_cap].effect_per_level`; priced in 03 section 6. |
+| `RES_TANK_REFILL_PER_LVL` | 0.4 s | S | 3 | Not a `constants` row: 09's `research[res_tank_refill].effect_per_level`; priced in 03 section 6. |
+| `Fish.TankReleaseLevel` | 1 (MVP; P1 upgrades) | S | 3 | State field (02) holding the upgrade level bought; what each level releases is content, base `tank.release_level` = 1 (issue #7). |
 | `FISH_DISCARD_COINS_PCT` | 0.10 | S | 4.4 | Of the level's discovery value. |
-| `FISH_BOARD_DPS_PER_FISH[n]` | `0.5 * FISH_MISSILE_PCT[n]` | S | 5.2 | Names the 0.5 factor from 00 section 6.4 so the table can carry it. |
+| `BoardDpsPct[n]` | `FISH_BOARD_DPS_FACTOR (0.5) * FISH_MISSILE_PCT[n]` | S | 5.2 | Derived `fish_levels` column (09); the factor is 00's `FISH_BOARD_DPS_FACTOR` (issue #19). |
 | `FISH_MAX_LVL_HARD` | 20 | S | 2.2 | `fish_levels` ships 20 rows; `RES_FISH_CAP` max 10. |
 | `AUTO_MERGE_INTERVAL_S` (P1) | 3 | S | 6.2 | |
-| `DRAG_START_PX`, `LONG_PRESS_MS` | 8, 350 | - | 6 | UI constants for 07. |
-| `MERGE_ALL_ANIM_MS`, `RELEASE_MAX_ANIM_MS` | 80, 60 | - | 6 | UI constants for 07. |
+| `UI_DRAG_START_PX`, `UI_LONG_PRESS_MS` | 8, 350 | - | 6 | Defined in 07's constants list (issue #18); `UI_LONG_PRESS_MS` is behaviour, so its value is this spec's. |
+| `UI_MERGE_ALL_ANIM_MS`, `UI_RELEASE_MAX_ANIM_MS` | 80, 60 | - | 6 | Defined in 07's constants list (issue #18). |
 | Haptic ids | `MERGE`, `DISCOVER`, `INVALID`, `RELEASE`, `SELECT` | - | 6 | For 07's haptics map. |
 | `fish_levels` rows | 20 rows per section 2.2 | S | 2.2 | Table, generated from the 00 formulas by the exporter. |

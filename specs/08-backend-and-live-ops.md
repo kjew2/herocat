@@ -1,6 +1,6 @@
 ## 08 - Backend and Live Ops
 
-Specifies `HeroCat.Server`: every service and endpoint the client calls, the auth model, the server-authoritative summon algorithm and its audit trail, receipt validation for both stores, remote config and content versioning, anti-cheat plausibility checks and the action matrix, live-ops tooling, infrastructure and cost, and compliance. Everything here sits behind the six interfaces of 00 section 8.11 with local implementations, so M0 ships with no server at all; the server is additive from MVP.
+Specifies `HeroCat.Server`: every service and endpoint the client calls, the auth model, the server-authoritative summon algorithm and its audit trail, receipt validation for both stores, remote config and content versioning, anti-cheat plausibility checks and the action matrix, live-ops tooling, infrastructure and cost, and compliance. Everything here sits behind the seven interfaces of 00 section 8.11 (`IClock`, `ISummonService`, `ISaveStore`, `IInboxService`, `IReceiptValidator`, `IConfigService`, `IDungeonSeedService`; issue #25) with local implementations, so M0 ships with no server at all; the server is additive from MVP.
 
 Tiers covered: MVP (everything not marked otherwise), P1 (Guild, Leaderboard, Coupon, Rewarded Ads, Events schedule), with M0 notes where the local implementation differs.
 
@@ -15,11 +15,11 @@ One ASP.NET Core 8 deployable (`HeroCat.Server`), organised as feature folders; 
 | Auth | guest creation, JWT issue/refresh, platform linking, logout, recovery, device registration, server time | `accounts`, `account_links`, `devices`, `refresh_tokens` | MVP | none needed; `PlayerId = Guid.Empty`, `ServerClock(api: null)` |
 | Profile | display name, avatar, age gate, account delete/export | `accounts` | MVP | `profile.json` cache only |
 | Save | upload/download, metadata, history, plausibility hook | `saves`, `save_history`, S3 | MVP | `LocalSaveStore` |
-| Summon | pull, pity state, rate table, history | `banner_pity`, `summon_log`, `diamond_ledger`, `idempotency` | MVP | `LocalSummonService` (same algorithm, `summon_*` streams) |
+| Summon | pull, pity state, rate table, history | `banner_pity`, `summon_log`, `diamond_ledger`, `idempotency` | MVP | `LocalSummonService` (same algorithm, 04 section 3.2, `summon_*` streams) |
 | Inbox | list, claim, claim-all, expiry | `inbox_items`, `diamond_ledger` | MVP | `LocalInboxService` (empty) |
 | IAP / Receipt | catalog, validate, restore, store webhooks, refunds | `purchases`, `inbox_items`, `diamond_ledger` | MVP | `DisabledReceiptValidator`; `FakeReceiptValidator` in debug builds |
 | Config / Content | remote config, kill switches, content manifest pointer, min versions, maintenance | `config_versions` | MVP | `LocalConfigService` (bundled content, all flags on) |
-| Dungeon seed | seed issue, result correlation | `dungeon_seeds` | MVP | `LocalDungeonSeedService` (one draw from `dungeon`) |
+| Dungeon seed | seed issue, result correlation | `dungeon_seeds` | MVP | `LocalDungeonSeedService : IDungeonSeedService` (one draw from `dungeon`; issue #25) |
 | Mail / Admin | mail blasts, compensation, moderation actions, config publishing, support lookups | `mail_blasts`, `moderation_actions`, `config_versions` | MVP (internal) | n/a |
 | Guild | create/join/chat/boss | `guilds`, `guild_members`, `guild_chat` | P1 | n/a |
 | Leaderboard | weekly boards from save summaries | Redis ZSETs | P1 | n/a |
@@ -203,7 +203,7 @@ public sealed record RateTable(double C, double R, double E, double L, double M)
 }
 ```
 
-Pity: `pity` = pulls since the last L+ result, held server-side in `banner_pity`. For the pull with index `n = pity + 1`:
+Pity is defined once (issue #24): `pity` = pulls on this banner since the last L+ result, **before** this pull, held server-side in `banner_pity` (the client's `Banners[b].PityCounter` mirrors it). The pull's index is `n = pity + 1`, and its L+ probability is 04's `PityRate(n)` (04 section 3.1):
 
 ```
 pLPlus(n) = n <= PITY_SOFT_START            ? table.LPlus                                   // pulls 1..50: 0.03
@@ -211,64 +211,19 @@ pLPlus(n) = n <= PITY_SOFT_START            ? table.LPlus                       
           : min(1.0, table.LPlus + PITY_SOFT_STEP * (n - PITY_SOFT_START))                  // pull 51..79: 0.03 + 0.0325*(n-50)
 ```
 
-Worked: `n = 51 -> 0.0625`, `n = 60 -> 0.355`, `n = 70 -> 0.68`, `n = 79 -> 0.9725`, `n = 80 -> 1.0`. The formula reaches 1.0 at `n = 80` on its own (`0.03 + 0.0325*30 = 1.005`), so `PITY_HARD` is a guarantee consistent with the curve, not an override of it.
+Worked: `n = 51 -> 0.0625`, `n = 60 -> 0.355`, `n = 70 -> 0.68`, `n = 79 -> 0.9725`, `n = 80 -> 1.0`. The formula reaches 1.0 at `n = 80` on its own (`0.03 + 0.0325*30 = 1.005`), so `PITY_HARD` is a guarantee consistent with the curve, not an override of it. So a pull made at `pity = 79` is pull 80 and its L+ probability is exactly 1.0.
 
-Below-L+ rarities on a pull with `pLPlus > table.LPlus` are scaled so the total is still 1: `pC = table.C * (1 - pLPlus) / (1 - table.LPlus)`, same for R and E.
+Below L+, 04 section 3.2 picks C/R/E with `u2` over the level's C/R/E weights renormalised by `(1 - table.LPlus)`.
 
-### 4.2 The pull as a pure function
+### 4.2 The pull algorithm (owned by 04)
 
-The algorithm is a pure function in `HeroCat.Sim.Summon` shared by the server, `LocalSummonService` and the Python model (04). Only the source of the uniforms differs: the server draws from a CSPRNG, the local service from the `summon_<banner>` stream, the model from `random`. Three uniforms per pull, always consumed, even when unused, so stream counters stay `3 * TotalPulls` (02 section 3.4).
+The algorithm is 04 section 3.2 (`Pull`, `Pull10`, `PityRate`, `SampleCRE` in `HeroCat.Sim.Summons`), shared by the server, `LocalSummonService` and `tools/gacha_model.py`; this spec does not restate it (issue #24). Only the source of the uniforms differs: the server draws from a CSPRNG, the local service from the `summon_<banner>` stream, the model from `random`. What the server handler and audit rely on:
 
-```csharp
-public static class SummonAlgorithm
-{
-    public readonly record struct PullInput(int Pity, double U1, double U2, double U3);
-    public readonly record struct PullOutput(Rarity Rarity, int PoolIndex, int PityAfter, bool Guarantee);
+- Three uniforms per pull, always consumed, even when unused, in a fixed order: `u1` is the L+ check against `PityRate(n)`; `u2` picks M vs L inside L+, or C/R/E renormalised, or is unused on a forced E; `u3` picks the item inside the rarity's pool. Stream counters stay `3 * TotalPulls` (02 section 3.4) and a 10-pull consumes exactly 30 uniforms.
+- Banner EXP is added before each pull's draw and that pull uses the resulting level's rate table (04 section 4), so a 10-pull that crosses a level threshold changes table mid-batch.
+- 10-pull guarantee: if slots 1-9 produced nothing >= EPIC, slot 10 still runs the normal L+ check first and becomes EPIC only if that check fails. It is never a reroll over E/L/M, so the L+ distribution is identical on every slot and the published odds need no forced-slot caveat. Pity advances through a forced E and resets on L/M.
 
-    // One pull. u1 picks the rarity, u2 picks M vs L inside L+, u3 picks the item within the rarity pool.
-    public static PullOutput Pull(RateTable t, int poolSizeOfRarity(Rarity), PullInput x, bool forceEplus = false)
-    {
-        int n = x.Pity + 1;
-        double pLPlus = n <= PITY_SOFT_START ? t.LPlus : n >= PITY_HARD ? 1.0 : Math.Min(1.0, t.LPlus + PITY_SOFT_STEP * (n - PITY_SOFT_START));
-        double scale  = (1.0 - pLPlus) / (1.0 - t.LPlus);
-        double pC = t.C * scale, pR = t.R * scale, pE = t.E * scale;
-
-        Rarity r; bool guarantee = false;
-        if (forceEplus)
-        {   // slot-10 reroll from the E+ sub-distribution: E, L, M in their natural proportions at this pity
-            double eplus = pE + pLPlus;
-            if (x.U1 * eplus < pE) r = Rarity.EPIC;
-            else r = x.U2 < t.MShare ? Rarity.MYTHIC : Rarity.LEGENDARY;
-            guarantee = true;
-        }
-        else if (x.U1 < pLPlus)              r = x.U2 < t.MShare ? Rarity.MYTHIC : Rarity.LEGENDARY;
-        else if (x.U1 < pLPlus + pE)         r = Rarity.EPIC;
-        else if (x.U1 < pLPlus + pE + pR)    r = Rarity.RARE;
-        else                                 r = Rarity.COMMON;
-
-        int pityAfter = r >= Rarity.LEGENDARY ? 0 : x.Pity + 1;
-        int idx = (int)Math.Floor(x.U3 * poolSizeOfRarity(r));      // uniform within the rarity's pool; 04 may weight items, in which case this is a CDF walk
-        return new PullOutput(r, idx, pityAfter, guarantee);
-    }
-
-    // A 1x or 10x batch. The 10-pull guarantee: if slots 1-9 produced nothing >= EPIC, slot 10 is rerolled from the E+ sub-distribution.
-    public static PullOutput[] Batch(RateTable t, Func<Rarity,int> pool, int pity, int count, Func<double> next)
-    {
-        var out = new PullOutput[count]; bool anyEplus = false;
-        for (int i = 0; i < count; i++)
-        {
-            bool force = count == 10 && i == 9 && !anyEplus;
-            out[i] = Pull(t, pool, new PullInput(pity, next(), next(), next()), force);
-            pity = out[i].PityAfter; anyEplus |= out[i].Rarity >= Rarity.EPIC;
-        }
-        return out;
-    }
-}
-```
-
-Notes: `forceEplus` reuses the same three uniforms (no extra draw), so the guarantee changes the outcome but not the stream consumption. Pity continues to advance correctly through a forced E (not L+), and resets on a forced L/M. The order "u1 rarity, u2 M-vs-L, u3 item" is fixed so the test vectors are meaningful.
-
-Test vectors (`Fixtures/Summon/vectors.json`, shared by `HeroCat.Sim.Tests`, `HeroCat.Server.Tests` and `tools/gacha_model.py`): 500 rows of `(table, pity, u1, u2, u3, forceEplus) -> (rarity, pityAfter, guarantee)` plus 20 batch rows. Server and client must reproduce every row.
+Test vectors: one directory `Fixtures/Summon/` (issue #14). `Fixtures/Summon/vectors.json` is generated by `tools/gacha_model.py --vectors` (the independent oracle): a superset of 04's named vectors (04 section 3.4) plus at least 500 row vectors `(level, pity, u1, u2, u3, forceEplus) -> (rarity, poolIndex, pityAfter, guarantee)` and 20 batch rows. `HeroCat.Sim.Tests` and `HeroCat.Server.Tests` only read it; server and client must reproduce every row. Beside it, the C# stream-sequence fixture (seed -> 1,000 pulls through the `summon_<banner>` stream) is a determinism golden that the Python model's SplitMix64 must also reproduce.
 
 ### 4.3 Handler
 
@@ -279,8 +234,8 @@ Test vectors (`Fixtures/Summon/vectors.json`, shared by `HeroCat.Sim.Tests`, `He
 { "banner": "WEAPON", "count": 10, "payment": "DIAMOND", "clientContentVersion": "2026.11.03" }
 // 200
 { "requestId": "c1f0…", "banner": "WEAPON", "count": 10,
-  "pulls": [ { "itemId": "wpn_017", "rarity": "R", "isNew": false, "levelBefore": 1, "levelAfter": 1, "guaranteeApplied": false }, "...9 more" ],
-  "pityBefore": 23, "pityAfter": 33, "bannerLevelBefore": 4, "bannerLevelAfter": 4, "bannerExpAfter": 22,
+  "pulls": [ { "itemId": "wpn_017", "rarity": "R", "isNew": false, "levelBefore": 1, "levelAfter": 1, "copiesAfter": 2, "overflowRockCandy": 0, "guaranteeApplied": false }, "...9 more" ],
+  "pityBefore": 23, "pityAfter": 33, "bannerLevelBefore": 4, "bannerLevelAfter": 4, "bannerExpAfter": 422,
   "debits": [ { "currency": "DIAMOND", "amount": -1000 } ],
   "balances": { "DIAMOND": 240, "TICKET_SUMMON_WEAPON": 3 },
   "rateTableHash": "3f9a…", "serverTime": 1793670900 }
@@ -294,28 +249,29 @@ Handle(player, req):
   content = ContentDb for req.clientContentVersion (CONTENT_TOO_OLD 409 if below min)
   tx:
     pity = select ... from banner_pity for update (insert default if absent)
-    table = content.BannerLevels[banner][pity.level]
     cost  = payment == DIAMOND ? PULL_COST[banner] * count : count tickets
     if payment == DIAMOND: balance = sum(diamond_ledger) ; if balance < cost: 402 INSUFFICIENT_FUNDS {need, have}
     else: tickets = server ticket ledger (06 keeps summon tickets server-side from MVP); if tickets < count: 402 INSUFFICIENT_FUNDS
     if payment == DIAMOND and tickets >= count: 409 PAYMENT_MISMATCH {expected: "TICKET"}   // 06 rule: tickets first; client out of date
-    outputs = SummonAlgorithm.Batch(table, pool, pity.pity, count, csprng.NextDouble)
-    items   = outputs.Select(o => content.Pool(banner, o.Rarity)[o.PoolIndex])
-    insert count rows into summon_log (one per pull, with roll_u = u1 of that pull, pity_before/after, guarantee, rate_table_hash)
+    st  = BannerState { PityCounter = pity.pity, TotalPulls = pity.total_pulls, BannerExp = pity.exp }      // cumulative exp; level derived
+    col = CollectionState from the player's item ledger (granted_items + summon_log aggregates)
+    results = count == 10 ? Pull10(content.Banner(banner), st, col, csprng)                                  // 04 section 3.2; banner level and
+                          : [Pull(content.Banner(banner), st, col, csprng, forceEplus: false)]               // rate table evaluated per pull
+    insert count rows into summon_log (one per pull, with that pull's u1/u2/u3, pity_before/after, banner level, guarantee, rate_table_hash of that pull's table)
     insert diamond_ledger (-cost, SUMMON, ref summon, request_id) or decrement ticket ledger
-    update banner_pity: pity = last pityAfter, exp += BANNER_EXP_PER_PULL * count, level = levelFor(exp) (04 thresholds), total_pulls += count
-    compute isNew/levelBefore/levelAfter from the player's item ledger (granted_items + summon_log aggregates), append items
+    update banner_pity: pity = st.PityCounter, exp = st.BannerExp, level = levelFor(exp) (04 section 4 thresholds), total_pulls = st.TotalPulls
+    isNew/levelBefore/levelAfter/copiesAfter/overflowRockCandy come from the Pull results; append items to the ledger
     insert idempotency(final, response)
   release lock; return response
 ```
 
-Latency target p99 under 150 ms. The response is the `SummonResultPayload` of 01 section 2.5; the client applies it with `ApplySummonResult`, replacing `DIAMOND` with `balances.DIAMOND`.
+Latency target p99 under 150 ms. The response is the `SummonResultPayload` of 01 section 2.5, with per-pull `copiesAfter` and `overflowRockCandy` (issue #13); the client applies it with `ApplySummonResult`, the only summon mutator in both modes, replacing `DIAMOND` with `balances.DIAMOND` (server wins).
 
 Errors: `INSUFFICIENT_FUNDS` 402, `PAYMENT_MISMATCH` 409, `BANNER_CLOSED` 409, `CONTENT_TOO_OLD` 409, `IDEMPOTENCY_IN_FLIGHT` 409, `SUMMON_DISABLED` 503 (kill switch).
 
 ### 4.4 Audit log
 
-One `summon_log` row per pull, never per batch, so a regulator or support agent can reproduce any pull: given `rate_table_hash` (which identifies the exact published table), `pity_before` and `roll_u`, `SummonAlgorithm.Pull` yields the logged rarity. The row also records `guarantee` so 10-pull rerolls are visible. Retention 7 years (02 section 13). `GET /summon/history?banner=WEAPON&limit=100` -- `jwt` -- 10/min -> the player's own rows (item, rarity, pity, time; not `roll_u`).
+One `summon_log` row per pull, never per batch, so a regulator or support agent can reproduce any pull: given `rate_table_hash` (which identifies the exact published table), `pity_before`, `guarantee` (whether slot 10 ran with `forceEplus`) and the pull's three uniforms, 04's `Pull` yields the logged rarity and item. The row records `guarantee` so forced 10-pull slots are visible. Retention 7 years (02 section 13). `GET /summon/history?banner=WEAPON&limit=100` -- `jwt` -- 10/min -> the player's own rows (item, rarity, pity, time; not the uniforms).
 
 ### 4.5 Published rates
 
@@ -326,17 +282,17 @@ One `summon_log` row per pull, never per batch, so a regulator or support agent 
   "rates": { "C": 0.52, "R": 0.33, "E": 0.12, "L": 0.025, "M": 0.005 },
   "pity": { "softStart": 50, "softStepPerPull": 0.0325, "hard": 80, "lplusAtSoftStart": 0.03 },
   "tenPullGuarantee": "EPIC_OR_BETTER",
-  "effective": { "lplusPerPullAveraged": 0.0412, "expectedPullsToLplus": 24.3, "p99PullsToLplus": 62 },
+  "effective": { "lplusPerPullAveraged": 0.0366, "expectedPullsToLplus": 27.3, "p99PullsToLplus": 62 },
   "items": [ { "itemId": "wpn_001", "rarity": "C", "weight": 1 }, "..." ] }
 ```
 
 `effective` numbers are computed by `tools/gacha_model.py` at export time and stored in `banner_levels` so the server serves exactly what the model printed. `SCR_SUMMON` renders this endpoint's body (07); the same JSON is exported to the store listing's odds page (section 10.3).
 
-**`GET /summon/state`** -- `jwt` -- 30/min -> `{ "banners": { "WEAPON": { "pity": 23, "level": 4, "exp": 12, "totalPulls": 412 }, ... } }`. The client calls it at boot to overwrite `Banners[b]` mirrors.
+**`GET /summon/state`** -- `jwt` -- 30/min -> `{ "banners": { "WEAPON": { "pity": 23, "level": 4, "bannerExp": 412, "totalPulls": 412 }, ... } }`. `bannerExp` is cumulative and `level` is derived from it (04 section 4; returned for display only). The client calls it at boot to overwrite the `Banners[b]` mirrors (`PityCounter`, `TotalPulls`, `BannerExp`).
 
 ### 4.6 M0 note
 
-`LocalSummonService` (Runtime) runs `SummonAlgorithm.Batch` with `next = () => streams["summon_" + banner].NextDouble()`, charges the local `Wallet`, and writes no log. The bot harness uses the same class. Because the function is shared, the bot's realised rates predict live rates exactly, and the server's test suite asserts the vectors file against the same assembly.
+`LocalSummonService` (Runtime) checks the wallet, then runs 04's `Pull`/`Pull10` on cloned banner and collection state with uniforms from the `summon_<banner>` stream, and returns a `SummonResultPayload` that also carries that stream's counter after the pull. It never writes `GameState` and writes no log: `ApplySummonResult` debits the wallet, sets the stream counter and applies the pulls, in Local and Remote mode alike (issues #6, #13). The bot harness uses the same class. Because the function is shared, the bot's realised rates predict live rates exactly, and the server's test suite asserts the vectors file against the same assembly.
 
 ## 5. IAP and receipt validation
 
@@ -458,21 +414,21 @@ Each check yields `(flag, severity, evidence)`; severity `info | suspicious | ce
 | `SEQ_REGRESSION` | `saveSeq` below the stored value for another device of the same player. | `info` (normal with two devices) |
 | `CLOCK_AHEAD` | `lastSavedServerTime > now + CLOCK_MAX_SKEW_ACCEPT_S`. | `suspicious` |
 | `STAGE_VS_TIME` | `HighestCleared > botStage(daysSinceCreated) * STAGE_BOUND_MULT` where `botStage` is the whale-policy curve from the 10 acceptance table (the fastest legitimate path), `STAGE_BOUND_MULT = 1.5`. | `suspicious`; `certain` above `3x` |
-| `DPS_VS_STAGE` | Re-derive DPS with `HeroCat.Sim.Power.Dps(state, db)` from the uploaded state. If `DPS * BOSS_TIME_TICKS / TICK_HZ < BossHp(HighestCleared) * DPS_BOUND_MARGIN` with `DPS_BOUND_MARGIN = 0.5` (allowing for fish missiles and tap zap the formula underestimates), the player could not have cleared it. | `certain` |
+| `DPS_VS_STAGE` | Re-derive the rated DPS with `Query.RatedDps` (03 section 7.1) from the uploaded state: skills, companions and fish missiles (05's closed form) are in it, transient buffs and tap zap are not (issues #10, #15). If `DPS * BOSS_TIME_TICKS / TICK_HZ < BossHp(HighestCleared) * DPS_BOUND_MARGIN` with `DPS_BOUND_MARGIN = 0.5` (allowing for tap zap, buffs and crit variance the rated value leaves out), the player could not have cleared it. | `certain` |
 | `GOLD_DELTA_BOUND` | `Stats.GoldEarned - prev.GoldEarned > maxGoldRate(HighestCleared, DPS) * elapsedSec * GOLD_BOUND_MULT`, `GOLD_BOUND_MULT = 2` (covers `GOLD_GAIN` training and boss multipliers). | `suspicious`; `certain` above `10x` |
 | `DIAMOND_LEDGER_MISMATCH` | `Wallet.Diamond > serverLedgerBalance + clientSideAllowance` where `clientSideAllowance = DIAMONDS_PER_DAY_F2P * daysSinceLastUpload + TUTORIAL_DIAMONDS (once) + firstClearDiamondsPossible(HighestCleared)`. Client-side diamond sources (quests, login, first clears) are bounded per day; anything above is impossible. | `certain` |
 | `ITEM_WITHOUT_PULL` | Any collection `Copies` exceeds `summon_log` count + `granted_items` for that id. | `certain` |
 | `PITY_MISMATCH` | Client pity differs from `banner_pity`. | `info` |
 | `DUPLICATE_REQUEST_ID` | `X-Request-Id` previously used by another player. | `certain` |
-| `OFFLINE_WINDOW_OVERLAP` | `Offline.LifetimeOfflineSecCredited` grew by more than the wall-clock gap between the last two uploads plus `OFFLINE_CAP_H * 3600`. | `suspicious` |
-| `STREAM_COUNTER_MISMATCH` | 02 P15 invariants fail on the uploaded body (the client's own validator should have fixed them; failing means the client is modified). | `certain` |
+| `OFFLINE_WINDOW_OVERLAP` | `Offline.LifetimeOfflineSecCredited` grew by more than the wall-clock gap between the last two uploads plus the effective cap `(OFFLINE_CAP_H + 2 * level(RES_OFFLINE_CAP)) * 3600` (issue #21). | `suspicious` |
+| `STREAM_COUNTER_MISMATCH` | 02 P15 invariants fail on the uploaded body, one per consumed draw, e.g. `loot.Counter == Stats.BossKills`, `crit.Counter == Stats.HeroHits`, `summon_<b>.Counter == 3 * TotalPulls` (issue #8; the client's own validator should have fixed them; failing means the client is modified). | `certain` |
 | `TAINTED` | `DebugTainted` true on a release client version. | `certain` |
 | `REPLAY_DIVERGENCE` | Spot check (section 7.3): re-simulating the command log from the previous upload does not reproduce the uploaded state hash. | `certain` |
 | `RESEARCH_WITHOUT_COINS` | `sum(research cost paid) > Stats.FishCoinEarned`. Same pattern for Rock Candy vs awakening cost. | `certain` |
 
 ### 7.3 Re-simulation spot check
 
-The server references `HeroCat.Sim`, so it can replay. Sampling: 1% of uploads at random plus 100% of uploads carrying any `suspicious` flag. The server requests the command log (`GET` is impossible server-side; the next `PUT /save` response carries `"requestCmdLog": true` and the client includes `saves/cmdlog.ndjson` in its next upload as a second part). Replay: load previous blob, apply `ApplyServerTime`/`Advance`/commands in log order with `LocalSummonService` replaced by a replayer that injects the logged `ApplySummonResult` payloads, compare the resulting state hash to the uploaded one. Divergence -> `REPLAY_DIVERGENCE`. Cost: one replay of a 2 h session is ~72,000 ticks, under 2 s on one core; at 1% sampling and 100k DAU that is ~2,000 replays a day, negligible.
+The server references `HeroCat.Sim`, so it can replay. Sampling: 1% of uploads at random plus 100% of uploads carrying any `suspicious` flag. The server requests the command log (`GET` is impossible server-side; the next `PUT /save` response carries `"requestCmdLog": true` and the client includes `saves/cmdlog.ndjson` in its next upload as a second part). Replay: load previous blob, apply `Advance` and the logged commands in log order. Runtime-originated changes are logged system commands (`ApplyServerTime` at sync points, `ComputeOfflineCatchup`, `ApplySummonResult` with its recorded payload; issues #5, #6), and `ApplySummonResult` itself performs the debit and, in Local mode, sets the summon stream counter, so the replay needs no service and no special records. Compare the resulting SHA-256 `StateHash` to the uploaded one (issue #28). Divergence -> `REPLAY_DIVERGENCE`. Cost: one replay of a 2 h session is ~72,000 ticks, under 2 s on one core; at 1% sampling and 100k DAU that is ~2,000 replays a day, negligible.
 
 Dungeon correlation: for every `dungeon_seeds` row with `result null` older than its TTL, compare `BestFloor[kind]` and `Stats.DungeonClears` between the two uploads bracketing the issue time; a `BestFloor` increase with no issued seed for that floor is `DUNGEON_WITHOUT_SEED` (`certain`).
 
@@ -603,7 +559,7 @@ Each alarm has an owner rotation (the on-call) and a runbook id (10).
 |---|---|---|---|
 | API 5xx rate | `5xx / total > 1%` over 5 min | page | RB-API-5XX |
 | API p99 latency | `p99 > 1 s` on `/summon/pull` or `/save` PUT over 10 min | page | RB-LATENCY |
-| Summon L+ rate drift | realised `lplus_rate_1h` outside `[0.028, 0.055]` with >= 2,000 pulls in the hour (expected ~0.041 with pity) | page | RB-SUMMON-RATES |
+| Summon L+ rate drift | realised `lplus_rate_1h` outside `[0.028, 0.055]` with >= 2,000 pulls in the hour (expected ~0.037 with pity, 04 section 3.1) | page | RB-SUMMON-RATES |
 | Summon errors | `INSUFFICIENT_FUNDS` share `> 20%` of pulls over 15 min (client balance display broken) | ticket | RB-CLIENT-BALANCE |
 | IAP validation failures | `iap_validate_total{status=invalid}/total > 5%` over 30 min, or `STORE_UNAVAILABLE > 10` in 5 min | page | RB-IAP |
 | IAP grant lag | any `purchases.status = pending` older than 10 min | page | RB-IAP |
@@ -715,29 +671,29 @@ Shapes fixed now so MVP code leaves room; no detailed design.
 
 ## 12. M0 note
 
-M0 has no server. Every service above is reached through an interface in `HeroCat.Runtime.Services` with a local implementation (01 section 1.2): `ServerClock(api: null)`, `LocalSummonService` (section 4.6), `LocalSaveStore`, `LocalInboxService` (empty list, `claim` -> `INBOX_NOT_FOUND`), `DisabledReceiptValidator`, `LocalConfigService` (bundled manifest, all switches on, no maintenance), `LocalDungeonSeedService`. The bot harness uses the same set with `FakeClock`. Nothing in the client branches on "local or remote"; the composition root picks. When the server arrives, the only client change is `BackendMode.Remote` and the base URL.
+M0 has no server. Every service above is reached through an interface in `HeroCat.Runtime.Services` with a local implementation (01 section 1.2): `ServerClock(api: null)`, `LocalSummonService` (section 4.6), `LocalSaveStore`, `LocalInboxService` (empty list, `claim` -> `INBOX_NOT_FOUND`), `DisabledReceiptValidator`, `LocalConfigService` (bundled manifest, all switches on, no maintenance), `LocalDungeonSeedService` (implements `IDungeonSeedService`, the seventh seam, issue #25). The bot harness uses the same set with `FakeClock`. Nothing in the client branches on "local or remote"; the composition root picks. When the server arrives, the only client change is `BackendMode.Remote` and the base URL.
 
 ## Open questions
 
 1. **Summon tickets server-side.** Section 4.3 assumes summon tickets are a server ledger from MVP (so `PAYMENT_MISMATCH` can be decided server-side). 06 owns ticket sources; if it keeps tickets client-side, the server must trust the client's ticket count on `/summon/pull`, bounded by `TICKETS_PER_DAY_MAX`. Owner: 06. Default: server ledger for summon tickets; dungeon tickets stay client-side.
-2. **`DPS_BOUND_MARGIN = 0.5`.** Fish missiles, tap zap and companion burst are not in the closed-form DPS the server re-derives. 0.5 may be too loose or too tight. Owner: 03 (provides `Power.Dps` and a "max burst multiplier" bound). Default: 0.5 until 10's bot harness reports the realised ratio of effective to formula DPS.
+2. **`DPS_BOUND_MARGIN = 0.5`.** Tap zap, transient buffs and crit variance are not in the rated DPS the server re-derives (fish missiles are, through 05's closed form; issue #15). 0.5 may be too loose or too tight. Owner: 03 (provides `Query.RatedDps` and a "max burst multiplier" bound). Default: 0.5 until 10's bot harness reports the realised ratio of effective to formula DPS.
 3. **Refund item clawback.** Section 5.4 keeps items from a refunded pull. Owner: product. Default: keep items, escalate repeat refunds.
 4. **Diamond reconciliation on first mismatch** silently overwrites the client balance. Should the client show a notice? Owner: 07. Default: show a one-line toast with the delta the first time, nothing afterwards.
 5. **Belgium**: disable paid summons or do not list. Owner: product/legal at soft launch. Default: do not list in Belgium for soft launch; decide for global launch.
 6. **Age-of-consent table** (`compliance_ages`) and whether to apply the regional age rather than 13 everywhere. Owner: legal. Default: 13 everywhere except where the region's digital-consent age is higher.
 7. **Sampling rate of re-simulation** (1%). Owner: ops after measuring worker cost. Default: 1% + all suspicious.
 8. **Per-region day rollover** (00 decision 8 names it as a P1 question). Server-side implication: `WeekKey`/`DayKey` would need a per-account timezone; leaderboards and daily resets would then differ by region. Owner: 06/08 at P1. Default: stay on 00:00 UTC.
-9. **Guest cloud save before any server contact** (01 open question 7): the first `/auth/guest` call must adopt a save that already has `DeviceId` set and `PlayerId = Guid.Empty`; the server assigns `playerId`, the client rewrites the save root and uploads with `If-Match: *`. Default: supported as described.
+9. **Guest cloud save before any server contact** (01 open question 7): the first `/auth/guest` call must adopt a save that already has `DeviceId` set and `PlayerId = Guid.Empty`; the server assigns `playerId`, the client rewrites the save root and uploads with `If-Match: *`. RNG seeds derive from the immutable `GameState.RngRoot`, not from `PlayerId`, so adopting the save re-seeds nothing and the server can re-simulate across the change (issue #9). Default: supported as described.
 
 ## Acceptance criteria
 
-1. `SummonAlgorithm` reproduces every row of `Fixtures/Summon/vectors.json` in `HeroCat.Sim.Tests`, `HeroCat.Server.Tests` and `tools/gacha_model.py` (10 CI gate).
-2. One million simulated pulls at level 1 through `SummonAlgorithm.Batch` with pity realise L+ in `[0.040, 0.043]` and never exceed 80 pulls between L+ results; the per-pull L+ probability at `pity = 79` is exactly 1.0.
-3. 10-pull batches: in 100,000 simulated batches with slots 1-9 forced below EPIC, slot 10 is EPIC or better 100% of the time, and the stream/CSPRNG consumption is exactly 30 uniforms per batch.
+1. 04's pull algorithm reproduces every row of `Fixtures/Summon/vectors.json` (generated by `tools/gacha_model.py --vectors`) in `HeroCat.Sim.Tests` and `HeroCat.Server.Tests`, and the Python model reproduces the C# stream-sequence golden in `Fixtures/Summon/` (10 CI gate; issue #14).
+2. One million simulated pulls at level 1 through 04's `Pull`/`Pull10` with pity realise L+ within 0.1 pp of 04's consolidated 3.657% and never exceed 80 pulls between L+ results; the per-pull L+ probability at `pity = 79` (pulls since the last L+ before this pull, so `n = 80`) is exactly 1.0 (issue #24).
+3. 10-pull batches: in 100,000 simulated batches with slots 1-9 forced below EPIC, slot 10 is EPIC or better 100% of the time, its L+ frequency equals the unforced per-pull L+ rate at the same pity (the guarantee never raises L+), and the stream/CSPRNG consumption is exactly 30 uniforms per batch.
 4. `/summon/pull` replay: a request that times out after commit and is retried with the same `X-Request-Id` produces one `diamond_ledger` row, `count` `summon_log` rows, and a byte-identical response with `X-Idempotent-Replay: true`.
 5. Two concurrent `/summon/pull` requests for the same player with different request ids produce one `200` and one `409 IDEMPOTENCY_IN_FLIGHT` (or two sequential `200`s), never two rolls against the same `pity_before`.
 6. `/summon/pull` with `payment = DIAMOND` while the player holds enough tickets returns `409 PAYMENT_MISMATCH` and charges nothing.
-7. Every `summon_log` row can be reproduced: `Pull(tableFor(rate_table_hash), pity_before, roll_u, u2, u3)` yields the logged rarity (test over 10,000 random rows in stage).
+7. Every `summon_log` row can be reproduced: 04's `Pull` with `tableFor(rate_table_hash)`, `pity_before`, `guarantee` and the row's `u1, u2, u3` yields the logged rarity and item (test over 10,000 random rows in stage).
 8. `/summon/rates` returns a table whose rarities sum to 1 within 1e-9 and whose `L` and `M` equal the level-1 values at every level.
 9. Apple: a valid sandbox JWS grants once; the same `transactionId` again returns `ALREADY_GRANTED` with the same `inboxItemId`; a JWS with a mismatched `appAccountToken` returns `RECEIPT_ACCOUNT_MISMATCH` and writes a `moderation_actions(log)` row.
 10. Google: a `purchaseState = 1` (canceled) token returns `RECEIPT_INVALID`; a valid token is acknowledged within the handler; the RTDN `ONE_TIME_PRODUCT_CANCELED` path writes the `REFUND` ledger row and clamps a negative balance to 0 with the `refund_debt` recorded.
@@ -783,4 +739,4 @@ Engineering/operational constants, code- or config-resident (`HeroCat.Server` `a
 | `RATE_DRIFT_SIGMA` | 3 | S | 10.3 |
 | Age of digital consent default | 13 | S | 10.1 |
 
-Used from 00 by name: base rates, `PITY_SOFT_START`, `PITY_SOFT_STEP`, `PITY_HARD`, `M_SHARE_OF_LPLUS`, `BANNER_EXP_PER_PULL`, `PULL_COST[*]`, `DIAMONDS_PER_DAY_F2P`, `TUTORIAL_DIAMONDS`, `LOGIN_DIAMONDS`, `OFFLINE_CAP_H`, `BOSS_TIME_TICKS`, `TICK_HZ`, `DAY_SECONDS`, `WEAPON_PASSIVE_PCT`. From 01: `CONFIG_CACHE_MAX_AGE_S`, `MAINT_POLL_S`, `CLOUD_UPLOAD_MIN_SEC`. From 02: `GDPR_DELETE_GRACE_DAYS`, `RETENTION_INACTIVE_DAYS`.
+Used from 00 by name: base rates, `PITY_SOFT_START`, `PITY_SOFT_STEP`, `PITY_HARD`, `M_SHARE_OF_LPLUS`, `BANNER_EXP_PER_PULL`, `PULL_COST[*]`, `DIAMONDS_PER_DAY_F2P`, `TUTORIAL_DIAMONDS`, `LOGIN_DIAMONDS`, `OFFLINE_CAP_H`, `RES_OFFLINE_CAP`, `BOSS_TIME_TICKS`, `TICK_HZ`, `DAY_SECONDS`, `WEAPON_PASSIVE_PCT`. From 01: `CONFIG_CACHE_MAX_AGE_S`, `MAINT_POLL_S`, `CLOUD_UPLOAD_MIN_SEC`. From 02: `GDPR_DELETE_GRACE_DAYS`, `RETENTION_INACTIVE_DAYS`.

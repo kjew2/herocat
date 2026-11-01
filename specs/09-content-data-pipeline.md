@@ -21,7 +21,7 @@ Depends on: 00 (sections 5, 6, 8), 01 (`ContentLoader`, boot flow 8.1, content h
 flowchart TD
     Sheet["Google Sheet<br/>one tab per table"] -->|"export_content.py pull<br/>(service account or CSV)"| CSV["content_src/*.csv<br/>committed"]
     CSV -->|"export_content.py build<br/>parse + validate + emit"| JSON["content/*.json<br/>content/manifest.json<br/>committed"]
-    JSON -->|"content.yml CI:<br/>--check, bots acceptance"| PR["Pull request"]
+    JSON -->|"content.yml CI (./check.sh --content):<br/>check, bots acceptance"| PR["Pull request"]
     PR -->|"merge"| Main["main"]
     Main -->|"publish --env stage|prod"| CDN["CDN /content/{version}/"]
     JSON -->|"copied at Unity build"| SA["StreamingAssets/content/<br/>bundled fallback"]
@@ -84,7 +84,7 @@ Enums are defined once in C# (`HeroCat.Sim.Content.Enums`) and mirrored in `tool
 | `Rarity` | `COMMON`, `RARE`, `EPIC`, `LEGENDARY`, `MYTHIC` | yes: `E+`, `L+` comparisons and rate renormalisation (04) |
 | `Stat` | `ATK`, `HP`, `DEF`, `CRIT_RATE`, `CRIT_DMG`, `ATK_SPD`, `GOLD_GAIN`, `EXP_GAIN` | yes: Training levels are stored by this index (02) |
 | `Banner` | `WEAPON`, `SKILL`, `COMPANION`, `RUNE` | yes: pity counters stored by index (02) |
-| `Currency` | `GOLD`, `DIAMOND`, `FISH_COIN`, `ROCK_CANDY`, `HERO_EXP`, `TICKET_FISH_COIN`, `TICKET_ROCK_CANDY`, `TICKET_EXP`, `TICKET_SUMMON_WEAPON`, `TICKET_SUMMON_SKILL`, `TICKET_SUMMON_COMPANION`, `GUILD_COIN` | yes: Wallet array index (02) |
+| `Currency` | `GOLD`, `DIAMOND`, `FISH_COIN`, `ROCK_CANDY`, `HERO_EXP`, `TICKET_FISH_COIN`, `TICKET_ROCK_CANDY`, `TICKET_EXP`, `TICKET_SUMMON_WEAPON`, `TICKET_SUMMON_SKILL`, `TICKET_SUMMON_COMPANION`, `GUILD_COIN`, `TICKET_SUMMON_RUNE` | yes: Wallet array index (02). `TICKET_SUMMON_RUNE` is appended last so earlier indices never move; unused until P1 (issue #26) |
 | `Dungeon` | `FISH_COIN`, `ROCK_CANDY`, `EXP` | yes |
 | `CastType` | `INSTANT`, `DOT`, `BUFF` | no |
 | `AbilityType` | `DAMAGE`, `BUFF_ATK`, `BUFF_GOLD`, `MP_REGEN` | no |
@@ -132,7 +132,7 @@ The exporter checks `constants` against this list (`E040` missing, `E042` unknow
 | `DAY_SECONDS` | `constants` | int |
 | `OFFLINE_RATE`, `OFFLINE_CAP_H`, `OFFLINE_MIN_S` | `constants` | double, double, int |
 | `TUTORIAL_DIAMONDS` | `tutorial_steps[tut_welcome].grants` | grantlist |
-| `LOGIN_DIAMONDS` | `quests_daily[d_login].reward_amount` (06 section 5.2) | long |
+| `LOGIN_DIAMONDS` | `constants` (auto-granted by `EnsureDay` with reason `LOGIN`; `d_login` pays nothing, issue #20) | int |
 | Base rates C..M | `banner_levels` rows with `level = 1`, per banner | double x5 |
 | `PITY_SOFT_START`, `PITY_SOFT_STEP`, `PITY_HARD`, `M_SHARE_OF_LPLUS` | `banners` | int, double, int, double |
 | 10-pull guarantee | `banners.guarantee_batch_size`, `.guarantee_min_rarity` | int, enum |
@@ -186,6 +186,7 @@ ATTACK_PROGRESS_UNIT int I    CRIT_DMG_BASE double S       MP_POOL0 double S
 MP_REGEN0 double S            BOSS_ROCK_CANDY_P double S   FIRST_CLEAR_DIAMONDS int I
 QUEST_DAILY_DIAMONDS int S    QUEST_DAILY_BONUS_5 int S    QUEST_DAILY_BONUS_8 int S
 QUEST_WEEKLY_DIAMONDS int S   INBOX_EXPIRY_DAYS int S      DAILY_GIFT_WEAPON_TICKETS int S
+LOGIN_DIAMONDS int I
 ```
 
 Range rules: every `*_TICKS`, `TICK_HZ`, `KILLS_PER_STAGE`, `BOSS_EVERY`, `CHAPTER_WIDTH`, `STAGE_CAP`, `TAP_ZAP_MAX_PER_SEC`, `DAY_SECONDS`, `OFFLINE_MIN_S`, `*_SLOTS`, `FISH_BOARD_*`, `FISH_MAX_LVL0`, `ATTACK_PROGRESS_UNIT` are `> 0`; `SPAWN_DELAY_TICKS >= 0`; `BASE_ATK`, `BASE_HP`, `BOSS_HP_MULT`, `BOSS_GOLD_MULT`, `OFFLINE_CAP_H`, `DUPE_LVL_BONUS`, `MP_POOL0`, `MP_REGEN0` are `> 0`; `TAP_ZAP_DMG_PCT`, `OFFLINE_RATE`, `FISH_MERGE_COINS_PCT`, `FISH_BOARD_DPS_FACTOR`, `BOSS_ROCK_CANDY_P` are `in [0, 1]`; `CRIT_DMG_BASE >= 1`; `TRAIN_BULK_STEPS` strictly increasing with first element 1; `FISH_BOARD_W * FISH_BOARD_H <= 64` (02 stores the board as a fixed array).
@@ -254,7 +255,7 @@ Enemy HP and gold are curves and `BOSS_*` constants (00 section 6.1); these tabl
 |---|---|---|
 | `id` | id | Key. |
 | `chapter` | ref(chapters) | Every chapter has at least one enemy (`E057`). |
-| `weight` | double | `> 0`. Spawn-skin weight within the chapter, drawn on the `combat` stream after the kill roll so it does not perturb combat RNG (03 section 10). |
+| `weight` | double | `> 0`. Spawn-skin weight within the chapter. The pick uses a hash of `(stage, killIndex)` and consumes no RNG stream (`combat` is reserved with `Counter == 0` in MVP, issue #8). |
 | `sprite` | asset | |
 | `anim_set` | asset | |
 | `name_key` | key | |
@@ -349,7 +350,7 @@ Derived at build: `Magnitude` by `ability_type` (04 section 8.1). Example: `{"id
 |---|---|---|
 | `id` | id | Key. |
 | `rarity` | enum(Rarity) | |
-| `stat` | ref(stats) | |
+| `stat` | ref(stats) | A rune adds `stat_pct` percent to this stat; 04's `ATK_PCT` maps to `ATK` (issue #26). |
 | `stat_pct` | double | Within tolerance of `rarities.rune_stat_pct`. |
 | `slot_mask` | int | Bitmask of allowed slots `0..RUNE_SLOTS-1`; `> 0`. |
 | `tier` | enum(Tier) | `P1`. |
@@ -366,7 +367,7 @@ When the tab is absent the exporter emits an empty `runes.json` and `banners[RUN
 | `enabled` | bool | `RUNE` is `false` until P1. |
 | `tier` | enum(Tier) | |
 | `pull_cost_diamonds` | int | `PULL_COST[banner]`; `> 0`. |
-| `ticket_currency` | enum(Currency) | One of the `TICKET_SUMMON_*` values (`E059`). |
+| `ticket_currency` | enum(Currency) | One of the `TICKET_SUMMON_*` values (`E059`); `RUNE` carries `TICKET_SUMMON_RUNE` (issue #26). |
 | `pool_c`, `pool_r`, `pool_e`, `pool_l`, `pool_m` | int x5 | Expected rows per rarity in the pool table; sum is the 00 pool size; pinned to actual counts by `E034`. Folded into `pool_size` in JSON. |
 | `pity_soft_start` | int | `PITY_SOFT_START`; `>= 1`. |
 | `pity_soft_step` | double | `PITY_SOFT_STEP`; `> 0`. |
@@ -469,7 +470,7 @@ Example: `{"id": "res_fish_cap", "effect": "FISH_CAP", "effect_per_level": 1.0, 
 | `sprite` | asset | |
 | `name_key` | key | "Guppy", "Koi"... |
 
-Derived at build: `MergeCoins = round(discovery_coins * FISH_MERGE_COINS_PCT)` (min 1), `BoardDpsPct = FISH_BOARD_DPS_FACTOR * missile_pct`. Example: `{"level": 5, "discovery_coins": 160, "missile_pct": 25.3125, "sprite": "spr_fish_05", "name_key": "fish.05.name"}`.
+Derived at build: `MergeCoins = discovery_coins * FISH_MERGE_COINS_PCT` as an unrounded `double` (no rounding, no minimum; the UI floors the display, issue #16), `BoardDpsPct = FISH_BOARD_DPS_FACTOR * missile_pct`. Example: `{"level": 5, "discovery_coins": 160, "missile_pct": 25.3125, "sprite": "spr_fish_05", "name_key": "fish.05.name"}`.
 
 ### 5.20 `tank` (1 row)
 
@@ -478,7 +479,7 @@ Derived at build: `MergeCoins = round(discovery_coins * FISH_MERGE_COINS_PCT)` (
 | `id` | id | Key. One row `default` (`E045`). |
 | `cap0` | int | `TANK_CAP0`; `>= 1`. |
 | `refill_s0` | double | `TANK_REFILL_S0`; `> 0`. Converted to ticks at build: `RefillTicks0 = round(refill_s0 * TICK_HZ)`; must be an integer number of ticks (`E043`). |
-| `release_level` | int | Level of a released fish; `1` in MVP. |
+| `release_level` | int | Base level of a released fish; `1` in MVP. The save holds the player's upgrade level (`Fish.TankReleaseLevel`, 02), not this value (issue #7). |
 | `refill_floor_s` | double | Hard floor Research cannot pass; must equal `research[TANK_REFILL].effect_floor` (`E056`). |
 
 ### 5.21 `quests_daily` and 5.22 `quests_weekly`
@@ -492,15 +493,16 @@ Same schema, two tabs, because 06 resets them on different keys and `SCR_QUESTS`
 | `filter` | string? | Required for `SUMMON` (a `Banner` value) and `CLEAR_DUNGEON` (a `Dungeon` value); must parse as that enum (`E021`); empty otherwise (`E054`). |
 | `target` | long | `>= 1`. |
 | `reward_currency` | enum(Currency) | |
-| `reward_amount` | long | `>= 1`. |
+| `reward_amount` | long | `>= 1`; `0` allowed only for goal `LOGIN` (`d_login` is a counting row that pays nothing, issue #20). |
+| `budgeted` | bool | `true` for rows 06 section 2 counts in the diamond budget (reference day); read only by `E039` (issue #20). |
 | `sort_order` | int | Unique (`E046`). |
 | `tier` | enum(Tier) | `d_watch_ad` is `P1`. |
 | `name_key` | key | |
 | `icon` | asset | |
 
-Sum rule (`E039`, on `quests_daily`): `reward_amount` over rows with `reward_currency = DIAMOND` and `tier <= MVP`, plus `FIRST_CLEAR_DIAMONDS` times the day-1 boss count the bot config declares (10), must land within 10% of `DIAMONDS_PER_DAY_F2P`. The exact arithmetic is 06 section 2; this rule only catches a sheet edit that silently breaks it.
+Sum rule (`E039`, on `quests_daily` and `quests_weekly`), reproducing 06 section 2's reference-day arithmetic (issue #20): `LOGIN_DIAMONDS`, plus `reward_amount` over `quests_daily` rows with `reward_currency = DIAMOND`, `budgeted = true` and `tier <= MVP` (the bonus rows included), plus the same sum over `quests_weekly` divided by 7, plus `FIRST_CLEAR_DIAMONDS` times the reference day's new boss stages (4, 06 section 2), must land within 10% of `DIAMONDS_PER_DAY_F2P`. Achievements and the tutorial grant are excluded. This rule only catches a sheet edit that silently breaks the budget.
 
-Example: `{"id": "d_merge", "goal": "MERGE_FISH", "filter": null, "target": 15, "reward_currency": "DIAMOND", "reward_amount": 20, "sort_order": 8, "tier": "MVP", "name_key": "quest.d_merge.name", "icon": "icon_quest_merge"}`.
+Example: `{"id": "d_merge", "goal": "MERGE_FISH", "filter": null, "target": 15, "reward_currency": "DIAMOND", "reward_amount": 20, "budgeted": true, "sort_order": 8, "tier": "MVP", "name_key": "quest.d_merge.name", "icon": "icon_quest_merge"}`.
 
 ### 5.23 `achievements`
 
@@ -720,7 +722,7 @@ Change classes the exporter detects against `--previous`:
 | B6 schema change needing new client code | new required column, removed enum value | bump `min_client_version` and `schema_version` together with the client release | `E092` if the schema changed and `min_client_version` did not increase |
 | B7 version went backwards | | | `E093` |
 
-Save compatibility (02 owns the load path): the save stores `ContentVersion` and `ContentHash`. On load with a different content, `ContentReconcile.Run(state, db)` drops collection entries whose id is not in `db`, clamps `Training` levels to `stats.cap`, clamps Research levels to `max_level`, clamps `FishBoard` levels and `MagicTank` to the current caps, drops quest progress for unknown quest ids, and logs each change as an analytics `content_reconciled` event. Nothing is refunded in MVP. `content_migrations` (old id -> new id) is P1.
+Save compatibility (02 owns the load path): the save stores `ContentVersion` and `ContentHash`. On load with a different content, `ContentReconcile.Run(state, db)` drops collection entries whose id is not in `db`, clamps `Training` levels to `stats.cap`, clamps Research levels to `max_level`, clamps `Fish.Cells` levels and `Fish.TankCount` to the current caps, drops quest progress for unknown quest ids, and logs each change as an analytics `content_reconciled` event. Nothing is refunded in MVP. `content_migrations` (old id -> new id) is P1.
 
 ## 7. The exporter: `tools/export_content.py`
 
@@ -738,7 +740,7 @@ Python 3.9+, stdlib only for `build`, `check`, `diff` and `translator-csv`; `pul
 
 ```
 python3 tools/export_content.py pull  --sheet <id> [--service-account creds.json | --csv-export] [--src content_src]
-python3 tools/export_content.py build [--src content_src] [--out content] [--previous content] [--ui-keys unity/Assets/HeroCat.Client/ui_keys.txt] [--strict-warnings]
+python3 tools/export_content.py build [--src content_src] [--out content] [--previous content] [--ui-keys unity/HeroCatClient/Assets/HeroCat.Client/ui_keys.txt] [--strict-warnings]
 python3 tools/export_content.py check [--src content_src] [--out content]
 python3 tools/export_content.py diff  --a content --b <dir>          # human-readable row diff for a PR description
 python3 tools/export_content.py translator-csv --out $KIROCREW_SCRATCH/strings_ja.csv --locale ja [--missing-only]
@@ -813,7 +815,7 @@ CONTENT <code> <location>: <message>
 | `E036` | banners, runes | `banner RUNE is enabled but runes has no rows` |
 | `E037` | banner_levels | `rate_{l or m} must not change with level; level {level} has {value}, level 1 has {base}` |
 | `E038` | fish_levels vs research | `fish_levels has {n} rows but FISH_MAX_LVL0 + research cap needs {needed}` |
-| `E039` | quests_daily | `daily diamond sum {sum} is outside 10% of DIAMONDS_PER_DAY_F2P {target}` |
+| `E039` | quests_daily, quests_weekly | `daily diamond sum {sum} is outside 10% of DIAMONDS_PER_DAY_F2P {target}` |
 | `E044` | enum-keyed tables | `missing row for {enum} value '{value}'` |
 | `E045` | hero_levels, tank | `exactly one row required, found {n}` |
 | `E046` | sort_order / unique columns | `duplicate {column} {value} (also at {other_row})` |
@@ -959,6 +961,7 @@ public sealed class Constants
     public int    QuestWeeklyDiamonds { get; }    // QUEST_WEEKLY_DIAMONDS (06)
     public int    InboxExpiryDays { get; }        // INBOX_EXPIRY_DAYS (06)
     public int    DailyGiftWeaponTickets { get; } // DAILY_GIFT_WEAPON_TICKETS (06)
+    public int    LoginDiamonds { get; }          // LOGIN_DIAMONDS (06)
 
     public bool IsBossStage(int s) => s % BossEvery == 0;
     public int  ChapterOf(int s)   => (s - 1) / ChapterWidth + 1;
@@ -1036,9 +1039,9 @@ public sealed class BannerLevelDef { int Level; int ExpRequired; IReadOnlyDictio
 public sealed class AwakeningDef  { int Rank; int StageGate; long RockCandyCost; double Mult; int CompanionSlotsAfter, RuneSlotsAfter; Tier Tier; string NameKey, Icon; }
 public sealed class HeroLevelsDef { CurveDef Exp; double? AtkPctPerLevel; double? MultPerLevel; int LevelCap; }
 public sealed class ResearchDef   { string Id; ResearchEffect Effect; double EffectPerLevel; double? EffectFloor; int MaxLevel; CurveDef Cost; int UnlockAwakenRank; int LayoutRow, LayoutCol; Tier Tier; ... }
-public sealed class FishLevelDef  { int Level; long DiscoveryCoins; double MissilePct; long MergeCoins; double BoardDpsPct; /* derived */ string Sprite, NameKey; }
+public sealed class FishLevelDef  { int Level; long DiscoveryCoins; double MissilePct; double MergeCoins; double BoardDpsPct; /* derived */ string Sprite, NameKey; }
 public sealed class TankDef       { int Cap0; double RefillS0; int RefillTicks0; int ReleaseLevel; double RefillFloorS; }
-public sealed class QuestDef      { string Id; QuestKind Kind; QuestGoal Goal; string Filter; long Target; Currency RewardCurrency; long RewardAmount; int SortOrder; Tier Tier; string NameKey, Icon; }
+public sealed class QuestDef      { string Id; QuestKind Kind; QuestGoal Goal; string Filter; long Target; Currency RewardCurrency; long RewardAmount; bool Budgeted; int SortOrder; Tier Tier; string NameKey, Icon; }
 public sealed class AchievementDef{ string Id, Ladder; int Rung; QuestGoal Goal; long Target; Currency RewardCurrency; long RewardAmount; Tier Tier; string NameKey; }
 public sealed class DungeonDef    { string Id; Dungeon? Kind; Currency? TicketCurrency; int TicketsPerDay, UnlockStage, FloorStageStep, Floors; bool SweepAllowed; Tier Tier; IReadOnlyList<DungeonFloorDef> FloorDefs; ... }
 public sealed class DungeonFloorDef { int Floor; int StageEquiv; Currency RewardCurrency; double RewardAmount; /* resolved at build for HERO_EXP */ string Boss; IReadOnlyList<Grant> FirstClearBonus; }
@@ -1162,7 +1165,7 @@ sequenceDiagram
     D->>X: pull, build --previous content
     X-->>D: errors / content_hash / hot_apply / S-constant list
     D->>G: PR: content_src/*.csv + content/*.json + diff output in description
-    G->>CI: check (stale JSON), build --strict-warnings, Sim+Runtime tests, bots acceptance (10 section 5)
+    G->>CI: ./check.sh --content: check (stale JSON), build --strict-warnings, Sim+Runtime tests, bots acceptance (10 section 5)
     CI-->>G: acceptance table, layer shares, golden diff
     R->>G: review day-30 median, longest wall, rates; approve
     G->>CDN: merge -> deploy.yml publishes to stage; QA on stage build
@@ -1182,7 +1185,7 @@ Rules:
 
 ### 13.1 Extraction
 
-Keys are declared where they are used: table rows carry `name_key`/`desc_key`, and the Unity client declares its `ui.*` keys in `unity/Assets/HeroCat.Client/ui_keys.txt` (one per line, generated by an editor script that scans `TextKeyLabel` components, 07 section 12). `export_content.py build --ui-keys <file>` checks both directions: every key referenced exists (`E072`), every row is referenced (`W021`). Keys are never built by string concatenation at runtime; the single exception is the per-locale suffix ladder which 07 keeps in code.
+Keys are declared where they are used: table rows carry `name_key`/`desc_key`, and the Unity client declares its `ui.*` keys in `unity/HeroCatClient/Assets/HeroCat.Client/ui_keys.txt` (one per line, generated by an editor script that scans `TextKeyLabel` components, 07 section 12). `export_content.py build --ui-keys <file>` checks both directions: every key referenced exists (`E072`), every row is referenced (`W021`). Keys are never built by string concatenation at runtime; the single exception is the per-locale suffix ladder which 07 keeps in code.
 
 ### 13.2 Translator round trip
 
@@ -1246,7 +1249,7 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 3. **Limit-break constants.** 04 section 5 names limit breaks past level 10 as a Rock Candy sink but has not fixed constant names. Default: `LIMIT_BREAK_MAX` (5) and `LIMIT_BREAK_COST_ROCK_CANDY` (intlist) in `constants` once 04 settles; not in `REQUIRED_CONSTANTS` until then. Owner: 04.
 4. **`hero_levels` linear vs compounding.** 00 section 6.5 has `HERO_LVL_ATK_PCT` 0.01 (linear); 03 proposes `HERO_LVL_MULT` 1.02 (compounding). The schema admits either (one of two nullable columns). Default: ship whatever 00 says after 03's tool runs; the exporter rejects both set or both empty. Owner: 03 and 00.
 5. **`E039` daily diamond sum tolerance.** 10% may be too tight when 06 moves the budget between quests and first clears. Default: keep 10%; loosen to 15% only with 06's agreement. Owner: 06.
-6. **Enemy skin draw on the `combat` stream.** Drawing skins from `combat` after the kill roll keeps streams at five (00 section 8 item 2) but means a skin table edit changes later combat RNG. Alternative: a sixth `cosmetic` stream. Default: cosmetic draws use a hash of `(stage, killIndex)` and consume no stream at all, which is what section 5.6 should say if 03 agrees. Owner: 03.
+6. **Enemy skin draw on the `combat` stream.** Resolved: skin picks use a hash of `(stage, killIndex)` and consume no stream, since `combat` is reserved with `Counter == 0` in MVP (issue #8). Section 5.6 says so.
 7. **Rollout bucket.** `rolloutPct` is evaluated client-side from `playerId` hash in 01's flow; a guest without a `playerId` (M0 path) is always in. Default: accept. Owner: 08.
 
 ## Acceptance criteria
