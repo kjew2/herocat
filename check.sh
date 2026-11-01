@@ -168,7 +168,7 @@ golden_check() {
 pr_dotnet() {
   build
 
-  step "Client: Unity-only Boot/ and Screens/ type-check against API stubs (tools/unity_typecheck; Unity itself cannot run here)"
+  step "Client: Unity-only Boot/, Screens/ and Editor/ContentPreBuild.cs type-check against API stubs (tools/unity_typecheck; Unity itself cannot run here)"
   dotnet build tools/unity_typecheck/UnityTypecheck.csproj -c Release -nologo -v q
 
   step "Saves: the v1 fixture matches what the bot CLI generates (until SaveSchema.V1Frozen)"
