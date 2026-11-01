@@ -149,7 +149,8 @@ namespace HeroCat.Sim
                 EnsureDay(VirtualNowServerSeconds);
                 RecomputeNextDayTick();
             }
-            // TODO(#81): the stage combat loop (spawn, hit, crit, boss, wall). TODO(#99): Magic Tank refill.
+            TickTank();   // 05 section 3: before combat, in every Combat.Mode
+            // TODO(#81): the stage combat loop (spawn, hit, crit, boss, wall).
         }
 
         // ================================================================================================ events
@@ -218,8 +219,8 @@ namespace HeroCat.Sim
                 Mp = s.Combat.Mp,
                 MpMax = k.MpPool0,
                 TankFish = s.Fish.TankCount,
-                TankCap = Db.Tank.Cap0,
-                TankRefillTicksLeft = Db.Tank.RefillTicks0 - s.Fish.TankRefillTick,
+                TankCap = FishTankCap,
+                TankRefillTicksLeft = FishTankRefillTicks - s.Fish.TankRefillTick,
             };
         }
     }

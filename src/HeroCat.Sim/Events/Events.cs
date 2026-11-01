@@ -48,4 +48,23 @@ namespace HeroCat.Sim.Events
         public int FromStage { get; internal set; }
         public int ToStage { get; internal set; }
     }
+
+    // ---------------------------------------------------------------------------------------- fish board (05 section 10)
+
+    /// <summary>A tank fish landed in <see cref="Cell"/>; StockAfter is TankCount after the release.</summary>
+    public sealed record FishReleased(int Cell, int Level, int StockAfter) : Event;
+
+    /// <summary>Source emptied, Target holds NewLevel. Coins as paid; MissilePct is FISH_MISSILE_PCT[NewLevel] (% of one hit).</summary>
+    public sealed record FishMerged(int Source, int Target, int NewLevel, double Coins, double MissilePct, bool Discovered) : Event;
+
+    /// <summary>The first fish of Level was created; Coins is FISH_DISCOVERY_COINS[Level].</summary>
+    public sealed record FishDiscovered(int Level, double Coins) : Event;
+
+    public sealed record FishDiscarded(int Cell, int Level, double Coins) : Event;
+
+    /// <summary>MoveFish (05 section 4.5, MVP).</summary>
+    public sealed record FishMoved(int Source, int Target, int Level) : Event;
+
+    /// <summary>Opt-in (Simulation.EmitTankFishReady); the HUD reads the snapshot instead.</summary>
+    public sealed record TankFishReady(int TankCount) : Event;
 }
