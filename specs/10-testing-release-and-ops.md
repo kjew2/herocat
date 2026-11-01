@@ -394,7 +394,7 @@ steps:
 `.github/workflows/build-android.yml` and `build-ios.yml` (on `release/*` push and manual dispatch):
 
 1. `export_content.py check`; copy `content/` to `unity/Assets/StreamingAssets/content/`.
-2. Unity build via `game-ci/unity-builder` on the self-hosted runner (Android) or Unity Cloud Build / self-hosted mac with Xcode (iOS). Build number is `github.run_number`; version from `unity/version.json`.
+2. Unity build via `game-ci/unity-builder` on the self-hosted runner (Android) or Unity Cloud Build / self-hosted mac with Xcode (iOS). Build number is `github.run_number`; version from `unity/HeroCatClient/version.json`.
 3. IL2CPP, ARM64 only (plus ARMv7 for Android 8 devices under 2 GB if the device farm needs it; decided per release).
 4. Sign with the keystore / provisioning profile from GitHub secrets (never in the repo).
 5. Artifact size check (section 5); upload the AAB / IPA; trigger the device-farm smoke (section 1.5); on green, upload to Play internal testing / TestFlight automatically.
@@ -408,7 +408,7 @@ steps:
 
 | Thing | Scheme | Where it lives | Bump when |
 |---|---|---|---|
-| Client | semver `MAJOR.MINOR.PATCH` + build number (`1.2.0+345`) | `unity/version.json`, `X-Client-Version` header | MINOR per store release, PATCH per hotfix, MAJOR for a save-incompatible change |
+| Client | semver `MAJOR.MINOR.PATCH` + build number (`1.2.0+345`) | `unity/HeroCatClient/version.json`, `X-Client-Version` header | MINOR per store release, PATCH per hotfix, MAJOR for a save-incompatible change |
 | Content | `YYYY.MM.DD[.N]` (09 section 6.3) | `manifest.json`, `X-Content-Version`, `GameState.ContentVersion` | every content change |
 | Save schema | integer `SAVE_SCHEMA_VERSION` (02) | `GameState.SchemaVersion` | any field add / rename / semantic change |
 | API | path prefix `/v1` (08) | routes | a breaking contract change only; additive fields never bump |

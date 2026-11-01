@@ -1,0 +1,148 @@
+# Signed Android release build (specs/10 section 6.2, issue #141): content check, Unity IL2CPP ARM64 AAB through
+# game-ci/unity-builder, size gate (specs/10 section 5), artifact upload, and the client-v<version>+<build> tag on
+# release/* branches (specs/10 section 6.1). Version from unity/HeroCatClient/version.json, build number from
+# github.run_number (specs/10 section 6.3). Unity build steps live here, not in ./check.sh: check.sh needs no Unity.
+#
+# Runner: a self-hosted Linux runner with Docker (game-ci runs the unityci/editor image for the version in
+# unity/HeroCatClient/ProjectSettings/ProjectVersion.txt, with the Android module). Its labels come from the
+# repository variable ANDROID_RUNNER, a JSON array, default ["self-hosted","linux","unity"]. Set it to
+# ["ubuntu-latest"] to try a GitHub-hosted runner instead (slow, and tight on disk).
+#
+# Required secrets (Settings > Secrets and variables > Actions). Never commit any of them, or the keystore:
+#   UNITY_LICENSE            contents of the Unity .ulf licence file (Personal), or leave empty and set UNITY_SERIAL
+#   UNITY_EMAIL              Unity account email
+#   UNITY_PASSWORD           Unity account password
+#   UNITY_SERIAL             Unity Pro/Plus serial (only when UNITY_LICENSE is not used)
+#   ANDROID_KEYSTORE_BASE64  the upload keystore, base64-encoded: base64 -w0 herocat-upload.keystore
+#   ANDROID_KEYSTORE_PASS    keystore password
+#   ANDROID_KEYALIAS_NAME    key alias inside the keystore
+#   ANDROID_KEYALIAS_PASS    key alias password
+#
+# Optional repository variables:
+#   ANDROID_RUNNER           runner labels as a JSON array (above)
+#   SIZE_AAB_MB_MAX          size budget in MB (default 150, specs/10 constants); the dispatch input overrides it
+name: build-android
+
+on:
+  push:
+    branches: ["release/**"]
+  workflow_dispatch:
+    inputs:
+      size_max_mb:
+        description: "AAB size budget in MB (default SIZE_AAB_MB_MAX = 150). Set it below the AAB size to check that the gate fails."
+        required: false
+        default: ""
+
+permissions:
+  contents: write # push the client-v* tag
+
+concurrency:
+  group: build-android-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PROJECT_PATH: unity/HeroCatClient
+  BUILD_NAME: HeroCat
+
+jobs:
+  build:
+    runs-on: ${{ fromJSON(vars.ANDROID_RUNNER || '["self-hosted","linux","unity"]') }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Step 1: committed Content/ matches content_src/. ContentPreBuild.cs copies Content/ into
+      # Assets/Resources/Content inside the Unity build and verifies every sha256 against manifest.json.
+      - name: Content check
+        run: python3 tools/content_build.py --check
+
+      - name: Release helper tests
+        run: python3 .github/scripts/test_android_release.py
+
+      - name: Version
+        id: version
+        run: python3 .github/scripts/android_release.py version --file "$PROJECT_PATH/version.json" --build "${{ github.run_number }}" | tee -a "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.PROJECT_PATH }}/Library
+          key: unity-library-android-${{ hashFiles('unity/HeroCatClient/Packages/packages-lock.json', 'unity/HeroCatClient/ProjectSettings/ProjectVersion.txt') }}
+          restore-keys: unity-library-android-
+
+      # Steps 2-4: IL2CPP, ARM64 only, signed AAB. Builds.AndroidRelease (Assets/HeroCat.Client/Editor/Builds.cs) reads
+      # the -buildVersion, -androidVersionCode and keystore arguments game-ci passes, and fails on a version mismatch
+      # or a missing keystore. ARMv7 is not built (decided per release, specs/10 section 6.2 step 3).
+      - name: Unity build (Android-Release)
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+        with:
+          projectPath: ${{ env.PROJECT_PATH }}
+          unityVersion: auto
+          targetPlatform: Android
+          buildName: ${{ env.BUILD_NAME }}
+          buildsPath: build
+          buildMethod: HeroCat.Client.Editor.Builds.AndroidRelease
+          versioning: Custom
+          version: ${{ steps.version.outputs.version }}
+          androidVersionCode: ${{ steps.version.outputs.build }}
+          androidExportType: androidAppBundle
+          androidKeystoreName: herocat-upload.keystore
+          androidKeystoreBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          androidKeystorePass: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          androidKeyaliasName: ${{ secrets.ANDROID_KEYALIAS_NAME }}
+          androidKeyaliasPass: ${{ secrets.ANDROID_KEYALIAS_PASS }}
+
+      - name: Find the AAB
+        id: aab
+        run: |
+          shopt -s nullglob
+          files=(build/Android/*.aab)
+          if [ "${#files[@]}" -ne 1 ]; then
+            echo "expected exactly one .aab in build/Android, found ${#files[@]}" >&2
+            ls -la build/Android || true
+            exit 1
+          fi
+          echo "path=${files[0]}" >> "$GITHUB_OUTPUT"
+
+      # Step 5: size gate (specs/10 section 5, SIZE_AAB_MB_MAX). AAB file size, 1 MB = 1,000,000 bytes.
+      - name: Size gate
+        env:
+          SIZE_MAX_MB: ${{ inputs.size_max_mb || vars.SIZE_AAB_MB_MAX || '150' }}
+        run: python3 .github/scripts/android_release.py size --max-mb "$SIZE_MAX_MB" "${{ steps.aab.outputs.path }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: herocat-android-${{ steps.version.outputs.full }}
+          path: ${{ steps.aab.outputs.path }}
+          if-no-files-found: error
+          retention-days: 90
+
+      # Tag only release branches (specs/10 section 6.1). A re-run of the same run keeps its run number, so an
+      # existing tag on this commit is accepted; one on another commit fails.
+      - name: Tag ${{ steps.version.outputs.tag }}
+        if: startsWith(github.ref, 'refs/heads/release/')
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if existing=$(git rev-list -n 1 "refs/tags/$TAG" 2>/dev/null); then
+            if [ "$existing" = "$GITHUB_SHA" ]; then echo "$TAG already on $GITHUB_SHA"; exit 0; fi
+            echo "$TAG already exists on $existing, not $GITHUB_SHA" >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "HeroCat Android ${{ steps.version.outputs.full }}" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG"
+
+      # Not yet automated (specs/10 section 6.2 step 5): device-farm smoke (#218) and the Play internal-testing upload.

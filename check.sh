@@ -29,6 +29,9 @@ step() { printf '\n== %s\n' "$1"; }
 step "Content: content_src builds to Content/ with no drift"
 python3 tools/content_build.py --check
 
+step "Release: build-android.yml helpers (version.json, size gate)"
+python3 .github/scripts/test_android_release.py
+
 if [ "$DOTNET" -eq 0 ]; then
   printf '\nSkipped .NET checks (--no-dotnet). Not a full pass.\n'
   exit 0

@@ -70,6 +70,7 @@ Assets/HeroCat.Client/
   Editor/    ProjectSetup.cs (Tools > HeroCat menu: player settings, URP asset)
              BuildProfiles.cs (Tools > HeroCat > Build Profiles: Dev/Release defines, Release pre-build check)
              ContentPreBuild.cs (copies Content/ into Resources/Content before each build)
+             Builds.cs (batch-mode entry points Builds.AndroidRelease / Builds.AndroidDev for CI)
   Art/       AppIcon.png (placeholder 1024x1024 icon)
   Screens/   Ui.cs (style kit), Shell.cs, HudAndStrip.cs, *Screen(s).cs, DebugScreen.cs
   Core/      HeroCat.Client.Core.asmdef (noEngineReferences: plain C#)
@@ -99,6 +100,49 @@ check fails a `*-Release` build marked Development, and any non-development buil
 To confirm a Release build has no Debug tab: activate `iOS-Release`, build, and check the tab bar ends at **Class**. Pressing
 Play in the Editor always shows the Debug tab, whichever profile is active.
 
+
+## Android release build (CI)
+
+`.github/workflows/build-android.yml` (`specs/10` section 6.2) runs on every push to `release/**` and on manual dispatch.
+It checks `Content/`, builds a signed IL2CPP ARM64 AAB with `game-ci/unity-builder` through
+`HeroCat.Client.Editor.Builds.AndroidRelease`, fails if the AAB is over 150 MB (`SIZE_AAB_MB_MAX`), uploads it as an
+artifact, and on `release/*` tags the commit `client-v<version>+<build>`.
+
+**Version.** `version.json` in this folder holds the client version, semver `MAJOR.MINOR.PATCH` (`specs/10` section 6.3).
+Bump it on the release branch: MINOR per store release, PATCH per hotfix, MAJOR for a save-incompatible change. The build
+number is the workflow's `github.run_number`, which becomes the Android versionCode, so `1.2.0` in run 345 is `1.2.0+345`.
+The build fails if game-ci's `-buildVersion` disagrees with `version.json`.
+
+**Setup the repo owner does once** (Settings > Secrets and variables > Actions):
+
+| Secret | What |
+|---|---|
+| `UNITY_LICENSE` | contents of the Unity `.ulf` licence file (Personal); or use `UNITY_SERIAL` for Pro/Plus |
+| `UNITY_EMAIL`, `UNITY_PASSWORD` | the Unity account that owns the licence |
+| `UNITY_SERIAL` | Pro/Plus serial, only when `UNITY_LICENSE` is not set |
+| `ANDROID_KEYSTORE_BASE64` | the upload keystore, `base64 -w0 herocat-upload.keystore` |
+| `ANDROID_KEYSTORE_PASS` | keystore password |
+| `ANDROID_KEYALIAS_NAME`, `ANDROID_KEYALIAS_PASS` | key alias and its password |
+
+Never commit the keystore (`*.keystore` and `*.jks` are git-ignored); keep the original and its passwords outside the
+repo, since losing it locks you out of Play updates unless Play App Signing is on. Create one with
+`keytool -genkeypair -v -keystore herocat-upload.keystore -alias herocat -keyalg RSA -keysize 2048 -validity 10000`.
+
+**Runner.** A self-hosted Linux runner with Docker and the labels `self-hosted`, `linux`, `unity`. To use other labels,
+set the repository variable `ANDROID_RUNNER` to a JSON array, for example `["ubuntu-latest"]` for a GitHub-hosted runner.
+game-ci pulls the `unityci/editor` image for the version in `ProjectSettings/ProjectVersion.txt`, Android module included.
+The optional variable `SIZE_AAB_MB_MAX` changes the budget; the dispatch input `size_max_mb` overrides it for one run
+(set it below the AAB size to see the gate fail).
+
+**Locally.** `Unity -batchmode -quit -projectPath unity/HeroCatClient -executeMethod HeroCat.Client.Editor.Builds.AndroidDev -logFile -`
+builds a development APK with the debug keystore into `Builds/Android/`. `Builds.AndroidRelease` also needs
+`-androidVersionCode N` and the keystore arguments (`-androidKeystoreName`, `-androidKeystorePass`, `-androidKeyaliasName`,
+`-androidKeyaliasPass`, or the `ANDROID_*` environment variables of the same names). Both use the `Android-Dev` /
+`Android-Release` Build Profile when it exists (see above), else the Player Settings. The minimum API level is whatever
+Player Settings hold (currently 26, Android 8).
+
+The version and size helpers (`.github/scripts/android_release.py`) are unit-tested by `./check.sh`; the Unity steps run
+only in the workflow.
 
 `Core/SaveBridge.cs` saves through `HeroCat.Runtime` (`specs/06`) to `<persistentDataPath>/saves/`: a CRC-checked
 file with a `.prev` backup. Bad files are quarantined and a new profile is created. Offline gold since the last save
