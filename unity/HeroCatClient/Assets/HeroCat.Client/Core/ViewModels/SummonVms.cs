@@ -201,6 +201,19 @@ namespace HeroCat.Client.Core
             Poll();   // the M0 local service completes synchronously
         }
 
+        /// <summary>
+        /// A summon intent saved before a kill, re-run by Runtime at boot or resume (01 section 8.2 step 3, SummonFlow's
+        /// ResolveAsync): it lands like a fresh request, so the reveal opens. Ignored while a request is in flight.
+        /// </summary>
+        public void Resume(Task<Result<SummonResultPayload, SummonError>> resolve)
+        {
+            if (InFlight || resolve == null) return;
+            _pending = resolve;
+            _pendingAnchor = null;
+            InFlightFlag.Set(true);
+            Poll();
+        }
+
         /// <summary>Per frame on the main thread: lands a finished request (Remote completes on a later frame).</summary>
         public void Poll()
         {
@@ -217,6 +230,7 @@ namespace HeroCat.Client.Core
             var r = t.Result;
             if (!r.IsOk)
             {
+                if (r.Error == SummonError.None) return;   // a resume with nothing left to resolve
                 Fail(r.Error, anchor);
                 return;
             }

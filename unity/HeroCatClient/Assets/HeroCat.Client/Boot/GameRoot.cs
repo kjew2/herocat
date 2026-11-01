@@ -43,7 +43,7 @@ namespace HeroCat.Client.Boot
         {
             Instance = this;
             QualitySettings.vSyncCount = 0;
-            Screen.sleepTimeout = SleepTimeout.NeverSleep;   // the phone-on-the-desk idle mode depends on it
+            ApplySleepTimeout(true);   // SCR_MAIN is the first screen; Update follows the router from then on
             Application.runInBackground = true;
             if (Camera.main == null)
             {
@@ -187,6 +187,7 @@ namespace HeroCat.Client.Boot
             if (_session == null || !_session.IsReady) return;
             _session.Frame();
             _ui.Tick();
+            ApplySleepTimeout(_session.Vm.Router.KeepScreenAwake);
 #if UNITY_EDITOR || DEVELOPMENT_BUILD || HEROCAT_CHEATS
             _debug?.Tick(Time.unscaledDeltaTime);
 #endif
@@ -195,6 +196,16 @@ namespace HeroCat.Client.Boot
                 _session.DeleteProfile();
                 StartSession();
             }
+        }
+
+        bool? _keepAwake;
+
+        /// <summary>01 section 3.3: NeverSleep on SCR_MAIN (the phone-on-the-desk idle mode), SystemSetting elsewhere.</summary>
+        void ApplySleepTimeout(bool keepAwake)
+        {
+            if (_keepAwake == keepAwake) return;
+            _keepAwake = keepAwake;
+            Screen.sleepTimeout = keepAwake ? SleepTimeout.NeverSleep : SleepTimeout.SystemSetting;
         }
 
         void OnApplicationPause(bool paused)

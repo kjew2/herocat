@@ -41,12 +41,15 @@ namespace HeroCat.Bots.Policies
 
         public virtual string Name => "greedy-f2p";
 
+        /// <summary>05 section 8.2's board policy (03 section 8.3 step 5): attentive for greedy-f2p; lazy-f2p overrides it.</summary>
+        public virtual FishPolicy Fish => FishPolicy.Attentive;
+
         public virtual void OnSessionStart(BotContext ctx)
         {
             ClaimOfflineReward(ctx);
             SpendTickets(ctx);
             SpendDiamonds(ctx);
-            PlayFishBoard(ctx);
+            FishPolicies.OnSessionStart(ctx, Fish);
             SpendGold(ctx);
             RetryBoss(ctx);
         }
@@ -54,7 +57,7 @@ namespace HeroCat.Bots.Policies
         public virtual void Decide(BotContext ctx)
         {
             SpendGold(ctx);
-            PlayFishBoard(ctx);
+            FishPolicies.OnActiveMinute(ctx, Fish);
             RetryBoss(ctx);
         }
 
@@ -63,7 +66,7 @@ namespace HeroCat.Bots.Policies
             SpendTickets(ctx);
             SpendDiamonds(ctx);
             SpendGold(ctx);
-            if (ctx.Sim.FishCanRelease) ctx.Apply(new ReleaseMax());
+            if (Fish != FishPolicy.Never && ctx.Sim.FishCanRelease) ctx.Apply(new ReleaseMax());
         }
 
         // ============================================================================================ step 7: offline reward

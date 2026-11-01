@@ -416,7 +416,9 @@ Sort options (client-side, over the VM): rarity desc then level desc (default), 
 namespace HeroCat.Runtime.Summons
 {
     // The result is 01's SummonResultPayload (01 section 2.5, extended per section 10); 08's endpoint returns the same shape (issue #13).
-    public enum SummonError { None, NotEnoughDiamonds, NotEnoughTickets, BannerClosed, RateLimited, Network, Replayed }
+    // InFlight and SaveFailed come from 01's SummonFlow, not a service: a summon intent is already pending, or the intent
+    // could not be saved before the roll, so nothing was rolled or charged (01 section 8.5.1 step 2; issue #68).
+    public enum SummonError { None, NotEnoughDiamonds, NotEnoughTickets, BannerClosed, RateLimited, Network, Replayed, InFlight, SaveFailed }
 
     public interface ISummonService
     {

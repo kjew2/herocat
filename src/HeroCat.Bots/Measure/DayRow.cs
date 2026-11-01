@@ -15,5 +15,9 @@ namespace HeroCat.Bots.Measure
         int Pulls, int LPlus, Rarity? HighestRarity, int HeroLevel, int AwakenRank,
         int FishMaxLevel, double FishCoins, long RockCandy,
         int FirstWallStage, double LongestWallHours, double CurrentWallHours,
-        LayerShares Shares, string StateHash);
+        LayerShares Shares, string StateHash)
+    {
+        /// <summary>The day's Fish Board columns (05 section 8.2, issue #105); not in the golden tables.</summary>
+        public FishDayStats Fish { get; init; }
+    }
 }

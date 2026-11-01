@@ -42,6 +42,21 @@ namespace HeroCat.Runtime.Tests
         }
 
         [Test]
+        public void TheScreenStaysAwake_OnlyWhileMainIsTheTopFullScreen()   // 01 section 3.3, issue #65
+        {
+            var r = new ScreenRouter();
+            Assert.That(r.KeepScreenAwake, Is.True);
+            r.ShowModal(ScreenIds.OfflineReward);
+            Assert.That(r.KeepScreenAwake, Is.True, "a modal over SCR_MAIN keeps it awake");
+            r.CloseModal();
+            r.Replace(ScreenIds.Hero);
+            Assert.That(r.KeepScreenAwake, Is.False, "SystemSetting elsewhere");
+            r.Back(0);
+            Assert.That(r.TopFull.Id, Is.EqualTo(ScreenIds.Main));
+            Assert.That(r.KeepScreenAwake, Is.True);
+        }
+
+        [Test]
         public void AC3_ThreeModalsInOneFrame_ShowOneAtATime_InOrder()
         {
             var host = new Host();

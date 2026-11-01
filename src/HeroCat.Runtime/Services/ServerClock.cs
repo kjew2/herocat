@@ -39,7 +39,7 @@ namespace HeroCat.Runtime.Services
     /// calls with every X-Server-Time; after one observation time runs on the monotonic clock from that offset.
     /// TODO(#149): SyncAsync over a time API, CLOCK_JUMP_WARN_SEC and the clock_anomaly event.
     /// </summary>
-    public sealed class ServerClock : IClock, IClockFloor
+    public sealed class ServerClock : IClock, IClockFloor, IClockResync
     {
         readonly IClock _device;
         long? _offsetSec;   // serverNow - monotonicNow at the last observation
@@ -61,10 +61,25 @@ namespace HeroCat.Runtime.Services
         /// <summary>A server time observation (X-Server-Time plus half the round trip).</summary>
         public void Observe(long serverTimeSec, long rttMs)
         {
+            long extrapolated = NowServerSeconds;
             long estimate = serverTimeSec + rttMs / 2000;
             _offsetSec = estimate - MonoSeconds();
+            Resynced?.Invoke(extrapolated, NowServerSeconds);
         }
 
+        /// <summary>After every observation: (what the clock read just before, what it reads now). Any thread.</summary>
+        public event Action<long, long> Resynced;
+
         static long MonoSeconds() => Stopwatch.GetTimestamp() / Stopwatch.Frequency;
+    }
+
+    /// <summary>
+    /// A clock whose server syncs can move it (01 section 8.2 step 2). <see cref="Resynced"/> fires after each sync with the
+    /// time the clock extrapolated just before it and the synced time, possibly off the main thread; SessionRunner
+    /// subscribes and handles a jump over CLOCK_JUMP_WARN_SEC on its next frame (issue #65).
+    /// </summary>
+    public interface IClockResync
+    {
+        event Action<long, long> Resynced;
     }
 }

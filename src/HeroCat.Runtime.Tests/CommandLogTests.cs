@@ -40,12 +40,40 @@ namespace HeroCat.Runtime.Tests
             Assert.That(CommandCodec.TagFor(typeof(ApplyServerTime)), Is.EqualTo("ApplyServerTime"));
             // Every command the bots issue is pinned, not registered by type name on first use.
             foreach (var t in new[] { typeof(ClaimOfflineReward), typeof(TrainStat), typeof(ReleaseMax), typeof(MergeAll), typeof(MergeFish),
-                                      typeof(DiscardFish), typeof(AttemptBoss), typeof(AutoEquipBestWeapon), typeof(AutoEquipBestSkills) })
+                                      typeof(DiscardFish), typeof(AttemptBoss), typeof(AutoEquipBestWeapon), typeof(AutoEquipBestSkills),
+                                      typeof(ReleaseFish), typeof(MoveFish) })
                 Assert.That(CommandCodec.RegisteredTypes, Does.Contain(t), t.Name);
             Assert.That(CommandCodec.Encode(new ApplyServerTime(123)), Does.Not.Contain("HeroCat."));
             Assert.Throws<FormatException>(() => CommandCodec.Decode("{\"tick\":1,\"type\":\"NoSuchCommand\"}"));
             Assert.Throws<FormatException>(() => CommandCodec.Decode("{\"tick\":1,\"type\":\"ApplyServerTime\",\"bogus\":1}"));
             Assert.Throws<FormatException>(() => CommandCodec.Decode("not json"));
+        }
+
+        [Test]
+        public void AFishSession_ReplayedFromJsonl_HasTheSameStateHash()   // issue #103 acceptance 3, 05 section 12
+        {
+            var s = TestSession.Open();
+            var memory = new MemoryJsonlCommandLog();
+            s.Sim.CommandLog = new TeeLog(memory, s.Log);
+            var cells = s.Sim.State.Fish.Cells;
+            for (int round = 0; round < 6; round++)
+            {
+                s.Runner.Issue(new ReleaseFish());
+                s.Runner.Issue(new ReleaseMax());
+                s.Play(20);   // the tank refills on ticks
+                int a = Array.FindIndex(cells, c => c > 0), b = Array.FindLastIndex(cells, c => c > 0);
+                if (a >= 0 && b > a) s.Runner.Issue(new MergeFish(a, b));
+                s.Runner.Issue(new MergeAll());
+                int empty = Array.IndexOf(cells, 0), full = Array.FindIndex(cells, c => c > 0);
+                if (empty >= 0 && full >= 0) s.Runner.Issue(new MoveFish(full, empty));
+                if (round % 2 == 1 && full >= 0) s.Runner.Issue(new DiscardFish(Array.FindIndex(cells, c => c > 0)));
+            }
+            string live = s.Sim.StateHash();
+            long endTick = s.Sim.Tick;
+            var log = s.Log.Records.Take(2).Concat(memory.Commands()).ToList();
+            foreach (var t in new[] { typeof(ReleaseFish), typeof(ReleaseMax), typeof(MergeFish), typeof(MergeAll), typeof(MoveFish), typeof(DiscardFish) })
+                Assert.That(log.Any(c => c.GetType() == t), Is.True, t.Name + " is in the log");
+            Assert.That(Replay(log, endTick), Is.EqualTo(live));
         }
 
         [Test]

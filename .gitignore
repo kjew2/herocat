@@ -25,6 +25,8 @@ unity/**/[Bb]uilds/
 # copy of content/ made by the pre-build step (Assets/HeroCat.Client/Editor/ContentPreBuild.cs)
 unity/HeroCatClient/Assets/Resources/content/
 unity/HeroCatClient/Assets/Resources/content.meta
+unity/HeroCatClient/Assets/StreamingAssets/
+unity/HeroCatClient/Assets/StreamingAssets.meta
 # Android signing material (build-android.yml decodes it from secrets) and CI build output
 *.keystore
 *.jks

@@ -118,7 +118,7 @@ content_python() {
   fi
 
   step "Tools: fish_model.py S-constant checks (05 section 9)"
-  $PY tools/fish_model.py --quiet
+  $PY tools/fish_model.py --quiet --out "$OUT_DIR/fish"
 
   step "Summons: tools/gacha_model.py matches content/, Fixtures/Summon/stream.json and vectors.json (04, decision 46)"
   $PY tools/gacha_model.py --check
@@ -183,7 +183,7 @@ golden_check() {
 pr_dotnet() {
   build
 
-  step "Client: Unity-only Boot/ and Screens/ type-check against API stubs (tools/unity_typecheck; Unity itself cannot run here)"
+  step "Client: Unity-only Boot/, Screens/ and Editor/ContentPreBuild.cs type-check against API stubs (tools/unity_typecheck; Unity itself cannot run here)"
   dotnet build tools/unity_typecheck/UnityTypecheck.csproj -c Release -nologo -v q
 
   step "Saves: the v1 fixture matches what the bot CLI generates (until SaveSchema.V1Frozen)"
@@ -191,6 +191,9 @@ pr_dotnet() {
 
   step "Summons: Fixtures/Summon/stream.json matches what the bot CLI generates (the C# side of issue #14)"
   $BOTS summon-stream --check
+
+  step "Fish Board: Fixtures/Fish/board-vectors.txt matches what the bot CLI generates (05 AC5, issue #103)"
+  $BOTS fish-vectors --check
 
   if [ "$FAST" -eq 1 ]; then
     step ".NET: unit tests (no golden, no perf)"
@@ -218,8 +221,10 @@ pr_dotnet() {
 }
 
 content_dotnet() {
-  if [ "$FAST" -eq 1 ]; then return 0; fi
   build
+  step "Fish Board: the C# attentive policy matches fish_model.py's day-7 fishMult within 5% (05 AC14, issue #105)"
+  $BOTS fish-check --model "$OUT_DIR/fish/fish_attentive.json"
+  if [ "$FAST" -eq 1 ]; then return 0; fi
 
   rm -f "$OUT_DIR/acceptance.report-only"
   if [ "$REWRITE_REPORT_ONLY" -eq 1 ]; then
@@ -247,6 +252,8 @@ nightly_dotnet() {
   build
   step "Bots: golden --replay, the seed-7 command log replays to its day hashes on this OS (specs/10 section 6.2)"
   to_file golden-replay.txt $BOTS golden --replay
+  step "Fish Board: the board vectors regenerate byte-identically on this OS (05 AC5, issue #103)"
+  $BOTS fish-vectors --check
   if [ "$REPLAY_ONLY" -eq 1 ]; then return 0; fi
 
   # TODO(#214, #215): sweep lazy-f2p, light-spender and whale too once those bots exist (specs/10 section 6.2).

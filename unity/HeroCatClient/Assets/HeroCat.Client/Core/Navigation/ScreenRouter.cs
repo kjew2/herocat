@@ -175,6 +175,13 @@ namespace HeroCat.Client.Core
 
         public bool BoardVisible => TopFull.Id == ScreenIds.Main;
 
+        /// <summary>
+        /// 01 section 3.3 (issue #65): the screen stays awake (Screen.sleepTimeout = NeverSleep) while SCR_MAIN is the top
+        /// Full screen, a modal over it included (the phone-on-the-desk idle mode, 00 pillar 1); elsewhere the system
+        /// setting applies. GameRoot applies it whenever it changes.
+        /// </summary>
+        public bool KeepScreenAwake => TopFull.Id == ScreenIds.Main;
+
         public bool IsOpen(string id)
         {
             if (TopFull.Id == id) return true;
