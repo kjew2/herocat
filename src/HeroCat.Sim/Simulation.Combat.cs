@@ -54,8 +54,16 @@ namespace HeroCat.Sim
             b.Tick = State.Time.Tick;
         }
 
-        /// <summary>What Emit does with a coalesced CurrencyChanged(KILL): its amount is summed through the kill's EnemyKilled.</summary>
-        internal void FoldKillCurrency() => OpenBatch(FoughtStage);   // the fought stage, as FoldKill: a side stage when farming one
+        /// <summary>
+        /// What Emit does with a coalesced CurrencyChanged(KILL) of GOLD or HERO_EXP: the amount goes into the open batch's
+        /// KillGold / KillExp, so the KILL rows of 06 section 13's <c>currency_changed</c> stay exact under coalescing.
+        /// </summary>
+        internal void FoldKillCurrency(Currency c, double amount)
+        {
+            var b = OpenBatch(FoughtStage);   // the fought stage, as FoldKill: a side stage when farming one
+            if (c == Currency.GOLD) b.KillGold += amount;
+            else b.KillExp += amount;
+        }
 
         /// <summary>The fought stage: the selected side stage, else the frontier (03 section 2.6; selection is MVP, #159).</summary>
         int FoughtStage => State.Combat.Selected ?? State.Combat.Stage;

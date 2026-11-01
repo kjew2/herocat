@@ -658,6 +658,8 @@ This section owns these events' fields (issue #245); every event also carries 02
 
 `awakened` is 03 section 11's; `clock_anomaly` (with `kind = backwards` for `ClockWentBackwards`) is 02 section 14.3's.
 
+`currency_changed` as built (`HeroCat.Runtime.Session.CurrencyAnalytics`, attached by the boot flow to the session's `EventBus` whenever analytics is not `NullAnalytics`; issue #155): `KILL` and `BOSS` rows are summed per currency and reason, so one window yields at most one `KILL` and one `BOSS` row per currency. The window is `CURRENCY_AGG_SEC` of sim time (ticks), opened by the first `KILL`/`BOSS` apply; it closes when a later `CurrencyChanged` (or `EnemyKilledBatch`) arrives past its end and whenever the analytics sink flushes (pause, quit). `balanceAfter` of an aggregated row is the balance in the state when the row is emitted (`Hero.Exp` for `HERO_EXP`). Kills folded into `EnemyKilledBatch` (01 section 2.3) count through its `KillGold` and `KillExp`. Deltas are summed as `double`, so the rows' deltas equal the wallet delta up to floating-point summation order. `refId` is omitted until the emitter of the apply supplies one.
+
 ## Open questions
 
 1. **Late-game diamond taper.** Steady state is about 384 to 407 per day against the 400 target (section 2). Owner: economy. Default: accept; revisit after the bot run. Alternative: raise the seven weekly rows' `reward_amount` to 60 (adds 10 per day).

@@ -208,11 +208,11 @@ namespace HeroCat.Runtime.Save
                     var report = SaveValidator.RunWithReport(state, nowServerSec, db,
                         new SaveValidatorOptions { InstallId = InstallId, RemoteMode = RemoteMode });
                     foreach (var rule in report.Repairs)
-                        _analytics.Track("save_repaired", new Dictionary<string, object> { ["rule"] = rule });
+                        _analytics.Track(new AnalyticsEvents.SaveRepaired(rule));
                     if (slot == SaveSlot.Backup)
                     {
                         if (primaryBad) Slots.Quarantine(SaveSlot.Primary, nowServerSec);
-                        _analytics.Track("save_fallback");
+                        _analytics.Track(new AnalyticsEvents.SaveFallback());
                     }
                     (_clock as IClockFloor)?.SetFloor(state.Time.LastSavedServerTime);   // 02 section 11.2 rule 4
                     var result = new LoadResult(slot == SaveSlot.Primary ? LoadStatus.Loaded : LoadStatus.LoadedFromPrev, state, null,
@@ -227,7 +227,7 @@ namespace HeroCat.Runtime.Save
                 catch (Exception e) when (e is SaveCorruptException || e is SaveInvalidException || e is JsonException)
                 {
                     problems.Add($"{file}: {e.Message}");
-                    _analytics.Track("save_reject", new Dictionary<string, object> { ["file"] = file, ["reason"] = e.Message });
+                    _analytics.Track(new AnalyticsEvents.SaveReject(file, e.Message));
                     if (slot == SaveSlot.Primary) primaryBad = true;
                 }
             }
@@ -236,7 +236,7 @@ namespace HeroCat.Runtime.Save
             {
                 Slots.Quarantine(SaveSlot.Primary, nowServerSec);
                 Slots.Quarantine(SaveSlot.Backup, nowServerSec);
-                _analytics.Track("save_corrupt", new Dictionary<string, object> { ["problems"] = string.Join("; ", problems) });
+                _analytics.Track(new AnalyticsEvents.SaveCorrupt(string.Join("; ", problems)));
             }
             var fresh = (NewProfileFactory ?? DefaultNewProfile)(db, nowServerSec);
             var created = new LoadResult(LoadStatus.NewProfile, fresh, null, null, null, null) { ReplacedUnreadableSave = anyExisted };
@@ -259,7 +259,7 @@ namespace HeroCat.Runtime.Save
             catch (SaveWriteException)
             {
                 ConsecutiveWriteFailures++;
-                _analytics.Track("save_write_failed", new Dictionary<string, object> { ["consecutive"] = ConsecutiveWriteFailures });
+                _analytics.Track(new AnalyticsEvents.SaveWriteFailed(ConsecutiveWriteFailures));
                 throw;
             }
         }

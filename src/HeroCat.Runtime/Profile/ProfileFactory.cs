@@ -70,16 +70,13 @@ namespace HeroCat.Runtime.Profile
             ProfileGrants.ApplyWelcome(s, db, nowServerSeconds, grant);
             if (analytics != null)
                 foreach (var e in grant.Events)
-                    if (e is CurrencyChanged c) analytics.Track("currency_changed", CurrencyChangedRow(c));
+                    if (e is CurrencyChanged c) analytics.Track(CurrencyChangedRow(c));
             return s;
         }
 
-        /// <summary>06 section 13's <c>currency_changed</c> fields for one CurrencyChanged (no refId for a grant).</summary>
-        public static Dictionary<string, object> CurrencyChangedRow(CurrencyChanged c) => new Dictionary<string, object>
-        {
-            ["currency"] = c.Currency.ToString(), ["delta"] = c.Delta, ["balanceAfter"] = c.BalanceAfter,
-            ["reason"] = c.Reason.ToString(),
-        };
+        /// <summary>06 section 13's <c>currency_changed</c> row for one CurrencyChanged (no refId for a grant).</summary>
+        public static AnalyticsEvents.CurrencyChanged CurrencyChangedRow(CurrencyChanged c) =>
+            new AnalyticsEvents.CurrencyChanged(c.Currency, c.Delta, c.BalanceAfter, c.Reason);
 
         sealed class CollectingEmitter : IEventEmitter
         {

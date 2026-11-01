@@ -1295,11 +1295,20 @@ Each feature spec owns its own events' field lists, next to the state and comman
 
 Added by the sink to every event: `ts` (server seconds), `sessionId` (GUID per process), `playerIdHash` (sha256 of playerId with a per-environment salt; never raw), `deviceId`, `clientVersion`, `contentVersion`, `schemaVersion`, `debugTainted`, `clockAuthoritative`, `dayIndex = (ts - CreatedServerTime) / DAY_SECONDS`, `stage` (current), `ageGate` (0/1, 08 section 10.1). Owner sections do not repeat these fields.
 
-Names snake_case; properties camelCase. Economy events (those that carry a currency, purchase, summon, dungeon or inbox payload) go to the backend `events` table (00 section 3) as well as Firebase so they can be joined with `purchases` and `saves`. The `events` table and its nightly `currency_daily` materialized view (06 source/sink dashboards) are defined in section 12 (issue #34).
+As built (`HeroCat.Runtime.Services.AnalyticsEnvelope`, issue #155): `playerIdHash` is lowercase hex `sha256(UTF8(salt + ":" + playerId))` with the playerId as a 36-character GUID, and `null` for an unlinked local guest (`PlayerId = Guid.Empty`; `deviceId` identifies it). `deviceId` is the install id (8.4), `schemaVersion` is `SAVE_SCHEMA_VERSION`, `contentVersion` the active `ContentDb.Version`. Every field is always present; `dayIndex` and `stage` are `null` for events tracked before the save loads (the save-health events of 8.3). Each queued event also carries `eventId` (32 hex, random), the server's per-event dedupe key. A queued line is `{"name", "eventId", <envelope fields>, "props": {<owner fields>}}`.
+
+Names snake_case; properties camelCase. The sink drops an event whose name is not snake_case and a property that is not camelCase, names an envelope field, or is a raw `playerId`; it never throws. `HeroCat.Runtime.Services.AnalyticsNames` holds every name in the 14.4 index (a test diffs it against the index) and `AnalyticsEvents` the typed events of 14.3 and 06's `currency_changed`. Economy events (those that carry a currency, purchase, summon, dungeon or inbox payload) go to the backend `events` table (00 section 3) as well as Firebase so they can be joined with `purchases` and `saves`. The `events` table and its nightly `currency_daily` materialized view (06 source/sink dashboards) are defined in section 12 (issue #34).
 
 ### 14.2 Offline queue
 
 The sink enqueues on the main thread and flushes on the thread pool (01 threading table). Pending events persist to `analytics/queue.ndjson` (8.4; excluded from OS backup) so they survive a kill while offline. Uploads go in batches of at most `ANALYTICS_BATCH_MAX` events; `OnPause` and `OnQuit` flush (01). The queue holds at most `ANALYTICS_QUEUE_MAX` events; past that the oldest are dropped.
+
+As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
+
+1. The file is one JSON event per line (14.1), appended per event. It may hold up to `2 * ANALYTICS_QUEUE_MAX` lines between compactions; it is rewritten (temp file, then rename) after each accepted batch and when an overflow finds it that long. A load keeps the newest `ANALYTICS_QUEUE_MAX` lines and skips a line that does not parse (a torn last line after a kill). A file error never throws: the events stay in memory.
+2. A flush first raises the sink's flush hook, so in-memory aggregates (06 section 13's `KILL`/`BOSS` window) reach the queue, then uploads on the thread pool, oldest first. Each batch's `X-Request-Id` is the first 32 hex of `sha256` of its events' `eventId`s, so a retry of the same events reuses it and a different set never does.
+3. An upload outcome is accepted (the events leave the queue), retry (offline, timeout, 5xx, 429, or the uploader threw: the flush stops and the next flush retries the same batch) or rejected (a non-retryable 4xx: the batch is dropped so it cannot block the queue). The remote uploader (Firebase for every event, the backend events route of issue #209 for the economy ones) waits on `ApiClient` (issue #143); a sink with no uploader keeps the events on disk.
+4. A Local build without a backend uses `NullAnalytics` and writes no queue file (01 section 1.2); bots and tests use `MemoryAnalytics` (no envelope, no files).
 
 ### 14.3 Events owned here (session, save health, cloud, clock)
 
@@ -1309,7 +1318,7 @@ The sink enqueues on the main thread and flushes on the thread pool (01 threadin
 | `session_end` | `durationSec`, `stageStart`, `stageEnd`, `kills`, `ticks`, `trigger` (pause/quit/gap) | Runtime on pause/quit | |
 | `cloud_save_uploaded` | `saveSeq`, `sizeBytes`, `trigger`, `latencyMs`, `flags[]` | Runtime | |
 | `cloud_conflict` / `cloud_autoresolved` | 9.4 | Runtime | |
-| `save_fallback`, `save_corrupt`, `save_corrupt_all{supportId}`, `save_repaired{rule}`, `save_reject{file, reason}`, `save_write_failed{consecutive}`, `migration_applied{from, to}` | | Runtime | Save health. `save_corrupt_all` is a new profile replacing an unreadable save (8.3; issue #248). |
+| `save_fallback`, `save_corrupt{problems}`, `save_corrupt_all{supportId}`, `save_repaired{rule}`, `save_reject{file, reason}`, `save_write_failed{consecutive}`, `migration_applied{from, to}` | | Runtime | Save health. `save_corrupt_all` is a new profile replacing an unreadable save (8.3; issue #248). |
 | `clock_anomaly` | `kind` (backwards/gap/resync), `seconds` | Runtime | Section 11 and 01; also emitted with `kind = backwards` when 06's offline compute sees `ClockWentBackwards`. |
 | `player_deleted` | `playerIdHash` | Server | 13.2 step 5. |
 
