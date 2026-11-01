@@ -6,49 +6,54 @@ using HeroCat.Remote.Transport;
 using HeroCat.Runtime.Save;
 using HeroCat.Runtime.Errors;
 using HeroCat.Runtime.Services;
+using HeroCat.Runtime.Session;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
-using ServerClock = HeroCat.Remote.Services.ServerClock;
 
 namespace HeroCat.Remote.Tests
 {
     public class RemoteServicesTests
     {
         [Test]
-        public void ServerClock_uses_device_time_until_synced_then_server_offset()
+        public void ServerClock_uses_device_time_until_synced_then_runs_on_the_monotonic_clock()   // issue #149
         {
             var device = new FakeClock(1000);
-            var t = new FakeTransport().On("GET", RemoteRoutes.Time, 200, "{\"serverSeconds\":5000}");
-            var clock = new ServerClock(new RemoteClient(t), device);
+            var mono = new FakeMonoClock();
+            var t = new FakeTransport().On("GET", RemoteRoutes.Time, 200, "{\"serverTime\":5000}");
+            var clock = new ServerClock(new RemoteTimeApi(new RemoteClient(t)), device, mono);
 
             Assert.That(clock.NowServerSeconds, Is.EqualTo(1000));
             Assert.That(clock.IsAuthoritative, Is.False);
 
-            Assert.That(clock.TrySync(), Is.True);
+            Assert.That(clock.SyncAsync().GetAwaiter().GetResult(), Is.True);
             Assert.That(clock.IsAuthoritative, Is.True);
             Assert.That(clock.NowServerSeconds, Is.EqualTo(5000));
-            device.Advance(60);
+            device.Advance(86400);   // a device clock change after the sync has no effect
+            mono.Advance(60);
             Assert.That(clock.NowServerSeconds, Is.EqualTo(5060));
         }
 
         [Test]
         public void ServerClock_offline_stays_on_device_time()
         {
-            var clock = new ServerClock(new RemoteClient(OfflineTransport.Instance), new FakeClock(1000));
-            Assert.That(clock.TrySync(), Is.False);
-            Assert.That(Assert.Throws<ServiceException>(clock.Sync).Kind, Is.EqualTo(ErrorClass.Offline));
+            var api = new RemoteTimeApi(new RemoteClient(OfflineTransport.Instance));
+            var clock = new ServerClock(api, new FakeClock(1000), new FakeMonoClock());
+            Assert.That(clock.SyncAsync().GetAwaiter().GetResult(), Is.False);
+            Assert.That(Assert.Throws<ServiceException>(() => api.GetServerTime()).Kind, Is.EqualTo(ErrorClass.Offline));
             Assert.That(clock.NowServerSeconds, Is.EqualTo(1000));
             Assert.That(clock.IsAuthoritative, Is.False);
         }
 
         [Test]
-        public void ServerClock_bad_body_is_Internal()
+        public void TimeApi_bad_body_is_Internal()
         {
-            var t = new FakeTransport().On("GET", RemoteRoutes.Time, 200, "not json");
-            var clock = new ServerClock(new RemoteClient(t), new FakeClock(0));
-            var e = Assert.Throws<ServiceException>(clock.Sync);
-            Assert.That(e.Kind, Is.EqualTo(ErrorClass.ServerError));
-            Assert.That(e.Code, Is.EqualTo("BadResponse"));
+            foreach (var body in new[] { "not json", "{\"serverSeconds\":5000}" })
+            {
+                var t = new FakeTransport().On("GET", RemoteRoutes.Time, 200, body);
+                var e = Assert.Throws<ServiceException>(() => new RemoteTimeApi(new RemoteClient(t)).GetServerTime(), body);
+                Assert.That(e.Kind, Is.EqualTo(ErrorClass.ServerError));
+                Assert.That(e.Code, Is.EqualTo("BadResponse"));
+            }
         }
 
         [Test]
