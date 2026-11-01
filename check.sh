@@ -11,9 +11,10 @@ cd "$(dirname "$0")"
 
 FAST=0
 DOTNET=1
-# M0 rewrite (specs/00 decision 33): the old sim is being replaced, so the day-stage acceptance sweep and the
-# golden files cannot pass until the new loop lands. The user agreed to run them report-only until then.
-# TODO(#136, #138): set to 0 (hard gates again) when the new acceptance gate and goldens land.
+# M0 rewrite (specs/00 decision 33): the user agreed to run the acceptance sweep report-only until the new bots meet
+# the day-stage targets. The golden files are regenerated from the new bots and are a hard gate again (#138).
+# TODO(#136): set to 0 (acceptance a hard gate again) once the greedy-f2p sweep passes honestly (it needs offline
+# catch-up, #108, and the MVP income systems).
 REWRITE_REPORT_ONLY=1
 REPORT_ONLY_FAILED=0
 for arg in "$@"; do
@@ -81,15 +82,8 @@ else
     fi
   }
 
-  if [ "$REWRITE_REPORT_ONLY" -eq 1 ]; then
-    step ".NET: unit tests (golden tests report-only during the M0 rewrite)"
-    dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory!=Golden&TestCategory!=Perf"
-    step ".NET: golden tests (report-only)"
-    soft dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory=Golden"
-  else
-    step ".NET: all tests but perf"
-    dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory!=Perf"
-  fi
+  step ".NET: all tests but perf (golden tests included, specs/10 section 2)"
+  dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory!=Perf"
 
   # Its own step so a perf flake reads as one (specs/10 section 1.1, issue #139).
   step ".NET: perf tests"
@@ -98,17 +92,20 @@ else
   step "Bots: tick benchmark"
   $BOTS bench --ticks 1000000 --stage 300 --max-ms 2000
 
-  step "Bots: acceptance sweep (20 seeds x 30 days)"
-  soft $BOTS acceptance --seeds 1-20 --days 30 --time-budget-s 180
+  step "Bots: acceptance sweep (greedy-f2p, 20 seeds x 30 days, tier M0; report-only during the M0 rewrite)"
+  soft $BOTS acceptance --tier M0 --seeds 1-20 --days 30 --time-budget-s 240 --table
 
-  step "Bots: golden files match"
-  soft $BOTS golden --check
+  step "Bots: M0 exit criterion, two weeks of simulated play (specs/00 section 11, specs/10 section 3.8; report-only)"
+  soft $BOTS acceptance --tier M0 --days 14 --time-budget-s 240
+
+  step "Bots: golden files match and the seed-7 command log replays to its day hashes (specs/10 section 2)"
+  $BOTS golden --check
 fi
 
 if [ "$REPORT_ONLY_FAILED" -eq 1 ]; then
-  printf '\nHard checks passed; report-only checks FAILED (acceptance/golden, M0 rewrite). Not a full pass.\n'
+  printf '\nHard checks passed; the report-only acceptance sweep FAILED (M0 rewrite, TODO(#136)). Not a full pass.\n'
 elif [ "$REWRITE_REPORT_ONLY" -eq 1 ] && [ "$FAST" -eq 0 ]; then
-  printf '\nAll checks passed (acceptance and golden are report-only during the M0 rewrite).\n'
+  printf '\nAll checks passed (the acceptance sweep is report-only during the M0 rewrite).\n'
 else
   printf '\nAll checks passed.\n'
 fi
