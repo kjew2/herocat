@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using HeroCat.Sim;
 using HeroCat.Sim.Content;
+using HeroCat.Sim.Fish;
 using HeroCat.Sim.Rng;
 using HeroCat.Sim.State;
 
@@ -156,7 +157,7 @@ namespace HeroCat.Runtime.Save
                 if (c.Selected is int sel && (sel < 1 || sel > s.Progress.HighestCleared)) { c.Selected = null; Hit("P1"); }
                 if (ClampNonNegative(c.SkillCooldowns)) Hit("P1");
                 if (ClampNonNegative(c.CompanionCooldowns)) Hit("P1");
-                if (c.MissileQueue.RemoveAll(m => !IsFiniteNonNegative(m)) > 0) Hit("P1");
+                if (c.MissileQueue.RemoveAll(m => !(m > 0) || double.IsInfinity(m)) > 0) Hit("P1");   // FishBoard invariant: positive, finite
                 // Mp is a double like the wallet's: a NaN would poison every tick (decision in the #75 change; 02 P1).
                 if (!IsFiniteNonNegative(c.Mp)) { c.Mp = 0; Hit("P1"); }
             }
@@ -291,7 +292,10 @@ namespace HeroCat.Runtime.Save
             void P9()
             {
                 var f = s.Fish;
-                int hard = db.FishLevels.Count;   // FISH_MAX_LVL_HARD (05 section 2.2)
+                int hard = FishBoard.FishMaxLvlHard(db);   // FISH_MAX_LVL_HARD (05 section 2.2)
+                if (f.DiscoveredLevels.RemoveWhere(lv => lv < 1 || lv > hard) > 0) Hit("P9");
+                if (f.TotalMerges < 0) { f.TotalMerges = 0; Hit("P9"); }
+                if (f.TotalMerges > s.Stats.Merges) { f.TotalMerges = s.Stats.Merges; Hit("P9"); }
                 for (int i = 0; i < f.Cells.Length; i++)
                 {
                     if (f.Cells[i] < 0) { f.Cells[i] = 0; Hit("P9"); }
@@ -307,13 +311,14 @@ namespace HeroCat.Runtime.Save
             void P9b()
             {
                 var f = s.Fish;
-                int cap = db.Tank.Cap0;                 // TODO(#167): + the TANK_CAP Research effect
-                int refillTicks = db.Tank.RefillTicks0; // TODO(#167): the TANK_REFILL Research effect
+                int cap = FishBoard.TankCap(s, db);                  // TODO(#167) lives there: the TANK_CAP Research term
+                int refillTicks = FishBoard.TankRefillTicks(s, db);  // TODO(#167) lives there: the TANK_REFILL Research term
                 int maxRelease = db.Tank.ReleaseLevel;  // TODO(#231): the content max of the P1 release-level upgrade
                 if (f.TankCount < 0) { f.TankCount = 0; Hit("P9b"); }
                 if (f.TankCount > cap) { f.TankCount = cap; Hit("P9b"); }
                 if (f.TankRefillTick < 0) { f.TankRefillTick = 0; Hit("P9b"); }
                 if (refillTicks > 0 && f.TankRefillTick > refillTicks - 1) { f.TankRefillTick = refillTicks - 1; Hit("P9b"); }
+                if (f.TankCount >= cap && f.TankRefillTick != 0) { f.TankRefillTick = 0; Hit("P9b"); }   // a full tank does not refill (05 section 3)
                 if (f.TankReleaseLevel < 1) { f.TankReleaseLevel = 1; Hit("P9b"); }
                 if (maxRelease >= 1 && f.TankReleaseLevel > maxRelease) { f.TankReleaseLevel = maxRelease; Hit("P9b"); }
             }

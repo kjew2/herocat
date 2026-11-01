@@ -63,7 +63,7 @@ namespace HeroCat.Runtime.Tests
             yield return new Case("P1", "negative cooldowns", s => { s.Combat.SkillCooldowns[2] = -4; s.Combat.CompanionCooldowns[0] = -1; },
                                   s => { Assert.That(s.Combat.SkillCooldowns[2], Is.EqualTo(0)); Assert.That(s.Combat.CompanionCooldowns[0], Is.EqualTo(0)); });
             yield return new Case("P1", "bad missile entries dropped",
-                                  s => { s.Combat.MissileQueue.Add(0.5); s.Combat.MissileQueue.Add(double.NaN); s.Combat.MissileQueue.Add(-1); s.Combat.MissileQueue.Add(double.PositiveInfinity); },
+                                  s => { s.Combat.MissileQueue.Add(0.5); s.Combat.MissileQueue.Add(double.NaN); s.Combat.MissileQueue.Add(-1); s.Combat.MissileQueue.Add(double.PositiveInfinity); s.Combat.MissileQueue.Add(0); },
                                   s => Assert.That(s.Combat.MissileQueue, Is.EqualTo(new[] { 0.5 })));
             yield return new Case("P1", "Mp not finite", s => s.Combat.Mp = double.NaN, s => Assert.That(s.Combat.Mp, Is.EqualTo(0)));
 
@@ -160,9 +160,16 @@ namespace HeroCat.Runtime.Tests
             // P9b: the tank
             yield return new Case("P9b", "tank count negative", s => s.Fish.TankCount = -1, s => Assert.That(s.Fish.TankCount, Is.EqualTo(0)));
             yield return new Case("P9b", "tank count above the cap", s => s.Fish.TankCount = Db.Tank.Cap0 + 3, s => Assert.That(s.Fish.TankCount, Is.EqualTo(Db.Tank.Cap0)));
-            yield return new Case("P9b", "refill tick at refillTicks", s => s.Fish.TankRefillTick = Db.Tank.RefillTicks0,
+            yield return new Case("P9", "DiscoveredLevels outside 1..FISH_MAX_LVL_HARD", s => { s.Fish.DiscoveredLevels.Add(0); s.Fish.DiscoveredLevels.Add(hard + 2); },
+                                  s => Assert.That(s.Fish.DiscoveredLevels.All(lv => lv >= 1 && lv <= hard)));
+            yield return new Case("P9", "TotalMerges above Stats.Merges", s => { s.Stats.Merges = 4; s.Fish.TotalMerges = 9; },
+                                  s => Assert.That(s.Fish.TotalMerges, Is.EqualTo(4)));
+            yield return new Case("P9", "TotalMerges negative", s => s.Fish.TotalMerges = -1, s => Assert.That(s.Fish.TotalMerges, Is.EqualTo(0)));
+            yield return new Case("P9b", "full tank with refill progress", s => { s.Fish.TankCount = Db.Tank.Cap0; s.Fish.TankRefillTick = 1; },
+                                  s => Assert.That(s.Fish.TankRefillTick, Is.EqualTo(0)));
+            yield return new Case("P9b", "refill tick at refillTicks", s => { s.Fish.TankCount = 0; s.Fish.TankRefillTick = Db.Tank.RefillTicks0; },
                                   s => Assert.That(s.Fish.TankRefillTick, Is.EqualTo(Db.Tank.RefillTicks0 - 1)));
-            yield return new Case("P9b", "refill tick negative", s => s.Fish.TankRefillTick = -5, s => Assert.That(s.Fish.TankRefillTick, Is.EqualTo(0)));
+            yield return new Case("P9b", "refill tick negative", s => { s.Fish.TankCount = 0; s.Fish.TankRefillTick = -5; }, s => Assert.That(s.Fish.TankRefillTick, Is.EqualTo(0)));
             yield return new Case("P9b", "release level 0", s => s.Fish.TankReleaseLevel = 0, s => Assert.That(s.Fish.TankReleaseLevel, Is.EqualTo(1)));
             yield return new Case("P9b", "release level above the content max", s => s.Fish.TankReleaseLevel = Db.Tank.ReleaseLevel + 4,
                                   s => Assert.That(s.Fish.TankReleaseLevel, Is.EqualTo(Db.Tank.ReleaseLevel)));
@@ -267,6 +274,7 @@ namespace HeroCat.Runtime.Tests
             Assert.That(repairs, Is.EqualTo(new[] { c.Rule }), c.ToString());
             c.Check(s);
             Assert.That(SaveValidator.Run(s, Now, Db, Opt()), Is.Empty, "a repaired state validates clean");
+            Assert.That(HeroCat.Sim.Fish.FishBoard.FirstViolation(s, Db), Is.Null, "a repaired state holds the Fish Board invariants (05)");
         }
 
         [Test]

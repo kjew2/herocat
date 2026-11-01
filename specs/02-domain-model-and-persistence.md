@@ -575,7 +575,7 @@ Repair:
 
 | Id | Condition | Repair |
 |---|---|---|
-| P1 | `Combat.Stage < 1` or `> STAGE_CAP`; `KillsInStage` outside `[0, KILLS_PER_STAGE-1]`; `Boss != None` on a stage that is not a multiple of `BOSS_EVERY`; `BossFailsOnStage < 0`; `Selected` outside `[1, HighestCleared]`; any cooldown negative; `MissileQueue` entry negative or non-finite; `Combat.Mp` negative or non-finite | Clamp; `Boss = None`; `Selected = null`; drop the bad missile entries; `Mp = 0`. |
+| P1 | `Combat.Stage < 1` or `> STAGE_CAP`; `KillsInStage` outside `[0, KILLS_PER_STAGE-1]`; `Boss != None` on a stage that is not a multiple of `BOSS_EVERY`; `BossFailsOnStage < 0`; `Selected` outside `[1, HighestCleared]`; any cooldown negative; `MissileQueue` entry not positive or non-finite (05: every queued missile is a positive hit fraction); `Combat.Mp` negative or non-finite | Clamp; `Boss = None`; `Selected = null`; drop the bad missile entries; `Mp = 0`. |
 | P2 | Any wallet balance negative, NaN or infinite; `Hero.Exp` likewise | Set to 0. |
 | P3 | `Hero.Level < 1`; `AwakenRank` outside `[0, AWAKEN_STAGES.Length]` | Clamp. |
 | P4 | `Training.Level[i]` outside `[0, TRAIN_CAP[i]]` | Clamp. |
@@ -583,8 +583,8 @@ Repair:
 | P6 | `HighestFirstClearBoss` not a multiple of `BOSS_EVERY`, negative, or `> HighestCleared` | Floor to a multiple; clamp. |
 | P7 | `Loadout.Skills.Length != SKILL_SLOTS`, `Companions.Length != COMPANION_SLOTS`, `Runes.Length != RUNE_SLOTS`; `Combat.SkillCooldowns` / `CompanionCooldowns` not `SKILL_SLOTS` / `COMPANION_SLOTS` long | Pad with `null` (cooldowns with 0) / truncate. |
 | P8 | Equipped id not owned, unknown to content, wrong kind, or duplicated across slots | Set slot to `null` (keep the first duplicate). `Loadout.Weapon` null -> auto-equip the highest-rarity owned weapon (04 rule). |
-| P9 | `Fish.Cells[i] < 0` or `> FISH_MAX_LVL_HARD` (the `fish_levels` row count, which 09 never shrinks) | Clamp to that range, never to the reachable cap (`FISH_MAX_LVL` incl. Research): a fish above a lowered cap stays and cannot merge (05), with no refund (issue #41). `DiscoveredLevels` gains any level present on the board. `HighestLevel` recomputed. |
-| P9b | `TankCount` outside `[0, TankCap]`; `TankRefillTick` outside `[0, refillTicks-1]`; `TankReleaseLevel < 1` or above its content max | Clamp. |
+| P9 | `Fish.Cells[i] < 0` or `> FISH_MAX_LVL_HARD` (the `fish_levels` row count, which 09 never shrinks) | Clamp to that range, never to the reachable cap (`FISH_MAX_LVL` incl. Research): a fish above a lowered cap stays and cannot merge (05), with no refund (issue #41). `DiscoveredLevels` drops levels outside `[1, FISH_MAX_LVL_HARD]` and gains any level present on the board. `HighestLevel` recomputed. `TotalMerges` clamped to `[0, Stats.Merges]`. |
+| P9b | `TankCount` outside `[0, TankCap]`; `TankRefillTick` outside `[0, refillTicks-1]`, or non-zero on a full tank; `TankReleaseLevel < 1` or above its content max | Clamp (a full tank's refill progress to 0, 05 section 3). A repaired board passes `FishBoard.FirstViolation`. |
 | P10 | `Items` key unknown to content, or `Copies <= 0` | Remove the entry. No refund in MVP (issue #56); ids are never deleted (09 section 3.4), so this path is rare. |
 | P11 | `Banners[b].Pity` outside `[0, PITY_HARD-1]`; `Exp < 0` | Clamp. Missing banner for a banner the content defines -> add default. |
 | P12 | Quest id unknown to content; `Progress < 0` | Drop the entry; clamp to 0. A quest with no entry reads as `IN_PROGRESS` with progress 0. |
