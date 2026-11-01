@@ -40,4 +40,5 @@ This file is how lessons reach the next agent. When the user corrects you on som
 - Code names are `HeroCat.*`; "Whisker Hero" is only the product's working title (`specs/00` decision 30).
 - Unity cannot run in cloud sessions. Only the client's engine-free `unity/HeroCatClient/Assets/HeroCat.Client/Core/` is compiled (inside `HeroCat.Runtime.Tests`); say so when you change the Unity-only screens.
 - Cloud sessions install the .NET 8 SDK through `.claude/hooks/session-start.sh`. If `dotnet` is missing, run that script with `CLAUDE_CODE_REMOTE=true`, then the full `./check.sh`.
+- During the M0 rewrite `check.sh` runs the acceptance sweep and golden check report-only (`REWRITE_REPORT_ONLY=1`, agreed with the user). Report their result honestly; do not regenerate goldens or targets to hide a regression in code that is already rewritten. #136/#138 turn them back into hard gates.
 - Generated test data is large and not for reading. Never open, grep through or hand-edit `golden/` files: regenerate them through the bot CLI, never edit by hand.

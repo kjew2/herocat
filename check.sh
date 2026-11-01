@@ -11,6 +11,11 @@ cd "$(dirname "$0")"
 
 FAST=0
 DOTNET=1
+# M0 rewrite (specs/00 decision 33): the old sim is being replaced, so the day-stage acceptance sweep and the
+# golden files cannot pass until the new loop lands. The user agreed to run them report-only until then.
+# TODO(#136, #138): set to 0 (hard gates again) when the new acceptance gate and goldens land.
+REWRITE_REPORT_ONLY=1
+REPORT_ONLY_FAILED=0
 for arg in "$@"; do
   case "$arg" in
     --fast) FAST=1 ;;
@@ -44,17 +49,42 @@ if [ "$FAST" -eq 1 ]; then
   step ".NET: unit tests (no golden)"
   dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory!=Golden"
 else
-  step ".NET: all tests"
-  dotnet test HeroCat.sln -c Release --no-build
+  # Report-only steps: run, print, but do not stop the run while REWRITE_REPORT_ONLY=1.
+  soft() {
+    if [ "$REWRITE_REPORT_ONLY" -eq 1 ]; then
+      if ! "$@"; then
+        REPORT_ONLY_FAILED=1
+        printf '\nWARNING: report-only step failed (M0 rewrite, TODO(#136)). Not a full pass.\n'
+      fi
+    else
+      "$@"
+    fi
+  }
+
+  if [ "$REWRITE_REPORT_ONLY" -eq 1 ]; then
+    step ".NET: unit tests (golden tests report-only during the M0 rewrite)"
+    dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory!=Golden"
+    step ".NET: golden tests (report-only)"
+    soft dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory=Golden"
+  else
+    step ".NET: all tests"
+    dotnet test HeroCat.sln -c Release --no-build
+  fi
 
   step "Bots: tick benchmark"
   $BOTS bench --ticks 1000000 --max-ms 2000
 
   step "Bots: acceptance sweep (20 seeds x 30 days)"
-  $BOTS acceptance --seeds 1-20 --days 30 --time-budget-s 180
+  soft $BOTS acceptance --seeds 1-20 --days 30 --time-budget-s 180
 
   step "Bots: golden files match"
-  $BOTS golden --check
+  soft $BOTS golden --check
 fi
 
-printf '\nAll checks passed.\n'
+if [ "$REPORT_ONLY_FAILED" -eq 1 ]; then
+  printf '\nHard checks passed; report-only checks FAILED (acceptance/golden, M0 rewrite). Not a full pass.\n'
+elif [ "$REWRITE_REPORT_ONLY" -eq 1 ] && [ "$FAST" -eq 0 ]; then
+  printf '\nAll checks passed (acceptance and golden are report-only during the M0 rewrite).\n'
+else
+  printf '\nAll checks passed.\n'
+fi
