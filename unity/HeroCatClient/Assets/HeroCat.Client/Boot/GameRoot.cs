@@ -1,19 +1,18 @@
 using System;
+using System.IO;
 using HeroCat.Client.Core;
 using HeroCat.Client.Screens;
-using HeroCat.Runtime.Boot;
 using HeroCat.Runtime.Replay;
 using HeroCat.Sim.Content;
 using UnityEngine;
-using UnityEngine.UIElements;
 
 namespace HeroCat.Client.Boot
 {
     /// <summary>
-    /// Composition root and the only MonoBehaviour (specs/07 section 4). Self-bootstraps after the first scene
-    /// loads, so pressing Play in any scene (even an empty one) starts the game: no scene, prefab or UXML assets.
-    /// Unity callbacks are forwarded to the plain-C# ClientSession, which runs Runtime's BootFlow and SessionRunner
-    /// (01 sections 3 and 8.1; issues #65, #70).
+    /// Composition root (07 sections 16 and 17.3). Self-bootstraps after the first scene loads, so pressing Play in any
+    /// scene starts the game: no prefabs (M0 builds every uGUI screen from code). Unity callbacks are forwarded to the
+    /// plain-C# ClientSession (BootFlow + SessionRunner, 01 sections 3 and 8.1) and its GameViewModel; the uGUI layer
+    /// (<see cref="UiRoot"/>) is a thin view over the vms. Unity-only: not compiled in cloud sessions.
     /// </summary>
     public sealed class GameRoot : MonoBehaviour
     {
@@ -28,101 +27,76 @@ namespace HeroCat.Client.Boot
             go.AddComponent<GameRoot>();
         }
 
-        UIDocument _doc;
-        VisualElement _safe;   // the safe-area rect inside the document root; all UI lives under it
-        Rect _lastSafeArea;
-        Vector2Int _lastScreen;
-        Vector2 _lastPanel;
         ContentDb _content;
         ClientSession _session;
         JsonlCommandLog _cmdlog;
-        Shell _shell;
-        Label _fatal;
-        bool _useBuiltinFont;
-        float _fpsAcc;
-        int _fpsFrames;
+        UiRoot _ui;
+        BootScreen _boot;
+        Localizer _loc;
+        MemoryClientPrefs _prefs;
+        string _prefsPath;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD || HEROCAT_CHEATS
+        DebugPanel _debug;
+#endif
 
         void Awake()
         {
             Instance = this;
-            Application.targetFrameRate = 60;
             QualitySettings.vSyncCount = 0;
-            Screen.sleepTimeout = SleepTimeout.NeverSleep;
+            Screen.sleepTimeout = SleepTimeout.NeverSleep;   // the phone-on-the-desk idle mode depends on it
             Application.runInBackground = true;
-
             if (Camera.main == null)
             {
                 var cam = new GameObject("Main Camera").AddComponent<Camera>();
                 cam.tag = "MainCamera";
                 cam.clearFlags = CameraClearFlags.SolidColor;
-                cam.backgroundColor = Ui.C(Palette.Background);
+                cam.backgroundColor = UiKit.C(Palette.Background);
                 cam.orthographic = true;
                 DontDestroyOnLoad(cam.gameObject);
             }
             InputSetup.EnsureEventSystem();
-            CreateDocument();
-        }
-
-        void CreateDocument()
-        {
-            var settings = ScriptableObject.CreateInstance<PanelSettings>();
-            settings.scaleMode = PanelScaleMode.ScaleWithScreenSize;
-            settings.referenceResolution = new Vector2Int(1080, 1920);
-            settings.screenMatchMode = PanelScreenMatchMode.Expand;   // the whole 1080x1920 reference always fits
-            var theme = Resources.Load<ThemeStyleSheet>("HeroCatTheme");
-            if (theme != null) settings.themeStyleSheet = theme;
-
-            // Add the UIDocument on an inactive object so panelSettings is set before its OnEnable runs.
-            var uiGo = new GameObject("UI");
-            uiGo.SetActive(false);
-            uiGo.transform.SetParent(transform, false);
-            _doc = uiGo.AddComponent<UIDocument>();
-            _doc.panelSettings = settings;
-            uiGo.SetActive(true);
-
-            _useBuiltinFont = theme == null;
         }
 
         void Start()
         {
-            // The document root is created in UIDocument.OnEnable; stretch it over the whole panel explicitly.
-            var root = _doc.rootVisualElement;
-            root.style.position = Position.Absolute;
-            root.style.left = 0; root.style.right = 0; root.style.top = 0; root.style.bottom = 0;
-
-            // Safe area (specs/07 section 5): an absolute child inset by Screen.safeArea, re-applied on change.
-            _safe = new VisualElement { name = "safe", pickingMode = PickingMode.Ignore };
-            _safe.style.position = Position.Absolute;
-            root.Add(_safe);
-            root.RegisterCallback<GeometryChangedEvent>(_ => ApplySafeArea());
-            ApplySafeArea();
-
-            if (_useBuiltinFont)
-            {
-                // No theme found: give the tree a font explicitly so labels still render.
-                try
-                {
-                    var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-                    if (font != null) root.style.unityFontDefinition = new StyleFontDefinition(FontDefinition.FromFont(font));
-                }
-                catch (Exception e) { Debug.LogWarning("HeroCat: no built-in font: " + e.Message); }
-            }
-
-            Debug.Log("HeroCat: backend " + Backend.Mode);
+            _prefsPath = Path.Combine(Application.persistentDataPath, "client_prefs.txt");
+            _prefs = LoadPrefs(_prefsPath);
+            Application.targetFrameRate = 60;   // TODO(#47): ClientPrefs.TargetFps (Battery saver 30) in SCR_SETTINGS (MVP)
+            _loc = Localizer.FromJson(SafeLoadLocalization());
+            _loc.Missing = key => Debug.LogWarning("HeroCat: missing localization key " + key);
+            Debug.Log("HeroCat: backend " + Backend.Mode + ", " + _loc.Count + " localization rows");
             StartSession();
         }
 
-        /// <summary>
-        /// Issue #8: IL2CPP stripping can break Newtonsoft silently (fields load back as defaults), and only on
-        /// device. Round-trip a sample state in memory at every launch; a failure is logged as an error, not hidden.
-        /// </summary>
+        static string SafeLoadLocalization()
+        {
+            try { return ContentLocator.LoadLocalizationJson(); }
+            catch (Exception e)
+            {
+                Debug.LogWarning("HeroCat: localization not loaded: " + e.Message);
+                return null;
+            }
+        }
+
+        static MemoryClientPrefs LoadPrefs(string path)
+        {
+            try { return File.Exists(path) ? MemoryClientPrefs.Deserialize(File.ReadAllText(path)) : new MemoryClientPrefs(); }
+            catch (Exception) { return new MemoryClientPrefs(); }   // losing prefs is acceptable (07 section 3)
+        }
+
+        void SavePrefs()
+        {
+            try { if (_prefs != null) File.WriteAllText(_prefsPath, _prefs.Serialize()); }
+            catch (Exception e) { Debug.LogWarning("HeroCat: client prefs not saved: " + e.Message); }
+        }
+
+        /// <summary>Issue #8: IL2CPP stripping can break Newtonsoft silently; round-trip a sample state at every launch.</summary>
         void RunSaveSelfCheck()
         {
             try
             {
                 if (SaveBridgeFactory.SelfCheck(_content, out var report)) Debug.Log("HeroCat: " + report);
-                else Debug.LogError("HeroCat: SAVES ARE BROKEN IN THIS BUILD. A save round trip lost data, most likely "
-                                    + "IL2CPP code stripping (check Assets/link.xml).\n" + report);
+                else Debug.LogError("HeroCat: SAVES ARE BROKEN IN THIS BUILD (check Assets/link.xml).\n" + report);
             }
             catch (Exception e)
             {
@@ -135,110 +109,107 @@ namespace HeroCat.Client.Boot
         ContentDb LoadBundledContent()
         {
             if (_content != null) return _content;
-            try
-            {
-                _content = ContentLocator.Load();
-                Debug.Log("HeroCat: content " + _content.Version + " from " + ContentLocator.Describe);
-                RunSaveSelfCheck();
-                return _content;
-            }
-            catch (Exception e)
-            {
-                Debug.LogError("HeroCat: content failed to load from " + ContentLocator.Describe + ": " + e.Message);
-                throw;
-            }
+            _content = ContentLocator.Load();
+            Debug.Log("HeroCat: content " + _content.Version + " from " + ContentLocator.Describe);
+            RunSaveSelfCheck();
+            return _content;
         }
 
         void StartSession()
         {
+            TearDownViews();
             try
             {
                 string dataDir = Application.persistentDataPath;
                 _cmdlog?.Dispose();
-                _cmdlog = new JsonlCommandLog(System.IO.Path.Combine(dataDir, "saves", JsonlCommandLog.FileName));
+                _cmdlog = new JsonlCommandLog(Path.Combine(dataDir, "saves", JsonlCommandLog.FileName));
                 // The build-time BackendMode picks the service implementations (01 section 1.2); nothing else branches on it.
                 _session = ClientSession.Start(new Func<ContentDb>[] { LoadBundledContent },
                                                (db, state, wrapClock) => Backend.Create(dataDir, db, state, wrapClock), _cmdlog,
-                                               clientVersion: Application.version);
-                if (!_session.IsReady)
-                {
-                    // TODO(#118): SCR_BOOT / SCR_ERROR render the error class; M0 shows the key and the support id.
-                    var err = _session.Boot.Error;
-                    ShowFatal(err.TitleKey + "\n" + err.BodyKey + "\n\nSupport id: " + err.SupportId);
-                    _session = null;
-                    return;
-                }
-                _shell = new Shell(_safe, _session.Vm);
-                // TODO(#118): the acknowledge-only notice modal; M0 toasts the key and the support id (00 decision 103).
-                var notice = _session.Boot.SaveResetNotice;
-                if (notice != null) _session.Vm.Toasts.Push(notice.BodyKey + " (" + notice.SupportId + ")", 8);
+                                               clientVersion: Application.version,
+                                               options: new ClientOptions { Localizer = _loc, Prefs = _prefs, BuildHash = Application.buildGUID });
             }
             catch (Exception e)
             {
-                _session = null;
-                ShowFatal("Failed to start the session:\n\n" + e);
                 Debug.LogException(e);
+                _session = null;
+                return;
             }
-        }
-
-        void ShowFatal(string message)
-        {
-            if (_fatal == null)
+            if (!_session.IsReady)
             {
-                _fatal = Ui.Text("", Ui.Body, Palette.Bad);
-                _fatal.style.position = Position.Absolute;
-                _fatal.style.left = 20; _fatal.style.right = 20; _fatal.style.top = 20;
-                _safe.Add(_fatal);
+                // SCR_BOOT with the blocking SCR_ERROR: the code, Retry / Update / Contact support (07 section 4.1).
+                var err = _session.Boot.Error;
+                Debug.LogError("HeroCat: boot failed: " + err?.Code + " support id " + err?.SupportId);
+                _session.BootError.OnAction = OnBootErrorAction;
+                _boot = BootScreen.Create(transform, _session.BootVm, _session.BootError, _loc);
+                return;
             }
-            _fatal.text = message;
+            _session.Vm.Error.Log = code => Debug.LogWarning("HeroCat: SCR_ERROR replaced " + code);
+            _ui = UiRoot.Create(transform, _session.Vm);
+            // TODO(#118): the acknowledge-only notice modal; M0 toasts the notice body with the support id (00 decision 103).
+            var notice = _session.Boot.SaveResetNotice;
+            if (notice != null)
+                _session.Vm.Toasts.Push(_loc.Text(notice.BodyKey).Replace("{supportId}", notice.SupportId ?? ""), ToastStyle.Error, 8);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD || HEROCAT_CHEATS
+            _debug = DebugPanel.Create(_ui.Safe, _session.Vm);
+#endif
         }
 
-        /// <summary>Insets the #safe element by Screen.safeArea, converted to panel units. No-op when nothing changed.</summary>
-        void ApplySafeArea()
+        void OnBootErrorAction(ErrorAction a)
         {
-            if (_safe == null) return;
-            Rect safe = Screen.safeArea;
-            var screen = new Vector2Int(Screen.width, Screen.height);
-            Vector2 panel = _doc.rootVisualElement.layout.size;   // NaN until the first layout pass
-            if (safe == _lastSafeArea && screen == _lastScreen && panel == _lastPanel) return;
-            _lastSafeArea = safe; _lastScreen = screen; _lastPanel = panel;
+            switch (a)
+            {
+                case ErrorAction.Retry:
+                    _content = null;
+                    StartSession();
+                    break;
+                case ErrorAction.UpdateApp:
+                    Application.OpenURL("market://details?id=" + Application.identifier);   // TODO(#141): per-platform store URL
+                    break;
+                case ErrorAction.ResetProfile:
+                    _session?.DeleteProfile();
+                    StartSession();
+                    break;
+                default:
+                    Debug.Log("HeroCat: contact support with id " + _session?.Boot.Error?.SupportId);
+                    break;
+            }
+        }
 
-            var i = SafeAreaMath.ToPanelInsets(screen.x, screen.y, safe.x, safe.y, safe.width, safe.height, panel.x, panel.y);
-            _safe.style.left = i.Left;
-            _safe.style.top = i.Top;
-            _safe.style.right = i.Right;
-            _safe.style.bottom = i.Bottom;
+        void TearDownViews()
+        {
+            if (_ui != null) { _ui.Dispose(); _ui = null; }
+            if (_boot != null) { Destroy(_boot.gameObject); _boot = null; }
         }
 
         void Update()
         {
-            ApplySafeArea();   // the safe area can change without the panel resizing (e.g. rotation, simulator device switch)
-            float dt = Time.unscaledDeltaTime;
-#if UNITY_EDITOR || DEVELOPMENT_BUILD || HEROCAT_CHEATS
-            _fpsAcc += dt; _fpsFrames++;
-            if (_fpsAcc >= 0.5f) { DebugScreen.Fps = _fpsFrames / _fpsAcc; _fpsAcc = 0; _fpsFrames = 0; }
-#endif
-
-            if (_session == null) return;
+            if (_session == null || !_session.IsReady) return;
             _session.Frame();
-            _shell.Refresh(Time.unscaledTime);
-
+            _ui.Tick();
+#if UNITY_EDITOR || DEVELOPMENT_BUILD || HEROCAT_CHEATS
+            _debug?.Tick(Time.unscaledDeltaTime);
+#endif
             if (_session.Vm.ResetRequested)
             {
                 _session.DeleteProfile();
-                _shell.Dispose();
                 StartSession();
             }
         }
 
         void OnApplicationPause(bool paused)
         {
+            if (paused) SavePrefs();
             if (_session == null) return;
             if (paused) _session.OnPause();
             else _session.OnResume();
         }
 
-        void OnApplicationQuit() => _session?.OnQuit();
+        void OnApplicationQuit()
+        {
+            SavePrefs();
+            _session?.OnQuit();
+        }
 
         void OnLowMemory() => _session?.OnLowMemory();
 
