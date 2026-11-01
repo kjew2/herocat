@@ -209,7 +209,7 @@ Rules:
 
 ### 2.3 Event buffering
 
-`Simulation` appends to a `List<Event>` with capacity `EVENT_BUFFER_MAX = 4096`. If a single `Advance` exceeds it (a 10 s catch-up at `MAX_TICKS_PER_FRAME` on a high-DPS hero can kill a few hundred mobs), the sim coalesces per tick: repeated `EnemyKilled` and `CurrencyChanged(KILL)` in the same `Advance` call are summed into `EnemyKilledBatch(count, goldTotal, expTotal, fromStage, toStage)` once the buffer passes `EVENT_COALESCE_AT = 1024`. Coalescing is deterministic (it depends only on counts) and the bot harness turns it on permanently to keep memory flat.
+`Simulation` appends to a `List<Event>` with capacity `EVENT_BUFFER_MAX = 4096`. If a single `Advance` exceeds it (a 10 s catch-up at `MAX_TICKS_PER_FRAME` on a high-DPS hero can kill a few hundred mobs), the sim coalesces per tick: repeated `EnemyKilled` and `CurrencyChanged(KILL)` in the same `Advance` call are summed into `EnemyKilledBatch(count, goldTotal, expTotal, fromStage, toStage, killGold, killExp)` once the buffer passes `EVENT_COALESCE_AT = 1024`. `goldTotal`/`expTotal` sum the folded kills (boss kills included, whose `CurrencyChanged(BOSS)` is not folded); `killGold`/`killExp` sum only the folded `CurrencyChanged(KILL)` amounts, so 06 section 13's `currency_changed` stays exact (issue #155). Coalescing is deterministic (it depends only on counts) and the bot harness turns it on permanently to keep memory flat.
 
 `SessionRunner` drains the buffer once per frame after ticking and dispatches to the `EventBus`:
 

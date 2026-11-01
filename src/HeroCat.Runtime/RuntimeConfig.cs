@@ -68,5 +68,16 @@ namespace HeroCat.Runtime
         /// HeroCat.Sim.DayKeys.FirstMondayDayKey is the one used by the sim (06 owns the week start).
         /// </summary>
         public const int WEEK_EPOCH_OFFSET_DAYS = HeroCat.Sim.DayKeys.FirstMondayDayKey;
+
+        // ---------------------------------------------------------------- analytics (02 section 14, 06 section 13)
+
+        /// <summary>02 section 2: events per upload batch.</summary>
+        public const int ANALYTICS_BATCH_MAX = 100;
+
+        /// <summary>02 section 2: offline queue cap; past it the oldest events are dropped.</summary>
+        public const int ANALYTICS_QUEUE_MAX = 10000;
+
+        /// <summary>06 section 13: KILL and BOSS <c>currency_changed</c> deltas are summed per currency over this window.</summary>
+        public const int CURRENCY_AGG_SEC = 60;
     }
 }

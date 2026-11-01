@@ -38,7 +38,9 @@ namespace HeroCat.Sim.Events
 
     /// <summary>
     /// 01 section 2.3: once the buffer passes EVENT_COALESCE_AT within one Advance, further EnemyKilled and
-    /// CurrencyChanged(KILL) events are summed here. The totals grow while the batch is open.
+    /// CurrencyChanged(KILL) events are summed here. The totals grow while the batch is open. GoldTotal and ExpTotal sum
+    /// the folded kills (boss kills included, whose CurrencyChanged(BOSS) stays in the buffer); KillGold and KillExp sum
+    /// only the folded CurrencyChanged(KILL) amounts, which is what analytics' currency_changed needs (issue #155).
     /// </summary>
     public sealed record EnemyKilledBatch : Event
     {
@@ -47,6 +49,8 @@ namespace HeroCat.Sim.Events
         public double ExpTotal { get; internal set; }
         public int FromStage { get; internal set; }
         public int ToStage { get; internal set; }
+        public double KillGold { get; internal set; }
+        public double KillExp { get; internal set; }
     }
 
     // ---------------------------------------------------------------------------------------- collections (04)

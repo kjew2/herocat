@@ -194,6 +194,24 @@ namespace HeroCat.Sim.Tests
         }
 
         [Test]
+        public void ForceCoalesce_KillGoldAndKillExp_AreTheFoldedKillAmounts()   // issue #155: currency_changed stays exact
+        {
+            var sim = TestContent.NewSim();
+            sim.DrainEvents();
+            sim.ForceCoalesce = true;
+            double gold0 = sim.State.Wallet.Gold;
+            sim.Advance(6000);
+            var ev = sim.DrainEvents();
+            var b = ev.OfType<EnemyKilledBatch>().Single();
+            double other = ev.OfType<CurrencyChanged>().Where(c => c.Currency == Currency.GOLD).Sum(c => c.Delta);
+            Assert.That(ev.OfType<CurrencyChanged>().Any(c => c.Reason == CurrencyReason.KILL), Is.False, "every KILL apply folded");
+            Assert.That(b.KillGold, Is.GreaterThan(0));
+            Assert.That(b.KillExp, Is.GreaterThan(0));
+            Assert.That(b.KillGold + other, Is.EqualTo(sim.State.Wallet.Gold - gold0).Within(1e-9 * (sim.State.Wallet.Gold - gold0)));
+            Assert.That(b.KillGold, Is.LessThanOrEqualTo(b.GoldTotal), "GoldTotal also counts folded boss kills");
+        }
+
+        [Test]
         public void ForceCoalesce_BatchesFromTheFirstKill()
         {
             var sim = TestContent.NewSim();

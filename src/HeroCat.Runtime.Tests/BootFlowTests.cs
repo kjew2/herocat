@@ -92,9 +92,12 @@ namespace HeroCat.Runtime.Tests
             Assert.That(r.ShowTutorial, Is.True);
             Assert.That(store.Primary, Is.Not.Null, "boot saves at once (step 5)");
             Assert.That(analytics.Events.Select(e => e.Name), Does.Contain("profile_created").And.Contain("session_start"));
-            var grant = analytics.Events.Where(e => e.Name == "currency_changed").ToList();
+            var rows = analytics.Events.Where(e => e.Name == "currency_changed").ToList();
+            var grant = rows.Where(e => (string)e.Props["reason"] == "TUTORIAL").ToList();
             Assert.That(grant, Has.Count.EqualTo(1), "the welcome grant's currency_changed row (issue #246 item 4)");
-            Assert.That(grant[0].Props["reason"], Is.EqualTo("TUTORIAL"));
+            Assert.That(rows.IndexOf(grant[0]), Is.EqualTo(0), "sent by ProfileFactory, before the session's rows");
+            Assert.That(rows.Count(e => (string)e.Props["reason"] == "LOGIN"), Is.EqualTo(1),
+                        "the first rollover's LOGIN apply reaches analytics through the session's CurrencyAnalytics (06 section 13)");
             Assert.That(r.SaveResetNotice, Is.Null, "no save existed: nothing to tell the player");
             Assert.That(analytics.Count("save_corrupt_all"), Is.EqualTo(0));
         }
