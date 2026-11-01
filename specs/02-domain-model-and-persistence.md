@@ -1296,7 +1296,7 @@ The sink enqueues on the main thread and flushes on the thread pool (01 threadin
 | `stage_cleared`, `boss_failed`, `wall_broken`, `training`, `level_up`, `awakened`, `research_bought` | 03 section 11 |
 | `summon`, `summon_reconciled`, `summon_pending`, `summon_resolved`, `item_acquired`, `item_equipped`, `limit_break` | 04 section 13 |
 | `fish_release`, `fish_merge`, `fish_discovered`, `fish_discard`, `fish_board_snapshot` | 05 section 13 |
-| `currency_changed`, `quest_completed`, `quest_claimed`, `achievement_unlocked`, `dungeon_run`, `offline_claimed`, `day_rollover`, `daily_gift_claimed`, `exchange`, `shop_view`, `iap_initiated`, `iap_completed`, `iap_failed`, `iap_status`, `inbox_claimed` | 06 section 13 |
+| `currency_changed`, `quest_completed`, `quest_claimed`, `achievement_unlocked`, `dungeon_run`, `offline_catchup`, `offline_claimed`, `day_rollover`, `daily_gift_claimed`, `exchange`, `shop_view`, `iap_initiated`, `iap_completed`, `iap_failed`, `iap_status`, `inbox_claimed` | 06 section 13 |
 | `plausibility_flag` | 08 section 7.4 |
 | `session_start`, `session_end`, `cloud_save_uploaded`, `cloud_conflict`, `cloud_autoresolved`, `save_*`, `migration_applied`, `clock_anomaly`, `player_deleted` | 14.3 |
 

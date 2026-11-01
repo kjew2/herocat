@@ -636,7 +636,8 @@ This section owns these events' fields (issue #245); every event also carries 02
 | `quest_claimed` | `questId`, `kind`, `rewardCurrency`, `rewardAmount`, `bulk` | `QuestClaimed` |
 | `achievement_unlocked` | `questId`, `rung` | achievement `QuestCompleted` |
 | `dungeon_run` | `kind`, `floor`, `outcome` (cleared/failed/swept/abandoned), `ticksUsed`, `rewards[]`, `grantId` | `DungeonCleared`, `DungeonFailed`, `DungeonSwept`, `DungeonAbandoned` |
-| `offline_claimed` | `elapsedSec`, `creditedSec`, `capped`, `gold`, `exp`, `tankFill`, `stage`, `x2` | `OfflineRewardClaimed` |
+| `offline_catchup` | `elapsedSec`, `creditedSec`, `capped`, `gold`, `exp`, `tankFill`, `stage` (the pending record's) | `ComputeOfflineCatchup` that credits a gap of at least `OFFLINE_MIN_S` (section 7); a catch-up with no later `offline_claimed` is a reward cleared unclaimed (02 P18) |
+| `offline_claimed` | `elapsedSec`, `creditedSec`, `capped`, `gold`, `exp`, `tankFill`, `x2` | `OfflineRewardClaimed` |
 | `day_rollover` | `dayKey`, `skippedDays`, `secondsSinceLastTick` | `DayRolledOver` |
 | `daily_gift_claimed` | | `ClaimDailyGift` |
 | `exchange` | `offerId`, `qty`, `diamonds` | `ExchangeItem` |
