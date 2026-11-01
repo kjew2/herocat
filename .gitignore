@@ -16,3 +16,13 @@ TestResults/
 src/**/bin/
 src/**/obj/
 web/wasm/dist/
+
+# Unity (unity/HeroCatClient)
+unity/**/[Ll]ibrary/
+unity/**/[Tt]emp/
+unity/**/[Ll]ogs/
+unity/**/[Uu]ser[Ss]ettings/
+unity/**/[Bb]uilds/
+# copy of Content/ made by the pre-build step (Assets/HeroCat.Client/Editor/ContentPreBuild.cs)
+unity/HeroCatClient/Assets/Resources/Content/
+unity/HeroCatClient/Assets/Resources/Content.meta

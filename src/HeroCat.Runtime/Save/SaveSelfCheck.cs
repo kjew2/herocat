@@ -13,7 +13,7 @@ namespace HeroCat.Runtime.Save
     /// a stripped setter or constructor does not throw: the field just silently comes back as its default. This
     /// builds a small played profile in memory, runs it through the real write and load path (Encode, then
     /// DecodeFull) and compares the canonical JSON before and after. Any difference means the build lost
-    /// serialization metadata (a native build would need a link.xml or equivalent). Touches no files.
+    /// serialization metadata (check unity/HeroCatClient/Assets/link.xml). Touches no files.
     /// </summary>
     public static class SaveSelfCheck
     {

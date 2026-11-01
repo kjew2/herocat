@@ -9,9 +9,15 @@
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
+    <!-- Unity provides Newtonsoft.Json via com.unity.nuget.newtonsoft-json (13.x); NuGet supplies it for dotnet. -->
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../HeroCat.Sim/HeroCat.Sim.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Unity package metadata lives next to the sources; not part of the dotnet build. -->
+    <None Remove="package.json" />
+    <None Remove="HeroCat.Runtime.asmdef" />
   </ItemGroup>
 </Project>

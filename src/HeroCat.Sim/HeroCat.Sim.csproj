@@ -8,4 +8,9 @@
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
     <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- Unity package metadata lives next to the sources; not part of the dotnet build. -->
+    <None Remove="package.json" />
+    <None Remove="HeroCat.Sim.asmdef" />
+  </ItemGroup>
 </Project>

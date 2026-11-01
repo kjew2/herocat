@@ -1,0 +1,23 @@
+<!--
+  Managed code stripping guard for IL2CPP builds (issue #8).
+
+  HeroCat.Runtime saves GameState with Newtonsoft.Json, which finds property setters, constructors (including the
+  GearPiece record's) and enum members by reflection. The linker cannot see those uses, so without this file a device
+  build can silently drop them: saves then load back as defaults, or every launch starts a new profile. The editor
+  never strips, so only a device build shows the bug.
+
+  Whole assemblies are preserved on purpose. They are small, and state types added later (in any namespace, such as
+  HeroCat.Sim.State, HeroCat.Sim.Rng.RngStream or HeroCat.Runtime.Save) are covered without editing this file.
+
+  Newtonsoft.Json comes from com.unity.nuget.newtonsoft-json (Packages/manifest.json), Unity's fork that ships an
+  AOT-safe build for IL2CPP (no System.Reflection.Emit). Preserving it whole avoids stripping of its own
+  reflection-only paths (converters, contract resolvers).
+
+  Unity reads link.xml only from Assets/, not from the local packages under src/, so this file lives here.
+  GameRoot runs SaveSelfCheck at startup and logs an error if a round trip loses data.
+-->
+<linker>
+  <assembly fullname="HeroCat.Sim" preserve="all" />
+  <assembly fullname="HeroCat.Runtime" preserve="all" />
+  <assembly fullname="Newtonsoft.Json" preserve="all" />
+</linker>

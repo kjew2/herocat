@@ -15,4 +15,9 @@
     <ProjectReference Include="../HeroCat.Runtime/HeroCat.Runtime.csproj" />
     <ProjectReference Include="../HeroCat.Sim/HeroCat.Sim.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- The Unity client's engine-free Core (its asmdef has noEngineReferences) is compiled in here, so dotnet build
+         catches client code that drifts from the sim, and SafeAreaMathTests can run without Unity. -->
+    <Compile Include="../../unity/HeroCatClient/Assets/HeroCat.Client/Core/**/*.cs" LinkBase="Client" />
+  </ItemGroup>
 </Project>

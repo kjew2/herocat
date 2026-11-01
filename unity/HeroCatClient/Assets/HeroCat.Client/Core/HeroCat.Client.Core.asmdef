@@ -1,0 +1,17 @@
+{
+    "name": "HeroCat.Client.Core",
+    "rootNamespace": "HeroCat.Client.Core",
+    "references": [
+        "HeroCat.Sim",
+        "HeroCat.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": true
+}
