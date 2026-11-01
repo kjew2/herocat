@@ -38,6 +38,25 @@ namespace HeroCat.Client.Boot
             Describe = "Resources/content";
             return ContentLoader.Load(new ResourcesContentSource(), BuildTier, Application.version);
         }
+
+        /// <summary>
+        /// The English localization table (09 <c>localization.en.json</c>) from the same places as the content, for the
+        /// client's Localizer (07 section 12). Null when it cannot be found; the Localizer then renders keys.
+        /// TODO(#57): the locale from ClientPrefs once a second locale ships.
+        /// </summary>
+        public static string LoadLocalizationJson(string locale = "en")
+        {
+            string file = "localization." + locale + ".json";
+            string dir = FileContentSource.FindContentDirectory(Application.dataPath);
+            if (dir == null)
+            {
+                string sa = Path.Combine(Application.streamingAssetsPath, "content");
+                if (File.Exists(Path.Combine(sa, file))) dir = sa;
+            }
+            if (dir != null && File.Exists(Path.Combine(dir, file))) return File.ReadAllText(Path.Combine(dir, file));
+            var asset = Resources.Load<TextAsset>("content/" + Path.GetFileNameWithoutExtension(file));
+            return asset != null ? asset.text : null;
+        }
     }
 
     /// <summary>Each table is a TextAsset under Assets/Resources/content/ (09 section 10.1).</summary>

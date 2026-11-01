@@ -435,6 +435,9 @@ namespace HeroCat.Client.Core
 
         public bool Compare { get; private set; }
 
+        /// <summary>Set by Open and Compare; the GameViewModel refreshes the open modal while it is set.</summary>
+        public bool Dirty { get; internal set; }
+
         /// <summary>Opens the modal for <paramref name="id"/> (pushes SCR_ITEM_DETAIL; the router queues or shifts it).</summary>
         public void Open(Banner banner, string id)
         {
@@ -442,16 +445,22 @@ namespace HeroCat.Client.Core
             ItemId = id;
             Compare = false;
             Item = null;
+            Dirty = true;
             _c.Router?.ShowModal(ScreenIds.ItemDetail, id);
         }
 
         public void Close() => _c.Router?.CloseModal(ScreenIds.ItemDetail);
 
-        public void ToggleCompare() => Compare = !Compare && Banner == Banner.WEAPON;
+        public void ToggleCompare()
+        {
+            Compare = !Compare && Banner == Banner.WEAPON;
+            Dirty = true;
+        }
 
         public void Refresh(Simulation sim)
         {
             _sim = sim;
+            Dirty = false;
             if (ItemId == null) return;
             var db = _c.Db;
             var view = SummonQuery.Collection(db, sim.State, Banner, i => _c.Prefs.IsNew(Banner, i));

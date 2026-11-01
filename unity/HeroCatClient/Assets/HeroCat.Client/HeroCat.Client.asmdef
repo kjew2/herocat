@@ -7,6 +7,7 @@
         "HeroCat.Remote",
         "HeroCat.Client.Core",
         "UnityEngine.UI",
+        "Unity.TextMeshPro",
         "Unity.InputSystem"
     ],
     "includePlatforms": [],

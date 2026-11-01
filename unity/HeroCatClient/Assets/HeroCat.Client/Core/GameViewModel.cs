@@ -158,7 +158,7 @@ namespace HeroCat.Client.Core
             else if (top == ScreenIds.Skills) Skills.Refresh(_sim);
             else if (top == ScreenIds.Summon) Summon.Refresh(_sim);
             var modal = Router.Modal;
-            if (modal != null && modal.Id == ScreenIds.ItemDetail && _detailDirty)
+            if (modal != null && modal.Id == ScreenIds.ItemDetail && (_detailDirty || ItemDetail.Dirty))
             {
                 _detailDirty = false;
                 ItemDetail.Refresh(_sim);

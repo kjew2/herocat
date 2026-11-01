@@ -57,6 +57,9 @@ fi
 step ".NET: build"
 dotnet build HeroCat.sln -c Release
 
+step "Client: Unity-only Boot/ and Screens/ type-check against API stubs (tools/unity_typecheck; Unity itself cannot run here)"
+dotnet build tools/unity_typecheck/UnityTypecheck.csproj -c Release -nologo -v q
+
 BOTS="dotnet run -c Release --no-build --project src/HeroCat.Bots --"
 
 step "Saves: the v1 fixture matches what the bot CLI generates (until SaveSchema.V1Frozen)"

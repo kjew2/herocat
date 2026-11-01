@@ -28,6 +28,31 @@ namespace HeroCat.Client.Core
             _rows = rows != null ? new Dictionary<string, string>(rows, StringComparer.Ordinal) : new Dictionary<string, string>(StringComparer.Ordinal);
         }
 
+        /// <summary>
+        /// Reads 09's <c>localization.&lt;locale&gt;.json</c> (<c>{"table":"localization","locale":"en","rows":[{"key","text"}]}</c>).
+        /// A broken file yields an empty table (every key renders as itself), never an exception at boot.
+        /// </summary>
+        public static Localizer FromJson(string json)
+        {
+            var rows = new Dictionary<string, string>(StringComparer.Ordinal);
+            if (string.IsNullOrEmpty(json)) return new Localizer(rows);
+            try
+            {
+                var root = Newtonsoft.Json.Linq.JObject.Parse(json);
+                if (root["rows"] is Newtonsoft.Json.Linq.JArray list)
+                    foreach (var row in list)
+                    {
+                        string k = (string)row["key"], t = (string)row["text"];
+                        if (!string.IsNullOrEmpty(k) && t != null) rows[k] = t;
+                    }
+            }
+            catch (Newtonsoft.Json.JsonException)
+            {
+                rows.Clear();
+            }
+            return new Localizer(rows);
+        }
+
         /// <summary>Renders every key as itself: the fallback when no table is loaded, and the tests' localizer.</summary>
         public static readonly Localizer Keys = new Localizer();
 

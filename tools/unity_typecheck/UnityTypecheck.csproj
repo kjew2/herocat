@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Type-checks the client's Unity-only code (Assets/HeroCat.Client/Boot and Screens) in sessions without Unity, against
+    UnityStubs.cs: minimal UnityEngine / uGUI / TextMeshPro / Input System declarations with only the members the client
+    uses. It catches drift between the screens and Core's view-models; it proves nothing about Unity behaviour. Not in
+    HeroCat.sln; check.sh builds it. When a screen uses a new Unity API, add that member to the stubs.
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <DefineConstants>$(DefineConstants);UNITY_EDITOR;ENABLE_INPUT_SYSTEM;UNITY_ANDROID</DefineConstants>
+    <NoWarn>CS0067;CS0414;CS0649;CS0169</NoWarn>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)../../build/obj/UnityTypecheck/</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(MSBuildThisFileDirectory)../../build/bin/UnityTypecheck/</BaseOutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/HeroCat.Sim/HeroCat.Sim.csproj" />
+    <ProjectReference Include="../../src/HeroCat.Runtime/HeroCat.Runtime.csproj" />
+    <ProjectReference Include="../../src/HeroCat.Remote/HeroCat.Remote.csproj" />
+    <Compile Include="UnityStubs.cs" />
+    <Compile Include="../../unity/HeroCatClient/Assets/HeroCat.Client/Core/**/*.cs" LinkBase="Core" />
+    <Compile Include="../../unity/HeroCatClient/Assets/HeroCat.Client/Boot/**/*.cs" LinkBase="Boot" />
+    <Compile Include="../../unity/HeroCatClient/Assets/HeroCat.Client/Screens/**/*.cs" LinkBase="Screens" />
+  </ItemGroup>
+</Project>
