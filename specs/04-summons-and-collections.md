@@ -283,10 +283,10 @@ The passive is 10-25% of the weapon layer for most of the first month and it is 
 | `buff_pct` | double | `BUFF` only: ATK buff while active |
 | `name_key`, `icon`, `vfx` | string | presentation |
 
-Derived per-cast numbers, so a skill's rated `dpsPct` is exactly what it delivers on an infinitely long fight. They are multiples of 03's `HeroHit`, which excludes the skill, companion and missile layers so no layer is counted twice (issue #10):
+Derived per-cast numbers, so a skill's rated `dpsPct` is exactly what it delivers on an infinitely long fight. They are multiples of 03's `SkillUnit` (section 7.1: one second of expected hero attack, `HeroHit * critFactor * speedFactor`, equal to `HeroHit` at speed 1 with no crit), which excludes the skill, companion and missile layers so no layer is counted twice (issue #10):
 
 ```
-INSTANT: damagePctPerCast = dps_pct * cooldown_ticks / ATTACK_INTERVAL_TICKS            # in % of one HeroHit (03 section 7.1; one hit = 1 s of hero DPS at speed 1)
+INSTANT: damagePctPerCast = dps_pct * cooldown_ticks / ATTACK_INTERVAL_TICKS            # in % of one SkillUnit (03 section 7.1; = 1 s of hero DPS)
 DOT:     damagePctPerTick = dps_pct * cooldown_ticks / duration_ticks / ATTACK_INTERVAL_TICKS
 BUFF:    dps_pct is informational = buff_pct * duration_ticks / cooldown_ticks           # the buff multiplies hero hits while active
 ```
@@ -321,7 +321,7 @@ Manual cast (P1): `CastSkill(slot)` fires a ready skill immediately, bypassing t
 | `magnitude` | double | type-specific, derived from `dps_pct` as below |
 
 ```
-DAMAGE:    damagePctPerCast = dps_pct * cooldown_ticks / ATTACK_INTERVAL_TICKS   # like an INSTANT skill, in % of one HeroHit (issue #10)
+DAMAGE:    damagePctPerCast = dps_pct * cooldown_ticks / ATTACK_INTERVAL_TICKS   # like an INSTANT skill, in % of one CompanionUnit (03 section 7.1; SkillUnit x skill factor; issue #10); TODO(#243)
 BUFF_ATK:  buff_pct = dps_pct * cooldown_ticks / duration_ticks                 # hero ATK buff while active; strongest active wins (shared with skill buffs)
 BUFF_GOLD: gold_buff_pct = 2 * dps_pct * cooldown_ticks / duration_ticks        # gold from kills while active; no DPS; rated dps_pct is a value proxy
 MP_REGEN:  mp_restored = dps_pct / 4 per cast                                  # e.g. E restores 16 MP for 10 MP spent; dps_pct counts as 0 in the formula
@@ -365,7 +365,7 @@ ApplySummonResult(SummonResultPayload p):                  # HeroCat.Sim system 
   MarkDpsDirty(); Applied.Add(p.RequestId)
 ```
 
-`SummonResultPayload` is 01's (section 2.5); `SummonPull` carries `ItemId`, `Rarity`, `IsNew`, `LevelBefore`, `LevelAfter`, `GuaranteeApplied`, plus `CopiesAfter` and `OverflowRockCandy`, and in Local mode the payload carries `StreamCounterAfter`, the `summon_<banner>` counter after the batch (issues #6, #13). In MVP the server has already debited diamonds or tickets and the payload carries the resulting balances; `Apply` replaces the local values (`Wallet.SummonTicket` is a mirror of the server ledger in Remote mode, issue #7). If the local balance minus `Debits` differs from the server balance, Runtime emits a `summon_reconcile` analytics event. In M0 the local service checks the wallet before drawing (`NotEnoughDiamonds` / `NotEnoughTickets` before any draw) and `Apply` debits, so replaying the logged `ApplySummonResult` reproduces the state exactly.
+`SummonResultPayload` is 01's (section 2.5); `SummonPull` carries `ItemId`, `Rarity`, `IsNew`, `LevelBefore`, `LevelAfter`, `GuaranteeApplied`, plus `CopiesAfter` and `OverflowRockCandy`, and in Local mode the payload carries `StreamCounterAfter`, the `summon_<banner>` counter after the batch (issues #6, #13). In MVP the server has already debited diamonds or tickets and the payload carries the resulting balances; `Apply` replaces the local values (`Wallet.SummonTicket` is a mirror of the server ledger in Remote mode, issue #7). If the local balance minus `Debits` differs from the server balance, Runtime emits a `summon_reconciled` analytics event. In M0 the local service checks the wallet before drawing (`NotEnoughDiamonds` / `NotEnoughTickets` before any draw) and `Apply` debits, so replaying the logged `ApplySummonResult` reproduces the state exactly.
 
 ## 11. Collection screen data
 
@@ -380,7 +380,7 @@ public sealed record CollectibleVm(
     double ValueNow, double ValueNextLevel,   // the kind's headline number: equipped pct / dps_pct / ability magnitude, after LevelMult
     double PassiveNow,                // weapons only
     bool Equipped, int? Slot,
-    bool IsNew);                      // set by ItemAcquired(IsNew) until the player opens SCR_ITEM_DETAIL for it; persisted in the local profile/UI store, not in sim state; there is no MarkSeen sim command (issue #7)
+    bool IsNew);                      // set by ItemAcquired(IsNew) until the player opens SCR_ITEM_DETAIL for it; persisted in the local profile/UI store, not in sim state; no sim command clears it (issue #7)
 
 public sealed record CollectionVm(
     Banner Banner, IReadOnlyList<CollectibleVm> Items,
@@ -421,8 +421,8 @@ All carry `playerId`, `serverTime`, `contentVersion`, `clientVersion`, `sessionI
 
 | Event | Fields | When |
 |---|---|---|
-| `summon` | `requestId`, `banner`, `count`, `payment` (DIAMOND/TICKET), `diamondsSpent`, `ticketsSpent`, `pityBefore`, `pityAfter`, `bannerLevelBefore`, `bannerLevelAfter`, `results[]` of `{itemId, rarity, isNew, levelBefore, levelAfter, overflowRockCandy}`, `lplusCount`, `guaranteeApplied` (bool), `source` (LOCAL/SERVER), `latencyMs` | once per request, after `ApplySummonResult`; one merged schema shared with 02 (issue #13) |
-| `summon_reconcile` | `requestId`, `banner`, `currency`, `localAfter`, `serverAfter` | Remote mode, when the local balance minus `Debits` differs from the server balance (issue #13) |
+| `summon` | `requestId`, `banner`, `count`, `payment` (DIAMOND/TICKET), `diamondsSpent`, `ticketsSpent`, `pityBefore`, `pityAfter`, `bannerLevelBefore`, `bannerLevelAfter`, `results[]` of `{itemId, rarity, isNew, levelBefore, levelAfter, overflowRockCandy, guaranteeApplied}`, `lplusCount`, `guaranteeApplied` (bool, any slot), `source` (LOCAL/SERVER), `latencyMs` | once per request, after `ApplySummonResult`; one merged schema shared with 02 (issue #13) |
+| `summon_reconciled` | `requestId`, `banner`, `currency`, `localAfter`, `serverAfter` | Remote mode, when the local balance minus `Debits` differs from the server balance (issue #13) |
 | `item_acquired` | `banner`, `itemId`, `rarity`, `isNew`, `copiesAfter`, `levelAfter`, `acquireReason` (SUMMON/MAIL/TUTORIAL) | once per result item (also for non-summon grants) |
 | `item_equipped` | `banner`, `slot`, `itemId`, `previousItemId`, `auto` (bool) | on equip |
 | `limit_break` | `banner`, `itemId`, `rarity`, `rankAfter`, `rockCandySpent` | on `ItemLimitBroken` |
@@ -466,7 +466,7 @@ It must print, in this order: the pity block (section 3.1 numbers), the soft ram
 6. `LimitBreak` is rejected for an unowned item, at 5 ranks, and with insufficient Rock Candy (nothing charged); otherwise charges `LIMIT_BREAK_COST[r] * (rank + 1)` with reason `LIMIT_BREAK` and raises the item's contribution by exactly 20% of its level-1 value.
 7. Copy 161 of any item adds `DUPE_OVERFLOW_ROCK_CANDY[r]` Rock Candy with reason `SUMMON` and leaves `Copies == 160`.
 8. `weaponMult` for a fixture (equipped L at level 3, owned 10 C at level 2, 4 R at level 1) equals `1 + (300 * 1.4 + 10 * 1 * 1.2 + 4 * 2 * 1.0) / 100 = 5.4` within 1e-12; unequipping is impossible (there is no unequip command for weapons) and `AutoEquipBestWeapon` after pulling an M switches the equipped weapon and publishes `ItemEquipped(..., auto: true)`.
-9. A level-1 Epic `INSTANT` skill with cooldown 100 deals exactly `4.0 * HeroHit` per cast (issue #10), fires on the first `Fighting` tick after its cooldown expires, and over a 600-tick fight with one enemy deals `40%` of hero damage within 1% (hero at speed 1, no crit).
+9. A level-1 Epic `INSTANT` skill with cooldown 100 deals exactly `4.0 * SkillUnit` per cast (`== 4.0 * HeroHit` at speed 1, no crit; issue #10), fires on the first `Fighting` tick after its cooldown expires, and over a 600-tick fight with one enemy deals `40%` of hero damage within 1% (hero at speed 1, no crit).
 10. Two `BUFF` effects active at once apply only the stronger; the weaker's expiry does not end the stronger.
 11. With `MP_REGEN0 = 2`, four `DAMAGE` companions at cost 10 / cooldown 100 fire 12 +/- 1 abilities per minute; replacing one with an E `MP_REGEN` companion (restores 16 per cast) raises the other three to full uptime (18 per minute).
 12. `ApplySummonResult` with a repeated `requestId` changes nothing; with a new one debits exactly the payload's `Debits` once (Local mode) or replaces the balances with the server's (Remote mode), updates pity and banner EXP to the payload's values, publishes one `ItemAcquired` per pull, `BannerLeveledUp` when the level rose, and one `summon` analytics event.

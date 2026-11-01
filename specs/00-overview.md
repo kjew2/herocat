@@ -248,7 +248,7 @@ Code must read every constant from content data (spec 09), never from a literal.
 | `PULL_COST[WEAPON/SKILL/COMPANION]` | 100 / 200 / 300 | S | Per single pull. 10-pull = 10x, no discount; discounting is done through banner level instead. Matches the reference game's pricing. |
 | `DAY_SECONDS` | 86400 | I | Day key = `floor(serverSeconds / DAY_SECONDS)`. Rollover 00:00 UTC. |
 | `OFFLINE_RATE` | 0.5 | I | Offline gold/EXP per second as a fraction of in-app kill rate at the current stage. |
-| `OFFLINE_CAP_H` | 24 | S | Reference game caps at 24 h. Sibling used 8 h; 24 h is friendlier and is what players expect in this sub-genre. Catch-up and 08's `offline_bound` use the effective cap `OFFLINE_CAP_H + 2 h * RES_OFFLINE_CAP level` (issue #21). |
+| `OFFLINE_CAP_H` | 24 | S | Reference game caps at 24 h. Sibling used 8 h; 24 h is friendlier and is what players expect in this sub-genre. Catch-up and 08's `OFFLINE_WINDOW_OVERLAP` check use the effective cap `OFFLINE_CAP_H + 2 h * RES_OFFLINE_CAP level` (issue #21). |
 | `OFFLINE_MIN_S` | 60 | S | Gaps shorter than this credit nothing and show no modal. |
 | `TUTORIAL_DIAMONDS` | 1500 | S | One-time grant at profile creation. |
 | `LOGIN_DIAMONDS` | 50 | I | Once per day key, auto-granted by `EnsureDay` with reason `LOGIN`. A `constants` row; the `d_login` daily quest only counts toward the bonus thresholds and pays nothing (issue #20). |
@@ -478,7 +478,7 @@ Known stale spots left for the next pass rather than patched blind: early-day st
 47. **`missileDpsPct` is rated-only** and never enters the live hit; any live display average is runtime-only, outside the save and `StateHash`. Issue #15.
 48. **Fish Coin merge payouts are unrounded `double`s** (05's values); 09 stops rounding them. Issue #16.
 49. **Jammed board**: a full board is jammed iff every level below the cap appears at most once; cap fish still do not merge (05 open question 7 default) and `DiscardFish` stays M0. Issue #17.
-50. **Fish Board gestures**: 05 owns behaviour, commands and events (discard entry, `LONG_PRESS_MS`); 07 owns presentation; the UI constants live in 07's constants list. Issue #18.
+50. **Fish Board gestures**: 05 owns behaviour, commands and events (discard entry, `UI_LONG_PRESS_MS`); 07 owns presentation; the UI constants live in 07's constants list. Issue #18.
 51. **Spec 05 errata applied** (and the 00 formula units and `FISH_COIN` sources). Issue #19.
 52. **Login diamonds are auto-granted** by `EnsureDay` with reason `LOGIN`; `d_login` pays nothing and only counts toward bonus thresholds, keeping the 400/day budget. Issue #20.
 53. **Offline catch-up details**: ticks pause behind `SCR_OFFLINE_REWARD`; the tank count uses 05's `CatchUpTank` over credited ticks at compute and applies at claim; a second gap sums into the pending record with the latest stage shown; the effective cap includes `RES_OFFLINE_CAP` (contract 7). Issue #21.
@@ -487,6 +487,6 @@ Known stale spots left for the next pass rather than patched blind: early-day st
 56. **One summon pull algorithm, 04's**: forced 10th slot is Epic only after a failed normal L+ check; `pity` = pulls since last L+ before this pull, `n = pity + 1`; banner level evaluated per pull; one vectors file `Fixtures/Summon/vectors.json` (section 6.3). Issue #24.
 57. **`IDungeonSeedService` is the seventh server-sensitive seam** (contract 11). Issue #25.
 58. **`TICKET_SUMMON_RUNE` is in the `Currency` enum from schema v1**, appended after `GUILD_COIN` and unused until P1 (section 5.2); rune `ATK_PCT` maps to `Stat.ATK`. Issue #26.
-59. **CI wraps `check.sh`**: `./check.sh` gains `--pr`, `--content` and `--nightly` modes and the workflows are thin path-filtered wrappers, so a green `./check.sh` still means green CI (section 3). Issue #27.
+59. **CI wraps `check.sh`**: `./check.sh` gains `--pr`, `--content` and `--nightly` modes (10 adds `--server` for the server-test job) and the workflows are thin path-filtered wrappers, so a green `./check.sh` still means green CI (section 3). Issue #27.
 60. **`StateHash` stays SHA-256**; the golden command log is JSONL in 01's command-log format (contract 12). Issue #28.
 61. **Bot sessions sometimes span the rollover**: gap lengths alternate so the evening session runs across 00:00 UTC on alternate days, keeping 120 active minutes in two sessions (amends decision 25; 10 section 3.3). Issue #29.

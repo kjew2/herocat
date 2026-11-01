@@ -184,7 +184,7 @@ public sealed class CombatState
     public CombatMode Mode          { get; set; } = CombatMode.Stage;
     public int    Stage             { get; set; } = 1;     // current farming stage, >= 1, <= STAGE_CAP
     public int    KillsInStage      { get; set; }          // 0..KILLS_PER_STAGE-1
-    public BossPhase Boss           { get; set; }          // replaces the v1 draft's bool BossActive so a wall survives a reload (issue #7)
+    public BossPhase Boss           { get; set; }          // None/Pending/Walled, so a wall survives a reload (issue #7)
     public int    BossFailsOnStage  { get; set; }          // reset on advance (03)
     public int?   Selected          { get; set; }          // MVP SCR_STAGE_SELECT choice; null = frontier (03)
     public double Mp                { get; set; }          // shared MP pool (04); regen per tick from Research
@@ -203,7 +203,7 @@ public sealed class FightState                              // in memory only; n
     public double EnemyHp           { get; set; }
     public double EnemyMaxHp        { get; set; }
     public bool   EnemyIsBoss       { get; set; }
-    public int    BossTicksLeft     { get; set; }          // 0..BOSS_TIME_TICKS (03 `BossTimer`)
+    public int    BossTicksLeft     { get; set; }          // 0..BOSS_TIME_TICKS (03 boss timer)
     public int    AttackProgress    { get; set; }          // fixed point, ATTACK_PROGRESS_UNIT (03 section 2.1)
     public List<DotInstance> ActiveDots { get; init; } = new();   // max 6 (03 section 2.3)
     public double AtkBuffPct        { get; set; }          // strongest active BUFF, percentage points
@@ -380,7 +380,7 @@ Stored server-side in `accounts` (section 12) and cached in `persistentDataPath/
 ### 5.1 File layout
 
 ```
-WHISKER-SAVE v=1 fmt=json crc32=7f3a19c2 len=38127 hmac=<64 hex>\n
+HEROCAT-SAVE v=1 fmt=json crc32=7f3a19c2 len=38127 hmac=<64 hex>\n
 { ...exactly len bytes of UTF-8 JSON... }
 ```
 
@@ -729,7 +729,7 @@ Recovery order, from best to worst outcome: (1) `slot0.sav`, (2) `slot0.prev.sav
 | `profile.json` | `Profile` cache | Included; harmless. |
 | `config_cache.json` | last remote config | Included. |
 | `content/<version>/` | downloaded bundles | Excluded (re-downloadable). |
-| `saves/cmdlog.ndjson` | command log (01 section 2.6) | Excluded. |
+| `saves/cmdlog.jsonl` | command log (01 section 2.6) | Excluded. |
 | `analytics/queue.ndjson` | pending events | Excluded. |
 
 ### 8.5 Known double-credit window
@@ -966,7 +966,7 @@ create table saves (                                       -- one row per player
   size_bytes        integer not null,
   sha256            bytea not null,
   hmac_valid        boolean not null,
-  blob_key          text not null,                         -- s3://whisker-saves-<env>/saves/{player_id}/{save_seq}.sav
+  blob_key          text not null,                         -- s3://herocat-saves-<env>/saves/{player_id}/{save_seq}.sav
   etag              text not null,                         -- opaque; changes on every write; used for If-Match
   progress_score    double precision not null,
   summary           jsonb not null,                        -- the "summary" object from 9.1
@@ -1043,9 +1043,11 @@ create table summon_log (                                  -- one row per pull (
   item_id         text not null, rarity char(1) not null,
   pity_before     smallint not null, pity_after smallint not null,
   banner_level    smallint not null,
-  guarantee       boolean not null,                        -- slot-10 E+ reroll applied
+  guarantee       boolean not null,                        -- slot 10 ran with forceEplus (04)
   rate_table_hash bytea not null,                          -- hash of the published rate table used (compliance)
-  roll_u          double precision not null,               -- the uniform draw, for audit reproduction
+  u1              double precision not null,               -- the pull's three uniforms in 04's fixed order (L+ check, rarity pick, item pick),
+  u2              double precision not null,               -- all logged so 08 can reproduce the pull exactly
+  u3              double precision not null,
   payment         text not null,                           -- DIAMOND | TICKET
   created_at      timestamptz not null default now()
 );
@@ -1165,10 +1167,10 @@ Names snake_case; properties camelCase. Economy events go to the backend `events
 | `currency_changed` | `currency` (code from 00 section 5.2), `delta` (double), `balanceAfter`, `reason` (closed enum, 00 section 8.6), `refId` (item/quest/banner id when applicable) | Sim `Wallet.Apply` -> sink | `KILL` and `BOSS` reasons are summed per currency over `CURRENCY_AGG_SEC` and emitted once; all other reasons per occurrence. |
 | `item_acquired` | `kind` (WEAPON/SKILL/COMPANION/RUNE), `itemId`, `rarity`, `isNew`, `copiesAfter`, `levelBefore`, `levelAfter`, `source` (SUMMON/MAIL/QUEST/ADMIN), `requestId` | Sim on `ItemAcquired` | One per item. |
 | `summon` | `requestId`, `banner`, `count`, `payment` (DIAMOND/TICKET), `diamondsSpent`, `ticketsSpent`, `pityBefore`, `pityAfter`, `bannerLevelBefore`, `bannerLevelAfter`, `results[]` of `{itemId, rarity, isNew, levelBefore, levelAfter, overflowRockCandy, guaranteeApplied}`, `lplusCount`, `guaranteeApplied` (bool, any slot), `source` (LOCAL/SERVER), `latencyMs` | Runtime after `ApplySummonResult` | One per batch, one schema shared with 04 section 13 (issue #13); per-pull audit detail is also in `summon_log`. |
-| `summon_reconciled` | `requestId`, `banner`, `currency`, `localDelta`, `serverDelta` | Runtime | Remote mode only: the server balance replaced a local delta that disagreed (issue #13). |
+| `summon_reconciled` | `requestId`, `banner`, `currency`, `localAfter`, `serverAfter` | Runtime | Remote mode only: the local balance minus `Debits` disagreed with the server balance that replaced it (issue #13; 04 section 13). |
 | `summon_pending` / `summon_resolved` | `requestId`, `banner`, `count`; resolved adds `latencySec`, `outcome` (replayed/executed/rejected) | Runtime | |
 | `stage_cleared` | `stage`, `isBoss`, `firstClear`, `diamondsGranted`, `attempts` (for a boss), `ticksOnStage`, `dps` | Sim | Feeds the 00 section 6.6 day table. |
-| `boss_failed` | `stage`, `bossHpLeftPct`, `attempt`, `voluntary` | Sim | Wall detection: first `boss_failed` on a stage = `wall_hit`. |
+| `boss_failed` | `stage`, `bossHpLeftPct`, `attempt` | Sim | Wall detection: first `boss_failed` on a stage = `wall_hit`. |
 | `wall_broken` | `stage`, `wallSec`, `activeSecDuringWall`, `attempts`, `layersChangedDuringWall[]` | Sim | |
 | `training` | `stat`, `levelFrom`, `levelTo`, `goldCost` | Sim | |
 | `level_up` | `heroLevel` | Sim | |

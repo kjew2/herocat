@@ -13,7 +13,7 @@ Start with `specs/00-overview.md`. It fixes the tech stack, the authority split,
 | `specs/04-summons-and-collections.md` | Banners, pity, banner level, weapons, skills, companions, runes |
 | `specs/05-fish-merge-minigame.md` | Board, tank, merge rules, discovery, missiles, auto-merge |
 | `specs/06-economy-and-daily-loop.md` | Currencies, daily sources/sinks, quests, dungeons, offline, shop, inbox |
-| `specs/07-screens-and-ux.md` | Navigation map, every screen, states, UX and design rules |
+| `specs/07-screens-and-ux.md` | Navigation map, every screen, states, UX and design rules, Unity client setup and device builds |
 | `specs/08-backend-and-live-ops.md` | Services, API contracts, auth, IAP, anti-cheat, config, compliance |
 | `specs/09-content-data-pipeline.md` | Table schemas, exporter, validation, `ContentDb`, localization |
 | `specs/10-testing-release-and-ops.md` | Test pyramid, bots, CI/CD, store release, KPIs, runbooks, roadmap |

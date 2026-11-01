@@ -56,7 +56,7 @@ Tick():
   TickBuffs()                                                              # 9. ATK/gold buffs from companions and skills -= 1
 ```
 
-State field names and shapes are 02's (section 3.1, issue #7): `Time.Tick`, `Combat.*`, `Progress.*`, `Loadout.*`, `Stats.*`. Everything this loop reads or writes lives in the in-memory `GameState`, so `DeepClone` and replay are exact. The save drops only the transient fight state 02 section 3.3 lists (enemy HP, `Phase`, `SpawnTimer`, `AttackProgress`, `ActiveDots`, buffs, `PendingTaps`, `TapWindowTick`); it keeps `Combat.Boss`, `Combat.BossFailsOnStage`, `Combat.Selected`, `Combat.Mp`, the skill and companion cooldowns and `Combat.MissileQueue`. On load the player faces a fresh mob and a `Pending` boss respawns as the boss.
+State field names and shapes are 02's (section 3.1, issue #7): `Time.Tick`, `Combat.*`, `Progress.*`, `Loadout.*`, `Stats.*`. Everything this loop reads or writes lives in the in-memory `GameState`, so `DeepClone` and replay are exact. The save drops only the transient fight state 02 section 3.3 lists, which lives in `Combat.Fight` (02's `FightState`; the pseudocode below writes `Combat.EnemyHp`, `Combat.Phase`, `Combat.BossTicksLeft` and the like as shorthand for `Combat.Fight.EnemyHp` and so on): enemy HP, `Phase`, `SpawnTimer`, `AttackProgress`, `ActiveDots`, buffs, `PendingTaps`, `TapWindowTick`. It keeps `Combat.Boss`, `Combat.BossFailsOnStage`, `Combat.Selected`, `Combat.Mp`, the skill and companion cooldowns and `Combat.MissileQueue`. On load the player faces a fresh mob and a `Pending` boss respawns as the boss.
 
 `ATTACK_PROGRESS_UNIT = 100` (integer fixed point). At `ATK_SPD` level 0 the hero gains 100 units per tick and hits every `ATTACK_INTERVAL_TICKS = 10` ticks, one hit per second. At `ATK_SPD` level `n` the gain is `100 * (1 + TRAIN_PER_LVL[ATK_SPD] * n)` rounded to an integer, so level 100 (cap, +100%) is 200 units per tick and one hit every 5 ticks. Integer arithmetic keeps the hit schedule identical on every platform; a `double` accumulator would not (00 section 3, determinism row).
 
@@ -242,7 +242,7 @@ In words: **if a normal mob on this stage takes more than three seconds of hero 
 |---|---|---|
 | `Combat.Stage` | `int` | Current stage `s >= 1`. |
 | `Combat.KillsInStage` | `int` | `0 .. KILLS_PER_STAGE-1`. |
-| `Combat.Boss` | `BossPhase` | `None`, `Pending` (next spawn is the boss), `Walled` (boss failed, farming mobs). Replaces 02's `BossActive` bool, which cannot represent `Walled` (issue #7). |
+| `Combat.Boss` | `BossPhase` | `None`, `Pending` (next spawn is the boss), `Walled` (boss failed, farming mobs). 02's type; a bool could not represent `Walled` (issue #7). |
 | `Combat.BossFailsOnStage` | `int` | Reset on advance. |
 | `Combat.Selected` | `int?` | MVP: stage chosen with `SelectStage` in `SCR_STAGE_SELECT`; null = frontier. |
 | `Progress.HighestCleared` | `int` | Highest stage completed (all kills, or the boss); the Awakening gate reads it. |
@@ -311,7 +311,7 @@ Why these shapes:
 - `ATK_SPD` is capped at exactly 2x so the integer attack schedule stays simple and the boss math in section 2.8 stays readable. It is deliberately the cheapest early doubling: level 100 costs `50 * (1.07^100 - 1) / 0.07 = 6.1e5` gold in total, affordable late on day 1.
 - `GOLD_GAIN` and `EXP_GAIN` are investment stats. A level of `GOLD_GAIN` is worth `ln(1 + 0.02/(1 + 0.02 n)) / ln(1.07)` future `ATK` levels; the bot (section 8.3) values it at half that to account for the delay.
 
-`TrainStat(stat, count)` is all-or-nothing for `count` in `TRAIN_BULK_STEPS` (1, 10, 100) and `TrainStatMax(stat)` buys while affordable. Both use 01's `RejectCode` with the specific reason in `ApplyResult.Reason` (issue #11): `Locked`/`STAT_NOT_TRAINABLE` for `HP`/`DEF` in MVP, `Capped`/`STAT_AT_CAP` at the cap, `CannotAfford`/`GOLD` otherwise. On success they publish `StatTrained(stat, newLevel)` and mark DPS dirty. Bulk cost is the closed form `50 * 1.07^n * (1.07^m - 1) / 0.07`, quoted and charged identically; `MaxAffordable` is computed by walking the `GeometricTable` (no logarithm, 00 section 8 item 1).
+`TrainStat(stat, count)` is all-or-nothing for `count` in `TRAIN_BULK_STEPS` (1, 10, 100) and `TrainStatMax(stat)` buys while affordable. Both use 01's `RejectCode` with the specific reason in `ApplyResult.Reason` (issue #11): `Locked`/`STAT_NOT_TRAINABLE` for `HP`/`DEF` in MVP, `Capped`/`STAT_AT_CAP` at the cap, `CannotAfford`/`NOT_ENOUGH_GOLD` otherwise. On success they publish `StatTrained(stat, newLevel)` and mark DPS dirty. Bulk cost is the closed form `50 * 1.07^n * (1.07^m - 1) / 0.07`, quoted and charged identically; `MaxAffordable` is computed by walking the `GeometricTable` (no logarithm, 00 section 8 item 1).
 
 ### 5.2 Hero Level
 
@@ -349,7 +349,7 @@ Awaken():                                                   # command, from SCR_
   r = Hero.AwakenRank
   if r >= AWAKEN_STAGES.Length:                        return Reject(Capped, "AWAKEN_MAX_RANK")
   if Progress.HighestCleared < AWAKEN_STAGES[r]:       return Reject(Locked, "AWAKEN_STAGE_NOT_REACHED")
-  if Wallet.RockCandy < AWAKEN_COST_ROCK_CANDY[r]:     return Reject(CannotAfford, "ROCK_CANDY")
+  if Wallet.RockCandy < AWAKEN_COST_ROCK_CANDY[r]:     return Reject(CannotAfford, "NOT_ENOUGH_ROCK_CANDY")
   Wallet.Apply(-AWAKEN_COST_ROCK_CANDY[r] ROCK_CANDY, AWAKENING)                   # reason per 00 contract 6 (issue #11)
   Hero.AwakenRank = r + 1; MarkDpsDirty()
   publish Awakened(Hero.AwakenRank)
@@ -374,9 +374,9 @@ Cost of level `k -> k+1` of node `x` is `RES_COST0[x] * RES_COST_G[x]^k` Fish Co
 | `res_fish_cap` | `FishMaxLvl += 1` | 10 | 2500 | 2.00 | 1.3e6 | Opens the next fish level and its discovery payout; the Fish Board's growth engine (05 section 8). |
 | `res_offline_cap` | `OfflineCapH += 2` | 6 | 500 | 1.50 | 3.8e3 | Only matters to players who skip a day; cheap on purpose. |
 
-Research effects are read by the sim through `Query` (`MpPoolMax`, `MpRegenPerTick`, `TankCap`, `TankRefillTicks`, `FishMaxLvl`, `OfflineCapH`, `GoldMult`, `ResearchPct`). Node ids are the `research` table's lowercase `res_*` ids (09; issue #11). `Research(nodeId)` buys one level: rejects `Capped`/`RESEARCH_MAXED`, `Locked`/`RESEARCH_LOCKED` (before Awakening rank 1), `CannotAfford`/`FISH_COIN`; charges with reason `RESEARCH`; publishes `ResearchLeveled(nodeId, newLevel, cost)`; marks DPS dirty when the node affects it.
+Research effects are read by the sim through `Query` (`MpPoolMax`, `MpRegenPerTick`, `TankCap`, `TankRefillTicks`, `FishMaxLvl`, `OfflineCapH`, `GoldMult`, `ResearchPct`). Node ids are the `research` table's lowercase `res_*` ids (09; issue #11). `Research(nodeId)` buys one level: rejects `Capped`/`RESEARCH_MAXED`, `Locked`/`RESEARCH_LOCKED` (before Awakening rank 1), `CannotAfford`/`NOT_ENOUGH_FISH_COIN`; charges with reason `RESEARCH`; publishes `ResearchLeveled(nodeId, newLevel, cost)`; marks DPS dirty when the node affects it.
 
-`res_offline_cap` extends the 24 h base cap from 00 decision 3; it does not change the base. Catch-up (06) and 08's `offline_bound` use the effective cap `OFFLINE_CAP_H + 2 h * res_offline_cap level` (issue #21).
+`res_offline_cap` extends the 24 h base cap from 00 decision 3; it does not change the base. Catch-up (06) and 08's `OFFLINE_WINDOW_OVERLAP` check use the effective cap `OFFLINE_CAP_H + 2 h * res_offline_cap level` (issue #21).
 
 Fish Coin income that pays for this is roughly `0.2 * (FishMaxLvl - 1)` coins per level-1 fish fully merged (05 section 8), about 1,800 to 2,500 per 2 h active day at Research 0, plus the Fish Coin Dungeon (06; the bot assumes `FISH_COIN_PER_DAY_DUNGEON_ASSUMED = 1000`). Against that income the costs above mean: all MP nodes to level 4 by day 3, `res_fish_cap` level 1 around day 3, level 2 around day 7, level 3 around day 14, level 4 around day 28, `res_atk` to about level 15 by day 30. The doubling cost of `res_fish_cap` is what turns linear coin income into a log-in-time Fish Board layer, which is the intended shape: fast at first, never finished.
 
@@ -415,7 +415,7 @@ missile       = HeroHit * f                                          # 05; rated
 tap           = HeroHit * TAP_ZAP_DMG_PCT                            # not in the rated DPS; the bot never taps
 ```
 
-At speed 1 with no crit `SkillUnit == HeroHit`, which is the unit 04's per-cast derivation states. `CompanionUnit` carries the skill factor so that hero + skills + companions multiply as the rated formula does instead of adding. A `BUFF` skill or `BUFF_ATK` companion is rated through its informational `dps_pct` (04) and realised as the hero-attack buff; buff uptime overlap, MP-gating and missiles are the only parts of the rated value that are approximations. Test (acceptance 20): measured DPS over a long fight equals `RatedDps` within 1%.
+At speed 1 with no crit `SkillUnit == HeroHit`, which is the unit 04's per-cast derivation states. `CompanionUnit` carries the skill factor so that hero + skills + companions multiply as the rated formula does instead of adding. TODO(#243): whether companion damage should scale with the equipped skills is an open design question. A `BUFF` skill or `BUFF_ATK` companion is rated through its informational `dps_pct` (04) and realised as the hero-attack buff; buff uptime overlap, MP-gating and missiles are the only parts of the rated value that are approximations. Test (acceptance 20): measured DPS over a long fight equals `RatedDps` within 1%.
 
 ### 7.2 Units
 
@@ -604,7 +604,7 @@ Summons are not a client stream (00 section 8 item 2). Draws are consumed even w
 9. `TrainStat(ATK, 10)` with insufficient gold changes nothing; with sufficient gold charges exactly the closed-form bulk cost and raises `atkMult` by `0.5`; `TrainStat(CRIT_RATE, 1)` at level 300 is rejected with `Capped`/`STAT_AT_CAP`; `TrainStat(HP, 1)` is rejected with `Locked`/`STAT_NOT_TRAINABLE` in MVP; a successful purchase publishes one `StatTrained`.
 10. `critFactor`, `speedFactor`, `heroMult`, `awakenMult` and `researchPct` from `Query` equal hand-computed values for a fixture with `CRIT_RATE` 120, `CRIT_DMG` 80, `ATK_SPD` 100, hero level 50, Awakening rank 2, `res_atk` 7, within relative 1e-12.
 11. A `Wallet.Apply(HERO_EXP)` crossing two thresholds in one grant raises the level by 2 and publishes two `LevelUp` events; `heroMult` equals `HERO_LVL_MULT^level` from the `GeometricTable` (bit-identical on x64, ARM64, IL2CPP per 10's golden-file test).
-12. `Awaken()` is rejected with `Locked`/`AWAKEN_STAGE_NOT_REACHED` at `Progress.HighestCleared == 49`, with `CannotAfford`/`ROCK_CANDY` at stage 50 with 99 candy, succeeds at 100 candy charging exactly 100 with reason `AWAKENING`, and opens companion slot 2.
+12. `Awaken()` is rejected with `Locked`/`AWAKEN_STAGE_NOT_REACHED` at `Progress.HighestCleared == 49`, with `CannotAfford`/`NOT_ENOUGH_ROCK_CANDY` at stage 50 with 99 candy, succeeds at 100 candy charging exactly 100 with reason `AWAKENING`, and opens companion slot 2.
 13. `Research(res_fish_cap)` at level 0 charges 2,500 Fish Coins, at level 9 charges 1,280,000, at level 10 is rejected with `Capped`/`RESEARCH_MAXED`; before Awakening rank 1 every `Research` call is rejected with `Locked`/`RESEARCH_LOCKED`.
 14. With four companions equipped, `MP_REGEN0 = 2`, costs 10 and cooldowns 100 ticks, the sim fires 12 +/- 1 companion abilities per minute (not 24); after `res_mp_regen` level 4 it fires 24 per minute.
 15. Deterministic: two fresh profiles with seed 7, the same scripted commands and `Advance(1_000_000)` produce field-equal `GameState` graphs and identical event sequences; a `DeepClone` taken mid-boss continues identically.

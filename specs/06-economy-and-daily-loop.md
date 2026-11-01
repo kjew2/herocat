@@ -79,9 +79,9 @@ M0 ships `GOLD`, `DIAMOND`, `FISH_COIN`, `HERO_EXP`; the tutorial grant; Offline
 
 ### 1.3 Reject reasons
 
-Every economy command rejects through 01's `ApplyResult.Reject(RejectCode, Detail)`: the `RejectCode` is 01's generic category (UI styling), and `Detail` is a reason string from the closed list below, which the UI localizes as `reject.<reason>` (issue #11). A rejection changes no state and emits no event. Tests assert both the code and the reason. This spec owns this list; a new reason is added here first.
+Every economy command rejects through 01's `ApplyResult.Reject(RejectCode, reason)`: the `RejectCode` is 01's generic category (UI styling), and `ApplyResult.Reason` is an UPPER_SNAKE reason key from the closed list below, which the UI localizes as `reject.<reason>` (issue #11). A rejection changes no state and emits no event. Tests assert both the code and the reason. This spec owns this list; a new reason is added here first.
 
-| Reason (`Detail`) | `RejectCode` | Raised by |
+| Reason (`ApplyResult.Reason`) | `RejectCode` | Raised by |
 |---|---|---|
 | `NOT_ENOUGH_<CURRENCY>` (e.g. `NOT_ENOUGH_DIAMOND`) | `CannotAfford` | any command that debits (rule 4) |
 | `UNKNOWN_ID` | `InvalidTarget` | `ClaimQuest`, `ExchangeItem` with an id not in content |
@@ -164,7 +164,7 @@ Runs in every `ApplyServerTime`, on every sim tick against the virtual clock (ch
 ```csharp
 void EnsureDay(long now)
 {
-    long day = now / DAY_SECONDS;
+    int day = (int)(now / DAY_SECONDS);                     // int day keys as in 02 (Time.DayKey)
     if (day <= State.Time.DayKey) return;                   // <= : a backwards clock never re-grants a day
     State.Time.DayKey = day;
 
@@ -175,7 +175,7 @@ void EnsureDay(long now)
     State.Shop.DailyGiftClaimed = false;
     State.Shop.ExchangeCounts.Clear();
 
-    long week = (day + 3) / 7;
+    int week = FloorDiv(day - 4, 7);                        // floor((dayKey - 4) / 7), Monday 00:00 UTC (00 decision 21); same as WeekKey() above
     if (week > State.Time.WeekKey)
     {
         State.Time.WeekKey = week;
@@ -227,7 +227,7 @@ Rules:
 
 ```csharp
 public enum QuestKind : byte { DAILY, WEEKLY, ACHIEVEMENT }
-public enum QuestState : byte { IN_PROGRESS, COMPLETED, CLAIMED }
+public enum QuestStatus { IN_PROGRESS, COMPLETED, CLAIMED }   // 02
 public enum QuestGoal : byte
 {
     LOGIN, LOGIN_DAYS, KILL_ENEMIES, ATTEMPT_BOSS, CLEAR_STAGES, SUMMON, RELEASE_FISH, MERGE_FISH,
@@ -243,7 +243,7 @@ public sealed record QuestDef(string Id, QuestKind Kind, QuestGoal Goal, string?
 public sealed class QuestProgress   // one per QuestDef, in GameState.Quests.Daily / .Weekly / .Achievement[questId] (02, issue #7)
 {
     public long Progress;           // keeps counting past Target for display
-    public QuestState State;
+    public QuestStatus State;
 }
 ```
 
@@ -407,13 +407,14 @@ public static CatchupResult? Compute(GameState s, ContentDb db, long serverNow)
     if (gap < 0) { s.Sink.Emit(new ClockWentBackwards(-gap)); return null; }    // grants nothing; LastTick unchanged
     if (gap < db.OFFLINE_MIN_S)                                          // no modal, no gold or EXP
     {
-        FishBoard.CatchUpTank(s, db, gap * TICK_HZ);                     // 05: short gaps still refill the tank, applied directly (issue #21)
+        var (added, refillAfter) = FishBoard.CatchUpTank(s, db, gap * TICK_HZ);   // 05 section 3: short gaps still refill the tank,
+        s.Fish.TankCount += added; s.Fish.TankRefillTick = refillAfter;           // applied directly (issue #21; 02 AC 11 exception)
         s.Time.LastTickServerTime = serverNow;
         return null;
     }
 
     var  prev     = s.Offline.Pending;                                   // non-null when a reward from an earlier gap is unclaimed
-    long capSec   = Economy.OfflineCapSeconds(s, db);                    // (OFFLINE_CAP_H + 2 h per RES_OFFLINE_CAP level) * 3600: 24 h to 36 h (00 decision 12, issue #21)
+    long capSec   = (long)(Query.OfflineCapH(s, db) * 3600);             // 03's Query: (OFFLINE_CAP_H + 2 h per RES_OFFLINE_CAP level) * 3600: 24 h to 36 h (00 decision 12, issue #21)
     long credited = Math.Max(0, Math.Min(gap, capSec - (prev?.CreditedSec ?? 0)));   // the cap applies to the stacked sum
 
     int    stage    = s.Combat.Stage;                                    // the stage being farmed, walled or not
@@ -421,8 +422,7 @@ public static CatchupResult? Compute(GameState s, ContentDb db, long serverNow)
     double killsPerSec = 1.0 / killTime;
     double gold = credited * db.OFFLINE_RATE * Economy.GoldPerKill(s, db, stage) * killsPerSec;   // GoldPerKill includes GOLD_GAIN training
     double exp  = credited * db.OFFLINE_RATE * Economy.ExpPerKill(s, db, stage)  * killsPerSec;   // includes EXP_GAIN training
-    int tankFill = FishBoard.CatchUpTankCount(s, db, credited * TICK_HZ, alreadyPending: prev?.TankFill ?? 0);
-                                                                         // 05 CatchUpTank arithmetic over credited ticks; read-only here, applied at claim
+    int tankFill = FishBoard.CatchUpTank(s, db, credited * TICK_HZ).added;  // 05 section 3 over credited ticks; read-only here, applied at claim (clamped to TankCap)
 
     long elapsedSum  = gap + (prev?.ElapsedSec ?? 0);
     long creditedSum = credited + (prev?.CreditedSec ?? 0);
@@ -440,14 +440,14 @@ public static ApplyResult ClaimOfflineReward(GameState s, ContentDb db)
     if (r is null) return Reject(NotAvailable, "NO_PENDING_OFFLINE_REWARD");
     s.Wallet.Apply(new(Currency.GOLD, r.Gold), CurrencyReason.OFFLINE, s.Sink);
     s.Wallet.Apply(new(Currency.HERO_EXP, r.Exp), CurrencyReason.OFFLINE, s.Sink);   // writes Hero.Exp; then runs 03's CheckHeroLevel (03 section 5.2)
-    FishBoard.AddTankFish(s, db, r.TankFill);                            // 05: TankCount = min(TankCap, TankCount + TankFill), refill progress per 05
+    s.Fish.TankCount = Math.Min(Query.TankCap(s, db), s.Fish.TankCount + r.TankFill);   // 05 section 7; TankRefillTick per 05 section 3
     s.Offline.Pending = null;
     s.Sink.Emit(new OfflineRewardClaimed(r));
     return Accepted;
 }
 ```
 
-What it does not do, by design: no stage progress, no kills counted, no drops, no Rock Candy, no quest progress, no RNG stream advanced, no boss attempts. Offline time is a rate multiplied by a duration and nothing else, so it is cheap to re-derive on the server (08 plausibility check `offline_bound`: credited gold <= `OfflineCapSeconds * OFFLINE_RATE * GoldPerKill(stage) / KillTimeSeconds(stage)` with a 2% tolerance, where `OfflineCapSeconds` includes the `RES_OFFLINE_CAP` extension).
+What it does not do, by design: no stage progress, no kills counted, no drops, no Rock Candy, no quest progress, no RNG stream advanced, no boss attempts. Offline time is a rate multiplied by a duration and nothing else, so it is cheap to re-derive on the server (08's plausibility checks `OFFLINE_WINDOW_OVERLAP`, credited offline seconds bounded by the wall-clock gap plus the effective cap including the `RES_OFFLINE_CAP` extension, and `GOLD_DELTA_BOUND`).
 
 Pending-reward persistence: `Offline.Pending` is in the save. If the app dies between compute and claim, the next launch finds the pending reward and shows the modal again rather than recomputing from a moved `LastTickServerTime`. If a second gap occurs while a reward is pending (user backgrounds the app on the modal), the new gap is computed against the already-moved `LastTickServerTime` and added into the pending record (`Gold += ...`, `ElapsedSec += ...`, `TankFill += ...`; the cap applies to the summed `CreditedSec` and `Capped` is recomputed against the sum). `Stage` and `KillTimeSec` are the latest gap's and serve the display only (issue #21).
 
@@ -656,7 +656,7 @@ All carry `playerId`, `serverTime`, `dayKey`, `stage`, `clientVersion`, `content
 26. Day rollover grants exactly `LOGIN_DIAMONDS` once with `CurrencyReason.LOGIN`; `d_login` reaches `CLAIMED` with no `CurrencyChanged` and counts toward `d_bonus_5`/`d_bonus_8`; a second `ApplyServerTime` on the same day key grants nothing (issue #20).
 27. Offline: a 2 h gap stores `TankFill` in `Offline.Pending` and leaves `Fish.TankCount` unchanged until `ClaimOfflineReward`, which adds it bounded by `TankCap`; with `RES_OFFLINE_CAP` at 6 levels a 40 h gap yields `CreditedSec` = 129,600; two stacked gaps of 20 h each at Research 0 yield `CreditedSec` = 86,400, `ElapsedSec` = 144,000, `Capped` = true and the second gap's `Stage` (issue #21).
 28. Replaying the command log (`ApplyServerTime`, `ComputeOfflineCatchup`, `Advance`, commands) from the prior save reproduces the same `Offline.Pending`, day keys and `StateHash` as the live session (issues #5, #6).
-29. Every economy rejection returns the `RejectCode` and `Detail` reason listed in section 1.3, changes no state and emits no event (issue #11).
+29. Every economy rejection returns the `RejectCode` and `Reason` key listed in section 1.3, changes no state and emits no event (issue #11).
 
 ## Constants introduced
 

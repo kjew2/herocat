@@ -208,7 +208,7 @@ Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them
 | Kill counter | `Combat.KillsInStage / KILLS_PER_STAGE` | red when `IsWalled` |
 | WALL badge | `Combat.IsWalled` | |
 | Enemy sprite, HP bar | `Combat.EnemyId`, `EnemyIsBoss`, `EnemyHp`, `EnemyMaxHp` | HP bar text "1.2M / 1.7M" |
-| Boss timer bar | `Combat.BossTimerTicks / BOSS_TIME_TICKS` | boss only; turns `bad` under 5 s |
+| Boss timer bar | `Combat.Fight.BossTicksLeft / BOSS_TIME_TICKS` | boss only; turns `bad` under 5 s |
 | Hero sprite | `Hero.AwakenRank` (tint/aura), `Loadout.Weapon` (held sprite) | |
 | Damage numbers | from `HitLanded` (hero hits, crit flag), `SkillCast`, `CompanionAbilityUsed` and `FishMissileHit` events (issue #11) | pooled, section 13 |
 | DPS readout | `Combat.Dps` | updates at most 2 Hz |
@@ -295,7 +295,7 @@ Purpose: the 30-weapon collection, equip, level-up readout, and the owned-collec
 
 Events: `ItemAcquired(kind=WEAPON)` (tile flips from "?" or copies tick up, `IsNew` set; a level change is read from the snapshot, level is derived from copies, 04), `ItemEquipped(WEAPON)` (equipped summary swap; also fires with `auto: true` after a summon's `AutoEquipBestWeapon`).
 
-States: Empty is impossible after the tutorial (the first summon is scripted). New badges clear when the tile is tapped or the screen is left (`cmd MarkSeen(ids)` is a client-side pref, not a sim command). Locked: none.
+States: Empty is impossible after the tutorial (the first summon is scripted). New badges clear when the tile is tapped or the screen is left (a client-side profile/UI store update, not a sim command; issue #7). Locked: none.
 
 ### 4.6 `SCR_SKILLS` (Full, M0)
 
@@ -397,7 +397,7 @@ Purpose: the diamond sink. One tab per banner; 1x and 10x; rates, pity and banne
 |---|---|
 | Banner tabs | `Banners[b]`: `Unlocked`, `BadgeNewLevel`; Companion tab locked before its unlock stage |
 | Banner level | `Level`, `Exp`, `ExpToNext` (04 thresholds) |
-| Pity | `PityCounter`, `PITY_SOFT_START`, `PITY_HARD`; bar with a marker at 50 |
+| Pity | `Banners[b].Pity`, `PITY_SOFT_START`, `PITY_HARD`; bar with a marker at 50 |
 | View rates | opens a rates panel (inline, not a new screen) listing the published table for the current banner level from `RateTable[level]` (04) and the pity ramp rows |
 | Summon x1 / x10 | `PullCost`, `CanPull1`, `CanPull10` (diamond balance); `cmd Summon(banner, count: 1 or 10, payment: DIAMOND, requestId)` |
 | Use ticket | `TicketCount`; `cmd Summon(banner, 1, payment: TICKET, requestId)`; hidden when 0 |
@@ -683,7 +683,7 @@ States: offline shows account actions disabled with "Needs connection". Dev buil
 |---|---|
 | Name | `DisplayName`; `[Edit]` opens a text field (2 to 12 chars, server-filtered, 08); `Profile.Rename(name)` |
 | Avatar | `AvatarId` from a fixed set of 12 cat portraits; `Profile.SetAvatar(id)` |
-| Stats | `Progress.HighestCleared`, `Hero.Level`, `Awaken.Rank`, `TotalSummons`, `LifetimeMerges`, `Collection counts x3`, `CreatedAt`, `PlayDays` |
+| Stats | `Progress.HighestCleared`, `Hero.Level`, `Hero.AwakenRank`, `Stats.Pulls`, `Stats.Merges`, `Collection counts x3`, `CreatedAt`, `PlayDays` |
 | Player id | `PlayerId` with copy button (support) |
 
 ### 4.22 `SCR_GUILD` (Full, P1)
@@ -1078,7 +1078,7 @@ Release build
 4. **CJK number ladders.** ja/ko/zh players expect 万/億 grouping. Owner: localization. Default: K/M/B everywhere in MVP; revisit with soft-launch feedback.
 5. **Stage select farming.** Letting the player farm a lower stage interacts with `GOLD_GAIN` and kill-time tuning (03). Owner: 03. Default: allowed, with every reward bound to `Progress.HighestCleared` as in section 4.14.
 6. **`MoveFish` command.** Resolved: `MoveFish(src, dst)` is in 00's command vocabulary (00 decision 22); 07 sends it on a drop onto an empty cell.
-7. **`MarkSeen` for new badges.** Resolved (issue #7): new badges stay out of the sim (no `MarkSeen` sim command) and persist in the local profile/UI store, so they never affect state hashes or replays.
+7. **New-item badges.** Resolved (issue #7): new badges stay out of the sim (no sim command) and persist in the local profile/UI store, so they never affect state hashes or replays.
 8. **Added screens.** `SCR_CONFIRM` and `SCR_ERROR` should be lifted into 00 section 5.3 as M0 modals.
 
 ## Acceptance criteria

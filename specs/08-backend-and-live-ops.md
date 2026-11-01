@@ -203,7 +203,7 @@ public sealed record RateTable(double C, double R, double E, double L, double M)
 }
 ```
 
-Pity is defined once (issue #24): `pity` = pulls on this banner since the last L+ result, **before** this pull, held server-side in `banner_pity` (the client's `Banners[b].PityCounter` mirrors it). The pull's index is `n = pity + 1`, and its L+ probability is 04's `PityRate(n)` (04 section 3.1):
+Pity is defined once (issue #24): `pity` = pulls on this banner since the last L+ result, **before** this pull, held server-side in `banner_pity` (the client's `Banners[b].Pity` mirrors it). The pull's index is `n = pity + 1`, and its L+ probability is 04's `PityRate(n)` (04 section 3.1):
 
 ```
 pLPlus(n) = n <= PITY_SOFT_START            ? table.LPlus                                   // pulls 1..50: 0.03
@@ -253,13 +253,13 @@ Handle(player, req):
     if payment == DIAMOND: balance = sum(diamond_ledger) ; if balance < cost: 402 INSUFFICIENT_FUNDS {need, have}
     else: tickets = server ticket ledger (06 keeps summon tickets server-side from MVP); if tickets < count: 402 INSUFFICIENT_FUNDS
     if payment == DIAMOND and tickets >= count: 409 PAYMENT_MISMATCH {expected: "TICKET"}   // 06 rule: tickets first; client out of date
-    st  = BannerState { PityCounter = pity.pity, TotalPulls = pity.total_pulls, BannerExp = pity.exp }      // cumulative exp; level derived
+    st  = BannerState { Pity = pity.pity, TotalPulls = pity.total_pulls, Exp = pity.exp }      // cumulative exp; level derived
     col = CollectionState from the player's item ledger (granted_items + summon_log aggregates)
     results = count == 10 ? Pull10(content.Banner(banner), st, col, csprng)                                  // 04 section 3.2; banner level and
                           : [Pull(content.Banner(banner), st, col, csprng, forceEplus: false)]               // rate table evaluated per pull
     insert count rows into summon_log (one per pull, with that pull's u1/u2/u3, pity_before/after, banner level, guarantee, rate_table_hash of that pull's table)
     insert diamond_ledger (-cost, SUMMON, ref summon, request_id) or decrement ticket ledger
-    update banner_pity: pity = st.PityCounter, exp = st.BannerExp, level = levelFor(exp) (04 section 4 thresholds), total_pulls = st.TotalPulls
+    update banner_pity: pity = st.Pity, exp = st.Exp, level = levelFor(exp) (04 section 4 thresholds), total_pulls = st.TotalPulls
     isNew/levelBefore/levelAfter/copiesAfter/overflowRockCandy come from the Pull results; append items to the ledger
     insert idempotency(final, response)
   release lock; return response
@@ -279,16 +279,16 @@ One `summon_log` row per pull, never per batch, so a regulator or support agent 
 
 ```json
 { "banner": "WEAPON", "level": 4, "contentVersion": "2026.11.03", "rateTableHash": "3f9a…",
-  "rates": { "C": 0.52, "R": 0.33, "E": 0.12, "L": 0.025, "M": 0.005 },
+  "rates": { "C": 0.540, "R": 0.316, "E": 0.114, "L": 0.025, "M": 0.005 },
   "pity": { "softStart": 50, "softStepPerPull": 0.0325, "hard": 80, "lplusAtSoftStart": 0.03 },
   "tenPullGuarantee": "EPIC_OR_BETTER",
   "effective": { "lplusPerPullAveraged": 0.0366, "expectedPullsToLplus": 27.3, "p99PullsToLplus": 62 },
   "items": [ { "itemId": "wpn_001", "rarity": "C", "weight": 1 }, "..." ] }
 ```
 
-`effective` numbers are computed by `tools/gacha_model.py` at export time and stored in `banner_levels` so the server serves exactly what the model printed. `SCR_SUMMON` renders this endpoint's body (07); the same JSON is exported to the store listing's odds page (section 10.3).
+`rates` is 04 section 4's level-4 row. `effective` numbers are computed by `tools/gacha_model.py` at export time and stored in `banner_levels` so the server serves exactly what the model printed. `SCR_SUMMON` renders this endpoint's body (07); the same JSON is exported to the store listing's odds page (section 10.3).
 
-**`GET /summon/state`** -- `jwt` -- 30/min -> `{ "banners": { "WEAPON": { "pity": 23, "level": 4, "bannerExp": 412, "totalPulls": 412 }, ... } }`. `bannerExp` is cumulative and `level` is derived from it (04 section 4; returned for display only). The client calls it at boot to overwrite the `Banners[b]` mirrors (`PityCounter`, `TotalPulls`, `BannerExp`).
+**`GET /summon/state`** -- `jwt` -- 30/min -> `{ "banners": { "WEAPON": { "pity": 23, "level": 4, "bannerExp": 412, "totalPulls": 412 }, ... } }`. `bannerExp` is cumulative and `level` is derived from it (04 section 4; returned for display only). The client calls it at boot to overwrite the `Banners[b]` mirrors (`Pity`, `TotalPulls`, `Exp`).
 
 ### 4.6 M0 note
 
@@ -428,7 +428,7 @@ Each check yields `(flag, severity, evidence)`; severity `info | suspicious | ce
 
 ### 7.3 Re-simulation spot check
 
-The server references `HeroCat.Sim`, so it can replay. Sampling: 1% of uploads at random plus 100% of uploads carrying any `suspicious` flag. The server requests the command log (`GET` is impossible server-side; the next `PUT /save` response carries `"requestCmdLog": true` and the client includes `saves/cmdlog.ndjson` in its next upload as a second part). Replay: load previous blob, apply `Advance` and the logged commands in log order. Runtime-originated changes are logged system commands (`ApplyServerTime` at sync points, `ComputeOfflineCatchup`, `ApplySummonResult` with its recorded payload; issues #5, #6), and `ApplySummonResult` itself performs the debit and, in Local mode, sets the summon stream counter, so the replay needs no service and no special records. Compare the resulting SHA-256 `StateHash` to the uploaded one (issue #28). Divergence -> `REPLAY_DIVERGENCE`. Cost: one replay of a 2 h session is ~72,000 ticks, under 2 s on one core; at 1% sampling and 100k DAU that is ~2,000 replays a day, negligible.
+The server references `HeroCat.Sim`, so it can replay. Sampling: 1% of uploads at random plus 100% of uploads carrying any `suspicious` flag. The server requests the command log (`GET` is impossible server-side; the next `PUT /save` response carries `"requestCmdLog": true` and the client includes `saves/cmdlog.jsonl` in its next upload as a second part). Replay: load previous blob, apply `Advance` and the logged commands in log order. Runtime-originated changes are logged system commands (`ApplyServerTime` at sync points, `ComputeOfflineCatchup`, `ApplySummonResult` with its recorded payload; issues #5, #6), and `ApplySummonResult` itself performs the debit and, in Local mode, sets the summon stream counter, so the replay needs no service and no special records. Compare the resulting SHA-256 `StateHash` to the uploaded one (issue #28). Divergence -> `REPLAY_DIVERGENCE`. Cost: one replay of a 2 h session is ~72,000 ticks, under 2 s on one core; at 1% sampling and 100k DAU that is ~2,000 replays a day, negligible.
 
 Dungeon correlation: for every `dungeon_seeds` row with `result null` older than its TTL, compare `BestFloor[kind]` and `Stats.DungeonClears` between the two uploads bracketing the issue time; a `BestFloor` increase with no issued seed for that floor is `DUNGEON_WITHOUT_SEED` (`certain`).
 
@@ -511,7 +511,7 @@ flowchart LR
 
 - One container image, two roles by command-line flag: `api` (stateless, horizontally scaled on CPU + request latency) and `worker` (mail blasts, plausibility replays, purges, refund polls; one instance, leader lock in Redis).
 - PostgreSQL via Npgsql with connection pooling (RDS Proxy at 100k DAU). Migrations are SQL files applied by the deploy pipeline before the new image receives traffic (expand/contract pattern: never drop a column in the same release that stops writing it).
-- S3 buckets per environment: `whisker-saves-{env}` (versioning on, SSE-KMS, lifecycle: non-current versions expire after 7 days), `whisker-receipts-{env}` (object lock, 7 years), `whisker-content-{env}` (public read via CloudFront OAC only).
+- S3 buckets per environment: `herocat-saves-{env}` (versioning on, SSE-KMS, lifecycle: non-current versions expire after 7 days), `herocat-receipts-{env}` (object lock, 7 years), `herocat-content-{env}` (public read via CloudFront OAC only).
 - Redis is a cache and a lock service only; losing it loses rate-limit counters and in-flight summon locks (the idempotency table in Postgres still prevents double rolls).
 
 ### 9.2 Environments
