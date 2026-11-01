@@ -6,3 +6,5 @@ w_summons,SUMMON,,30,DIAMOND,50,4,MVP,quest.w_summons.name,icon_quest_summon
 w_merges,MERGE_FISH,,100,DIAMOND,50,5,MVP,quest.w_merges.name,icon_quest_merge
 w_dungeons,CLEAR_DUNGEON,,25,DIAMOND,50,6,MVP,quest.w_dungeons.name,icon_quest_dungeon
 w_train,TRAIN_LEVELS,,300,DIAMOND,50,7,MVP,quest.w_train.name,icon_quest_train
+w_bonus_all_skill,WEEKLIES_COMPLETED,,7,TICKET_SUMMON_SKILL,1,8,MVP,quest.w_bonus_all_skill.name,icon_quest_bonus
+w_bonus_all_companion,WEEKLIES_COMPLETED,,7,TICKET_SUMMON_COMPANION,1,9,MVP,quest.w_bonus_all_companion.name,icon_quest_bonus

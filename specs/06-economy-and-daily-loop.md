@@ -73,7 +73,7 @@ Rules that hold for every row:
 3. Nothing converts between currencies except the exchange offers in section 8.4, each with a daily limit.
 4. A debit that would go negative is rejected by `Wallet.Apply` before any state changes; commands check `CanAfford` first and return `Reject(CannotAfford, "NOT_ENOUGH_<CURRENCY>")` (section 1.3) so the UI can name the shortfall. Tickets follow the same pattern, e.g. `NOT_ENOUGH_TICKET_FISH_COIN`, `NOT_ENOUGH_TICKET_SUMMON_WEAPON` (issue #244).
 5. **Sim-granted diamonds and tickets reach the server ledgers on upload** (issue #49). Login, quests, first clears, achievements, the tutorial grant, the daily gift and quest ticket grants are credited locally by the sim and work offline. Each `PUT /save` reports cumulative per-reason counters (`Stats.ClientDiamondsEarned[reason]`, `Stats.ClientTicketsEarned[kind][reason]`, plus the client-side spends such as `SHOP_EXCHANGE`; 02), and the server credits the delta since the last upload into `diamond_ledger` / `ticket_ledger` with `ref_type = save_reconcile`, clamped to the per-day allowance (08 section 3.1). A summon can only spend what has been uploaded, so the client uploads before a pull when it has unsynced earnings (01).
-6. **`maxTicketsPerDay(ticket)`** is the per-day bound 08 section 3.1 clamps a summon ticket's upload credit to. It is derived from content, not hand-entered: that ticket's daily client-side grants (`DAILY_GIFT_WEAPON_TICKETS` and daily quest rows granting it) plus its weekly grants (weekly quest rows and `w_bonus_all`) in full, since a weekly grant lands on one day. Achievement ticket rewards are bounded like first-clear diamonds, by the achievement rows the uploaded progress has reached. MVP values: Weapon 1, Skill 1, Companion 1.
+6. **`maxTicketsPerDay(ticket)`** is the per-day bound 08 section 3.1 clamps a summon ticket's upload credit to. It is derived from content, not hand-entered: that ticket's daily client-side grants (`DAILY_GIFT_WEAPON_TICKETS` and daily quest rows granting it) plus its weekly grants (weekly quest rows, the bonus rows `w_bonus_all_skill` / `w_bonus_all_companion` included) in full, since a weekly grant lands on one day. Achievement ticket rewards are bounded like first-clear diamonds, by the achievement rows the uploaded progress has reached. MVP values: Weapon 1, Skill 1, Companion 1.
 
 ### 1.2 M0 subset
 
@@ -245,8 +245,8 @@ public sealed record QuestDef(string Id, QuestKind Kind, QuestGoal Goal, string?
                               Currency RewardCurrency, double RewardAmount, int Order);
 // Filter: banner code for SUMMON, dungeon code for CLEAR_DUNGEON, null otherwise. A null filter on a SUMMON or
 // CLEAR_DUNGEON row matches any banner or dungeon (w_summons, w_dungeons).
-// One reward per row, as 09's quest tables have it; w_bonus_all (section 5.3) grants two tickets, and the shape that
-// carries it (a grant list or two rows) is open in issue #170.
+// One reward per row, as 09's quest tables have it; the weekly complete-all bonus (section 5.3), which grants two tickets,
+// is therefore two rows, w_bonus_all_skill and w_bonus_all_companion (issue #170).
 
 public sealed class QuestProgress   // one per QuestDef, in GameState.Quests.Daily / .Weekly / .Achievement[questId] (02, issue #7)
 {
@@ -304,7 +304,14 @@ Each row's `reward_amount` is 50 diamonds (issue #55). All seven complete-able b
 | `w_dungeons` | `CLEAR_DUNGEON` (any) | 25 | 6 per day for 4 days |
 | `w_train` | `TRAIN_LEVELS` | 300 | Training levels bought, any stat; the bot buys far more |
 
-Weekly complete-all bonus `w_bonus_all`: goal `WEEKLIES_COMPLETED` (in `QuestGoal`, section 5.1; not `DAILIES_COMPLETED`), target 7, reward 1 `TICKET_SUMMON_SKILL` + 1 `TICKET_SUMMON_COMPANION`. Non-diamond on purpose so the section 2 arithmetic stays a diamond sum. A `QuestDef` carries one reward, so how the row holds two tickets is open (issue #170).
+Weekly complete-all bonus: 1 `TICKET_SUMMON_SKILL` + 1 `TICKET_SUMMON_COMPANION` for completing all seven missions above. A `QuestDef` carries one reward, so the bonus is two rows (issue #170, the user's call):
+
+| Id | Goal | Target | Reward |
+|---|---|---|---|
+| `w_bonus_all_skill` | `WEEKLIES_COMPLETED` | 7 | 1 `TICKET_SUMMON_SKILL` |
+| `w_bonus_all_companion` | `WEEKLIES_COMPLETED` | 7 | 1 `TICKET_SUMMON_COMPANION` |
+
+`WEEKLIES_COMPLETED` is in `QuestGoal` (section 5.1; not `DAILIES_COMPLETED`). Only the seven missions count toward it: the two bonus rows complete together on the seventh mission and do not count each other, so their progress tops out at 7 (section 5.1). Non-diamond on purpose so the section 2 arithmetic stays a diamond sum. `SCR_QUESTS` shows them as the weekly tab's bonus chips (07).
 
 ### 5.4 Achievement ladders
 

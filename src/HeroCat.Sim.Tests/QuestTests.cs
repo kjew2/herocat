@@ -65,10 +65,19 @@ namespace HeroCat.Sim.Tests
                 "d_login", "d_kills", "d_boss", "d_summon_weapon", "d_summon_skill", "d_summon_companion", "d_release", "d_merge",
                 "d_dungeon_fish", "d_dungeon_candy", "d_dungeon_exp", "d_bonus_5", "d_bonus_8",
             }), "d_watch_ad is P1 and filtered out at an MVP build");
-            Assert.That(Mvp.QuestsWeekly.Select(q => q.Id), Is.EqualTo(new[] { "w_login", "w_kills", "w_dailies", "w_summons", "w_merges", "w_dungeons", "w_train" }));
+            Assert.That(Mvp.QuestsWeekly.Select(q => q.Id), Is.EqualTo(new[]
+            {
+                "w_login", "w_kills", "w_dailies", "w_summons", "w_merges", "w_dungeons", "w_train", "w_bonus_all_skill", "w_bonus_all_companion",
+            }));
             Assert.That(Mvp.QuestsDaily.Where(q => q.Goal != QuestGoal.DAILIES_COMPLETED && q.Id != "d_login").Select(q => q.RewardAmount).Distinct(), Is.EqualTo(new[] { 20L }));
             Assert.That((Q("d_login").RewardAmount, Q("d_bonus_5").RewardAmount, Q("d_bonus_8").RewardAmount), Is.EqualTo((0L, 30L, 70L)));
-            Assert.That(Mvp.QuestsWeekly.Select(q => q.RewardAmount).Distinct(), Is.EqualTo(new[] { 50L }));
+            Assert.That(Mvp.QuestsWeekly.Where(q => q.Goal != QuestGoal.WEEKLIES_COMPLETED).Select(q => (q.RewardCurrency, q.RewardAmount)).Distinct(),
+                        Is.EqualTo(new[] { (Currency.DIAMOND, 50L) }));
+            Assert.That(Mvp.QuestsWeekly.Where(q => q.Goal == QuestGoal.WEEKLIES_COMPLETED).Select(q => (q.Id, q.Target, q.RewardCurrency, q.RewardAmount)),
+                        Is.EqualTo(new[]
+                        {
+                            ("w_bonus_all_skill", 7L, Currency.TICKET_SUMMON_SKILL, 1L), ("w_bonus_all_companion", 7L, Currency.TICKET_SUMMON_COMPANION, 1L),
+                        }), "06 section 5.3: the two-ticket bonus is two rows (issue #170)");
             Assert.That((Q("d_summon_skill").Filter, Q("d_dungeon_exp").Filter, Q("w_summons").Filter), Is.EqualTo(("SKILL", "EXP", (string)null)));
             Assert.That(Q("w_train").Goal, Is.EqualTo(QuestGoal.TRAIN_LEVELS));
             Assert.That(TestContent.Db.QuestsDaily, Is.Empty, "quest rows are MVP; the M0 build has none");
@@ -317,29 +326,58 @@ namespace HeroCat.Sim.Tests
         }
 
         [Test]
-        public void WeekliesCompleted_CountsTheSevenWeeklyRows_AndPaysATicketWithReasonQuest()
+        public void WeekliesCompleted_BothBonusRowsCompleteOnTheSeventhMission_DoNotCountEachOther_AndPayOneTicketEach()
         {
-            var db = WithWeeklyBonus.Value;
-            var sim = NewSim(db);
-            var bonus = db.Quest("w_bonus_test");
-            Assert.That(db.QuestsWeekly.Count(q => q.Goal != QuestGoal.WEEKLIES_COMPLETED), Is.EqualTo(7));
+            var sim = NewSim();
+            var bonus = new[] { Q("w_bonus_all_skill"), Q("w_bonus_all_companion") };
+            Assert.That(Mvp.QuestsWeekly.Count(q => q.Goal != QuestGoal.WEEKLIES_COMPLETED), Is.EqualTo(7));
             Progress(sim, QuestGoal.KILL_ENEMIES, 3000);              // w_kills (and d_kills -> w_dailies 2 with d_login)
             Progress(sim, QuestGoal.SUMMON, 30, (int)Banner.WEAPON);  // w_summons (any banner)
             Progress(sim, QuestGoal.MERGE_FISH, 100);                 // w_merges
             for (int i = 0; i < 25; i++) sim.QuestsOnDungeonCleared(Dungeon.FISH_COIN);   // w_dungeons (any dungeon)
             Progress(sim, QuestGoal.TRAIN_LEVELS, 300);               // w_train
             Progress(sim, QuestGoal.LOGIN_DAYS, 4);                   // w_login: 1 + 4
-            Assert.That((sim.QuestStateOf(bonus), sim.QuestProgressOf(bonus)), Is.EqualTo((QuestStatus.IN_PROGRESS, 6L)));
+            foreach (var b in bonus)
+                Assert.That((sim.QuestStateOf(b), sim.QuestProgressOf(b)), Is.EqualTo((QuestStatus.IN_PROGRESS, 6L)), b.Id);
             Assert.That(Pr(sim, "w_dailies"), Is.EqualTo(5), "d_login, d_kills, d_summon_weapon, d_merge, d_dungeon_fish");
             sim.DrainEvents();
             Progress(sim, QuestGoal.DAILIES_COMPLETED, 35);           // w_dailies 40: the seventh weekly row
-            Assert.That(sim.DrainEvents().OfType<QuestCompleted>().Select(e => e.QuestId).ToArray(), Does.Contain("w_dailies").And.Contain("w_bonus_test"));
-            Assert.That(sim.QuestStateOf(bonus), Is.EqualTo(QuestStatus.COMPLETED));
+            Assert.That(sim.DrainEvents().OfType<QuestCompleted>().Select(e => e.QuestId).Where(id => id.StartsWith("w_")).ToArray(),
+                        Is.EqualTo(new[] { "w_dailies", "w_bonus_all_skill", "w_bonus_all_companion" }), "the test helper also feeds d_bonus_8");
+            foreach (var b in bonus)
+                Assert.That((sim.QuestStateOf(b), sim.QuestProgressOf(b)), Is.EqualTo((QuestStatus.COMPLETED, 7L)),
+                            b.Id + ": the other bonus row's completion counts toward nothing");
 
-            Assert.That(sim.Apply(new ClaimQuest("w_bonus_test")).Ok, Is.True);
+            Assert.That(sim.Apply(new ClaimQuest("w_bonus_all_skill")).Ok, Is.True);
             var cc = sim.DrainEvents().OfType<CurrencyChanged>().Single();
             Assert.That((cc.Currency, cc.Delta, cc.Reason), Is.EqualTo((Currency.TICKET_SUMMON_SKILL, 1.0, CurrencyReason.QUEST)));
+            Assert.That(Pr(sim, "w_bonus_all_companion"), Is.EqualTo(7), "a claim counts toward nothing either");
+            Assert.That(sim.Apply(new ClaimQuest("w_bonus_all_companion")).Ok, Is.True);
+            cc = sim.DrainEvents().OfType<CurrencyChanged>().Single();
+            Assert.That((cc.Currency, cc.Delta, cc.Reason), Is.EqualTo((Currency.TICKET_SUMMON_COMPANION, 1.0, CurrencyReason.QUEST)));
             Assert.That(sim.State.Stats.ClientTicketsEarned[Banner.SKILL][CurrencyReason.QUEST], Is.EqualTo(1));
+            Assert.That(sim.State.Stats.ClientTicketsEarned[Banner.COMPANION][CurrencyReason.QUEST], Is.EqualTo(1));
+        }
+
+        [Test]
+        public void ClaimAllWeekly_PaysTheSevenMissionsAndBothBonusTickets_TotalsInCurrencyOrder()
+        {
+            var sim = NewSim();
+            Progress(sim, QuestGoal.KILL_ENEMIES, 3000);
+            Progress(sim, QuestGoal.SUMMON, 30, (int)Banner.WEAPON);
+            Progress(sim, QuestGoal.MERGE_FISH, 100);
+            for (int i = 0; i < 25; i++) sim.QuestsOnDungeonCleared(Dungeon.FISH_COIN);
+            Progress(sim, QuestGoal.TRAIN_LEVELS, 300);
+            Progress(sim, QuestGoal.LOGIN_DAYS, 4);
+            Progress(sim, QuestGoal.DAILIES_COMPLETED, 35);
+            sim.DrainEvents();
+            Assert.That(sim.Apply(new ClaimAllQuests(QuestKind.WEEKLY)).Ok, Is.True);
+            var ev = sim.DrainEvents();
+            Assert.That(ev.OfType<QuestClaimed>().Select(e => e.QuestId), Is.EqualTo(Mvp.QuestsWeekly.Select(q => q.Id)), "claims in sort order");
+            var bulk = ev.OfType<QuestsBulkClaimed>().Single();
+            Assert.That((bulk.Kind, bulk.Count), Is.EqualTo((QuestKind.WEEKLY, 9)));
+            Assert.That(bulk.Totals.Select(t => (t.Currency, t.Amount)),
+                        Is.EqualTo(new[] { (Currency.DIAMOND, 350.0), (Currency.TICKET_SUMMON_SKILL, 1.0), (Currency.TICKET_SUMMON_COMPANION, 1.0) }));
         }
 
         // ------------------------------------------------------------------------------------------------ AC 1, 06:251
@@ -443,19 +481,5 @@ namespace HeroCat.Sim.Tests
             if (sim.State.Offline.Pending != null) sim.Apply(new ClaimOfflineReward());
             Assert.That(sim.State.Quests.Daily.ToDictionary(kv => kv.Key, kv => (kv.Value.Progress, kv.Value.State)), Is.EqualTo(before));
         }
-
-        static readonly Lazy<ContentDb> WithWeeklyBonus = new Lazy<ContentDb>(() =>
-        {
-            var dtos = ContentLoader.LoadDtos(new FileContentSource(TestContent.Dir));
-            dtos.QuestsWeekly = dtos.QuestsWeekly.Concat(new[]
-            {
-                new QuestRowDto
-                {
-                    Id = "w_bonus_test", Goal = "WEEKLIES_COMPLETED", Target = 7, RewardCurrency = "TICKET_SUMMON_SKILL", RewardAmount = 1,
-                    SortOrder = 8, Tier = "MVP", NameKey = "quest.w_kills.name", Icon = "icon_quest_bonus",
-                },
-            }).ToArray();
-            return ContentDb.Build(dtos, Tier.MVP);
-        });
     }
 }

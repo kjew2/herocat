@@ -451,6 +451,14 @@
       "text": "Watch an ad"
     },
     {
+      "key": "quest.w_bonus_all_companion.name",
+      "text": "Complete all weekly missions"
+    },
+    {
+      "key": "quest.w_bonus_all_skill.name",
+      "text": "Complete all weekly missions"
+    },
+    {
       "key": "quest.w_dailies.name",
       "text": "Complete daily missions"
     },

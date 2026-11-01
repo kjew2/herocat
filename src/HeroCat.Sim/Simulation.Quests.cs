@@ -73,7 +73,8 @@ namespace HeroCat.Sim
         /// <summary>
         /// IN_PROGRESS -> COMPLETED (a reward-0 row goes straight to CLAIMED, 06 section 5.1), then the bonus counters: a
         /// daily mission counts toward the daily bonus rows and w_dailies (DAILIES_COMPLETED), a weekly mission toward
-        /// w_bonus_all (WEEKLIES_COMPLETED). The bonus rows themselves count toward nothing, so this never recurses deeper.
+        /// w_bonus_all_skill and w_bonus_all_companion (WEEKLIES_COMPLETED). The bonus rows themselves count toward nothing (not even
+        /// each other), so this never recurses deeper.
         /// </summary>
         void CompleteQuest(QuestDef def, QuestProgress e)
         {
