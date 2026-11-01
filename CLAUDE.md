@@ -19,7 +19,7 @@ A gap is anything the specs, code or task leave undecided: a missing rule, an un
 2. **Does not block the current task:** open a GitHub issue and keep going. Search open issues first and comment on a match instead of duplicating it. Label it `agent-found`. The issue must stand alone: the gap, where you found it, options with a recommendation, and what it blocks. If you work around it, leave `TODO(#N)` at that spot.
 3. **Blocks the task and the call is the user's** (game design, balance targets, monetization, anything hard to reverse, specs contradicting each other): stop and ask. Do not file an issue and guess anyway.
 
-When unsure between 1 and 3, treat it as 3. Create issues with `gh api repos/kjew2/herocat/issues` (REST; `gh issue create` fails here because GraphQL is blocked).
+When unsure between 1 and 3, treat it as 3. Label a decision issue `needs-decision`. Label an issue blocked on something only the owner can do outside the code (accounts, secrets, hardware, store or legal setup) `needs-user-action`, and give it a "What you need to do" checklist with exact steps and where in each console to click. Create issues with `gh api repos/kjew2/herocat/issues` (REST; `gh issue create` fails here because GraphQL is blocked).
 
 ## Run every check before calling a change done
 
