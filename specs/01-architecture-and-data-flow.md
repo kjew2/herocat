@@ -168,8 +168,8 @@ Concrete commands (`VerbNoun`, 00 section 5.1) and the events they emit. Full fi
 | `SweepDungeon` | `Dungeon kind` | 06 | `DungeonSwept`, `CurrencyChanged(..., DUNGEON)` |
 | `ClaimQuest` | `string questId` | 06 | `QuestClaimed`, `CurrencyChanged(..., QUEST)` |
 | `ClaimAllQuests` | `QuestKind kind` | 06 | one `QuestClaimed` per quest |
-| `ClaimDailyGift` | none | 06 | `CurrencyChanged(TICKET_SUMMON_WEAPON, DAILY_GIFT)` |
-| `ExchangeItem` | `string offerId, int qty` | 06 | `CurrencyChanged(..., SHOP_EXCHANGE)` |
+| `ClaimDailyGift` | none | 06 | `DailyGiftClaimed`, `CurrencyChanged(TICKET_SUMMON_WEAPON, DAILY_GIFT)` |
+| `ExchangeItem` | `string offerId, int qty` | 06 | `ItemExchanged`, `CurrencyChanged(DIAMOND, SHOP_EXCHANGE)`, `CurrencyChanged(TICKET_*, SHOP_EXCHANGE)` |
 | `Awaken` | none | 03 | `Awakened`, `CurrencyChanged(ROCK_CANDY, AWAKENING)` |
 | `Research` | `string nodeId` | 03 | `ResearchLeveled`, `CurrencyChanged(FISH_COIN, RESEARCH)` |
 | `ApplyInboxGrant` | `InboxGrantPayload grant` | 06/08 | `CurrencyChanged(..., IAP or MAIL)`, `ItemAcquired?` |

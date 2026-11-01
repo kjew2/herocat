@@ -440,4 +440,30 @@ namespace HeroCat.Sim.Content
         /// <summary>True when an event with <paramref name="filter"/> (an enum ordinal, -1 for none) counts toward this row.</summary>
         internal bool Matches(int filter) => FilterValue < 0 || FilterValue == filter;
     }
+
+    /// <summary>
+    /// A diamond-for-dungeon-ticket exchange offer (09 section 5.37, 06 section 8.4; issue #174): Qty of them costs
+    /// Qty x <see cref="PriceAmount"/> <see cref="PriceCurrency"/> (DIAMOND, E059) and grants Qty x <see cref="GrantAmount"/>
+    /// <see cref="GrantCurrency"/> (a dungeon ticket, E059), at most <see cref="DailyLimit"/> a day key.
+    /// </summary>
+    public sealed class ExchangeOfferDef
+    {
+        internal ExchangeOfferDef(string id, Currency priceCurrency, long priceAmount, Currency grantCurrency, long grantAmount,
+                                  int dailyLimit, int sortOrder, Tier tier, string nameKey, string icon)
+        {
+            Id = id; PriceCurrency = priceCurrency; PriceAmount = priceAmount; GrantCurrency = grantCurrency; GrantAmount = grantAmount;
+            DailyLimit = dailyLimit; SortOrder = sortOrder; Tier = tier; NameKey = nameKey; Icon = icon;
+        }
+
+        public string Id { get; }
+        public Currency PriceCurrency { get; }
+        public long PriceAmount { get; }
+        public Currency GrantCurrency { get; }
+        public long GrantAmount { get; }
+        public int DailyLimit { get; }
+        public int SortOrder { get; }
+        public Tier Tier { get; }
+        public string NameKey { get; }
+        public string Icon { get; }
+    }
 }

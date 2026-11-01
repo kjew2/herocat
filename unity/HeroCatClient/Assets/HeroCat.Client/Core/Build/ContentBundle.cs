@@ -90,6 +90,7 @@ namespace HeroCat.Client.Core
             ["shop_products"] = new[] { "icon" },
             ["shop_packages"] = new[] { "icon" },
             ["inbox_templates"] = new[] { "icon" },
+            ["shop_exchange"] = new[] { "icon" },
         };
 
         /// <summary>

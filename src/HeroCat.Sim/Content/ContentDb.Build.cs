@@ -83,6 +83,7 @@ namespace HeroCat.Sim.Content
                 Required("tutorial_steps", d.TutorialSteps); Required("progress_targets", d.ProgressTargets);
                 Required("feature_unlocks", d.FeatureUnlocks);
                 Required("quests_daily", d.QuestsDaily); Required("quests_weekly", d.QuestsWeekly);
+                Required("shop_exchange", d.ShopExchange);
                 if (Errors.Count > 0) return null;
 
                 // Loader-scope validation (ContentDb.Rules.cs, issue #126): keys first, then constants, refs and the
@@ -269,6 +270,22 @@ namespace HeroCat.Sim.Content
                 // daily and weekly quests (09 sections 5.21-5.22, issue #170): MVP rows, so an M0 build has none
                 db.QuestsDaily = BuildQuests("quests_daily", QuestKind.DAILY, d.QuestsDaily, out db._dailyById);
                 db.QuestsWeekly = BuildQuests("quests_weekly", QuestKind.WEEKLY, d.QuestsWeekly, out db._weeklyById);
+
+                // diamond-for-ticket exchange offers (09 section 5.37, issue #174): MVP rows, so an M0 build has none
+                var offers = new List<ExchangeOfferDef>();
+                foreach (var r in d.ShopExchange)
+                {
+                    if (!Keep("shop_exchange", r.Id, r.Tier)) continue;
+                    string loc = "shop_exchange[" + r.Id + "]";
+                    offers.Add(new ExchangeOfferDef(r.Id, Enum<Currency>(r.PriceCurrency, loc + ".price_currency"), r.PriceAmount,
+                                                    Enum<Currency>(r.GrantCurrency, loc + ".grant_currency"), r.GrantAmount, r.DailyLimit,
+                                                    r.SortOrder, Enum<Tier>(r.Tier, loc + ".tier"), r.NameKey, r.Icon));
+                }
+                offers.Sort((a, b) => a.SortOrder.CompareTo(b.SortOrder));   // sort_order is unique (E046)
+                var offerMap = new Dictionary<string, ExchangeOfferDef>(StringComparer.Ordinal);
+                foreach (var o in offers) offerMap[o.Id] = o;
+                db.ExchangeOffers = offers.AsReadOnly();
+                db._exchangeById = new ReadOnlyDictionary<string, ExchangeOfferDef>(offerMap);
                 return db;
             }
 

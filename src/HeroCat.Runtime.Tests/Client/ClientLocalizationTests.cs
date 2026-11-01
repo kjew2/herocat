@@ -39,6 +39,8 @@ namespace HeroCat.Runtime.Tests
             Need(ErrorClassifier.ErrTitleKey("NET_OFFLINE"));
             Need(ErrorClassifier.RejectReasonKey(CollectionRejectReasons.BANNER_CLOSED));
             Need(ErrorClassifier.RejectReasonKey(CollectionRejectReasons.NotEnough(Currency.DIAMOND)));
+            foreach (var f in typeof(ShopRejectReasons).GetFields(BindingFlags.Public | BindingFlags.Static))   // issue #174
+                Need(ErrorClassifier.RejectReasonKey((string)f.GetValue(null)));
             Assert.That(missing, Is.Empty);
         }
 

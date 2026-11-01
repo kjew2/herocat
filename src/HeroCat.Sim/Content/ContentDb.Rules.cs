@@ -226,6 +226,11 @@ namespace HeroCat.Sim.Content
                 });
                 Add(t, "awakening_targets", d.AwakeningTargets, r => I(r.Rank), (r, x) => { x["rank"] = r.Rank; x["max_days_after_gate"] = r.MaxDaysAfterGate; });
                 Add(t, "plausibility_stage_bound", d.PlausibilityStageBound, r => I(r.Day), (r, x) => { x["day"] = r.Day; x["stage"] = r.Stage; });
+                Add(t, "shop_exchange", d.ShopExchange, r => r.Id, (r, x) =>
+                {
+                    x["id"] = r.Id; x["price_currency"] = r.PriceCurrency; x["price_amount"] = r.PriceAmount; x["grant_currency"] = r.GrantCurrency;
+                    x["grant_amount"] = r.GrantAmount; x["daily_limit"] = r.DailyLimit; x["sort_order"] = r.SortOrder; x["tier"] = r.Tier;
+                });
                 return t;
             }
 
@@ -259,6 +264,7 @@ namespace HeroCat.Sim.Content
                 Unique("feature_unlocks", Rows(d.FeatureUnlocks), r => r.Feature);
                 Unique("awakening_targets", Rows(d.AwakeningTargets), r => I(r.Rank));
                 Unique("plausibility_stage_bound", Rows(d.PlausibilityStageBound), r => I(r.Day));
+                Unique("shop_exchange", Rows(d.ShopExchange), r => r.Id);
             }
 
             /// <summary>E043 for one constants row; called from BuildConstants right after the value parses (export_content.check_constant_range).</summary>
@@ -573,6 +579,7 @@ namespace HeroCat.Sim.Content
                 Rng("tutorial_steps", "expect_count", ge1, ">= 1");
                 Rng("progress_targets", "stage", ge1, ">= 1");
                 Rng("feature_unlocks", "threshold", ge1, ">= 1");
+                foreach (var col in new[] { "price_amount", "grant_amount", "daily_limit" }) Rng("shop_exchange", col, ge1, ">= 1");
                 Rng("awakening_targets", "max_days_after_gate", ge0, ">= 0");
                 Rng("plausibility_stage_bound", "stage", ge1, ">= 1");
             }
@@ -711,6 +718,7 @@ namespace HeroCat.Sim.Content
                 UniqueCols(T("research"), "layout_row", "layout_col");
                 UniqueCols(T("quests_daily"), "sort_order");
                 UniqueCols(T("quests_weekly"), "sort_order");
+                UniqueCols(T("shop_exchange"), "sort_order");
             }
 
             void RuleBannerPityAndGuarantee()
@@ -814,6 +822,9 @@ namespace HeroCat.Sim.Content
                     }
             }
 
+            /// <summary>06 section 8.4: what shop_exchange may grant (the exporter's EXCHANGE_GRANTS).</summary>
+            static readonly string[] ExchangeGrants = { "TICKET_FISH_COIN", "TICKET_ROCK_CANDY", "TICKET_EXP" };
+
             void RuleE059CurrencyAllowlists()
             {
                 foreach (var b in T("banners"))
@@ -821,6 +832,13 @@ namespace HeroCat.Sim.Content
                     string want = "TICKET_SUMMON_" + b.S("id");
                     if (b.S("ticket_currency") != want)
                         Err("E059", b.Loc + ".ticket_currency", $"ticket_currency '{b.S("ticket_currency")}' is not an allowed currency here ({want} for banner {b.S("id")})");
+                }
+                foreach (var x in T("shop_exchange"))   // 06 sections 8.4-8.5: diamonds for dungeon tickets, nothing else
+                {
+                    if (x.S("price_currency") != "DIAMOND")
+                        Err("E059", x.Loc + ".price_currency", $"price_currency '{x.S("price_currency")}' is not an allowed currency here (DIAMOND only)");
+                    if (Array.IndexOf(ExchangeGrants, x.S("grant_currency")) < 0)
+                        Err("E059", x.Loc + ".grant_currency", $"grant_currency '{x.S("grant_currency")}' is not an allowed currency here ({string.Join(", ", ExchangeGrants)})");
                 }
             }
 

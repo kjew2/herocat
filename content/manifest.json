@@ -85,6 +85,11 @@
       "rows": 0,
       "sha256": "3261e985463cf5bc04fc2980bab3ccc3559fc1aa0e9f270d9e1e80b76593b1b4"
     },
+    "shop_exchange": {
+      "file": "shop_exchange.json",
+      "rows": 3,
+      "sha256": "338fa2140a85ecbd5a010d65ac11429f2b6ea3ad0a8ef43879cbad101173037a"
+    },
     "skills": {
       "file": "skills.json",
       "rows": 40,
@@ -119,11 +124,11 @@
   "localization": {
     "en": {
       "file": "localization.en.json",
-      "rows": 482,
-      "sha256": "0761be088dace725eaafdbf43af3052f31dcf054488342bfe1f90d8bc8274a16"
+      "rows": 489,
+      "sha256": "8be3e78915e539bacd731451fdb0f69b7108e8ff74c67cc82014c92d46585ec4"
     }
   },
-  "content_hash": "81ba3d1bad3d832bf64f5170342758ec988b1ab485ca3348c35e2718d5faf490",
+  "content_hash": "226e4ce5b7f6aa7bcc09905b367c0431cbd8ad33fa7394dfae442c40fa763e67",
   "s_constants": [
     "BASE_HP",
     "BOSS_ROCK_CANDY_P",

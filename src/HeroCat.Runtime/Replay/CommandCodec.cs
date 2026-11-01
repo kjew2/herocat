@@ -53,6 +53,9 @@ namespace HeroCat.Runtime.Replay
             // Quest claims (06 section 5.5; issue #170).
             (typeof(ClaimQuest), "ClaimQuest"),
             (typeof(ClaimAllQuests), "ClaimAllQuests"),
+            // Shop: daily gift and exchange (06 sections 8.3-8.4; issue #174).
+            (typeof(ClaimDailyGift), "ClaimDailyGift"),
+            (typeof(ExchangeItem), "ExchangeItem"),
         };
 
         static readonly object Lock = new object();

@@ -86,7 +86,7 @@ Every economy command rejects through 01's `ApplyResult.Reject(RejectCode, reaso
 | Reason (`ApplyResult.Reason`) | `RejectCode` | Raised by |
 |---|---|---|
 | `NOT_ENOUGH_<CURRENCY>` (e.g. `NOT_ENOUGH_DIAMOND`) | `CannotAfford` | any command that debits (rule 4) |
-| `UNKNOWN_ID` | `InvalidTarget` | `ClaimQuest`, `ExchangeItem` with an id not in content; `ClaimAllQuests` with a kind outside `QuestKind` |
+| `UNKNOWN_ID` | `InvalidTarget` | `ClaimQuest`, `ExchangeItem` with an id not in content (`shop_exchange` for `ExchangeItem`); `ClaimAllQuests` with a kind outside `QuestKind` |
 | `BAD_QUANTITY` | `BadArgument` | `ExchangeItem` with `qty < 1` |
 | `QUEST_NOT_COMPLETED` | `NotAvailable` | `ClaimQuest` |
 | `QUEST_ALREADY_CLAIMED` | `AlreadyClaimed` | `ClaimQuest` |
@@ -97,8 +97,9 @@ Every economy command rejects through 01's `ApplyResult.Reject(RejectCode, reaso
 | `DUNGEON_RUN_IN_PROGRESS` | `NotAvailable` | `StartDungeon`, `SweepDungeon` |
 | `BOSS_ATTEMPT_IN_PROGRESS` | `NotAvailable` | `StartDungeon` while a boss fight is active (issue #42); a sweep has no fight and is allowed |
 | `NOTHING_TO_SWEEP` | `NotAvailable` | `SweepDungeon` |
+| `SHOP_LOCKED` | `Locked` | `ClaimDailyGift`, `ExchangeItem` when the `feature_unlocks` row `SHOP` is not met: never in MVP (`ALWAYS`, 09 `E063`), always in an M0 build, which has no shop (section 1.2; issue #174) |
 | `DAILY_GIFT_ALREADY_CLAIMED` | `AlreadyClaimed` | `ClaimDailyGift` |
-| `EXCHANGE_LIMIT_REACHED` | `Capped` | `ExchangeItem` |
+| `EXCHANGE_LIMIT_REACHED` | `Capped` | `ExchangeItem` with `qty` above the offer's remaining daily limit |
 | `NO_PENDING_OFFLINE_REWARD` | `NotAvailable` | `ClaimOfflineReward` |
 
 `Awaken` is 03's command; its reject reasons are 03's.
@@ -533,7 +534,7 @@ The modal cannot be dismissed without claiming (there is no reason to refuse fre
 
 ## 8. Shop (MVP)
 
-All prices are content rows (09 `shop_products`, `shop_packages`). USD tiers map to Apple and Google price tiers in 08; other currencies use store-side tier conversion. Diamonds are the only thing money buys (00 decision 7).
+All prices are content rows (09 `shop_products`, `shop_packages`, and `shop_exchange` for section 8.4). USD tiers map to Apple and Google price tiers in 08; other currencies use store-side tier conversion. Diamonds are the only thing money buys (00 decision 7).
 
 ### 8.1 Diamond packs
 
@@ -562,7 +563,7 @@ The monthly card is the best value in the shop by a factor of 2.7 over the large
 
 ### 8.3 Daily free gift
 
-`ClaimDailyGift`: once per day key, grants 1 `TICKET_SUMMON_WEAPON` (`DAILY_GIFT_WEAPON_TICKETS` = 1) with `CurrencyReason.DAILY_GIFT`. Rejection `(AlreadyClaimed, DAILY_GIFT_ALREADY_CLAIMED)`. This is what makes `d_summon_weapon` free and is one of the ticket sources the tuning tool feeds into each banner's pull cadence (section 2, issue #38). The grant is a sim grant like quest tickets; it reaches the server `ticket_ledger` on the next upload (section 1.1 rule 5). The bot claims it first thing.
+`ClaimDailyGift`: once per day key, grants 1 `TICKET_SUMMON_WEAPON` (`DAILY_GIFT_WEAPON_TICKETS` = 1) with `CurrencyReason.DAILY_GIFT`, sets `Shop.DailyGiftClaimed` and emits `DailyGiftClaimed(currency, amount)` before its `CurrencyChanged`. It runs `EnsureDay` (section 4.2), then the `SHOP` gate (`SHOP_LOCKED`), then rejects `(AlreadyClaimed, DAILY_GIFT_ALREADY_CLAIMED)` when the flag is set. This is what makes `d_summon_weapon` free and is one of the ticket sources the tuning tool feeds into each banner's pull cadence (section 2, issue #38). The grant is a sim grant like quest tickets; it reaches the server `ticket_ledger` on the next upload (section 1.1 rule 5). The bot claims it first thing.
 
 ### 8.4 Exchange
 
@@ -574,7 +575,9 @@ Diamonds for tickets, with daily limits, so a player who wants more dungeon runs
 | `ex_ticket_candy` | 50 diamonds | 1 `TICKET_ROCK_CANDY` | 2 |
 | `ex_ticket_exp` | 50 diamonds | 1 `TICKET_EXP` | 2 |
 
-`ExchangeItem(offerId, qty)`: `qty` in 1..remaining limit; rejections `UNKNOWN_ID`, `BAD_QUANTITY`, `EXCHANGE_LIMIT_REACHED`, `NOT_ENOUGH_DIAMOND` (section 1.3). The count lives in `Shop.ExchangeCounts[offerId]` (02 `ShopState`). Summon tickets are not sold here; a pull is already priced in diamonds on `SCR_SUMMON`. Fish Coins, Rock Candy and gold are not sold for diamonds either; see 8.5.
+The offers are the rows of 09's `shop_exchange` (section 5.37; issue #174): `price_currency` must be `DIAMOND` and `grant_currency` a dungeon ticket (`E059`), so nothing else can be put on sale by a sheet edit.
+
+`ExchangeItem(offerId, qty)`: `qty` in 1..remaining limit. It runs `EnsureDay`, then the `SHOP` gate (`SHOP_LOCKED`), then rejects in this order: `UNKNOWN_ID`, `BAD_QUANTITY` (`qty < 1`), `EXCHANGE_LIMIT_REACHED` (`qty` above `daily_limit - ExchangeCounts[offerId]`), `NOT_ENOUGH_DIAMOND` for `qty * price_amount` (section 1.3); a rejected purchase changes nothing, so there is no partial buy. Accepted, it adds `qty` to `Shop.ExchangeCounts[offerId]` (02 `ShopState`), emits `ItemExchanged(offerId, qty, diamonds)`, then debits `qty * price_amount` diamonds and grants `qty * grant_amount` tickets, both with `CurrencyReason.SHOP_EXCHANGE` (the debit is a client-side spend, counted in `Stats.ClientDiamondsSpent`, section 1.1 rule 5). Summon tickets are not sold here; a pull is already priced in diamonds on `SCR_SUMMON`. Fish Coins, Rock Candy and gold are not sold for diamonds either; see 8.5.
 
 ### 8.5 Never sold
 
@@ -659,8 +662,8 @@ This section owns these events' fields (issue #245); every event also carries 02
 | `offline_catchup` | `elapsedSec`, `creditedSec`, `capped`, `gold`, `exp`, `tankFill`, `stage` (the pending record's) | `ComputeOfflineCatchup` that credits a gap of at least `OFFLINE_MIN_S` (section 7); a catch-up with no later `offline_claimed` is a reward cleared unclaimed (02 P18) |
 | `offline_claimed` | `elapsedSec`, `creditedSec`, `capped`, `gold`, `exp`, `tankFill`, `x2` | `OfflineRewardClaimed` |
 | `day_rollover` | `dayKey`, `skippedDays`, `secondsSinceLastTick` | `DayRolledOver` |
-| `daily_gift_claimed` | | `ClaimDailyGift` |
-| `exchange` | `offerId`, `qty`, `diamonds` | `ExchangeItem` |
+| `daily_gift_claimed` | | `DailyGiftClaimed` (`ClaimDailyGift`) |
+| `exchange` | `offerId`, `qty`, `diamonds` | `ItemExchanged` (`ExchangeItem`) |
 | `shop_view` | `tab` | `SCR_SHOP` opened (07 section 4.16) |
 | `iap_initiated`, `iap_completed`, `iap_failed` | `sku`, `platform`, `priceTier`, `priceMinor`, `currency` (store ISO code), `firstPurchase`, `latencyMs`, `errorCode` (`iap_failed` only; `RECEIPT_INVALID` for a `400` from validate) | client purchase flow (01, 08 section 5): store sheet opened, store success, store or validate failure |
 | `iap_status` | `sku`, `platform`, `status` (validated/granted/invalid/refunded/chargeback), `transactionIdHash`, `priceMinor`, `currency`, `firstPurchase` | server, on each `purchases` status change (08 sections 5.2 and 5.4) |
@@ -734,7 +737,7 @@ This section owns these events' fields (issue #245); every event also carries 02
 | `DAILY_GIFT_WEAPON_TICKETS` | 1 | S | Open question 3; input to the tool's per-banner pull cadence (issue #38) |
 | `awakening_targets.max_days_after_gate` | 2 per rank | S | AC 18 (issue #43) |
 | `INBOX_EXPIRY_DAYS` | 30 | S | |
-| Shop rows (8.1, 8.2, 8.4) | as tabled | S | Conversion KPIs in 10 |
+| Shop rows (8.1, 8.2, 8.4) | as tabled; 8.4's are 09 `shop_exchange` rows | S | Conversion KPIs in 10 |
 | `CurrencyReason` | 00 section 8 item 6's list (section 1) | | Resolved, issue #11 |
 | Reject reasons | section 1.3 | | |
 | `QuestGoal` enum, `WEEKLIES_COMPLETED` | section 5.1 | | |

@@ -63,6 +63,14 @@ namespace HeroCat.Sim.Content
         /// <summary>The PROFILE_CREATED step's grants (TUTORIAL_DIAMONDS and the starter weapon); empty if absent.</summary>
         public IReadOnlyList<Grant> ProfileCreatedGrants { get; private set; }
 
+        /// <summary>shop_exchange offers by SortOrder (09 section 5.37, 06 section 8.4). Empty in an M0 build (tier MVP rows).</summary>
+        public IReadOnlyList<ExchangeOfferDef> ExchangeOffers { get; private set; }
+
+        IReadOnlyDictionary<string, ExchangeOfferDef> _exchangeById;
+
+        /// <summary>The exchange offer with this id, or null if shop_exchange (after the tier filter) has none.</summary>
+        public ExchangeOfferDef ExchangeOffer(string id) => id != null && _exchangeById.TryGetValue(id, out var o) ? o : null;
+
         /// <summary>Research nodes by id (09 section 5.18). Empty when the table is absent or filtered out by tier (M0).</summary>
         public IReadOnlyDictionary<string, ResearchDef> Research { get; private set; }
 
