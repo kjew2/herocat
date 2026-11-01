@@ -136,8 +136,8 @@ namespace HeroCat.Sim.Summons
         {
             switch (b)
             {
-                case Banner.WEAPON: return 1.0 + (PowerFormula.EquippedWeaponPct(db, s) + PowerFormula.WeaponPassivePct(db, s)) / 100.0;
-                case Banner.SKILL: return 1.0 + PowerFormula.SkillDpsPct(db, s) / 100.0;
+                case Banner.WEAPON: return 1.0 + (PowerFormula.EquippedWeaponPct(db, s) + PowerFormula.WeaponPassivePct(db, s)) / Units.Percent;
+                case Banner.SKILL: return 1.0 + PowerFormula.SkillDpsPct(db, s) / Units.Percent;
                 default: return 1.0;
             }
         }

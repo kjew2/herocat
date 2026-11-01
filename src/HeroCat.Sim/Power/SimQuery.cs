@@ -58,7 +58,7 @@ namespace HeroCat.Sim.Power
 
         /// <summary>The rated DPS with a modelled <paramref name="missileDpsPct"/> (05 section 5.1; issue #15).</summary>
         public double RatedDpsWithMissiles(double missileDpsPct) =>
-            RatedDps / Power.Fish * (1.0 + (Power.FishBoardDpsPct + missileDpsPct) / 100.0);
+            RatedDps / Power.Fish * (1.0 + (Power.FishBoardDpsPct + missileDpsPct) / Units.Percent);
 
         // ------------------------------------------------------------------------------------------- stages (03 3)
 

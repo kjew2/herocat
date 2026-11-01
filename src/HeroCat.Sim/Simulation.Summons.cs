@@ -23,7 +23,7 @@ namespace HeroCat.Sim
         /// </summary>
         readonly HashSet<string> _appliedRequests = new HashSet<string>(StringComparer.Ordinal);
         readonly Queue<string> _appliedOrder = new Queue<string>();
-        internal const int AppliedRequestsMax = 256;
+        internal const int AppliedRequestsMax = 256;   // literal-ok: bookkeeping bound, not balance
 
         // ================================================================================================ ApplySummonResult
 

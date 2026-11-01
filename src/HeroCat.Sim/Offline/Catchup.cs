@@ -12,11 +12,8 @@ namespace HeroCat.Sim
     /// </summary>
     public static class Catchup
     {
-        /// <summary>Seconds per hour: a unit conversion for OFFLINE_CAP_H, not a balance number.</summary>
-        const int SecondsPerHour = 3600;   // literal-ok: unit conversion (hours to seconds)
-
         /// <summary>The effective cap in seconds: (OFFLINE_CAP_H + RES_OFFLINE_CAP hours) * 3600 (00 decision 12).</summary>
-        public static long CapSeconds(ContentDb db, GameState s) => (long)(PowerFormula.OfflineCapH(db, s) * SecondsPerHour);
+        public static long CapSeconds(ContentDb db, GameState s) => (long)(PowerFormula.OfflineCapH(db, s) * Units.SecondsPerHour);
 
         /// <summary>
         /// <c>credited * OFFLINE_RATE * perKill / killTimeSec</c>: offline gold or EXP for <paramref name="creditedSec"/>

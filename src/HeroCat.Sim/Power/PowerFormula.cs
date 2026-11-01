@@ -161,8 +161,8 @@ namespace HeroCat.Sim.Power
             double sum = 0.0, share = 1.0;
             for (int n = 2; n <= cap; n++)
             {
-                share *= 0.5;   // each level-n merge is shared by 2^(n-1) released fish
-                sum += levels[n - 1].MissilePct / 100.0 * share;
+                share /= 2;   // each level-n merge is shared by 2^(n-1) released fish
+                sum += levels[n - 1].MissilePct / Units.Percent * share;
             }
             return sum;
         }
@@ -174,7 +174,7 @@ namespace HeroCat.Sim.Power
         /// SCR_HERO) pass it to <see cref="SimQuery.RatedDpsWithMissiles"/>.
         /// </summary>
         public static double MissileDpsPct(ContentDb db, double fishPerMinute, int cap, double speedFactor) =>
-            100.0 * fishPerMinute * MissileHitsPerFish(db, cap) / (60.0 * speedFactor);
+            Units.Percent * fishPerMinute * MissileHitsPerFish(db, cap) / (Units.SecondsPerMinute * speedFactor);
 
         // ================================================================================================ Research, Runes, Awakening
 
@@ -267,15 +267,15 @@ namespace HeroCat.Sim.Power
                 GoldMult = GoldMult(db, s),
                 ExpMult = ExpMult(db, s),
             };
-            p.Weapons = 1.0 + (p.EquippedWeaponPct + p.WeaponPassivePct) / 100.0;
-            p.Skills = 1.0 + p.SkillDpsPct / 100.0;
-            p.Companions = 1.0 + p.MpSufficiency * p.CompanionDpsPct / 100.0;
-            p.Fish = 1.0 + (p.FishBoardDpsPct + p.MissileDpsPct) / 100.0;
+            p.Weapons = 1.0 + (p.EquippedWeaponPct + p.WeaponPassivePct) / Units.Percent;
+            p.Skills = 1.0 + p.SkillDpsPct / Units.Percent;
+            p.Companions = 1.0 + p.MpSufficiency * p.CompanionDpsPct / Units.Percent;
+            p.Fish = 1.0 + (p.FishBoardDpsPct + p.MissileDpsPct) / Units.Percent;
             p.Research = 1.0 + p.ResearchPct;
             p.Runes = 1.0 + p.RunePct;
             p.Crit = CritFactor(p.CritRate, p.CritDmg);
 
-            p.HeroHit = p.Base * p.Training * p.Hero * p.Weapons * (1.0 + p.FishBoardDpsPct / 100.0)
+            p.HeroHit = p.Base * p.Training * p.Hero * p.Weapons * (1.0 + p.FishBoardDpsPct / Units.Percent)
                       * p.Research * p.Runes * p.Awakening;
             p.SkillUnit = p.HeroHit * p.Crit * p.Speed;
             p.CompanionUnit = p.SkillUnit * p.Skills;

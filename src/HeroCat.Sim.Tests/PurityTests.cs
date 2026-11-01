@@ -6,8 +6,8 @@ using NUnit.Framework;
 namespace HeroCat.Sim.Tests
 {
     /// <summary>
-    /// 00 contract 1 and 09 principle 5 as source greps over src/HeroCat.Sim (01 AC 1's list). TODO(#63): the same rule as a
-    /// check.sh step with the Runtime clock-API rule of 02 AC 18.
+    /// 00 contract 1 and 09 principle 5 as source greps over src/HeroCat.Sim (01 AC 1's list). check.sh runs the same rule
+    /// as tools/check_sim_purity.py (issue #63), next to tools/check_clock_apis.py for 02 AC 18's Runtime clock rule.
     /// </summary>
     public class PurityTests
     {
