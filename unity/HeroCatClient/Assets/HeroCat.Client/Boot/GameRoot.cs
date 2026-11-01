@@ -164,11 +164,14 @@ namespace HeroCat.Client.Boot
                 {
                     // TODO(#118): SCR_BOOT / SCR_ERROR render the error class; M0 shows the key and the support id.
                     var err = _session.Boot.Error;
-                    ShowFatal(err.LocalizationKey + "\n\nSupport id: " + err.SupportId);
+                    ShowFatal(err.TitleKey + "\n" + err.BodyKey + "\n\nSupport id: " + err.SupportId);
                     _session = null;
                     return;
                 }
                 _shell = new Shell(_safe, _session.Vm);
+                // TODO(#118): the acknowledge-only notice modal; M0 toasts the key and the support id (00 decision 103).
+                var notice = _session.Boot.SaveResetNotice;
+                if (notice != null) _session.Vm.Toasts.Push(notice.BodyKey + " (" + notice.SupportId + ")", 8);
             }
             catch (Exception e)
             {

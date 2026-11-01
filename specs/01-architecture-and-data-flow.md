@@ -138,7 +138,7 @@ public readonly struct ApplyResult               // a readonly struct: record st
 }
 ```
 
-A reject is two-level (issue #11): `Code` is the category from this enum, and `Reason` is a stable key from the owning spec's closed reason list (for example 06's `DUNGEON_FLOOR_NOT_UNLOCKED` under `Locked`, 03's `STAT_AT_CAP` under `Capped`), localized as `reject.<reason>`. 01 owns the type; each owning spec owns its reason list, and its tests assert both values.
+A reject is two-level (issue #11): `Code` is the category from this enum, and `Reason` is a stable key from the owning spec's closed reason list (for example 06's `DUNGEON_FLOOR_NOT_UNLOCKED` under `Locked`, 03's `STAT_AT_CAP` under `Capped`), localized as `reject.<reason_lower>` (the reason stays UPPER_SNAKE in `ApplyResult.Reason`; the client lowercases it to build the key, so `STAT_AT_CAP` shows `reject.stat_at_cap`; a reject without a reason uses the snake-cased `RejectCode`, `reject.cannot_afford`; issue #248). 01 owns the type; each owning spec owns its reason list, and its tests assert both values.
 
 Concrete commands (`VerbNoun`, 00 section 5.1) and the events they emit. Full field lists are in the owning spec; this table fixes the inventory and the owning assembly path.
 
@@ -290,7 +290,7 @@ This payload is the only summon contract (issue #13); 04 and 08 use it. `ApplySu
 
 Lives in `HeroCat.Runtime`. Owns one `Simulation`, drives ticks from a monotonic clock, applies lifecycle transitions, schedules autosaves, and drains events. The Unity side forwards four callbacks and nothing else. Every command, player or system, goes through `Issue`, so the command log holds exactly what was applied.
 
-Server time reaches the sim only through logged `ApplyServerTime` commands at sync points: boot, resume, gap recovery and every `WALL_CLOCK_SYNC_SEC = 60` of foreground time (issue #5). Between them the sim advances a virtual server clock with its ticks (`anchor + (Tick - anchorTick) / TICK_HZ`), so a day rollover happens on a tick and is a pure function of the logged inputs (06).
+Server time reaches the sim only through logged `ApplyServerTime` commands at sync points: boot, resume, gap recovery and every `WALL_CLOCK_SYNC_SEC = 60` of foreground time (issue #5). Between them the sim advances a virtual server clock with its ticks (`anchor + (Tick - anchorTick) / TICK_HZ`), so a day rollover happens on a tick and is a pure function of the logged inputs (06). A re-anchor whose server time is behind the virtual clock by at most `CLOCK_BACKWARDS_TOLERANCE_S = 5` is resync jitter and emits nothing; only a larger gap emits `ClockWentBackwards` (and Runtime's `clock_anomaly{backwards}`, the same rule for a resume behind `LastTickServerTime`; issue #246). The constant is a content constant (09 section 5.1) because the sim reads it.
 
 ```csharp
 public sealed class SessionRunner
@@ -363,6 +363,7 @@ public sealed class SessionRunner
 | `IN_APP_GAP_SEC` | 30 | A frame gap above this is treated as an offline interval and goes through `Catchup`, not ticks. |
 | `AUTOSAVE_INTERVAL_SEC` | 30 | Periodic save while dirty. |
 | `WALL_CLOCK_SYNC_SEC` | 60 | Foreground cadence of the logged `ApplyServerTime` re-anchor (3.1). |
+| `CLOCK_BACKWARDS_TOLERANCE_S` | 5 | A server time behind the virtual clock (or behind `LastTickServerTime` at resume) by at most this is jitter: no `ClockWentBackwards`, no `clock_anomaly` (3.1; issue #246). Content constant, read by the sim. |
 | `TICK_BUDGET_MS` | 8 | Soft budget: if the tick loop has already used this much wall time this frame, stop at the current `n` even below `MAX_TICKS_PER_FRAME`. Keeps 30 fps on 2 GB devices during catch-up bursts. The remainder stays in `acc`. |
 
 Tick cost target: one `Advance(1)` under 0.1 ms on a 2019 mid-range Android (Snapdragon 665 class) with zero GC allocation (10 perf budget). The fish board, skills and companions all run inside the same tick.
@@ -497,7 +498,7 @@ A mutating request is retried **only with the same `requestId`**. The server rep
 
 ## 7. Error taxonomy shown to the user
 
-Every user-visible failure maps to one of these classes. The class picks the presentation; the `code` picks the localization key `err.<code>`, spelled exactly as listed here and in 5.2 (server codes are 08's wire codes, issue #30). Sim rejects use `reject.<reason>` (2.1).
+Every user-visible failure maps to one of these classes. The class picks the presentation; the `code` picks the localization keys `err.<code_lower>.title` and `err.<code_lower>.body` (07 section 4.27): the code as listed here and in 5.2 (server codes are 08's wire codes, issue #30), lowercased by the client when it builds the key, so `NET_OFFLINE` shows `err.net_offline.title`. Codes stay UPPER_SNAKE on the wire and in code; only the key is lowercase, because 09's key pattern is (issue #248). Sim rejects use the single toast key `reject.<reason_lower>` (2.1).
 
 | Class | Presentation | Examples (`code`) | Retry |
 |---|---|---|---|
@@ -507,9 +508,11 @@ Every user-visible failure maps to one of these classes. The class picks the pre
 | `Rejected` (server) | Modal with a specific message | `INSUFFICIENT_FUNDS`, `RECEIPT_INVALID`, `PROVIDER_ALREADY_LINKED`, `CLIENT_TOO_OLD`, `CONTENT_TOO_OLD`, `BANNER_CLOSED`, `SUMMON_DISABLED`; client-side `IAP_PENDING` (store reports a deferred payment; the pending receipt is kept, 8.9) | Depends; `CLIENT_TOO_OLD` has only "Update". |
 | `Conflict` | Dedicated choice modal: the conflict modal (02 section 9.4) for `SAVE_CONFLICT`; [Restore from cloud] / [Reset profile] for `SAVE_CORRUPT` (local save unreadable, a cloud or backup copy exists); a rollback notice for `SAVE_ROLLED_BACK` | `SAVE_CONFLICT`, `SAVE_CORRUPT`, `SAVE_ROLLED_BACK` | Player chooses (rollback: acknowledge). |
 | `Maintenance` | Full-screen block on `SCR_BOOT`/`SCR_TITLE` with the message from config and an ETA | `MAINTENANCE` | Automatic poll every `MAINT_POLL_S = 60`. |
-| `Fatal` | Full-screen with support id; app cannot continue | `SAVE_TOO_NEW`, `CONTENT_CORRUPT`, `SAVE_CORRUPT_ALL` (no readable copy anywhere), `ACCOUNT_BANNED` (appeal url) | Reinstall / contact support. |
+| `Fatal` | Full-screen with support id; app cannot continue | `SAVE_TOO_NEW`, `CONTENT_CORRUPT`, `ACCOUNT_BANNED` (appeal url) | Reinstall / contact support. |
 
-Rules: never two modals at once (07); a `Reject` never produces a modal; a reject code is never shown raw, always through its key (`reject.<reason>`, 2.1); every modal has a support id (`sessionId` prefix + minute) in small print so a screenshot is actionable.
+No readable save copy anywhere is not an error class (issue #248; 02 section 8.3 owns it): the copies are quarantined, a new profile starts, analytics gets `save_corrupt_all{supportId}`, and `SCR_MAIN` shows a one-time acknowledge-only notice (`notice.save_corrupt_all.title` / `.body`, "your save could not be read; a new game was started; contact support with id X") with the support id. There is no `SAVE_CORRUPT_ALL` row in the 5.2 / section 7 table.
+
+Rules: never two modals at once (07); a `Reject` never produces a modal; a reject code is never shown raw, always through its key (`reject.<reason_lower>`, 2.1); every modal has a support id (`sessionId` prefix + minute) in small print so a screenshot is actionable.
 
 ## 8. End-to-end flows
 
@@ -547,7 +550,7 @@ Steps:
 1. **Content load** (Runtime `ContentLoader`): read `StreamingAssets/content/manifest.json`, verify each table's hash, parse into DTOs, hand DTOs to `ContentDb.Build(dtos)` (sim). If a cached newer bundle exists in `persistentDataPath/content/<version>/` and its manifest hash verifies, use it instead. Failure of both -> `Fatal CONTENT_CORRUPT`. Target under 300 ms.
 2. **Config fetch** (`ConfigClient`): `GET /config` with `CONFIG_FETCH_TIMEOUT_S = 3`, sending the cached access JWT if one exists (it may be expired). The server applies the content rollout bucket only for a valid JWT; without one it returns the non-rollout default (08; issue #31). After step 3 succeeds, `ConfigClient` re-fetches config once in the background with the fresh JWT; this fetch is off the boot critical path, and any newer bundle it names applies at the next cold boot (8.12). On success: if `minClientVersion > clientVersion` -> `CLIENT_TOO_OLD` block with store link; if `maintenance.active` -> `Maintenance` block; store kill switches; if `contentVersion` newer than loaded -> start background download (8.12). On timeout/offline: use cached config if under `CONFIG_CACHE_MAX_AGE_S = 86400`, else defaults (everything enabled, no gate). Local mode skips this step.
 3. **Auth** (`AuthClient`): if a refresh token exists, `POST /auth/refresh`; else if no account at all, `POST /auth/guest` with the device id. Store tokens in secure storage. On offline: continue with cached `playerId` if any; else create a local guest profile with `playerId = null` and link it on first successful connection (08 section 3). First `X-Server-Time` observation makes `ServerClock.IsAuthoritative = true`.
-4. **Save load** (`CloudSaveClient.LoadAsync`): local load per 02 section 8.3 in parallel with `GET /save/meta` (5 s). Resolve per 02 section 9.3; a `Conflict` result shows the conflict modal before `SCR_MAIN`. No save anywhere -> `GameState.NewProfile(playerId, now)` with `TUTORIAL_DIAMONDS` granted via `Wallet.Apply(+1500 DIAMOND, TUTORIAL)` and the starter weapon `TUTORIAL_WEAPON_ID` (both from 09's `tut_welcome` step grant, the only grant path, applied once and guarded by `Tutorial.TutorialDiamondsGranted`, 02; issue #46), tutorial step 0.
+4. **Save load** (`CloudSaveClient.LoadAsync`): local load per 02 section 8.3 in parallel with `GET /save/meta` (5 s). Resolve per 02 section 9.3; a `Conflict` result shows the conflict modal before `SCR_MAIN`. No save anywhere -> `GameState.NewProfile(playerId, now)` with `TUTORIAL_DIAMONDS` granted via `Wallet.Apply(+1500 DIAMOND, TUTORIAL)` and the starter weapon `TUTORIAL_WEAPON_ID` (both from 09's `tut_welcome` step grant, the only grant path, applied once and guarded by `Tutorial.TutorialDiamondsGranted`, 02; issue #46), tutorial step 0, a full Magic Tank and MP 0 (02 section 3.1). No `Simulation` exists yet, so `ProfileFactory` reports the grant as a `currency_changed` analytics row with `reason = TUTORIAL` itself (06 section 13; issue #246). Copies that exist but none is readable: the same new profile plus 02 section 8.3's `save_corrupt_all` and one-time notice, never a fatal error (section 7; issue #248).
 5. **Offline catch-up**: issue the logged system commands `ApplyServerTime(now)` (day/week rollover first, so a new day's quests exist before anything is credited), then `ComputeOfflineCatchup(now)`, which runs `Catchup.Compute` inside `Apply`, stores or sums the result into `state.Offline.Pending` and stamps `LastTickServerTime = now` (8.7; issue #6). Save immediately.
 6. **Main screen**: `SCR_BOOT` hands over to `SCR_MAIN`; `SCR_MAIN` opens `SCR_OFFLINE_REWARD` if `Offline.Pending != null`, then the tutorial overlay if `Tutorial.Step < TUTORIAL_DONE` (`TUTORIAL_DONE` = row count of `tutorial_steps`, 09; issue #46). Ticks start on the first `OnFrame` after `SCR_MAIN` is shown (not during the modal, so the modal's numbers are exactly what gets credited).
 
@@ -828,7 +831,7 @@ sequenceDiagram
 1. Purchase through Unity IAP (StoreKit 2 on iOS, Play Billing 6 on Android). The store transaction is **not** finished/acknowledged until the server has confirmed the grant; an unacknowledged Play purchase is auto-refunded after 3 days, so step 4 must happen before then and the pending receipt list guarantees retries.
 2. Persist the receipt intent (`Pending.Receipts`, a list, not a single slot: a player can complete a second purchase while the first validation is in flight) and save before calling the server.
 3. `POST /iap/validate` (08 section 6). Server verifies the signed payload with the store API, checks the `transactionId` has not been granted before, writes `purchases` and `inbox_items` in one transaction, returns `GRANTED` (or `ALREADY_GRANTED` with the same `inboxItemId`, which the client treats identically).
-4. On 200: finish/acknowledge the store transaction, remove the pending receipt, save. On retryable failure: keep the pending receipt, retry with the same `requestId` on resume and every `RECEIPT_RETRY_S = 60` while in the foreground. On `400 RECEIPT_INVALID`: remove pending, do **not** finish the transaction (let the store's own refund path handle it), show `err.RECEIPT_INVALID` with a support id, analytics `iap_failed` with `errorCode = RECEIPT_INVALID` (06 section 13). A store-side deferred payment (Ask to Buy, pending card) shows `IAP_PENDING` and keeps the pending receipt.
+4. On 200: finish/acknowledge the store transaction, remove the pending receipt, save. On retryable failure: keep the pending receipt, retry with the same `requestId` on resume and every `RECEIPT_RETRY_S = 60` while in the foreground. On `400 RECEIPT_INVALID`: remove pending, do **not** finish the transaction (let the store's own refund path handle it), show `err.receipt_invalid` (title and body) with a support id, analytics `iap_failed` with `errorCode = RECEIPT_INVALID` (06 section 13). A store-side deferred payment (Ask to Buy, pending card) shows `IAP_PENDING` and keeps the pending receipt.
 5. The grant lands in the Inbox, never directly in the wallet. `SCR_SHOP` shows a toast "Sent to your Inbox" and the inbox badge increments. First-purchase doubling is applied server-side when writing the inbox item (06).
 6. Claim: `POST /inbox/claim {requestId, inboxItemId}` -> `Apply(ApplyInboxGrant(payload))` -> `Wallet.Apply(+diamonds, IAP)`; `Inbox.ClaimedIds += id`. Replay-safe by `requestId`; a double claim returns `409 INBOX_ALREADY_CLAIMED` carrying the original grants, which the client treats as success (5.2): it applies them only if the id is not already in `ClaimedIds`.
 7. Restore purchases (`SCR_SETTINGS`): query the store for owned non-consumed transactions, run step 3 for each. Server deduplicates on `transactionId`.
@@ -971,7 +974,7 @@ sequenceDiagram
 11. Kill switch `summonEnabled[WEAPON] = false` disables the summon button within one config refresh without a restart; a new content bundle never changes `ContentDb` mid-session (assert the `ContentDb` instance identity is stable across a config refresh).
 12. `EventBus` handlers calling `runner.Enqueue` never cause a nested `Apply` (assert `Apply` re-entrancy guard is never hit in the PlayMode smoke test).
 13. Logout with a failed upload shows `LOGOUT_UNSYNCED` and does not clear tokens unless confirmed; the archived save directory exists after logout.
-14. Every code in the 5.2 table and section 7 that shows a message has an `err.<code>` key in `localization` (09 validator rule; the validator reads `ErrorClassifier.Table`, issue #30).
+14. Every code in the 5.2 table and section 7 that shows a message has `err.<code_lower>.title` and `err.<code_lower>.body` keys in the English `localization`, every reject reason and `RejectCode` fallback has its `reject.<reason_lower>` key, and the save-reset notice has its `notice.save_corrupt_all.*` keys (09 validator rule; the test reads `ErrorClassifier.Table` and the sim's reason lists, issues #30, #248).
 15. Boot to `SCR_MAIN` under 4 s with warm content cache on the reference low device, under 6 s with a 3 s config timeout and offline (10 perf test).
 
 ## Constants introduced
@@ -984,6 +987,7 @@ Engineering constants, code-resident in `HeroCat.Runtime.RuntimeConfig` (not bal
 | `IN_APP_GAP_SEC` | 30 | I | 3.2 |
 | `AUTOSAVE_INTERVAL_SEC` | 30 | I | 3.2 |
 | `WALL_CLOCK_SYNC_SEC` | 60 | I | 3.1, 3.2, 8.11 |
+| `CLOCK_BACKWARDS_TOLERANCE_S` | 5 | S | 3.1, 3.2 (content constant, 09 section 5.1) |
 | `TICK_BUDGET_MS` | 8 | S | 3.2 |
 | `SAVE_FAIL_WARN_COUNT` | 3 | I | 3.1 |
 | `EVENT_BUFFER_MAX` | 4096 | S | 2.3 |

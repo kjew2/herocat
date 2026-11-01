@@ -32,8 +32,8 @@
     },
     "constants": {
       "file": "constants.json",
-      "rows": 42,
-      "sha256": "73d6b82651e1b549afb4f0af491aa7905245156231e6376f5f3d28cc9b521568"
+      "rows": 43,
+      "sha256": "32d0946697285b6e0c93bb1542ce69400e623bc9509e90c0acfca657e0dda830"
     },
     "curves": {
       "file": "curves.json",
@@ -98,7 +98,7 @@
     "tutorial_steps": {
       "file": "tutorial_steps.json",
       "rows": 12,
-      "sha256": "b959b462cceb1b4e1c0d2f482d7ab60e17e05ced0e60606116e97ec7779fbbd0"
+      "sha256": "6bb0fdaf33df711614791b88e61119122b9ab41087fb648e3a8820413d6e3b16"
     },
     "weapons": {
       "file": "weapons.json",
@@ -109,16 +109,17 @@
   "localization": {
     "en": {
       "file": "localization.en.json",
-      "rows": 217,
-      "sha256": "06afddaabf2600b2d58a797e82bf6ad52cbca570a0b20e90015059b589af7e9b"
+      "rows": 318,
+      "sha256": "597ab8c47635deeb8007e11033aba4681cd80f06412fc1f36952d14eb5b8db5c"
     }
   },
-  "content_hash": "271e3ca3b41417b56dc1a43bc308d485827cec3232992d9ba765923d519b9d62",
+  "content_hash": "c76420cddc455823e9aa79e1f0c882452d747ca8ac8efb728e26c7ccbed3948d",
   "s_constants": [
     "BASE_HP",
     "BOSS_ROCK_CANDY_P",
     "BOSS_TIME_TICKS",
     "CHAPTER_WIDTH",
+    "CLOCK_BACKWARDS_TOLERANCE_S",
     "COMPANION_SLOTS",
     "CRIT_DMG_BASE",
     "DAILY_GIFT_WEAPON_TICKETS",

@@ -88,6 +88,8 @@ CatchUpTank(elapsedTicks):                    # closed form, no per-tick loop; p
   return (added, refillTickAfter)
 ```
 
+A new profile starts with a full tank, `TankCount = TankCap` (`TANK_CAP0` at Research 0) and `TankRefillTick = 0`, set by `ProfileFactory` through the `TankCap` query, so the first session can release and merge at once (02 section 3.1; issue #246).
+
 The timer runs on sim ticks, not wall time, so it advances exactly as fast as combat does and offline catch-up can fill it with the same arithmetic 06 uses for gold (`elapsedTicks = creditedSeconds * TICK_HZ`, credited not full gap; issue #21). The effective offline cap (`OFFLINE_CAP_H` plus `RES_OFFLINE_CAP`) applies to the tank too: a player back after a weekend finds a full tank, not three days of fish. At Research 0 the tank is full one minute after it empties; with `RES_TANK_CAP` 10 and `RES_TANK_REFILL` 10 it holds 60 fish and refills in two minutes. Progress while the tank is full is discarded, which is the whole reason to release fish before closing the app.
 
 P1: tank level upgrades (released fish start at level 2, then 3) would halve the taps per coin. State holds the upgrade level bought, `Fish.TankReleaseLevel` (default 1); content holds what each level releases, with `tank.release_level` (09) as the base value (1 in MVP) (issue #7). Not in MVP content.
@@ -147,7 +149,7 @@ Discover(n):
   Fish.DiscoveredLevels.Add(n); Fish.HighestLevel = max(Fish.HighestLevel, n); return true
 ```
 
-Rejections use 01's `RejectCode` (`TankEmpty`, `BoardFull`, `LevelMismatch`, `InvalidTarget`, `Capped`, `BadArgument`, `Locked`) plus a reason key from this spec's closed list in `ApplyResult.Reason`, localized as `reject.<reason>` (issue #11): `TANK_EMPTY`, `BOARD_FULL`, `LEVEL_MISMATCH`, `EMPTY_CELL`, `CELL_OCCUPIED`, `FISH_AT_LEVEL_CAP`, `BAD_CELL`, `BOARD_LOCKED` (issue #40). A rejection leaves `StateHash` unchanged and emits no events. Every `Wallet.Apply` of Fish Coins also adds to `Stats.FishCoinEarned`.
+Rejections use 01's `RejectCode` (`TankEmpty`, `BoardFull`, `LevelMismatch`, `InvalidTarget`, `Capped`, `BadArgument`, `Locked`) plus a reason key from this spec's closed list in `ApplyResult.Reason`, localized as `reject.<reason_lower>` (issue #11; lowercased by the client, `reject.tank_empty`, issue #248): `TANK_EMPTY`, `BOARD_FULL`, `LEVEL_MISMATCH`, `EMPTY_CELL`, `CELL_OCCUPIED`, `FISH_AT_LEVEL_CAP`, `BAD_CELL`, `BOARD_LOCKED` (issue #40). A rejection leaves `StateHash` unchanged and emits no events. Every `Wallet.Apply` of Fish Coins also adds to `Stats.FishCoinEarned`.
 
 The merged fish lands in the **target** cell (where the finger let go), and the source empties. Adjacency is not required: any two equal fish on the board can be merged, which keeps the 20-cell board from jamming and keeps `Merge all` simple. A merge pays the full discovery value the first time a level is created and 2% of it on every repeat; both go through the Wallet with their own reason so analytics (06) can tell the one-off income from the recurring one.
 

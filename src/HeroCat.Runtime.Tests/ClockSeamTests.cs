@@ -90,6 +90,25 @@ namespace HeroCat.Runtime.Tests
             Assert.That(analytics.Count("clock_anomaly"), Is.EqualTo(1));
         }
 
+        [Test]
+        public void ResumeBehindByAtMostTheTolerance_IsJitter_NoClockAnomaly()   // 01 section 3.1, issue #246 item 5
+        {
+            var clock = new FakeClock(TestContent.T0);
+            var analytics = new MemoryAnalytics();
+            var session = TestSession.Open(clock, analytics: analytics);
+            int tol = TestContent.Db.Constants.ClockBackwardsToleranceS;
+            clock.Advance(1000);
+            session.Runner.OnPause();
+            clock.Set(TestContent.T0 + 1000 - tol);
+            session.Runner.OnResume();
+            Assert.That(analytics.Count("clock_anomaly"), Is.EqualTo(0), "within CLOCK_BACKWARDS_TOLERANCE_S");
+
+            session.Runner.OnPause();
+            clock.Set(TestContent.T0 + 1000 - tol - 1);
+            session.Runner.OnResume();
+            Assert.That(analytics.Count("clock_anomaly"), Is.EqualTo(1), "past it");
+        }
+
         // ------------------------------------------------------------------------------------------- install id
 
         [Test]

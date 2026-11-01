@@ -32,7 +32,9 @@ namespace HeroCat.Sim
             if (IsAnchored)
             {
                 long virtualNow = VirtualNowServerSeconds;
-                if (c.ServerSeconds < virtualNow) Emit(new ClockWentBackwards(virtualNow - c.ServerSeconds));
+                // Only a gap past CLOCK_BACKWARDS_TOLERANCE_S is a backwards clock; less is resync jitter (issue #246 item 5).
+                long behind = virtualNow - c.ServerSeconds;
+                if (behind > Db.Constants.ClockBackwardsToleranceS) Emit(new ClockWentBackwards(behind));
             }
             t.AnchorServerTime = c.ServerSeconds;
             t.AnchorTick = t.Tick;

@@ -8,27 +8,55 @@ namespace HeroCat.Runtime.Errors
     /// <summary>One row of 01 section 5.2's table (or a client-side code of section 7). Status 0 = no response.</summary>
     public sealed record ErrorRule(int Status, string Code, ErrorClass Class, RetryPolicy Retry, Presentation Presentation)
     {
-        /// <summary>The localization key, <c>err.&lt;CODE&gt;</c> (spelled exactly as the code, 01 section 7).</summary>
+        /// <summary>The key stem <c>err.&lt;code_lower&gt;</c>: the wire code lowercased (01 section 7, 00 decision 102).</summary>
         public string LocalizationKey => ErrorClassifier.ErrKey(Code);
+
+        /// <summary><c>err.&lt;code_lower&gt;.title</c> (07 section 4.27).</summary>
+        public string TitleKey => LocalizationKey + ".title";
+
+        /// <summary><c>err.&lt;code_lower&gt;.body</c> (07 section 4.27).</summary>
+        public string BodyKey => LocalizationKey + ".body";
 
         /// <summary>True when the row shows text to the player, so 01 AC 14 requires its key.</summary>
         public bool ShowsMessage => Presentation != Presentation.None;
     }
 
     /// <summary>What a view-model hands to SCR_ERROR or the inline reject feedback (07 renders it).</summary>
+    /// <remarks>
+    /// <see cref="LocalizationKey"/> is the full toast key <c>reject.&lt;reason_lower&gt;</c> for a sim reject, and the key
+    /// stem <c>err.&lt;code_lower&gt;</c> for every other class, whose text is <see cref="TitleKey"/> and <see cref="BodyKey"/>.
+    /// </remarks>
     public sealed record UserError(ErrorClass Class, string Code, string LocalizationKey, Presentation Presentation, RetryPolicy Retry,
                                    string SupportId)
     {
         /// <summary>Modal-class errors block input and carry the support id (01 section 7 rules).</summary>
         public bool IsModal => ErrorClassifier.IsModal(Presentation);
+
+        /// <summary>The title (or, for a reject, the single toast) key.</summary>
+        public string TitleKey => Class == ErrorClass.Reject ? LocalizationKey : LocalizationKey + ".title";
+
+        /// <summary>The body key; null for a reject (one toast line).</summary>
+        public string BodyKey => Class == ErrorClass.Reject ? null : LocalizationKey + ".body";
+    }
+
+    /// <summary>
+    /// A one-time, acknowledge-only notice (not an error class): today only <see cref="ErrorClassifier.SAVE_CORRUPT_ALL"/>,
+    /// shown once on the boot that replaced an unreadable save with a new profile, with the support id (02 section 8.3;
+    /// 00 decision 103). Keys: <c>notice.&lt;code_lower&gt;.title</c> / <c>.body</c>; the body takes <c>{supportId}</c>.
+    /// </summary>
+    public sealed record Notice(string Code, string SupportId)
+    {
+        public string TitleKey => "notice." + ErrorClassifier.Lower(Code) + ".title";
+        public string BodyKey => "notice." + ErrorClassifier.Lower(Code) + ".body";
     }
 
     /// <summary>
     /// The error taxonomy as code (01 sections 5.2 and 7, 00 decision 62; issue #69). Responses are classified by
     /// (status, code), code first: a known code decides the class, retry and presentation; an unknown code falls back to
     /// its status rule. <see cref="Table"/> is the single table the ApiClient and the localization check (01 AC 14) read.
-    /// Codes are never shown raw: server and client codes localize as <c>err.&lt;CODE&gt;</c>, sim rejects as
-    /// <c>reject.&lt;reason&gt;</c> (or <c>reject.&lt;RejectCode&gt;</c> when a reject carries no reason).
+    /// Codes are never shown raw: server and client codes localize as <c>err.&lt;code_lower&gt;.title</c> / <c>.body</c>,
+    /// sim rejects as <c>reject.&lt;reason_lower&gt;</c> (or the snake-cased RejectCode, <c>reject.cannot_afford</c>, when a
+    /// reject carries no reason). Wire codes stay UPPER_SNAKE; only the key is lowercased (00 decision 102, issue #248).
     /// </summary>
     public static class ErrorClassifier
     {
@@ -47,6 +75,11 @@ namespace HeroCat.Runtime.Errors
         public const string SAVE_CORRUPT = "SAVE_CORRUPT";
         public const string SAVE_TOO_NEW = "SAVE_TOO_NEW";
         public const string CONTENT_CORRUPT = "CONTENT_CORRUPT";
+
+        /// <summary>
+        /// Not an error class (00 decision 103): no readable save copy means quarantine and a new profile (02 section 8.3),
+        /// then a one-time <see cref="Notice"/> and the <c>save_corrupt_all</c> analytics event. Not in <see cref="Table"/>.
+        /// </summary>
         public const string SAVE_CORRUPT_ALL = "SAVE_CORRUPT_ALL";
 
         static ErrorRule R(int status, string code, ErrorClass c, RetryPolicy r, Presentation p) => new ErrorRule(status, code, c, r, p);
@@ -87,7 +120,6 @@ namespace HeroCat.Runtime.Errors
             R(0, SAVE_CORRUPT, ErrorClass.Conflict, RetryPolicy.None, Presentation.ChoiceModal),
             R(0, SAVE_TOO_NEW, ErrorClass.Fatal, RetryPolicy.None, Presentation.Fatal),
             R(0, CONTENT_CORRUPT, ErrorClass.Fatal, RetryPolicy.None, Presentation.Fatal),
-            R(0, SAVE_CORRUPT_ALL, ErrorClass.Fatal, RetryPolicy.None, Presentation.Fatal),
             // Status-rule fallbacks with a generic key (an unknown code must still never show raw).
             R(0, REQUEST_REJECTED, ErrorClass.Rejected, RetryPolicy.None, Presentation.Modal),
             R(0, SRV_UNEXPECTED, ErrorClass.ServerError, RetryPolicy.None, Presentation.ToastThenModal),
@@ -106,10 +138,33 @@ namespace HeroCat.Runtime.Errors
             return d;
         }
 
-        public static string ErrKey(string code) => "err." + code;
+        /// <summary>The key stem <c>err.&lt;code_lower&gt;</c>; the wire code itself stays UPPER_SNAKE.</summary>
+        public static string ErrKey(string code) => "err." + Lower(code);
 
-        /// <summary>Key for a sim reject: <c>reject.&lt;reason&gt;</c>, else <c>reject.&lt;RejectCode&gt;</c> (2.1).</summary>
-        public static string RejectKey(ApplyResult r) => "reject." + (string.IsNullOrEmpty(r.Reason) ? r.Code.ToString() : r.Reason);
+        /// <summary>
+        /// Key for a sim reject: <c>reject.&lt;reason_lower&gt;</c>, else the snake-cased RejectCode
+        /// (<c>CannotAfford</c> -> <c>reject.cannot_afford</c>) (01 section 2.1).
+        /// </summary>
+        public static string RejectKey(ApplyResult r) =>
+            string.IsNullOrEmpty(r.Reason) ? RejectCodeKey(r.Code) : "reject." + Lower(r.Reason);
+
+        /// <summary>The fallback key for a RejectCode with no reason, <c>reject.&lt;snake_case&gt;</c>.</summary>
+        public static string RejectCodeKey(RejectCode c) => "reject." + Snake(c.ToString());
+
+        /// <summary>UPPER_SNAKE code to the lowercase key segment (09's key pattern is lowercase only).</summary>
+        public static string Lower(string code) => code.ToLowerInvariant();
+
+        static string Snake(string pascal)
+        {
+            var sb = new System.Text.StringBuilder(pascal.Length + 4);
+            for (int i = 0; i < pascal.Length; i++)
+            {
+                char ch = pascal[i];
+                if (char.IsUpper(ch) && i > 0) sb.Append('_');
+                sb.Append(char.ToLowerInvariant(ch));
+            }
+            return sb.ToString();
+        }
 
         /// <summary>True for a code the table knows.</summary>
         public static bool IsKnown(string code) => code != null && ByCode.ContainsKey(code);

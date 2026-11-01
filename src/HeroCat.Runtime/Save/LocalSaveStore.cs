@@ -89,6 +89,13 @@ namespace HeroCat.Runtime.Save
         /// <summary>The TooNew version found, else 0.</summary>
         public int TooNewVersion { get; internal set; }
 
+        /// <summary>
+        /// NewProfile only: save copies existed but none was readable, so they were quarantined (02 section 8.3). In M0 there
+        /// is no cloud copy, so boot treats this as "no readable copy anywhere": the save_corrupt_all event and the one-time
+        /// notice (00 decision 103). The MVP cloud wrapper clears it when it restores a cloud copy instead.
+        /// </summary>
+        public bool ReplacedUnreadableSave { get; internal set; }
+
         public bool HasState => State != null;
         public bool IsNewProfile => Status == LoadStatus.NewProfile;
     }
@@ -239,12 +246,12 @@ namespace HeroCat.Runtime.Save
                 _analytics.Track("save_corrupt", new Dictionary<string, object> { ["problems"] = string.Join("; ", problems) });
             }
             var fresh = (NewProfileFactory ?? DefaultNewProfile)(db, nowServerSec);
-            var created = new LoadResult(LoadStatus.NewProfile, fresh, null, null, null, null);
+            var created = new LoadResult(LoadStatus.NewProfile, fresh, null, null, null, null) { ReplacedUnreadableSave = anyExisted };
             created.Problems.AddRange(problems);
             return created;
         }
 
-        GameState DefaultNewProfile(ContentDb db, long now) => ProfileFactory.Create(db, Guid.Empty, now, InstallId);
+        GameState DefaultNewProfile(ContentDb db, long now) => ProfileFactory.Create(db, Guid.Empty, now, InstallId, null, _analytics);
 
         public void Save(GameState state, SaveTrigger trigger)
         {

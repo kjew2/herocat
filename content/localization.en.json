@@ -87,6 +87,190 @@
       "text": "Dreamland 12"
     },
     {
+      "key": "err.account_banned.body",
+      "text": "This account has been suspended. Contact support to appeal."
+    },
+    {
+      "key": "err.account_banned.title",
+      "text": "Account suspended"
+    },
+    {
+      "key": "err.banner_closed.body",
+      "text": "This summon is no longer available."
+    },
+    {
+      "key": "err.banner_closed.title",
+      "text": "Summon closed"
+    },
+    {
+      "key": "err.client_too_old.body",
+      "text": "A new version is available. Update the game to keep playing."
+    },
+    {
+      "key": "err.client_too_old.title",
+      "text": "Update required"
+    },
+    {
+      "key": "err.content_corrupt.body",
+      "text": "The game data is damaged. Reinstall the game or contact support."
+    },
+    {
+      "key": "err.content_corrupt.title",
+      "text": "Game data damaged"
+    },
+    {
+      "key": "err.content_too_old.body",
+      "text": "New game data is available. Restart the game to download it."
+    },
+    {
+      "key": "err.content_too_old.title",
+      "text": "Update needed"
+    },
+    {
+      "key": "err.dungeon_seed_cap.body",
+      "text": "You've started too many dungeon runs. Try again later."
+    },
+    {
+      "key": "err.dungeon_seed_cap.title",
+      "text": "Try again later"
+    },
+    {
+      "key": "err.export_rate_limited.body",
+      "text": "You've requested your data recently. Try again later."
+    },
+    {
+      "key": "err.export_rate_limited.title",
+      "text": "Try again later"
+    },
+    {
+      "key": "err.iap_pending.body",
+      "text": "Your purchase is waiting for approval. It will arrive when it is approved."
+    },
+    {
+      "key": "err.iap_pending.title",
+      "text": "Purchase pending"
+    },
+    {
+      "key": "err.insufficient_funds.body",
+      "text": "You don't have enough diamonds for this."
+    },
+    {
+      "key": "err.insufficient_funds.title",
+      "text": "Not enough diamonds"
+    },
+    {
+      "key": "err.maintenance.body",
+      "text": "The game is under maintenance. Please come back soon."
+    },
+    {
+      "key": "err.maintenance.title",
+      "text": "Maintenance"
+    },
+    {
+      "key": "err.net_offline.body",
+      "text": "Check your connection. Your progress is saved on this device."
+    },
+    {
+      "key": "err.net_offline.title",
+      "text": "You're offline"
+    },
+    {
+      "key": "err.net_timeout.body",
+      "text": "The server took too long to answer. Try again."
+    },
+    {
+      "key": "err.net_timeout.title",
+      "text": "Connection timed out"
+    },
+    {
+      "key": "err.provider_already_linked.body",
+      "text": "That account is already linked to another player."
+    },
+    {
+      "key": "err.provider_already_linked.title",
+      "text": "Account already linked"
+    },
+    {
+      "key": "err.receipt_invalid.body",
+      "text": "We couldn't verify this purchase. Contact support if you were charged."
+    },
+    {
+      "key": "err.receipt_invalid.title",
+      "text": "Purchase failed"
+    },
+    {
+      "key": "err.request_rejected.body",
+      "text": "The server couldn't complete this request."
+    },
+    {
+      "key": "err.request_rejected.title",
+      "text": "Couldn't do that"
+    },
+    {
+      "key": "err.save_conflict.body",
+      "text": "This device and the cloud have different progress. Pick the save to keep."
+    },
+    {
+      "key": "err.save_conflict.title",
+      "text": "Choose a save"
+    },
+    {
+      "key": "err.save_corrupt.body",
+      "text": "Your save on this device can't be read. Restore it from the cloud or start over."
+    },
+    {
+      "key": "err.save_corrupt.title",
+      "text": "Save can't be read"
+    },
+    {
+      "key": "err.save_rolled_back.body",
+      "text": "Your progress was restored to an earlier point."
+    },
+    {
+      "key": "err.save_rolled_back.title",
+      "text": "Progress restored"
+    },
+    {
+      "key": "err.save_too_new.body",
+      "text": "Your save is from a newer version. Update the game to keep playing."
+    },
+    {
+      "key": "err.save_too_new.title",
+      "text": "Update required"
+    },
+    {
+      "key": "err.sku_not_available.body",
+      "text": "This offer is not available right now."
+    },
+    {
+      "key": "err.sku_not_available.title",
+      "text": "Not available"
+    },
+    {
+      "key": "err.srv_5xx.body",
+      "text": "The server had a problem. Try again."
+    },
+    {
+      "key": "err.srv_5xx.title",
+      "text": "Something went wrong"
+    },
+    {
+      "key": "err.srv_unexpected.body",
+      "text": "Something unexpected happened. Try again."
+    },
+    {
+      "key": "err.srv_unexpected.title",
+      "text": "Something went wrong"
+    },
+    {
+      "key": "err.summon_disabled.body",
+      "text": "Summons are paused for a moment. Try again later."
+    },
+    {
+      "key": "err.summon_disabled.title",
+      "text": "Summons paused"
+    },
+    {
       "key": "feature.dungeons.locked",
       "text": "Unlocks at stage 30"
     },
@@ -179,6 +363,14 @@
       "text": "Fish 20"
     },
     {
+      "key": "notice.save_corrupt_all.body",
+      "text": "Your save could not be read, so a new game was started. Contact support with id {supportId} to recover it."
+    },
+    {
+      "key": "notice.save_corrupt_all.title",
+      "text": "A new game was started"
+    },
+    {
       "key": "rarity.common.name",
       "text": "Common"
     },
@@ -197,6 +389,218 @@
     {
       "key": "rarity.rare.name",
       "text": "Rare"
+    },
+    {
+      "key": "reject.already_claimed",
+      "text": "Already claimed"
+    },
+    {
+      "key": "reject.already_equipped",
+      "text": "Already equipped"
+    },
+    {
+      "key": "reject.bad_argument",
+      "text": "Invalid request"
+    },
+    {
+      "key": "reject.bad_cell",
+      "text": "Invalid cell"
+    },
+    {
+      "key": "reject.bad_server_time",
+      "text": "Clock error"
+    },
+    {
+      "key": "reject.bad_slot",
+      "text": "Invalid slot"
+    },
+    {
+      "key": "reject.banner_closed",
+      "text": "This summon is closed"
+    },
+    {
+      "key": "reject.board_full",
+      "text": "The board is full"
+    },
+    {
+      "key": "reject.board_locked",
+      "text": "The board is locked during a dungeon"
+    },
+    {
+      "key": "reject.boss_already_pending",
+      "text": "The boss is already waiting"
+    },
+    {
+      "key": "reject.cannot_afford",
+      "text": "Can't afford that"
+    },
+    {
+      "key": "reject.capped",
+      "text": "Already at max"
+    },
+    {
+      "key": "reject.cell_occupied",
+      "text": "That cell is taken"
+    },
+    {
+      "key": "reject.cooldown",
+      "text": "Not ready yet"
+    },
+    {
+      "key": "reject.empty_cell",
+      "text": "No fish there"
+    },
+    {
+      "key": "reject.fish_at_level_cap",
+      "text": "Already the highest level"
+    },
+    {
+      "key": "reject.invalid_count",
+      "text": "Invalid amount"
+    },
+    {
+      "key": "reject.invalid_stat",
+      "text": "Unknown stat"
+    },
+    {
+      "key": "reject.invalid_target",
+      "text": "Invalid target"
+    },
+    {
+      "key": "reject.item_not_owned",
+      "text": "You don't own this yet"
+    },
+    {
+      "key": "reject.level_mismatch",
+      "text": "Fish must be the same level"
+    },
+    {
+      "key": "reject.locked",
+      "text": "Locked"
+    },
+    {
+      "key": "reject.no_boss_to_attempt",
+      "text": "No boss to fight here"
+    },
+    {
+      "key": "reject.not_available",
+      "text": "Not available"
+    },
+    {
+      "key": "reject.not_enough_diamond",
+      "text": "Not enough diamonds"
+    },
+    {
+      "key": "reject.not_enough_fish_coin",
+      "text": "Not enough Fish Coins"
+    },
+    {
+      "key": "reject.not_enough_gold",
+      "text": "Not enough gold"
+    },
+    {
+      "key": "reject.not_enough_guild_coin",
+      "text": "Not enough Guild Coins"
+    },
+    {
+      "key": "reject.not_enough_hero_exp",
+      "text": "Not enough EXP"
+    },
+    {
+      "key": "reject.not_enough_rock_candy",
+      "text": "Not enough Rock Candy"
+    },
+    {
+      "key": "reject.not_enough_ticket_exp",
+      "text": "Not enough EXP tickets"
+    },
+    {
+      "key": "reject.not_enough_ticket_fish_coin",
+      "text": "Not enough Fish Coin tickets"
+    },
+    {
+      "key": "reject.not_enough_ticket_rock_candy",
+      "text": "Not enough Rock Candy tickets"
+    },
+    {
+      "key": "reject.not_enough_ticket_summon_companion",
+      "text": "Not enough companion summon tickets"
+    },
+    {
+      "key": "reject.not_enough_ticket_summon_rune",
+      "text": "Not enough rune summon tickets"
+    },
+    {
+      "key": "reject.not_enough_ticket_summon_skill",
+      "text": "Not enough skill summon tickets"
+    },
+    {
+      "key": "reject.not_enough_ticket_summon_weapon",
+      "text": "Not enough weapon summon tickets"
+    },
+    {
+      "key": "reject.not_implemented",
+      "text": "Coming soon"
+    },
+    {
+      "key": "reject.not_owned",
+      "text": "You don't own this"
+    },
+    {
+      "key": "reject.rate_limited",
+      "text": "Too fast, try again"
+    },
+    {
+      "key": "reject.skill_in_other_slot",
+      "text": "Equipped in another slot"
+    },
+    {
+      "key": "reject.slot_empty",
+      "text": "That slot is empty"
+    },
+    {
+      "key": "reject.slot_occupied",
+      "text": "That slot is taken"
+    },
+    {
+      "key": "reject.stale_request",
+      "text": "Request expired"
+    },
+    {
+      "key": "reject.stat_at_cap",
+      "text": "Already at max level"
+    },
+    {
+      "key": "reject.stat_not_trainable",
+      "text": "This stat can't be trained"
+    },
+    {
+      "key": "reject.summon_already_applied",
+      "text": "Already summoned"
+    },
+    {
+      "key": "reject.summon_bad_count",
+      "text": "Invalid summon amount"
+    },
+    {
+      "key": "reject.summon_bad_payload",
+      "text": "Summon failed"
+    },
+    {
+      "key": "reject.summon_bad_payment",
+      "text": "Can't pay that way"
+    },
+    {
+      "key": "reject.summon_stream_mismatch",
+      "text": "Summon failed"
+    },
+    {
+      "key": "reject.tank_empty",
+      "text": "The tank is empty"
+    },
+    {
+      "key": "reject.unknown_item",
+      "text": "Unknown item"
     },
     {
       "key": "skill.c_01.desc",

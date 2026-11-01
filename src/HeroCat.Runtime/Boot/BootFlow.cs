@@ -72,6 +72,13 @@ namespace HeroCat.Runtime.Boot
         public LoadStatus LoadStatus { get; internal set; }
         public bool IsNewProfile { get; internal set; }
 
+        /// <summary>
+        /// Set on the boot that replaced an unreadable save with a new profile: SCR_MAIN shows it once, acknowledge-only,
+        /// with the support id (02 section 8.3, 07 section 4.27; 00 decision 103). Null otherwise. The next boot loads the new
+        /// save, so the notice is never shown twice.
+        /// </summary>
+        public Notice SaveResetNotice { get; internal set; }
+
         /// <summary>Step 6: SCR_MAIN opens SCR_OFFLINE_REWARD first (the runner's ticks stay off until it closes).</summary>
         public bool OpenOfflineReward { get; internal set; }
 
@@ -150,7 +157,7 @@ namespace HeroCat.Runtime.Boot
             progress?.Invoke(BootStep.Save);
             long now = svc.Clock.NowServerSeconds;
             if (svc.Saves is LocalSaveStore local)   // a new profile is this boot's guest (or MVP account), seeded as asked
-                local.NewProfileFactory = (db, t) => ProfileFactory.Create(db, o.PlayerId, t, svc.InstallId, o.NewProfileRngRoot);
+                local.NewProfileFactory = (db, t) => ProfileFactory.Create(db, o.PlayerId, t, svc.InstallId, o.NewProfileRngRoot, analytics);
             // 02 section 8.3's recovery order; the store floors the clock at the loaded LastSavedServerTime (11.2 rule 4).
             var load = svc.Saves.LoadAsync(now, r.Content, CancellationToken.None).GetAwaiter().GetResult();
             r.LoadStatus = load.Status;
@@ -160,10 +167,16 @@ namespace HeroCat.Runtime.Boot
             state = load.State;
             if (load.IsNewProfile)
             {
-                // No save, or every local copy bad (quarantined): a new profile (02 section 8.3 step 4). See the gap note
-                // in the runtime track report on 01's SAVE_CORRUPT_ALL vs 02's quarantine-and-recreate.
+                // No save, or every copy bad (quarantined): a new profile (02 section 8.3 step 4). An unreadable save is not
+                // fatal: boot continues and shows a one-time notice with the support id (00 decision 103, issue #248).
                 r.IsNewProfile = true;
                 analytics.Track("profile_created", new Dictionary<string, object> { ["rngRoot"] = state.RngRoot.ToString() });
+                if (load.ReplacedUnreadableSave)
+                {
+                    var sid = new SupportId(o.SessionId, now).Format();
+                    r.SaveResetNotice = new Notice(ErrorClassifier.SAVE_CORRUPT_ALL, sid);
+                    analytics.Track("save_corrupt_all", new Dictionary<string, object> { ["supportId"] = sid });
+                }
             }
             r.Sim = new Simulation(state, r.Content);
             r.Bus = new EventBus();

@@ -22,10 +22,13 @@ namespace HeroCat.Runtime.Tests
                 Assert.That(e.Class, Is.EqualTo(ErrorClass.Reject), code.ToString());
                 Assert.That(e.Presentation, Is.EqualTo(Presentation.Inline), code.ToString());
                 Assert.That(e.IsModal, Is.False, code.ToString());
-                Assert.That(e.LocalizationKey, Is.EqualTo("reject." + code), code.ToString());
+                Assert.That(e.LocalizationKey, Is.EqualTo(ErrorClassifier.RejectCodeKey(code)), code.ToString());
+                Assert.That(e.LocalizationKey, Does.Match("^reject\\.[a-z0-9_]+$"), "lowercase key (00 decision 102)");
             }
             var withReason = ErrorClassifier.ForReject(ApplyResult.Reject(RejectCode.CannotAfford, "NOT_ENOUGH_GOLD"));
-            Assert.That(withReason.LocalizationKey, Is.EqualTo("reject.NOT_ENOUGH_GOLD"), "the owning spec's reason wins (2.1)");
+            Assert.That(withReason.LocalizationKey, Is.EqualTo("reject.not_enough_gold"), "the owning spec's reason wins, lowercased (2.1)");
+            Assert.That(withReason.Code, Is.EqualTo("NOT_ENOUGH_GOLD"), "the reason itself stays UPPER_SNAKE");
+            Assert.That(ErrorClassifier.RejectCodeKey(RejectCode.CannotAfford), Is.EqualTo("reject.cannot_afford"));
         }
 
         // (status, code) -> class, retry: the 01 section 5.2 rows (issue #30's mapping).
@@ -83,23 +86,51 @@ namespace HeroCat.Runtime.Tests
             Assert.That(codes, Is.Unique);
             foreach (var r in ErrorClassifier.Table)
             {
-                Assert.That(r.Code, Does.Match("^[A-Z][A-Z0-9_]*$"));
-                Assert.That(r.LocalizationKey, Is.EqualTo("err." + r.Code));
+                Assert.That(r.Code, Does.Match("^[A-Z][A-Z0-9_]*$"), "wire codes stay UPPER_SNAKE");
+                Assert.That(r.LocalizationKey, Is.EqualTo("err." + r.Code.ToLowerInvariant()), "00 decision 102");
+                Assert.That(r.TitleKey, Is.EqualTo(r.LocalizationKey + ".title"));
+                Assert.That(r.BodyKey, Is.EqualTo(r.LocalizationKey + ".body"));
             }
-            foreach (var fatal in new[] { ErrorClassifier.SAVE_TOO_NEW, ErrorClassifier.CONTENT_CORRUPT, ErrorClassifier.SAVE_CORRUPT_ALL })
+            foreach (var fatal in new[] { ErrorClassifier.SAVE_TOO_NEW, ErrorClassifier.CONTENT_CORRUPT })
                 Assert.That(ErrorClassifier.Find(fatal).Class, Is.EqualTo(ErrorClass.Fatal), fatal);
+            Assert.That(ErrorClassifier.IsKnown(ErrorClassifier.SAVE_CORRUPT_ALL), Is.False,
+                        "no readable save is a new profile and a notice, not an error class (00 decision 103)");
+        }
+
+        static HashSet<string> EnglishKeys()
+        {
+            var path = Path.Combine(TestContent.Dir, "localization.en.json");
+            return new HashSet<string>(((JArray)JObject.Parse(File.ReadAllText(path))["rows"]).Select(r => (string)r["key"]),
+                                       StringComparer.Ordinal);
         }
 
         [Test]
-        [Ignore("Blocked on a spec decision: 01/00/07 spell keys err.<CODE> and reject.<UPPER_SNAKE>, but 09's key regex " +
-                "(E071) is lowercase-only, and 07 section 19 wants err.<code>.title/.body. See the runtime track report.")]
         public void EveryShownCode_HasAnErrKey_InTheEnglishLocalization()   // 01 AC 14
         {
-            var path = Path.Combine(TestContent.Dir, "localization.en.json");
-            var keys = new HashSet<string>(((JArray)JObject.Parse(File.ReadAllText(path))["rows"])
-                                           .Select(r => (string)r["key"]), StringComparer.Ordinal);
-            var missing = ErrorClassifier.Table.Where(r => r.ShowsMessage && !keys.Contains(r.LocalizationKey))
-                                         .Select(r => r.LocalizationKey).ToList();
+            var keys = EnglishKeys();
+            var missing = ErrorClassifier.Table.Where(r => r.ShowsMessage)
+                                         .SelectMany(r => new[] { r.TitleKey, r.BodyKey })
+                                         .Where(k => !keys.Contains(k)).ToList();
+            var notice = new Notice(ErrorClassifier.SAVE_CORRUPT_ALL, "x");
+            missing.AddRange(new[] { notice.TitleKey, notice.BodyKey }.Where(k => !keys.Contains(k)));
+            Assert.That(missing, Is.Empty, "add the rows to content_src/localization.csv");
+        }
+
+        [Test]
+        public void EveryRejectReason_AndRejectCode_HasARejectKey_InTheEnglishLocalization()   // 01 AC 14, 00 decision 102
+        {
+            var keys = EnglishKeys();
+            var reasons = new List<string>();
+            foreach (var t in typeof(ApplyResult).Assembly.GetTypes().Where(t => t.Name.EndsWith("RejectReasons", StringComparison.Ordinal)))
+                foreach (var f in t.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static))
+                    if (f.IsLiteral && f.FieldType == typeof(string)) reasons.Add((string)f.GetRawConstantValue());
+            foreach (HeroCat.Sim.Content.Currency c in Enum.GetValues(typeof(HeroCat.Sim.Content.Currency)))
+                if (c != HeroCat.Sim.Content.Currency.GOLD) reasons.Add("NOT_ENOUGH_" + c);
+            Assert.That(reasons, Does.Contain("STAT_AT_CAP").And.Contain("TANK_EMPTY").And.Contain("NOT_ENOUGH_TICKET_EXP"));
+            var missing = reasons.Select(r => ErrorClassifier.ForReject(ApplyResult.Reject(RejectCode.BadArgument, r)).LocalizationKey)
+                                 .Concat(Enum.GetValues(typeof(RejectCode)).Cast<RejectCode>().Where(c => c != RejectCode.None)
+                                             .Select(ErrorClassifier.RejectCodeKey))
+                                 .Where(k => !keys.Contains(k)).Distinct().ToList();
             Assert.That(missing, Is.Empty, "add the rows to content_src/localization.csv");
         }
 

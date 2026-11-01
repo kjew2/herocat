@@ -96,6 +96,8 @@ namespace HeroCat.Sim.Content
         public int RefDailiesDone { get; private set; }
         /// <summary>REF_NEW_BOSSES (S).</summary>
         public int RefNewBosses { get; private set; }
+        /// <summary>CLOCK_BACKWARDS_TOLERANCE_S (S): a server time behind the virtual clock by at most this is jitter (issue #246).</summary>
+        public int ClockBackwardsToleranceS { get; private set; }
 
         public bool IsBossStage(int s) => s % BossEvery == 0;
 
@@ -157,6 +159,7 @@ namespace HeroCat.Sim.Content
             "LIMIT_BREAK_RANKS",
             "REF_DAILIES_DONE",
             "REF_NEW_BOSSES",
+            "CLOCK_BACKWARDS_TOLERANCE_S",
         };
 
         /// <summary>Required declared type per key ("int", "long", "double", "bool", "intlist").</summary>
@@ -206,6 +209,7 @@ namespace HeroCat.Sim.Content
                 case "LIMIT_BREAK_RANKS": return "int";
                 case "REF_DAILIES_DONE": return "int";
                 case "REF_NEW_BOSSES": return "int";
+                case "CLOCK_BACKWARDS_TOLERANCE_S": return "int";
                 default: return null;
             }
         }
@@ -260,6 +264,7 @@ namespace HeroCat.Sim.Content
                     case "LIMIT_BREAK_RANKS": c.LimitBreakRanks = v.Int; break;
                     case "REF_DAILIES_DONE": c.RefDailiesDone = v.Int; break;
                     case "REF_NEW_BOSSES": c.RefNewBosses = v.Int; break;
+                    case "CLOCK_BACKWARDS_TOLERANCE_S": c.ClockBackwardsToleranceS = v.Int; break;
                 }
             }
             return c;

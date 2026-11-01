@@ -173,8 +173,8 @@
       "screen": "SCR_MAIN",
       "highlight": "boss_button",
       "text_key": "tut.12.boss",
-      "expect_event": null,
-      "expect_count": null,
+      "expect_event": "BossCleared|BossFailed",
+      "expect_count": 1,
       "grants": null,
       "skippable": true,
       "tier": "MVP"

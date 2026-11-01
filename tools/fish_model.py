@@ -224,6 +224,7 @@ def new_day():
 def run(db, policy, days, active_min, sessions, research_for_day, dungeon_coins):
     """Simulates `days` days. Each day: `sessions` equal sessions spread over 24 h; offline fills the tank between them."""
     b = Board(db)
+    b.tank = db.tank_cap(research_for_day(1))   # a new profile starts with a full tank (00 decision 99, issue #246)
     level = max(1, min(db.hard, int(db.c["TANK_RELEASE_LEVEL"])))
     out = []
     session_min = [active_min // sessions + (1 if i < active_min % sessions else 0) for i in range(sessions)]
