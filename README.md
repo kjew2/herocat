@@ -1,6 +1,6 @@
 # HeroCat - prototype specs
 
-A cat hero idle game. It is mobile first: the product is a Unity app for iOS and Android, and the web client in `web/` is the development and playtest build. It starts from the Idle RNG prototype (MonStack commit 28aaa59), including its Unity client in `unity/HeroCatClient` (open it in Unity 6.3 on a Mac; see its README); the game content is still the original hero gacha and is to be re-themed.
+A cat hero idle game. It is mobile first: the product is a Unity app for iOS and Android, and the web client in `web/` is the development and playtest build. It starts from the Idle RNG prototype (MonStack commit 28aaa59), including its Unity client in `unity/HeroCatClient` (open it in Unity 6000.6.7f1 on a Mac; see its README); the game content is still the original hero gacha and is to be re-themed.
 
 Mobile idle game in the Sword x Staff / Maple Idle mould: auto-combat pushes stages, stages drop currency, currency feeds parallel RNG upgrade systems, the player's job is deciding where to spend.
 

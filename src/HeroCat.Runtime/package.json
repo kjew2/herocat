@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "displayName": "HeroCat Runtime",
   "description": "Save/load, migrations, offline catch-up and the GameSession facade for the HeroCat prototype (specs/06, specs/08). Plain C#, no UnityEngine references.",
-  "unity": "2022.3",
+  "unity": "6000.6",
   "dependencies": {
     "com.herocat.sim": "0.1.0",
     "com.unity.nuget.newtonsoft-json": "3.2.1"

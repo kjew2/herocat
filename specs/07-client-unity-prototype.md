@@ -20,9 +20,9 @@ Non-goals (P1/P2, listed in section 16): art, audio, tutorial flow, ads, IAP, cl
 
 ## 2. Unity version, template and render pipeline
 
-**Unity 6.3 LTS** (`6000.3.x`), newest patch at project creation, pinned in `ProjectSettings/ProjectVersion.txt`. Do not change the editor version during the prototype.
+**Unity `6000.6.7f1`**, pinned in `ProjectSettings/ProjectVersion.txt`. The plan was 6.3 LTS (`6000.3.x`); kj first opened the project in 6000.6.7f1 on 2026-11-01, which upgraded the packages (`Packages/manifest.json`), so that is the pin now. Everyone opens the project in this exact version; do not change it during the prototype except under open decision 11.
 
-Why 6.3 LTS and not 2022.3 or 6.0:
+Why Unity 6 and not 2022.3 or 6.0 (the reasons for the original 6.3 LTS choice):
 
 - 6.0 LTS support ends October 2026 and 2022.3 is already out of support; 6.3 LTS is supported until December 2027 ([Unity 6 support page](https://unity.com/releases/unity-6/support)). A prototype that becomes the product should not start on a stream that is ending.
 - Google Play's current requirements (target API level 35 or newer for new apps and updates, 16 KB page size support for apps targeting Android 15 and newer) are met by Unity 6 out of the box; on 2022.3 they depend on late patch releases.
@@ -713,7 +713,7 @@ Milestones from `content.Class.ClassStages` and `Query.ClassMult(k)`; names from
 ```
 +--------------------------------------------------+
 | Settings                                  [ X ]  |
-| App 0.1.0 (build 17)   Unity 6000.3.x            |
+| App 0.1.0 (build 17)   Unity 6000.6.7f1          |
 | Content 1.0  hash 3f9a...                        |
 | Profile 8d1c... [ Copy ]   Save schema v1        |
 | [ Reset profile ]  (tap twice within 3 s)        |
@@ -953,4 +953,4 @@ Release build
 8. **Vulkan on Android.** P0 ships GLES3 only. Evaluate Vulkan on the test device set in P1 for battery.
 9. **Reveal versus state visibility.** In P0 the HUD and Heroes tab update before the reveal finishes. If playtesters report it as spoiling, add a 'pending results' mask in `HeroesVm` that hides copies until the sequencer releases them; no sim change needed.
 10. **`OFFLINE_MIN_GAP_S` and `OffsetClock` in Release.** The client assumes `OFFLINE_MIN_GAP_S` is content (proposed 60 s in `specs/03` section 11). `specs/08` decides what Release does on `ClockWentBackwards`; the client currently does nothing.
-11. **Unity 6.3 patch pin and upgrade policy.** The pinned patch is chosen at project creation; decide who may bump it and when (recommendation: only between playtest rounds).
+11. **Unity version pin and upgrade policy.** The pin is `6000.6.7f1` (section 2); decide who may bump it and when (recommendation: only between playtest rounds).

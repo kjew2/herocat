@@ -5,8 +5,8 @@ Ugly-UI Unity client for HeroCat (`specs/07`). It is a thin shell over the pure 
 
 ## Run it
 
-1. Install **Unity 6.3 LTS** (`6000.3.x`) with Unity Hub. Any 6000.3 patch works. Other Unity 6 versions also work if
-   you let the Package Manager pick the URP version that matches the editor.
+1. Install **Unity 6000.6.7f1** with Unity Hub, the version in `ProjectSettings/ProjectVersion.txt` (`specs/07` section 2).
+   Opening the project in another version upgrades it; don't commit that unless the team agreed to move the pin.
 2. Unity Hub → **Add project from disk** → choose `unity/HeroCatClient` (this folder).
 3. On first open Unity imports packages and generates `ProjectSettings/*` and the `.meta` files, including some in
    `src/HeroCat.Sim/`. Commit them. If Unity asks to enable the new Input System backends, answer **Yes**. Either
