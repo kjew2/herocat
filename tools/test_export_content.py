@@ -247,6 +247,50 @@ class VersioningTests(unittest.TestCase):
         pools = ex.pool_lists(tables, tables["banners"])
         self.assertEqual(pools[("SKILL", "COMMON")], ["skill_c_01", "skill_c_15"])
 
+    def two_common_skills_previous(self, c02_tier="M0"):
+        """Rebuilds the previous build with Pool(SKILL, COMMON) = [skill_c_01, skill_c_02]; the current src matches it."""
+        fx.apply_edits(self.src, {"edits": [["banners", "TICKET_SUMMON_SKILL,1,1,1,1,1", "TICKET_SUMMON_SKILL,2,1,1,1,1"]],
+                                  "append": [["skills", f"skill_c_02,COMMON,10.0,INSTANT,80,,,{c02_tier},skill.c_01.name,"
+                                              "skill.c_01.desc,icon_skill_c_02,vfx_skill_c_02"]]})
+        shutil.rmtree(self.prev)
+        rc, lines = fx.run_main(["build", "--src", self.src, "--out", self.prev, "--dto-out", os.path.join(self.tmp, "d.cs")])
+        self.assertEqual(rc, 0, lines)
+
+    def test_pool_lists_filter_by_tier_like_content_db(self):   # issue #250
+        self.two_common_skills_previous(c02_tier="MVP")
+        prev = ex.load_previous(self.prev)["rows"]
+        self.assertEqual(ex.pool_lists(prev, prev["banners"], "M0")[("SKILL", "COMMON")], ["skill_c_01"])
+        self.assertEqual(ex.pool_lists(prev, prev["banners"], "MVP")[("SKILL", "COMMON")], ["skill_c_01", "skill_c_02"])
+        self.assertNotIn(("COMPANION", "COMMON"), ex.pool_lists(prev, prev["banners"], "M0"), "an MVP banner is off in M0")
+
+    def test_retiring_the_last_pool_row_by_tier_passes(self):   # issue #250: retire by tier only at the end of a pool
+        self.two_common_skills_previous()
+        self.bump()
+        self.edit("skills", "skill_c_02,COMMON,10.0,INSTANT,80,,,M0,", "skill_c_02,COMMON,10.0,INSTANT,80,,,P2,")
+        self.edit("banners", "TICKET_SUMMON_SKILL,2,1,1,1,1", "TICKET_SUMMON_SKILL,1,1,1,1,1")
+        (_, tables, _), errs = self.build()
+        self.assertEqual(errs, [])
+        self.assertEqual(ex.pool_lists(tables, tables["banners"], "MVP")[("SKILL", "COMMON")], ["skill_c_01"])
+
+    def test_retiring_a_mid_pool_row_by_tier_is_E090(self):   # issue #250 (also bad_E090_pool_retired_by_tier)
+        self.two_common_skills_previous()
+        self.bump()
+        self.edit("skills", "skill_c_01,COMMON,10.0,INSTANT,80,,,M0,", "skill_c_01,COMMON,10.0,INSTANT,80,,,P2,")
+        self.edit("banners", "TICKET_SUMMON_SKILL,2,1,1,1,1", "TICKET_SUMMON_SKILL,1,1,1,1,1")
+        _, errs = self.build()
+        self.assertEqual(len(errs), 1, errs)
+        self.assertTrue(errs[0].startswith("CONTENT E090 skills: skills: 'skill_c_02' in Pool(SKILL, COMMON) of previous "
+                                           "build 2026.11.01 moved (M0 pool index 1 -> 0; MVP pool index 1 -> 0)"), errs[0])
+
+    def test_a_tier_change_that_shifts_only_the_m0_pool_is_E090(self):   # issue #250: every shippable tier is checked
+        self.two_common_skills_previous()
+        self.bump()
+        self.edit("skills", "skill_c_01,COMMON,10.0,INSTANT,80,,,M0,", "skill_c_01,COMMON,10.0,INSTANT,80,,,MVP,")
+        _, errs = self.build()
+        self.assertEqual(len(errs), 1, errs)
+        self.assertIn("'skill_c_02' in Pool(SKILL, COMMON) of previous build 2026.11.01 moved (M0 pool index 1 -> 0)", errs[0])
+        self.assertNotIn("MVP pool index", errs[0], "the MVP pool is unchanged")
+
     def test_hot_apply_only_for_allowlisted_files(self):   # acceptance 15
         self.bump()
         self.edit("localization", "awakening.rank_1.name,Awakened 1,Awakened 1,", "awakening.rank_1.name,Awakened 1,Kakusei 1,")

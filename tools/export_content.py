@@ -1546,16 +1546,36 @@ def keyed_tables():
     return out
 
 
-def pool_lists(rows_by_table, banners):
-    """Pool(banner, rarity): ids ordinal-sorted (09 section 3.4), for the banners enabled in `banners`."""
+SHIPPABLE_TIERS = ["M0", "MVP"]   # the tiers a client is built for; B4 compares the pool each of them derives
+
+
+def pool_lists(rows_by_table, banners, tier="MVP"):
+    """Pool(banner, rarity) as a client built for `tier` derives it (09 sections 3.4, 5.32; ContentDb.BuildBanners):
+    the ids of the pool table's rows with tier <= `tier`, ordinal-sorted, for the banners enabled at that tier."""
     out = {}
     for b in banners:
-        if not b.get("enabled"):
+        if not b.get("enabled") or not tier_le(b, tier):
             continue
-        rows = rows_by_table.get(POOL_TABLES[b["id"]], [])
+        rows = [r for r in rows_by_table.get(POOL_TABLES[b["id"]], []) if tier_le(r, tier)]
         for rarity in ENUMS["Rarity"]:
             out[(b["id"], rarity)] = sorted((r["id"] for r in rows if r["rarity"] == rarity),
                                             key=lambda x: x.encode("utf-8"))
+    return out
+
+
+def pool_shifts(old_rows, new_rows):
+    """B4 (issue #250): for every shippable tier, the first id per (banner, rarity) of the previous build's pool that
+    is still in the pool but at another index. Returns {(banner, rarity, id): [(tier, old index, new index), ...]}."""
+    out = {}
+    for tier in SHIPPABLE_TIERS:
+        old_pools = pool_lists(old_rows, old_rows.get("banners", []), tier)
+        new_pools = pool_lists(new_rows, new_rows.get("banners", []), tier)
+        for (banner, rarity), ids in old_pools.items():
+            now = new_pools.get((banner, rarity), [])
+            for i, rid in enumerate(ids):
+                if rid in now and now.index(rid) != i:
+                    out.setdefault((banner, rarity, rid), []).append((tier, i, now.index(rid)))
+                    break
     return out
 
 
@@ -1590,14 +1610,13 @@ def version_rules(tables, meta, files, manifest, prev, errs):
             if rid in now and (i >= len(now) or now[i] != rid):
                 e090("tutorial_steps", rid)
                 break
-    old_pools = pool_lists(prev["rows"], prev["rows"].get("banners", []))
-    new_pools = pool_lists(cur_rows, cur_rows.get("banners", []))
-    for (banner, rarity), ids in old_pools.items():   # B4: an insert that sorts before a shipped id shifts indices
-        now = new_pools.get((banner, rarity), [])
-        for i, rid in enumerate(ids):
-            if rid in now and (i >= len(now) or now[i] != rid):
-                e090(POOL_TABLES[banner], rid)
-                break
+    # B4: an insert that sorts before a shipped id, or a retirement (tier raised past a shippable tier) before one,
+    # shifts the indices of the tier-filtered pool the runtime draws from (issue #250).
+    for (banner, rarity, rid), moves in pool_shifts(prev["rows"], cur_rows).items():
+        table = POOL_TABLES[banner]
+        where = "; ".join(f"{t} pool index {i} -> {j}" for t, i, j in moves)
+        errs.add("E090", table, f"{table}: '{rid}' in Pool({banner}, {rarity}) of previous build {pv} moved ({where}); "
+                 "add ids that sort after every shipped one, and retire a pool row by tier only when it is last in its pool")
 
     if schema_changed(cur_rows, prev) and \
             not parse_semver(manifest["min_client_version"]) > parse_semver(pm.get("min_client_version", "")):
