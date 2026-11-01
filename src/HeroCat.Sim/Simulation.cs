@@ -35,6 +35,7 @@ namespace HeroCat.Sim
             Db = db ?? throw new ArgumentNullException(nameof(db));
             _tickHz = db.Constants.TickHz;
             RecomputeNextDayTick();
+            RecomputeAchievements();   // 06 section 5.4: on load and on a new content build (Simulation.Achievements.cs)
             RefreshSnapshot();
         }
 

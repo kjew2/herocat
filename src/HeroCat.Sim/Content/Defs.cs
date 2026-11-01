@@ -406,18 +406,26 @@ namespace HeroCat.Sim.Content
     }
 
     /// <summary>
-    /// A daily or weekly mission row (09 sections 5.21-5.22, 06 sections 5.1-5.3). The rows are the only home of quest
-    /// reward amounts (issues #55, #244); <see cref="RewardAmount"/> 0 is a counting row (d_login) that pays nothing.
+    /// A daily or weekly mission row (09 sections 5.21-5.22, 06 sections 5.1-5.3), or an achievement rung (09 section
+    /// 5.23, 06 section 5.4; issue #171). The rows are the only home of quest reward amounts (issues #55, #244);
+    /// <see cref="RewardAmount"/> 0 is a counting row (d_login) that pays nothing.
     /// </summary>
     public sealed class QuestDef
     {
         internal QuestDef(string id, QuestKind kind, QuestGoal goal, string filter, int filterValue, long target,
-                          Currency rewardCurrency, long rewardAmount, int sortOrder, Tier tier, string nameKey, string icon)
+                          Currency rewardCurrency, long rewardAmount, int sortOrder, Tier tier, string nameKey, string icon,
+                          string ladder = null, int rung = 0)
         {
             Id = id; Kind = kind; Goal = goal; Filter = filter; FilterValue = filterValue; Target = target;
             RewardCurrency = rewardCurrency; RewardAmount = rewardAmount; SortOrder = sortOrder; Tier = tier;
-            NameKey = nameKey; Icon = icon;
+            NameKey = nameKey; Icon = icon; Ladder = ladder; Rung = rung;
         }
+
+        /// <summary>The achievement ladder id (06 section 5.4); null on a daily or weekly row.</summary>
+        public string Ladder { get; }
+
+        /// <summary>The rung within <see cref="Ladder"/>, 1..N (E060); 0 on a daily or weekly row.</summary>
+        public int Rung { get; }
 
         public string Id { get; }
         public QuestKind Kind { get; }
@@ -432,9 +440,12 @@ namespace HeroCat.Sim.Content
         public long Target { get; }
         public Currency RewardCurrency { get; }
         public long RewardAmount { get; }
+        /// <summary>Display and claim-all order: sort_order for missions; for rungs, ladder by first row then rung.</summary>
         public int SortOrder { get; }
         public Tier Tier { get; }
         public string NameKey { get; }
+
+        /// <summary>The row's icon; null on an achievement rung (09's achievements table has no icon column).</summary>
         public string Icon { get; }
 
         /// <summary>True when an event with <paramref name="filter"/> (an enum ordinal, -1 for none) counts toward this row.</summary>

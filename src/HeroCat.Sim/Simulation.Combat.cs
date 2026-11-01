@@ -354,7 +354,11 @@ namespace HeroCat.Sim
             var k = Db.Constants;
             var p = State.Progress;
             int from = c.Stage;
-            if (from > p.HighestCleared) p.HighestCleared = from;
+            if (from > p.HighestCleared)
+            {
+                p.HighestCleared = from;
+                AchievementsSetMax(QuestGoal.REACH_STAGE, from);   // the Stage ladder reads Progress.HighestCleared (06 section 5.4)
+            }
             if (from >= k.StageCap)
             {
                 // Issue #81's decision: at the cap the stage loops (kills reset) and StageCapReached is emitted once.

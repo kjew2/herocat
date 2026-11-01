@@ -542,7 +542,7 @@ Rules the modal makes visible: offline gold and EXP use the frontier `Combat.Sta
 | Daily progress bar | `DailyCompletedCount / 11`, bonus chips for `d_bonus_5`, `d_bonus_8` with their state |
 | Row per quest | `Rows[]`: `TitleKey`, `TitleArgs` (target), `Progress`, `Target`, `State`, `RewardIcon`, `RewardAmount`, `GoScreen` (deep link for `IN_PROGRESS` rows) |
 | Claim | `cmd ClaimQuest(id)`; Claim all: `cmd ClaimAllQuests(tab)` with a summary toast "+140 diamonds". `d_login` pays nothing (login diamonds are auto-granted on rollover, issue #20): its row shows "done" with no Claim button and only counts toward the bonus rows |
-| Achievements tab | one row per ladder showing the lowest unclaimed rung and "3 / 11 rungs" |
+| Achievements tab | one row per ladder showing the lowest unclaimed rung and "3 / 11 rungs" (`Simulation.AchievementRows()`, `ClaimedRungs(ladder)`, 06 section 5.4); a fully claimed ladder drops out |
 
 Events: `QuestCompleted` (row state swap, badge), `QuestClaimed`, `QuestsBulkClaimed` (toast), `DayRolledOver` / `WeekRolledOver` (full refresh; a toast "Missions reset" if the screen is open).
 

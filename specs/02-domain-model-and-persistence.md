@@ -587,7 +587,7 @@ Repair:
 | P9b | `TankCount` outside `[0, TankCap]`; `TankRefillTick` outside `[0, refillTicks-1]`, or non-zero on a full tank; `TankReleaseLevel < 1` or above its content max | Clamp (a full tank's refill progress to 0, 05 section 3). A repaired board passes `FishBoard.FirstViolation`. |
 | P10 | `Items` key unknown to content, or `Copies <= 0` | Remove the entry. No refund in MVP (issue #56); ids are never deleted (09 section 3.4), so this path is rare. |
 | P11 | `Banners[b].Pity` outside `[0, PITY_HARD-1]`; `Exp < 0` | Clamp. Missing banner for a banner the content defines -> add default. |
-| P12 | Quest id unknown to content; `Progress < 0` | Drop the entry; clamp to 0. A quest with no entry reads as `IN_PROGRESS` with progress 0. |
+| P12 | Quest id unknown to content (`Daily`, `Weekly` and `Achievement` maps, each checked against its own table); `Progress < 0` | Drop the entry; clamp to 0. A quest with no entry reads as `IN_PROGRESS` with progress 0. The sim raises the achievement ladders back to the state's values when it is constructed (06 section 5.4, issue #171). |
 | P13 | `Research.Level` key unknown or value `< 1` or `> maxLevel` | Remove (unknown or `< 1`: absent reads as level 0) / clamp. |
 | P14 | `OwnedItem.Copies > DUPE_LVL_CUM[10]` (160); `LimitBreaks` outside `[0, LIMIT_BREAK_RANKS]` | Clamp (no Rock Candy is granted on load; conversion happens only at pull time, 04). |
 | P15 | Stream counter invariants (3.4): `combat.Counter != 0` (MVP), `crit.Counter != Stats.HeroHits`, `loot.Counter != Stats.BossKills`, `fish_spawn.Counter != Stats.FishReleased`, Local mode `summon_x.Counter != 3 * TotalPulls` | Set the counter from the stat. The player-visible count is the source of truth for "which draw is next". |

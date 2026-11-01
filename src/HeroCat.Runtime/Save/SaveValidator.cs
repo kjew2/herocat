@@ -364,28 +364,25 @@ namespace HeroCat.Runtime.Save
                     if (def.Enabled && !s.Banners.ContainsKey(def.Id)) { s.Banners[def.Id] = new BannerState(); Hit("P11"); }
             }
 
-            // P12: quest progress. Daily and weekly ids the content does not define are dropped (a missing entry reads as
-            // IN_PROGRESS at 0). TODO(#171): the same for achievement rung ids once ContentDb has the achievements table.
+            // P12: quest progress. Daily, weekly and achievement rung ids the content does not define are dropped (a missing
+            // entry reads as IN_PROGRESS at 0; issues #170, #171). The sim raises the max ladders back to the state's values
+            // when it is constructed, so a dropped or clamped rung recovers what the state proves.
             void P12()
             {
                 if (CleanQuests(s.Quests.Daily, db.QuestsOf(QuestKind.DAILY))) Hit("P12");
                 if (CleanQuests(s.Quests.Weekly, db.QuestsOf(QuestKind.WEEKLY))) Hit("P12");
-                if (CleanQuests(s.Quests.Achievement, null)) Hit("P12");
+                if (CleanQuests(s.Quests.Achievement, db.QuestsOf(QuestKind.ACHIEVEMENT))) Hit("P12");
             }
 
             static bool CleanQuests(Dictionary<string, QuestProgress> map, IReadOnlyList<QuestDef> known)
             {
                 bool changed = false;
                 List<string> drop = null;
-                HashSet<string> ids = null;
-                if (known != null)
-                {
-                    ids = new HashSet<string>(StringComparer.Ordinal);
-                    foreach (var q in known) ids.Add(q.Id);
-                }
+                var ids = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var q in known) ids.Add(q.Id);
                 foreach (var kv in map)
                 {
-                    if (kv.Value == null || (ids != null && !ids.Contains(kv.Key))) { (drop ??= new List<string>()).Add(kv.Key); continue; }
+                    if (kv.Value == null || !ids.Contains(kv.Key)) { (drop ??= new List<string>()).Add(kv.Key); continue; }
                     if (kv.Value.Progress < 0) { kv.Value.Progress = 0; changed = true; }
                 }
                 if (drop != null) { foreach (var id in drop) map.Remove(id); changed = true; }

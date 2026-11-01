@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "achievements",
+      "ach_weapons_02,weapons,2,OWN_WEAPONS,4,",
+      "ach_weapons_02,weapons,2,OWN_WEAPONS,3,"
+    ]
+  ],
+  "csharp": true
+}
