@@ -296,10 +296,10 @@ namespace HeroCat.Client.Core
 
     /// <summary>
     /// SCR_OFFLINE_REWARD (07 section 4.18, 06 section 7.3, 01 section 8.7; issue #118): the <c>Offline.Pending</c> record
-    /// plus formatted strings. Ticks stay off while it is open, so the numbers shown are exactly what is credited. Claim is
-    /// mandatory: no scrim, no back. If nothing is pending when it would show, it pops silently. The Claim command is
-    /// injected: the M0 sim has no <c>ClaimOfflineReward</c> yet (TODO(#108)), so without one Claim only closes the modal
-    /// and turns ticks back on.
+    /// plus formatted strings. Ticks stay off while it is open, so the numbers shown are exactly what is credited: the
+    /// SessionRunner holds them while <c>Offline.Pending</c> is set (decision 53), and Claim sends
+    /// <c>ClaimOfflineReward</c>, which credits the reward and clears it. Claim is mandatory: no scrim, no back. If nothing
+    /// is pending when it would show, it pops silently.
     /// </summary>
     public sealed class OfflineRewardVm
     {
@@ -318,11 +318,8 @@ namespace HeroCat.Client.Core
             Claim.Label.Set(UiKeys.OfflineClaim);
         }
 
-        /// <summary><c>() =&gt; new ClaimOfflineReward()</c> once the 06 command exists; null in M0.</summary>
-        public Func<Command> ClaimCommand { get; set; }
-
-        /// <summary>Turns ticks on or off (SessionRunner.TicksEnabled).</summary>
-        public Action<bool> SetTicks { get; set; }
+        /// <summary>The command [Claim] sends (06 section 7.3).</summary>
+        public Func<Command> ClaimCommand { get; set; } = () => new ClaimOfflineReward();
 
         public CatchupResult Pending { get; private set; }
 
@@ -338,8 +335,8 @@ namespace HeroCat.Client.Core
         public readonly ButtonState Claim;
 
         /// <summary>
-        /// Boot and resume: when <c>Offline.Pending</c> is set, stop ticks and request the modal (the router holds it back
-        /// during a boss). Returns true when the modal was requested.
+        /// Boot and resume: when <c>Offline.Pending</c> is set (the runner is then holding ticks), request the modal (the
+        /// router holds it back during a boss). Returns true when the modal was requested.
         /// </summary>
         public bool CheckPending(Simulation sim)
         {
@@ -350,7 +347,6 @@ namespace HeroCat.Client.Core
                 Fill(p);
                 return true;
             }
-            SetTicks?.Invoke(false);
             Fill(p);
             _c.Router?.ShowModal(ScreenIds.OfflineReward, p);
             return true;
@@ -363,7 +359,6 @@ namespace HeroCat.Client.Core
             if (p == null)
             {
                 _c.Router?.CloseModal(ScreenIds.OfflineReward);
-                SetTicks?.Invoke(true);
                 return;
             }
             Fill(p);
@@ -389,7 +384,8 @@ namespace HeroCat.Client.Core
             Claim.Enabled.Set(true);
         }
 
-        /// <summary>[Claim]: ClaimOfflineReward, the gold burst into the HUD chip, pop, ticks back on (06 section 7.3).</summary>
+        /// <summary>[Claim]: ClaimOfflineReward (which releases the runner's tick hold), the gold burst into the HUD chip, pop
+        /// (06 section 7.3). A rejected claim keeps the modal open.</summary>
         public void OnClaim()
         {
             var make = ClaimCommand;
@@ -402,7 +398,6 @@ namespace HeroCat.Client.Core
             _c.Cues?.Feel(Haptic.Light, Sounds.Coins);
             Pending = null;
             _c.Router?.CloseModal(ScreenIds.OfflineReward);
-            SetTicks?.Invoke(true);
         }
     }
 }

@@ -67,7 +67,7 @@ namespace HeroCat.Client.Core
             SummonResult = new SummonResultVm(Context);
             Summon = new SummonVm(Context, options.Summon ?? ((b, n, p) => _runner.SummonAsync(b, n, p)), SummonResult);
             SummonResult.Summon = Summon;
-            OfflineReward = new OfflineRewardVm(Context) { SetTicks = on => _runner.TicksEnabled = on };
+            OfflineReward = new OfflineRewardVm(Context);
             Confirm = new ConfirmVm(Localizer, Router);
             Error = new ErrorVm(Localizer, Router);
 
@@ -121,7 +121,8 @@ namespace HeroCat.Client.Core
         public double TimeScale => _runner.DebugTimeScale;
         public long ClockOffsetSeconds => _clock?.OffsetSeconds ?? 0;
         public bool ResetRequested { get; private set; }
-        public bool TicksEnabled => _runner.TicksEnabled;
+        /// <summary>False while ticks are off or held for the offline reward (SessionRunner.TicksRunning).</summary>
+        public bool TicksRunning => _runner.TicksRunning;
 
         /// <summary>Monotonic seconds, as the vms see them.</summary>
         public double Now => _now();

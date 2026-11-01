@@ -443,16 +443,21 @@ namespace HeroCat.Runtime.Tests
                                             KillTimeSec: 1.5, ComputedServerTime: TestContent.T0);
             var f = ClientFixture.Open(s => s.Offline.Pending = pending);
             Assert.That(f.Vm.Router.Modal?.Id, Is.EqualTo(ScreenIds.OfflineReward));
-            Assert.That(f.Vm.TicksEnabled, Is.False);
+            Assert.That(f.Vm.TicksRunning, Is.False);
+            Assert.That(f.S.Runner.TicksHeldForOfflineReward, Is.True, "the runner holds ticks while Offline.Pending is set");
             Assert.That(f.Vm.OfflineReward.Gold.Value, Is.EqualTo(997000), "the modal shows the pending record");
             long tick = f.S.Sim.Tick;
             f.Frames(30, 0.1);
             Assert.That(f.S.Sim.Tick, Is.EqualTo(tick), "no tick runs while SCR_OFFLINE_REWARD is open");
             Assert.That(f.Vm.Back(), Is.EqualTo(BackResult.Ignored));
             Assert.That(f.Vm.Router.ScrimTap(), Is.False);
+            double gold = f.S.Sim.State.Wallet.Get(Currency.GOLD);
             f.Vm.OfflineReward.OnClaim();
             Assert.That(f.Vm.Router.Modal, Is.Null);
-            Assert.That(f.Vm.TicksEnabled, Is.True);
+            Assert.That(f.S.Sim.State.Offline.Pending, Is.Null, "Claim sends ClaimOfflineReward (#108)");
+            Assert.That(f.S.Sim.State.Wallet.Get(Currency.GOLD), Is.EqualTo(gold + 997000), "the claim credits the pending gold");
+            Assert.That(f.S.Runner.TicksHeldForOfflineReward, Is.False, "the claim releases the runner's tick hold");
+            Assert.That(f.Vm.TicksRunning, Is.True);
             f.Frames(10, 0.1);
             Assert.That(f.S.Sim.Tick, Is.GreaterThan(tick));
         }
