@@ -1,0 +1,1 @@
+CONTENT E075 localization[ui.scr_main.fish_count].en: plural message must have 'one' and 'other' branches: en lacks one

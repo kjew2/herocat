@@ -1,0 +1,15 @@
+{
+  "edits": [
+    [
+      "meta",
+      "content_version,2026.11.01",
+      "content_version,2026.11.02"
+    ]
+  ],
+  "previous": {
+    "drop_column": [
+      "weapons",
+      "element"
+    ]
+  }
+}

@@ -1,0 +1,1 @@
+CONTENT W012 banner_levels: enabled banners have different level counts: WEAPON 3, SKILL 2, COMPANION 2

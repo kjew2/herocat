@@ -1,0 +1,8 @@
+{
+  "append": [
+    [
+      "localization",
+      "ui.scr_main.fish_count,\"{n, plural, other {# fish}}\",\"{n, plural, other {# fish}}\",\"{n, plural, other {# fish}}\",\"{n, plural, other {# fish}}\",0,true"
+    ]
+  ]
+}

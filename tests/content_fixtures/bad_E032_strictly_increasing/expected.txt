@@ -1,0 +1,1 @@
+CONTENT E032 awakening[2].stage_gate: stage_gate must be strictly increasing; awakening[2] has 40 <= previous 50

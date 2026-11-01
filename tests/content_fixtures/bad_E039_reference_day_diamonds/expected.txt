@@ -1,0 +1,1 @@
+CONTENT E039 quests_daily: reference-day diamond sum 300.0 is outside 10% of DIAMONDS_PER_DAY_F2P 400

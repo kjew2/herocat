@@ -1,0 +1,1 @@
+CONTENT E056 chapters[ch_02].from_stage: from_stage must equal 51 ((index - 1) * CHAPTER_WIDTH + 1), got 50

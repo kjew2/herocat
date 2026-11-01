@@ -1,0 +1,20 @@
+{
+  "edits": [
+    [
+      "banner_levels",
+      "WEAPON,1,0,0.6,0.28,0.09,0.025,0.005",
+      "WEAPON,1,0,0.605,0.28,0.09,0.025,0.0"
+    ],
+    [
+      "banner_levels",
+      "WEAPON,2,10,0.58,0.292,0.098,0.025,0.005",
+      "WEAPON,2,10,0.585,0.292,0.098,0.025,0.0"
+    ],
+    [
+      "banners",
+      "10,EPIC,1,0,banner.weapon.name",
+      "10,MYTHIC,1,0,banner.weapon.name"
+    ]
+  ],
+  "csharp": true
+}

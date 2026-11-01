@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "training_curves",
+      "EXP_GAIN,50,1.07\n",
+      ""
+    ]
+  ],
+  "csharp": true
+}

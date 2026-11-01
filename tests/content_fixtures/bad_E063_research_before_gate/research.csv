@@ -1,0 +1,2 @@
+id,effect,effect_per_level,effect_floor,max_level,cost0,cost_g,unlock_awaken_rank,layout_row,layout_col,tier,name_key,desc_key,icon
+res_atk,RESEARCH_PCT,0.01,,10,100,1.5,0,1,1,MVP,chapter.01.name,chapter.02.name,icon_res_atk

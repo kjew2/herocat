@@ -1,19 +1,26 @@
 #!/usr/bin/env python3
 """Content exporter: content_src/<table>.csv -> content/<table>.json + manifest.json (specs/09).
 
-    python3 tools/export_content.py build [--src content_src] [--out content] [--dto-out PATH]
-    python3 tools/export_content.py check [--src content_src] [--out content] [--dto-out PATH]
+    python3 tools/export_content.py build [--src content_src] [--out content] [--dto-out PATH] [--previous DIR]
+                                          [--ui-keys FILE] [--strict-warnings]
+    python3 tools/export_content.py check [--src content_src] [--out content] [--dto-out PATH] [--previous DIR]
+                                          [--ui-keys FILE] [--strict-warnings]
     python3 tools/export_content.py gen-dtos [--dto-out PATH]
+    python3 tools/export_content.py diff --a <old content dir> --b <new content dir>
 
 `build` parses, validates and emits every table plus the manifest (09 sections 6.1, 6.2) and regenerates the C#
 DTO file (`HeroCat.Sim.Content.Dto`, 09 section 9.1) from SCHEMA, so the Python and C# shapes cannot drift.
-`check` builds to memory and exits 1 if content/ or the DTO file differ byte for byte (CI's stale guard).
+`check` builds to memory and exits 1 if content/ or the DTO file differ byte for byte (CI's stale guard); without
+--previous it reproduces the committed manifest's hot_apply instead of recomputing it.
+`--previous` runs 6.3's version rules (E090-E093, W030, W031) and computes hot_apply from the changed-file set.
+`diff` prints the row-level changes between two built content dirs for a PR description (7.1).
 
-Implemented here (issue #121): SCHEMA for every 09 section 5 table, column types (3.2), ENUMS (3.3),
-REQUIRED_CONSTANTS (5.1), SCREEN_IDS (00 section 5.3), structural codes E001-E003, E010, E011, E020-E022,
-E070, E071, E094, constants rules E040-E043 and the 5.1 range rules, deterministic emit and the manifest.
-Not yet: the table rules of 8.4 and warnings of 8.6 (TODO(#122)), --previous / diff / hot_apply (TODO(#123)),
-localization rules E072-E075 (TODO(#128)), pull (TODO(#132)).
+Implemented: SCHEMA for every 09 section 5 table, column types (3.2), ENUMS (3.3), REQUIRED_CONSTANTS (5.1),
+SCREEN_IDS (00 section 5.3), structural codes E001-E003, E010, E011, E020-E022, E070, E071, E094, constants
+E040-E043, the table rules of 8.4 and warnings W010-W013 (RULES, issue #122), versioning E090-E093 / W030 / W031 /
+hot_apply / diff (issue #123), localization E072-E075 / W020 / W021 (issue #128). Fixtures for every code live in
+tests/content_fixtures/ (tools/content_fixtures.py, issue #124). Not yet: pull (TODO(#132)), translator-csv,
+import-translations (E076) and pseudo (13.2, 13.3).
 
 Exit codes: 0 ok, 1 validation errors (all listed) or drift, 2 usage / IO error. Python 3.9+, stdlib only.
 """
@@ -21,6 +28,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 import os
 import re
 import sys
@@ -269,6 +277,17 @@ LONG53 = (-2 ** 53, 2 ** 53)
 
 
 class Errors(list):
+    """Error lines in 8.1's format; `warnings` holds the W0xx lines (7.1: they fail only with --strict-warnings)."""
+
+    def __init__(self, *a):
+        super().__init__(*a)
+        self.warnings = Warnings()
+
+    def add(self, code, loc, msg):
+        self.append(f"CONTENT {code} {loc}: {msg}")
+
+
+class Warnings(list):
     def add(self, code, loc, msg):
         self.append(f"CONTENT {code} {loc}: {msg}")
 
@@ -564,11 +583,815 @@ def check_tutorial_events(tables, errs):
                 errs.add("E021", f"{r['_loc']}.expect_event", f"'{name}' is not a valid Event (allowed: {', '.join(SIM_EVENT_NAMES)})")
 
 
-def validate(tables, errs):
-    check_constants(tables, errs)
-    resolve_refs(tables, errs)
-    check_tutorial_events(tables, errs)
-    # TODO(#122): the table and cross-table rules of 09 section 8.4 and the warnings of 8.6.
+# ------------------------------------------------------------------------------- table rules (8.4), warnings (8.6)
+# One small function per rule, appended to RULES in the order they run. validate() sorts their errors by table
+# (TABLE_ORDER, the SCHEMA order) so a set of independent defects reports in table order (09 acceptance 7); within a
+# table the rule order below holds. ContentDb.Build (src/HeroCat.Sim/Content/ContentDb.Rules.cs) runs the loader-scope
+# rules in the same order with byte-identical messages (09 section 7.2, acceptance 20).
+# Rules over a table that is not authored yet (optional and absent: companions, research, quests, achievements,
+# dungeons, enemies, bosses, shop) skip; each starts checking the day its table lands.
+
+TABLE_ORDER = list(SCHEMA)
+RATE_COLS = ["rate_c", "rate_r", "rate_e", "rate_l", "rate_m"]
+POOL_COLS = ["pool_c", "pool_r", "pool_e", "pool_l", "pool_m"]
+POOL_TABLES = {"WEAPON": "weapons", "SKILL": "skills", "COMPANION": "companions", "RUNE": "runes"}
+UI_FISH_SPRITE_LEVELS = 12   # 07 section 13 (issue #48): distinct fish sprites in the MVP art set
+CODE_BUILT_KEY_PREFIXES = ("err.", "reject.", "notice.")   # 13.1: built from wire codes, checked by 01 AC 14's test
+RULES = []
+
+
+def rule(fn):
+    RULES.append(fn)
+    return fn
+
+
+def fmt(v):
+    """A value as 8.1 prints it: doubles by repr, bools lowercase, ints and strings as-is."""
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, float):
+        return repr(v)
+    if v is None:
+        return "empty"
+    return str(v)
+
+
+def table_of(loc):
+    return re.split(r"[\[. :]", loc, maxsplit=1)[0]
+
+
+def tier_le(r, tier="MVP"):
+    t = r.get("tier")
+    return t is None or ENUMS["Tier"].index(t) <= ENUMS["Tier"].index(tier)
+
+
+class Ctx:
+    def __init__(self, tables, errs, warns, meta, ui_keys):
+        self.tables, self.errs, self.warns, self.meta, self.ui_keys = tables, errs, warns, meta, ui_keys
+        self.k = {r["key"]: r.get("value") for r in tables.get("constants", [])
+                  if r.get("key") in REQUIRED_CONSTANTS and not isinstance(r.get("value"), str)}
+
+    def rows(self, table):
+        return self.tables.get(table, [])
+
+    def has(self, table):
+        return table in self.tables
+
+    def err(self, code, loc, msg):
+        self.errs.add(code, loc, msg)
+
+    def warn(self, code, loc, msg):
+        self.warns.add(code, loc, msg)
+
+
+def groups(rows, col):
+    """Rows grouped by `col`, groups in first-seen order, rows in row order."""
+    out = {}
+    for r in rows:
+        out.setdefault(r[col], []).append(r)
+    return out
+
+
+def strictly_increasing(ctx, code, rows, col):
+    for prev, r in zip(rows, rows[1:]):
+        if r[col] is not None and prev[col] is not None and not r[col] > prev[col]:
+            ctx.err(code, f"{r['_loc']}.{col}",
+                    f"{col} must be strictly increasing; {r['_loc']} has {fmt(r[col])} <= previous {fmt(prev[col])}")
+
+
+def non_decreasing(ctx, rows, col, order, decreasing=False):
+    for prev, r in zip(rows, rows[1:]):
+        if r[col] is None or prev[col] is None:
+            continue
+        if decreasing and r[col] > prev[col]:
+            ctx.err("E048", f"{r['_loc']}.{col}",
+                    f"{col} must be non-increasing in {order}; {r['_loc']} has {fmt(r[col])} > previous {fmt(prev[col])}")
+        elif not decreasing and r[col] < prev[col]:
+            ctx.err("E048", f"{r['_loc']}.{col}",
+                    f"{col} must be non-decreasing in {order}; {r['_loc']} has {fmt(r[col])} < previous {fmt(prev[col])}")
+
+
+def exactly_one_to_n(ctx, loc, label, values, n=None):
+    n = len(values) if n is None else n
+    if values != list(range(1, n + 1)):
+        ctx.err("E060", loc, f"{label} must be exactly 1..{n} in row order, got {', '.join(fmt(v) for v in values)}")
+
+
+def rng(ctx, table, col, test, rule_text, rows=None):
+    for r in ctx.rows(table) if rows is None else rows:
+        v = r.get(col)
+        if v is not None and not test(v):
+            ctx.err("E043", f"{r['_loc']}.{col}", f"value {fmt(v)} out of range ({rule_text})")
+
+
+def cond(ctx, r, col, must_set, cond_col, cond_val):
+    is_set = r.get(col) is not None
+    if is_set != must_set:
+        ctx.err("E054", f"{r['_loc']}.{col}",
+                f"{col} must be {'set' if must_set else 'empty'} when {cond_col} = {fmt(cond_val)}")
+
+
+@rule
+def rule_e044_enum_tables_complete(ctx):
+    for table, enum in (("stats", "Stat"), ("rarities", "Rarity"), ("banners", "Banner")):
+        have = {r["id"] for r in ctx.rows(table)}
+        for v in ENUMS[enum]:
+            if v not in have:
+                ctx.err("E044", table, f"missing row for {enum} value '{v}'")
+    have = {r["id"] for r in ctx.rows("curves")}
+    for cid in ("enemy_hp", "gold_per_kill", "exp_per_kill"):
+        if ctx.has("curves") and cid not in have:
+            ctx.err("E044", "curves", f"missing row for curve '{cid}'")
+
+
+@rule
+def rule_e045_one_row_tables(ctx):
+    for table in ("hero_levels", "tank"):
+        if ctx.has(table) and len(ctx.rows(table)) != 1:
+            ctx.err("E045", table, f"exactly one row required, found {len(ctx.rows(table))}")
+
+
+@rule
+def rule_e060_index_columns(ctx):
+    for table, enum in (("stats", "Stat"), ("rarities", "Rarity"), ("banners", "Banner")):
+        ids = [r["id"] for r in ctx.rows(table)]
+        if sorted(ids) == sorted(ENUMS[enum]) and ids != ENUMS[enum]:
+            ctx.err("E060", table, f"id must be exactly {ENUMS[enum][0]}..{ENUMS[enum][-1]} in enum order, got {', '.join(ids)}")
+    for table, col in (("chapters", "index"), ("dupe_levels", "level"), ("awakening", "rank"), ("fish_levels", "level"),
+                       ("tutorial_steps", "order"), ("plausibility_stage_bound", "day")):
+        if ctx.has(table):
+            exactly_one_to_n(ctx, table, col, [r[col] for r in ctx.rows(table)])
+    for banner, rows in groups(ctx.rows("banner_levels"), "banner").items():
+        exactly_one_to_n(ctx, "banner_levels", f"level for banner {banner}", [r["level"] for r in rows])
+    for ladder, rows in groups(ctx.rows("achievements"), "ladder").items():
+        exactly_one_to_n(ctx, "achievements", f"rung for ladder {ladder}", [r["rung"] for r in rows])
+    floors = {r["id"]: r["floors"] for r in ctx.rows("dungeons")}
+    for dungeon, rows in groups(ctx.rows("dungeon_floors"), "dungeon").items():
+        exactly_one_to_n(ctx, "dungeon_floors", f"floor for dungeon {dungeon}", [r["floor"] for r in rows],
+                         floors.get(dungeon))
+    if ctx.has("awakening_targets"):
+        ranks = [r["rank"] for r in ctx.rows("awakening_targets")]
+        exactly_one_to_n(ctx, "awakening_targets", "rank", ranks, len(ctx.rows("awakening")) if ctx.has("awakening") else None)
+
+
+@rule
+def rule_e043_table_ranges(ctx):
+    pos, ge0, ge1, gt1 = (lambda v: v > 0), (lambda v: v >= 0), (lambda v: v >= 1), (lambda v: v > 1)
+    unit = lambda v: 0 <= v <= 1  # noqa: E731
+    rng(ctx, "curves", "base", pos, "> 0")
+    rng(ctx, "curves", "growth", gt1, "> 1")
+    rng(ctx, "stats", "per_lvl", pos, "> 0")
+    rng(ctx, "stats", "cap", ge1, ">= 1")
+    rng(ctx, "training_curves", "cost0", pos, "> 0")
+    rng(ctx, "training_curves", "cost_g", gt1, "> 1")
+    rng(ctx, "enemies", "weight", pos, "> 0")
+    rng(ctx, "rarities", "limit_break_cost", ge1, ">= 1")
+    rng(ctx, "rarities", "dupe_overflow_rock_candy", ge0, ">= 0")
+    rng(ctx, "skills", "cooldown_ticks", lambda v: 30 <= v <= 300, "in [30, 300]")
+    rng(ctx, "skills", "buff_pct", pos, "> 0")
+    rng(ctx, "companions", "mp_cost", ge1, ">= 1")
+    rng(ctx, "companions", "cooldown_ticks", lambda v: 20 <= v <= 600, "in [20, 600]")
+    rng(ctx, "runes", "slot_mask", pos, "> 0")
+    rng(ctx, "banners", "pull_cost_diamonds", pos, "> 0")
+    rng(ctx, "banners", "pity_soft_start", ge1, ">= 1")
+    rng(ctx, "banners", "pity_soft_step", pos, "> 0")
+    rng(ctx, "banners", "m_share_of_lplus", unit, "in [0, 1]")
+    rng(ctx, "banners", "guarantee_batch_size", lambda v: v >= 2, ">= 2")
+    rng(ctx, "banners", "exp_per_pull", ge0, ">= 0")
+    for col in RATE_COLS:
+        rng(ctx, "banner_levels", col, unit, "in [0, 1]")
+    rng(ctx, "banner_levels", "exp_required", lambda v: v == 0, "level 1 must be 0",
+        rows=[r for r in ctx.rows("banner_levels") if r["level"] == 1])
+    rng(ctx, "awakening", "mult", gt1, "> 1")
+    rng(ctx, "awakening", "companion_slots_after", lambda v: v <= ctx.k.get("COMPANION_SLOTS", v), "<= COMPANION_SLOTS")
+    rng(ctx, "awakening", "rune_slots_after", lambda v: v <= ctx.k.get("RUNE_SLOTS", v), "<= RUNE_SLOTS")
+    rng(ctx, "hero_levels", "exp0", pos, "> 0")
+    rng(ctx, "hero_levels", "exp_g", gt1, "> 1")
+    rng(ctx, "hero_levels", "level_cap", ge1, ">= 1")
+    rng(ctx, "research", "effect_per_level", pos, "> 0")
+    rng(ctx, "research", "max_level", ge1, ">= 1")
+    rng(ctx, "research", "cost0", pos, "> 0")
+    rng(ctx, "research", "cost_g", gt1, "> 1")
+    rng(ctx, "research", "unlock_awaken_rank", ge0, ">= 0")
+    rng(ctx, "tank", "cap0", ge1, ">= 1")
+    rng(ctx, "tank", "refill_s0", pos, "> 0")
+    hz = ctx.k.get("TICK_HZ")
+    if isinstance(hz, int):
+        rng(ctx, "tank", "refill_s0", lambda v: v * hz == round(v * hz),
+            "refill_s0 * TICK_HZ must be a whole number of ticks")
+    for q in ("quests_daily", "quests_weekly"):
+        rng(ctx, q, "target", ge1, ">= 1")
+        for r in ctx.rows(q):
+            rng(ctx, q, "reward_amount", ge0 if r["goal"] == "LOGIN" else ge1,
+                ">= 0 for LOGIN" if r["goal"] == "LOGIN" else ">= 1", rows=[r])
+    rng(ctx, "achievements", "reward_amount", ge1, ">= 1")
+    rng(ctx, "dungeons", "tickets_per_day", ge0, ">= 0")
+    rng(ctx, "dungeons", "floor_stage_step", ge1, ">= 1")
+    rng(ctx, "shop_products", "usd_tier", ge1, ">= 1")
+    rng(ctx, "shop_products", "base_amount", ge1, ">= 1")
+    rng(ctx, "shop_products", "bonus_pct", unit, "in [0, 1]")
+    rng(ctx, "shop_packages", "limit_count", ge1, ">= 1")
+    rng(ctx, "inbox_templates", "expiry_days", ge1, ">= 1")
+    rng(ctx, "tutorial_steps", "expect_count", ge1, ">= 1")
+    rng(ctx, "localization", "max_chars", ge0, ">= 0")
+    rng(ctx, "progress_targets", "stage", ge1, ">= 1")
+    rng(ctx, "feature_unlocks", "threshold", ge1, ">= 1")
+    rng(ctx, "awakening_targets", "max_days_after_gate", ge0, ">= 0")
+    rng(ctx, "plausibility_stage_bound", "stage", ge1, ">= 1")
+
+
+@rule
+def rule_banner_levels(ctx):
+    """E030 rates sum, E037 L/M constant, E031 exp_required, E048 rate monotonicity (09 section 5.14, acceptance 12)."""
+    for banner, rows in groups(ctx.rows("banner_levels"), "banner").items():
+        for r in rows:
+            s = 0.0
+            for col in RATE_COLS:
+                s += r[col]
+            if abs(s - 1.0) > 1e-9:
+                ctx.err("E030", f"{r['_loc']}.rates", f"rates sum to {s!r} (abs error {abs(s - 1.0)!r}), expected 1 within 1e-9")
+        base = rows[0]
+        for r in rows[1:]:
+            for col in ("rate_l", "rate_m"):
+                if abs(r[col] - base[col]) > 1e-12:
+                    ctx.err("E037", f"{r['_loc']}.{col}", f"{col} must not change with level; level {r['level']} has "
+                            f"{fmt(r[col])}, level {base['level']} has {fmt(base[col])}")
+        strictly_increasing(ctx, "E031", rows, "exp_required")
+        non_decreasing(ctx, rows, "rate_c", "level", decreasing=True)
+        non_decreasing(ctx, rows, "rate_r", "level")
+        non_decreasing(ctx, rows, "rate_e", "level")
+
+
+@rule
+def rule_monotonic_columns(ctx):
+    """E031 / E032 strictly increasing, E048 non-decreasing (09 sections 5.8-5.36)."""
+    for col in ("weapon_atk_pct", "weapon_passive_pct", "skill_dps_pct", "companion_dps_pct", "rune_stat_pct",
+                "limit_break_cost", "dupe_overflow_rock_candy"):
+        non_decreasing(ctx, ctx.rows("rarities"), col, "rarity")
+    strictly_increasing(ctx, "E031", ctx.rows("dupe_levels"), "cum_copies")
+    strictly_increasing(ctx, "E032", ctx.rows("awakening"), "stage_gate")
+    strictly_increasing(ctx, "E032", ctx.rows("awakening"), "rock_candy_cost")
+    non_decreasing(ctx, ctx.rows("awakening"), "companion_slots_after", "rank")
+    non_decreasing(ctx, ctx.rows("awakening"), "rune_slots_after", "rank")
+    strictly_increasing(ctx, "E031", ctx.rows("fish_levels"), "discovery_coins")
+    strictly_increasing(ctx, "E031", ctx.rows("fish_levels"), "missile_pct")
+    for rows in groups(ctx.rows("achievements"), "ladder").values():
+        strictly_increasing(ctx, "E031", rows, "target")
+    for rows in groups(ctx.rows("dungeon_floors"), "dungeon").values():
+        non_decreasing(ctx, rows, "reward_amount", "floor")
+    shop = sorted(ctx.rows("shop_products"), key=lambda r: r["sort_order"])
+    strictly_increasing(ctx, "E031", shop, "usd")
+    non_decreasing(ctx, shop, "bonus_pct", "sort_order")
+    strictly_increasing(ctx, "E032", ctx.rows("progress_targets"), "day")
+    non_decreasing(ctx, ctx.rows("progress_targets"), "stage", "day")
+    non_decreasing(ctx, ctx.rows("plausibility_stage_bound"), "stage", "day")
+
+
+@rule
+def rule_e034_counts(ctx):
+    """Pool sizes for enabled banners (tier <= MVP), dungeon floors, awakening targets (09 sections 5.13, 5.24, 5.35)."""
+    for b in ctx.rows("banners"):
+        table = POOL_TABLES[b["id"]]
+        if not b["enabled"] or not tier_le(b) or not ctx.has(table):
+            continue   # TODO(#161): companions; a banner whose pool table is not authored yet is skipped
+        rows = [r for r in ctx.rows(table) if tier_le(r)]
+        for rarity, col in zip(ENUMS["Rarity"], POOL_COLS):
+            n = sum(1 for r in rows if r["rarity"] == rarity)
+            if n != b[col]:
+                ctx.err("E034", table, f"{table} has {n} rows of {rarity}, expected {b[col]} from {b['_loc']}.{col}")
+    floors = groups(ctx.rows("dungeon_floors"), "dungeon")
+    for d in ctx.rows("dungeons"):
+        n = len(floors.get(d["id"], []))
+        if n != d["floors"]:
+            ctx.err("E034", "dungeon_floors", f"dungeon_floors has {n} rows of {d['id']}, expected {d['floors']} from {d['_loc']}.floors")
+    if ctx.has("awakening_targets") and ctx.has("awakening"):
+        n, want = len(ctx.rows("awakening_targets")), len(ctx.rows("awakening"))
+        if n != want:
+            ctx.err("E034", "awakening_targets", f"awakening_targets has {n} rows of rank, expected {want} from awakening")
+
+
+@rule
+def rule_e035_override_tolerance(ctx):
+    rar = {r["id"]: r for r in ctx.rows("rarities")}
+    for table, col, default_col in (("weapons", "atk_pct", "weapon_atk_pct"), ("weapons", "passive_pct", "weapon_passive_pct"),
+                                    ("skills", "dps_pct", "skill_dps_pct"), ("companions", "dps_pct", "companion_dps_pct"),
+                                    ("runes", "stat_pct", "rune_stat_pct")):
+        for r in ctx.rows(table):
+            rd = rar.get(r["rarity"])
+            if rd is None or not rd[default_col] > 0:
+                continue
+            d, tol = rd[default_col], rd["override_tolerance"]
+            dev = abs(r[col] - d) / d
+            if dev > tol + 1e-12:
+                ctx.err("E035", f"{r['_loc']}.{col}", f"{col} {fmt(r[col])} deviates {fmt(dev * 100.0)}% from rarities "
+                        f"default {fmt(d)} (tolerance {fmt(tol * 100.0)}%)")
+
+
+@rule
+def rule_e036_rune_banner(ctx):
+    for b in ctx.rows("banners"):
+        if b["id"] == "RUNE" and b["enabled"] and not ctx.rows("runes"):
+            ctx.err("E036", f"{b['_loc']}.enabled", "banner RUNE is enabled but runes has no rows")
+
+
+def fish_cap_levels(ctx):
+    node = next((r for r in ctx.rows("research") if r["effect"] == "FISH_CAP"), None)
+    extra = 0 if node is None else int(math.ceil(node["effect_per_level"] * node["max_level"]))
+    lvl0 = ctx.k.get("FISH_MAX_LVL0")
+    return None if not isinstance(lvl0, int) else lvl0 + extra
+
+
+@rule
+def rule_e038_fish_levels_cover_cap(ctx):
+    needed = fish_cap_levels(ctx)
+    n = len(ctx.rows("fish_levels"))
+    if ctx.has("fish_levels") and needed is not None and n < needed:
+        ctx.err("E038", "fish_levels", f"fish_levels has {n} rows but FISH_MAX_LVL0 + research cap needs {needed}")
+
+
+def unique(ctx, rows, cols, label=None):
+    seen = {}
+    label = label or ",".join(cols)
+    for r in rows:
+        v = tuple(r[c] for c in cols)
+        if any(x is None for x in v):
+            continue
+        if v in seen:
+            ctx.err("E046", f"{r['_loc']}.{cols[0]}", f"duplicate {label} {','.join(fmt(x) for x in v)} (also at {seen[v]})")
+        else:
+            seen[v] = r["_loc"]
+
+
+@rule
+def rule_e046_unique_columns(ctx):
+    unique(ctx, ctx.rows("banners"), ["sort_order"])
+    unique(ctx, ctx.rows("research"), ["effect"])
+    unique(ctx, ctx.rows("research"), ["layout_row", "layout_col"])
+    for q in ("quests_daily", "quests_weekly"):
+        unique(ctx, ctx.rows(q), ["sort_order"])
+    unique(ctx, ctx.rows("dungeons"), ["kind"])
+    unique(ctx, ctx.rows("shop_products"), ["sort_order"])
+    both = ctx.rows("shop_products") + ctx.rows("shop_packages")
+    unique(ctx, both, ["apple_product_id"])
+    unique(ctx, both, ["google_product_id"])
+
+
+@rule
+def rule_banner_pity_and_guarantee(ctx):
+    """E051 pity_hard > pity_soft_start; E052 a guarantee rarity with a level-1 rate (09 section 5.13)."""
+    level1 = {r["banner"]: r for r in ctx.rows("banner_levels") if r["level"] == 1}
+    for b in ctx.rows("banners"):
+        if not b["pity_hard"] > b["pity_soft_start"]:
+            ctx.err("E051", f"{b['_loc']}.pity_hard",
+                    f"pity_hard ({b['pity_hard']}) must be greater than pity_soft_start ({b['pity_soft_start']})")
+        lv = level1.get(b["id"])
+        if lv is not None:
+            i = ENUMS["Rarity"].index(b["guarantee_min_rarity"])
+            s = 0.0
+            for col in RATE_COLS[i:]:
+                s += lv[col]
+            if not s > 0:
+                ctx.err("E052", f"{b['_loc']}.guarantee_min_rarity",
+                        f"guarantee_min_rarity '{b['guarantee_min_rarity']}' has zero combined level-1 rate")
+
+
+@rule
+def rule_e054_conditional_columns(ctx):
+    for r in ctx.rows("stats"):
+        cond(ctx, r, "per_lvl", r["trainable"], "trainable", r["trainable"])
+    for r in ctx.rows("skills"):
+        cond(ctx, r, "duration_ticks", r["cast_type"] != "INSTANT", "cast_type", r["cast_type"])
+        cond(ctx, r, "buff_pct", r["cast_type"] == "BUFF", "cast_type", r["cast_type"])
+    for r in ctx.rows("companions"):
+        cond(ctx, r, "duration_ticks", r["ability_type"].startswith("BUFF_"), "ability_type", r["ability_type"])
+    for r in ctx.rows("hero_levels"):
+        if (r["atk_pct_per_level"] is None) == (r["mult_per_level"] is None):
+            cond(ctx, r, "mult_per_level", r["atk_pct_per_level"] is None, "atk_pct_per_level", r["atk_pct_per_level"])
+    for r in ctx.rows("research"):
+        if r["effect"] == "TANK_REFILL":
+            cond(ctx, r, "effect_floor", True, "effect", r["effect"])
+    for q in ("quests_daily", "quests_weekly"):
+        for r in ctx.rows(q):
+            enum = {"SUMMON": "Banner", "CLEAR_DUNGEON": "Dungeon"}.get(r["goal"])
+            cond(ctx, r, "filter", enum is not None, "goal", r["goal"])
+            if enum and r["filter"] is not None and r["filter"] not in ENUMS[enum]:
+                ctx.err("E021", f"{r['_loc']}.filter",
+                        f"'{r['filter']}' is not a valid {enum} (allowed: {', '.join(ENUMS[enum])})")
+    for r in ctx.rows("dungeons"):
+        cond(ctx, r, "ticket_currency", r["kind"] is not None, "kind", r["kind"])
+    for r in ctx.rows("dungeon_floors"):
+        if (r["reward_amount"] is None) == (r["reward_kills_equiv"] is None):
+            cond(ctx, r, "reward_kills_equiv", r["reward_amount"] is None, "reward_amount", r["reward_amount"])
+    for r in ctx.rows("shop_packages"):
+        cond(ctx, r, "drip_days", r["daily_drip"] is not None, "daily_drip", "set" if r["daily_drip"] else None)
+    for r in ctx.rows("tutorial_steps"):
+        cond(ctx, r, "trigger_value", r["trigger"] in ("STAGE_REACHED", "SCREEN_OPENED"), "trigger", r["trigger"])
+        cond(ctx, r, "expect_count", r["expect_event"] is not None, "expect_event", r["expect_event"])
+    for r in ctx.rows("feature_unlocks"):
+        cond(ctx, r, "threshold", r["condition"] != "ALWAYS", "condition", r["condition"])
+        cond(ctx, r, "locked_text_key", r["condition"] != "ALWAYS", "condition", r["condition"])
+
+
+@rule
+def rule_e055_training_curves(ctx):
+    if not ctx.has("training_curves") or not ctx.has("stats"):
+        return
+    want = [r["id"] for r in ctx.rows("stats") if r["trainable"]]
+    have = [r["stat"] for r in ctx.rows("training_curves")]
+    missing = [s for s in want if s not in have]
+    extra = [s for s in have if s not in want]
+    if any(s not in ENUMS["Stat"] for s in extra):
+        return   # an unresolved stat is E022's to report
+    if missing or extra:
+        ctx.err("E055", "training_curves", f"rows must be exactly the trainable stats; missing "
+                f"{', '.join(missing) or 'none'}, extra {', '.join(extra) or 'none'}")
+
+
+@rule
+def rule_e056_derived_equalities(ctx):
+    w = ctx.k.get("CHAPTER_WIDTH")
+    if isinstance(w, int):
+        for r in ctx.rows("chapters"):
+            want = (r["index"] - 1) * w + 1
+            if r["from_stage"] != want:
+                ctx.err("E056", f"{r['_loc']}.from_stage",
+                        f"from_stage must equal {want} ((index - 1) * CHAPTER_WIDTH + 1), got {r['from_stage']}")
+    node = next((r for r in ctx.rows("research") if r["effect"] == "TANK_REFILL"), None)
+    if node is not None and node["effect_floor"] is not None:
+        for r in ctx.rows("tank"):
+            if r["refill_floor_s"] != node["effect_floor"]:
+                ctx.err("E056", f"{r['_loc']}.refill_floor_s", f"refill_floor_s must equal {fmt(node['effect_floor'])} "
+                        f"({node['_loc']}.effect_floor), got {fmt(r['refill_floor_s'])}")
+    for ladder, rows in groups(ctx.rows("achievements"), "ladder").items():
+        for r in rows[1:]:
+            if r["goal"] != rows[0]["goal"]:
+                ctx.err("E056", f"{r['_loc']}.goal",
+                        f"goal must equal {rows[0]['goal']} (same goal for every rung of ladder {ladder}), got {r['goal']}")
+
+
+@rule
+def rule_e057_skins_per_chapter(ctx):
+    for table, word, ok, rule_text in (("enemies", "enemies", lambda n: n >= 1, "at least 1"),
+                                       ("bosses", "bosses", lambda n: n == 1, "exactly 1")):
+        if not ctx.has(table):
+            continue   # TODO(#113): enemies and bosses are cosmetic tables not authored yet
+        counts = {}
+        for r in ctx.rows(table):
+            counts[r["chapter"]] = counts.get(r["chapter"], 0) + 1
+        for ch in ctx.rows("chapters"):
+            n = counts.get(ch["id"], 0)
+            if not ok(n):
+                ctx.err("E057", table, f"chapter '{ch['id']}' has {n} {word}, expected {rule_text}")
+
+
+@rule
+def rule_e058_duration_within_cooldown(ctx):
+    for table in ("skills", "companions"):
+        for r in ctx.rows(table):
+            d, c = r["duration_ticks"], r["cooldown_ticks"]
+            if d is not None and not 1 <= d <= c:
+                ctx.err("E058", f"{r['_loc']}.duration_ticks", f"duration_ticks {d} must be in 1..cooldown_ticks {c}")
+
+
+@rule
+def rule_e059_currency_allowlists(ctx):
+    for b in ctx.rows("banners"):
+        want = "TICKET_SUMMON_" + b["id"]
+        if b["ticket_currency"] != want:
+            ctx.err("E059", f"{b['_loc']}.ticket_currency",
+                    f"ticket_currency '{b['ticket_currency']}' is not an allowed currency here ({want} for banner {b['id']})")
+    for d in ctx.rows("dungeons"):
+        if d["kind"] is not None and d["ticket_currency"] is not None and d["ticket_currency"] != "TICKET_" + d["kind"]:
+            ctx.err("E059", f"{d['_loc']}.ticket_currency", f"ticket_currency '{d['ticket_currency']}' is not an allowed "
+                    f"currency here (TICKET_{d['kind']} for kind {d['kind']})")
+    for p in ctx.rows("shop_products"):
+        if p["grant_currency"] != "DIAMOND":
+            ctx.err("E059", f"{p['_loc']}.grant_currency",
+                    f"grant_currency '{p['grant_currency']}' is not an allowed currency here (DIAMOND only)")
+
+
+@rule
+def rule_e061_dupe_level_one(ctx):
+    rows = ctx.rows("dupe_levels")
+    if rows and rows[0]["level"] == 1 and rows[0]["cum_copies"] != 1:
+        ctx.err("E061", f"{rows[0]['_loc']}.cum_copies", f"cum_copies for level 1 must be 1, got {rows[0]['cum_copies']}")
+
+
+@rule
+def rule_e062_profile_created_step(ctx):
+    if not ctx.has("tutorial_steps"):
+        return
+    pc = [r for r in ctx.rows("tutorial_steps") if r["trigger"] == "PROFILE_CREATED"]
+    if len(pc) != 1 or pc[0]["order"] != 1:
+        ctx.err("E062", "tutorial_steps", "exactly one PROFILE_CREATED step at order 1 required")
+
+
+@rule
+def rule_e063_feature_gates(ctx):
+    unlocks = {r["feature"]: r for r in ctx.rows("feature_unlocks")}
+    gate = unlocks.get("RESEARCH")
+    if gate is not None and gate["condition"] == "AWAKEN_RANK" and gate["threshold"] is not None:
+        for r in ctx.rows("research"):   # TODO(#158): research rows are not authored yet
+            if r["unlock_awaken_rank"] < gate["threshold"]:
+                ctx.err("E063", f"{r['_loc']}.unlock_awaken_rank", f"research[{r['id']}] unlocks at "
+                        f"{r['unlock_awaken_rank']}, before feature 'RESEARCH' ({gate['threshold']})")
+    shop = unlocks.get("SHOP")
+    if shop is not None and shop["condition"] != "ALWAYS":
+        ctx.err("E063", f"{shop['_loc']}.condition", "feature 'SHOP' must be ALWAYS")
+
+
+@rule
+def rule_e064_daily_bonus_rows(ctx):
+    if not ctx.has("quests_daily"):
+        return   # TODO(#170): quest tables are not authored yet
+    rows = [r for r in ctx.rows("quests_daily") if tier_le(r)]
+    bonus = [r for r in rows if r["goal"] == "DAILIES_COMPLETED"]
+    if not bonus:
+        ctx.err("E064", "quests_daily", "missing or unreachable daily bonus rows (no DAILIES_COMPLETED row with tier <= MVP)")
+    for r in bonus:
+        if r["target"] > len(rows):
+            ctx.err("E064", f"{r['_loc']}.target", f"missing or unreachable daily bonus rows ({r['id']} target "
+                    f"{r['target']} exceeds the {len(rows)} daily rows)")
+
+
+@rule
+def rule_e065_owned_counts_below_pool(ctx):
+    for r in ctx.rows("achievements"):   # TODO(#171): achievements are not authored yet
+        table = {"OWN_WEAPONS": "weapons", "OWN_SKILLS": "skills", "OWN_COMPANIONS": "companions"}.get(r["goal"])
+        if table is None or not ctx.has(table):
+            continue
+        pool = sum(1 for x in ctx.rows(table) if tier_le(x))
+        if not r["target"] < pool:
+            ctx.err("E065", f"{r['_loc']}.target", f"{r['goal']} target {r['target']} must be below the pool size {pool} (pillar 4)")
+
+
+@rule
+def rule_e039_reference_day_diamonds(ctx):
+    """06 section 2's reference day recomputed from the quest rows (09 section 5.22, issues #55, #244)."""
+    if not ctx.has("quests_daily"):
+        return   # TODO(#170): quest tables are not authored yet; REF_DAILIES_DONE / REF_NEW_BOSSES wait for them
+    k = ctx.k
+    need = ("LOGIN_DIAMONDS", "REF_DAILIES_DONE", "REF_NEW_BOSSES", "FIRST_CLEAR_DIAMONDS", "DIAMONDS_PER_DAY_F2P")
+    if not all(isinstance(k.get(x), int) for x in need):
+        return
+    daily = [r for r in ctx.rows("quests_daily") if r["reward_currency"] == "DIAMOND" and tier_le(r)]
+    weekly = [r for r in ctx.rows("quests_weekly") if r["reward_currency"] == "DIAMOND" and tier_le(r)]
+    paying = [r["reward_amount"] for r in daily if r["reward_amount"] > 0 and r["goal"] != "DAILIES_COMPLETED"]
+    total = float(k["LOGIN_DIAMONDS"])
+    if paying:
+        total += k["REF_DAILIES_DONE"] * (sum(paying) / len(paying))
+    total += sum(r["reward_amount"] for r in daily if r["goal"] == "DAILIES_COMPLETED" and r["target"] <= k["REF_DAILIES_DONE"])
+    total += sum(r["reward_amount"] for r in weekly) / 7.0
+    total += k["FIRST_CLEAR_DIAMONDS"] * k["REF_NEW_BOSSES"]
+    target = k["DIAMONDS_PER_DAY_F2P"]
+    if abs(total - target) > 0.1 * target:
+        ctx.err("E039", "quests_daily", f"reference-day diamond sum {fmt(total)} is outside 10% of DIAMONDS_PER_DAY_F2P {target}")
+
+
+# ----------------------------------------------------------------------------------------- localization (13)
+def icu_parse(text):
+    """Parses the ICU MessageFormat subset 13.4 ships (literal text, {arg}, {arg, number}, {arg, plural|select, ...}).
+    Returns a list of parts: str, or (name, kind, {selector: parts}). Raises ValueError with a detail."""
+    pos = 0
+
+    def message(depth):
+        nonlocal pos
+        parts, buf = [], []
+        while pos < len(text):
+            ch = text[pos]
+            if ch == "'":
+                if text.startswith("''", pos):
+                    buf.append("'")
+                    pos += 2
+                    continue
+                if pos + 1 < len(text) and text[pos + 1] in "{}#":
+                    end = text.find("'", pos + 1)
+                    if end < 0:
+                        raise ValueError(f"unterminated quote at {pos}")
+                    buf.append(text[pos + 1:end])
+                    pos = end + 1
+                    continue
+                buf.append(ch)
+                pos += 1
+            elif ch == "{":
+                if buf:
+                    parts.append("".join(buf))
+                    buf = []
+                parts.append(argument())
+            elif ch == "}":
+                if depth == 0:
+                    raise ValueError(f"unmatched '}}' at {pos}")
+                break
+            else:
+                buf.append(ch)
+                pos += 1
+        if buf:
+            parts.append("".join(buf))
+        return parts
+
+    def word():
+        nonlocal pos
+        while pos < len(text) and text[pos].isspace():
+            pos += 1
+        start = pos
+        while pos < len(text) and text[pos] not in ",{} \t\n":
+            pos += 1
+        w = text[start:pos]
+        while pos < len(text) and text[pos].isspace():
+            pos += 1
+        return w
+
+    def argument():
+        nonlocal pos
+        pos += 1   # {
+        name = word()
+        if not name:
+            raise ValueError(f"empty argument at {pos}")
+        if pos < len(text) and text[pos] == "}":
+            pos += 1
+            return (name, "simple", {})
+        if pos >= len(text) or text[pos] != ",":
+            raise ValueError(f"expected ',' or '}}' after '{name}'")
+        pos += 1
+        kind = word()
+        if kind == "number":
+            if pos < len(text) and text[pos] == ",":
+                pos += 1
+                word()
+            if pos >= len(text) or text[pos] != "}":
+                raise ValueError(f"unterminated number argument '{name}'")
+            pos += 1
+            return (name, "number", {})
+        if kind not in ("plural", "select"):
+            raise ValueError(f"unsupported argument type '{kind}'")
+        if pos >= len(text) or text[pos] != ",":
+            raise ValueError(f"expected ',' after '{kind}'")
+        pos += 1
+        branches = {}
+        while True:
+            sel = word()
+            if sel.startswith("offset:"):
+                sel = word()
+            if not sel:
+                break
+            if pos >= len(text) or text[pos] != "{":
+                raise ValueError(f"branch '{sel}' has no message")
+            pos += 1
+            branches[sel] = message(1)
+            if pos >= len(text) or text[pos] != "}":
+                raise ValueError(f"unterminated branch '{sel}'")
+            pos += 1
+        if pos >= len(text) or text[pos] != "}":
+            raise ValueError(f"unterminated {kind} argument '{name}'")
+        pos += 1
+        return (name, kind, branches)
+
+    return message(0)
+
+
+def plural_args(parts):
+    out = []
+    for p in parts:
+        if isinstance(p, tuple):
+            if p[1] == "plural":
+                out.append(p)
+            for b in p[2].values():
+                out += plural_args(b)
+    return out
+
+
+def rendered_len(parts):
+    """Longest rendering, counting a `#` or an argument as one character (E074's measure)."""
+    n = 0
+    for p in parts:
+        if isinstance(p, str):
+            n += len(p)
+        elif p[1] in ("plural", "select") and p[2]:
+            n += max(rendered_len(b) for b in p[2].values())
+        else:
+            n += 1
+    return n
+
+
+# CLDR plural categories the shipped locales need (13.2): en one + other; ja, ko, zh-Hans other only.
+PLURAL_CATEGORIES = {"en": ["one", "other"], "ja": ["other"], "ko": ["other"], "zh-Hans": ["other"]}
+
+
+def key_cells(tables):
+    """(loc, key) for every `key`-typed cell outside localization."""
+    for table, schema in SCHEMA.items():
+        if table == "localization":
+            continue
+        for name, typ, _ in schema["columns"]:
+            if typ == "key":
+                for r in tables.get(table, []):
+                    if r.get(name) is not None:
+                        yield f"{r['_loc']}.{name}", r[name]
+
+
+@rule
+def rule_localization(ctx):
+    """E072-E075 and W020-W021 (09 sections 5.30, 8.2, 8.6, 13.1; acceptance 14)."""
+    if not ctx.has("localization"):
+        return
+    loc_rows = ctx.rows("localization")
+    have = {r["key"] for r in loc_rows}
+    referenced = set()
+    for loc, key in key_cells(ctx.tables):
+        referenced.add(key)
+        if key not in have:
+            ctx.err("E072", loc, f"key '{key}' has no row in localization")
+    for key in ctx.ui_keys or []:
+        referenced.add(key)
+        if key not in have:
+            ctx.err("E072", "ui_keys", f"key '{key}' has no row in localization")
+    ship = [x.strip() for x in (ctx.meta.get("ship_locales") or "en").split(",")]
+    for locale, col in LOCALE_COLUMNS.items():
+        if locale != "en" and locale in ship:
+            for r in loc_rows:
+                if r.get(col) is None:
+                    ctx.err("E073", f"{r['_loc']}.{col}", f"key '{r['key']}' has no {locale} text and {locale} is in ship_locales")
+    for r in loc_rows:
+        for locale, col in LOCALE_COLUMNS.items():
+            text = r.get(col)
+            if text is None:
+                continue
+            try:
+                parts = icu_parse(text)
+            except ValueError as e:
+                parts = None
+                if r["plural"]:
+                    ctx.err("E075", f"{r['_loc']}.{col}", f"plural message must have 'one' and 'other' branches: {locale} {e}")
+                    continue
+            if r["plural"]:
+                plurals = plural_args(parts)
+                missing = [c for c in PLURAL_CATEGORIES[locale] if not plurals or any(c not in p[2] for p in plurals)]
+                if missing:
+                    detail = f"{locale} has no plural argument" if not plurals else f"{locale} lacks {', '.join(missing)}"
+                    ctx.err("E075", f"{r['_loc']}.{col}", f"plural message must have 'one' and 'other' branches: {detail}")
+                    continue
+            n = rendered_len(parts) if parts is not None else len(text)
+            if r["max_chars"] and n > r["max_chars"]:
+                ctx.err("E074", f"{r['_loc']}.{col}", f"{locale} text is {n} chars, budget {r['max_chars']}")
+    for locale, col in LOCALE_COLUMNS.items():
+        if locale == "en" or locale in ship:
+            continue
+        empty = [r for r in loc_rows if r.get(col) is None]
+        if len(empty) == len(loc_rows) and loc_rows:
+            ctx.warn("W020", "localization", f"{locale} has no text; all {len(loc_rows)} keys fall back to en")
+        else:
+            for r in empty:
+                ctx.warn("W020", f"{r['_loc']}.{col}", f"key '{r['key']}' has no {locale} text (falls back to en)")
+    for r in loc_rows:
+        key = r["key"]
+        if key in referenced or key.startswith(CODE_BUILT_KEY_PREFIXES):
+            continue
+        if key.startswith("ui.") and ctx.ui_keys is None:
+            continue   # the client's ui_keys.txt (07 section 12) was not given; ui.* rows cannot be judged
+        ctx.warn("W021", r["_loc"], f"key '{key}' is not referenced by any table or by --ui-keys")
+
+
+@rule
+def rule_warnings(ctx):
+    """W010-W013 (09 section 8.6)."""
+    counts = {}
+    for r in ctx.rows("skills"):
+        if r["cast_type"] == "BUFF":
+            counts[r["rarity"]] = counts.get(r["rarity"], 0) + 1
+    for rarity in ENUMS["Rarity"]:
+        if counts.get(rarity, 0) > 2:
+            ctx.warn("W010", "skills", f"{counts[rarity]} BUFF skills share rarity {rarity} (more than two; buffs do not stack)")
+    if ctx.has("companions"):
+        for rarity in ("COMMON", "RARE"):
+            if not any(r["rarity"] == rarity and r["ability_type"] == "MP_REGEN" for r in ctx.rows("companions")):
+                ctx.warn("W011", "companions", f"rarity {rarity} has no MP_REGEN companion (auto-equip's MP reserve needs one)")
+    enabled = [b["id"] for b in ctx.rows("banners") if b["enabled"]]
+    levels = groups(ctx.rows("banner_levels"), "banner")
+    n = {b: len(levels.get(b, [])) for b in enabled}
+    if len(set(n.values())) > 1:
+        ctx.warn("W012", "banner_levels", "enabled banners have different level counts: " +
+                 ", ".join(f"{b} {c}" for b, c in n.items()))
+    reach = fish_cap_levels(ctx)
+    if reach is not None:
+        seen = set()
+        for r in ctx.rows("fish_levels"):
+            reused = r["sprite"] in seen
+            seen.add(r["sprite"])
+            if r["level"] <= reach and r["tint"] is None and (reused or r["level"] > UI_FISH_SPRITE_LEVELS):
+                why = f"reuses sprite '{r['sprite']}'" if reused else f"is above UI_FISH_SPRITE_LEVELS {UI_FISH_SPRITE_LEVELS}"
+                ctx.warn("W013", f"{r['_loc']}.tint", f"reachable fish level {r['level']} {why} and has no tint")
+
+
+def validate(tables, errs, meta=None, ui_keys=None):
+    found = Errors()
+    check_constants(tables, found)
+    resolve_refs(tables, found)
+    check_tutorial_events(tables, found)
+    ctx = Ctx(tables, found, errs.warnings, meta or {}, ui_keys)
+    for fn in RULES:
+        fn(ctx)
+    order = {t: i for i, t in enumerate(TABLE_ORDER)}
+    errs.extend(sorted(found, key=lambda e: order.get(table_of(e.split(" ", 2)[2]), len(order))))
 
 
 # ----------------------------------------------------------------------------------------------------- emit
@@ -594,7 +1417,10 @@ def dumps(doc):
     return json.dumps(doc, indent=2, ensure_ascii=False) + "\n"
 
 
-def build(src):
+def build(src, previous=None, ui_keys=None, emit_invalid=False, hot_apply_default=False):
+    """Parse, validate, emit. Returns ((files, tables, manifest) or None, errs); errs.warnings holds the W0xx lines.
+    previous: a loaded previous build (load_previous) for 6.3's version rules and hot_apply. emit_invalid (fixtures
+    only): still emit when every error comes after parsing, so ContentDb.Build can be fed the same defect."""
     errs = Errors()
     tables = {}
     for name, schema in SCHEMA.items():
@@ -605,11 +1431,20 @@ def build(src):
             continue
         tables[name] = read_table(path, name, schema, errs)
     meta = read_meta(os.path.join(src, "meta.csv"), errs)
-    if not errs:
-        validate(tables, errs)
-    if errs:
+    parsed = all(e.split()[1] == "E020" for e in errs)
+    if not errs or (emit_invalid and parsed):
+        validate(tables, errs, meta, ui_keys)
+    if errs and not (emit_invalid and parsed):
         return None, errs
+    files, manifest = emit(tables, meta, hot_apply_default)
+    if previous is not None and not errs:
+        version_rules(tables, meta, files, manifest, previous, errs)
+        manifest["hot_apply"] = compute_hot_apply(files, previous)
+        files["manifest.json"] = dumps(manifest).encode("utf-8")
+    return (files, tables, manifest), errs
 
+
+def emit(tables, meta, hot_apply):
     files = {}
     entries = {}
     for name in sorted(SCHEMA):
@@ -641,10 +1476,10 @@ def build(src):
     s_constants = sorted(k for k, (_, kind) in REQUIRED_CONSTANTS.items() if kind == "S")
     manifest = {
         "schema_version": SCHEMA_VERSION,
-        "content_version": meta["content_version"],
-        "min_client_version": meta["min_client_version"],
-        "source_revision": meta["source_revision"],
-        "hot_apply": False,   # TODO(#123): computed against --previous from HOT_APPLY_TABLES
+        "content_version": meta.get("content_version", ""),
+        "min_client_version": meta.get("min_client_version", ""),
+        "source_revision": meta.get("source_revision", ""),
+        "hot_apply": bool(hot_apply),   # recomputed against --previous by build(); `check` keeps the committed value
         "tables": entries,
         "localization": loc_entries,
         "content_hash": content_hash,
@@ -652,7 +1487,214 @@ def build(src):
         "notes": meta.get("notes", ""),
     }
     files["manifest.json"] = dumps(manifest).encode("utf-8")
-    return (files, tables, manifest), errs
+    return files, manifest
+
+
+# ------------------------------------------------------------------------------------- versioning (6.2, 6.3)
+# B5: tables whose row count may never shrink (and tutorial_steps may never reorder). B3 applies to every table keyed
+# by an id, enum or ref, plus these: saves and the server's audit rows reference those keys (02, 08).
+NEVER_SHRINK = ["dupe_levels", "awakening", "banner_levels", "fish_levels", "stats", "tutorial_steps"]
+
+
+def parse_semver(v):
+    try:
+        return tuple(int(x) for x in v.split("."))
+    except (AttributeError, ValueError):
+        return (0, 0, 0)
+
+
+def version_key(v):
+    """ContentVersion.Compare's order (09 section 6.3): numeric per component, a missing .N reads as 0."""
+    parts = [int(x) for x in v.split(".")]
+    return tuple(parts + [0] * (4 - len(parts)))
+
+
+def load_previous(path):
+    """A previous build directory: its manifest, the bytes of every listed file and the parsed rows per table."""
+    mpath = os.path.join(path, "manifest.json")
+    if not os.path.exists(mpath):
+        raise FileNotFoundError(f"--previous {path}: no manifest.json")
+    with open(mpath, encoding="utf-8") as f:
+        manifest = json.load(f)
+    files, rows = {}, {}
+    for group in ("tables", "localization"):
+        for name, e in (manifest.get(group) or {}).items():
+            p = os.path.join(path, e["file"])
+            if os.path.exists(p):
+                with open(p, "rb") as f:
+                    data = f.read()
+                files[e["file"]] = data
+                if group == "tables":
+                    rows[name] = json.loads(data.decode("utf-8"))["rows"]
+    return {"manifest": manifest, "files": files, "rows": rows}
+
+
+def row_key(table, r):
+    key = SCHEMA[table]["key"]
+    return ",".join(fmt(r[k]) for k in key) if isinstance(key, tuple) else fmt(r[key])
+
+
+def keyed_tables():
+    out = []
+    for table, schema in SCHEMA.items():
+        key = schema["key"]
+        col = next(c for c in schema["columns"] if c[0] == (key[0] if isinstance(key, tuple) else key))
+        if col[1] == "id" or col[1].startswith(("enum(", "ref(")) or table in NEVER_SHRINK:
+            out.append(table)
+    return out
+
+
+def pool_lists(rows_by_table, banners):
+    """Pool(banner, rarity): ids ordinal-sorted (09 section 3.4), for the banners enabled in `banners`."""
+    out = {}
+    for b in banners:
+        if not b.get("enabled"):
+            continue
+        rows = rows_by_table.get(POOL_TABLES[b["id"]], [])
+        for rarity in ENUMS["Rarity"]:
+            out[(b["id"], rarity)] = sorted((r["id"] for r in rows if r["rarity"] == rarity),
+                                            key=lambda x: x.encode("utf-8"))
+    return out
+
+
+def version_rules(tables, meta, files, manifest, prev, errs):
+    """E090-E093 and W030-W031 against --previous (09 sections 6.3, 8.5, 8.6)."""
+    pm = prev["manifest"]
+    pv, cv = pm.get("content_version", ""), manifest["content_version"]
+    vloc = "meta[content_version]"
+    if VERSION_RE.match(pv or "") and VERSION_RE.match(cv) and version_key(cv) < version_key(pv):
+        errs.add("E093", vloc, f"content_version {cv} is lower than previous {pv}")
+    if changed_files(files, prev) and cv == pv:
+        errs.add("E091", vloc, f"content differs from previous build but content_version is still {cv}")
+
+    cur_rows = {t: [shape_row(r, SCHEMA[t]) for r in rows] for t, rows in tables.items() if SCHEMA[t]["dto"]}
+
+    def e090(table, rid):
+        errs.add("E090", table, f"{table}: '{rid}' existed in previous build {pv} and is missing or reordered; "
+                 "retire rows with enabled=false or tier=P2 instead")
+
+    for table in keyed_tables():   # B3, B5
+        if table not in prev["rows"]:
+            continue
+        have = {row_key(table, r) for r in cur_rows.get(table, [])}
+        for r in prev["rows"][table]:
+            k = row_key(table, r)
+            if k not in have:
+                e090(table, k)
+    if "tutorial_steps" in prev["rows"]:   # B5: appended only, never reordered (issue #46)
+        before = [r["id"] for r in prev["rows"]["tutorial_steps"]]
+        now = [r["id"] for r in cur_rows.get("tutorial_steps", [])]
+        for i, rid in enumerate(before):
+            if rid in now and (i >= len(now) or now[i] != rid):
+                e090("tutorial_steps", rid)
+                break
+    old_pools = pool_lists(prev["rows"], prev["rows"].get("banners", []))
+    new_pools = pool_lists(cur_rows, cur_rows.get("banners", []))
+    for (banner, rarity), ids in old_pools.items():   # B4: an insert that sorts before a shipped id shifts indices
+        now = new_pools.get((banner, rarity), [])
+        for i, rid in enumerate(ids):
+            if rid in now and (i >= len(now) or now[i] != rid):
+                e090(POOL_TABLES[banner], rid)
+                break
+
+    if schema_changed(cur_rows, prev) and \
+            not parse_semver(manifest["min_client_version"]) > parse_semver(pm.get("min_client_version", "")):
+        errs.add("E092", "meta[min_client_version]", "schema changed (new required column / removed enum value) but "
+                 f"min_client_version {manifest['min_client_version']} did not increase")
+
+    old_k = {r["key"]: r["value"] for r in prev["rows"].get("constants", [])}
+    notes = meta.get("notes", "") or ""
+    for r in cur_rows.get("constants", []):
+        if r["kind"] == "S" and r["key"] in old_k and old_k[r["key"]] != r["value"] and r["key"] not in notes:
+            errs.warnings.add("W030", f"constants[{r['key']}].value", f"S constant changed from {fmt(old_k[r['key']])} "
+                              f"to {fmt(r['value'])} without a note in meta.notes")
+    new_k = {r["key"]: r["value"] for r in cur_rows.get("constants", [])}
+    if isinstance(old_k.get("FISH_MAX_LVL0"), int) and isinstance(new_k.get("FISH_MAX_LVL0"), int) and \
+            new_k["FISH_MAX_LVL0"] < old_k["FISH_MAX_LVL0"]:
+        errs.warnings.add("W031", "constants[FISH_MAX_LVL0].value", f"FISH_MAX_LVL0 decreased from "
+                          f"{old_k['FISH_MAX_LVL0']} to {new_k['FISH_MAX_LVL0']} (saved fish keep their level, issue #41)")
+    old_cap = {r["id"]: r["max_level"] for r in prev["rows"].get("research", []) if r.get("effect") == "FISH_CAP"}
+    for r in cur_rows.get("research", []):
+        if r["effect"] == "FISH_CAP" and r["id"] in old_cap and r["max_level"] < old_cap[r["id"]]:
+            errs.warnings.add("W031", f"research[{r['id']}].max_level", f"max_level decreased from {old_cap[r['id']]} "
+                              f"to {r['max_level']} (saved fish keep their level, issue #41)")
+
+
+def changed_files(files, prev):
+    """Data files (not the manifest) added, removed or with different bytes."""
+    names = (set(files) | set(prev["files"])) - {"manifest.json"}
+    return sorted(f for f in names if files.get(f) != prev["files"].get(f))
+
+
+def schema_changed(cur_rows, prev):
+    """B6: a non-nullable column the previous build's rows lack, or an enum value the previous rows use that is gone."""
+    for table, rows in cur_rows.items():
+        old = prev["rows"].get(table)
+        if not old or not rows:
+            continue
+        nullable = {c[0]: c[2] for c in SCHEMA[table]["columns"]}
+        for col in rows[0]:
+            if col not in old[0] and not nullable.get(col, False):
+                return True
+    for table, rows in prev["rows"].items():
+        if table not in SCHEMA:
+            continue
+        for name, typ, _ in SCHEMA[table]["columns"]:
+            if typ.startswith("enum("):
+                allowed = ENUMS[typ[5:-1]]
+                if any(r.get(name) is not None and r.get(name) not in allowed for r in rows):
+                    return True
+    return False
+
+
+def compute_hot_apply(files, prev):
+    """6.2: true only when every changed file is in the hot-apply allowlist (00 contract 3, issue #54). No change at
+    all keeps the previous build's value, so an identical rebuild reproduces identical bytes."""
+    changed = changed_files(files, prev)
+    if not changed:
+        return bool(prev["manifest"].get("hot_apply", False))
+    allowed = {t + ".json" for t in HOT_APPLY_TABLES if t != "localization"}
+    return all(f in allowed or f.startswith("localization.") for f in changed)
+
+
+def diff_dirs(a, b):
+    """Row-level added/removed/changed per table between two content dirs (7.1 `diff`), as printable lines."""
+    pa, pb = load_previous(a), load_previous(b)
+    out = [f"content {pa['manifest'].get('content_version')} -> {pb['manifest'].get('content_version')}"]
+    for table in sorted(set(pa["rows"]) | set(pb["rows"])):
+        ra, rb = pa["rows"].get(table, []), pb["rows"].get(table, [])
+        if table in SCHEMA:
+            ka = {row_key(table, r): r for r in ra}
+            kb = {row_key(table, r): r for r in rb}
+        else:
+            ka, kb = {str(i): r for i, r in enumerate(ra)}, {str(i): r for i, r in enumerate(rb)}
+        lines = [f"  + {k}" for k in kb if k not in ka] + [f"  - {k}" for k in ka if k not in kb]
+        for k in kb:
+            if k in ka and ka[k] != kb[k]:
+                cols = [c for c in kb[k] if ka[k].get(c) != kb[k].get(c)] + [c for c in ka[k] if c not in kb[k]]
+                lines.append(f"  ~ {k}: " + "; ".join(
+                    f"{c} {json.dumps(ka[k].get(c))} -> {json.dumps(kb[k].get(c))}" for c in cols))
+        if lines:
+            out.append(f"{table}:")
+            out += lines
+
+    def texts(p, locale):
+        e = p["manifest"].get("localization", {}).get(locale)
+        if not e or e["file"] not in p["files"]:
+            return {}
+        return {r["key"]: r["text"] for r in json.loads(p["files"][e["file"]].decode("utf-8"))["rows"]}
+
+    for locale in sorted(set(pa["manifest"].get("localization", {})) | set(pb["manifest"].get("localization", {}))):
+        ta, tb = texts(pa, locale), texts(pb, locale)
+        lines = [f"  + {k}" for k in tb if k not in ta] + [f"  - {k}" for k in ta if k not in tb]
+        lines += [f"  ~ {k}: {json.dumps(ta[k], ensure_ascii=False)} -> {json.dumps(tb[k], ensure_ascii=False)}"
+                  for k in tb if k in ta and ta[k] != tb[k]]
+        if lines:
+            out.append(f"localization.{locale}:")
+            out += lines
+    if len(out) == 1:
+        out.append("no row changes")
+    return out
 
 
 # ------------------------------------------------------------------------------------------------ C# DTOs
@@ -799,13 +1841,44 @@ def print_summary(tables, manifest):
     print("  S constants: " + ", ".join(manifest["s_constants"]))
 
 
+def read_bytes(path):
+    if not os.path.exists(path):
+        return None
+    with open(path, "rb") as f:
+        return f.read()
+
+
+def read_ui_keys(path):
+    """The client's ui.* key list (13.1): one key per line; blank lines and `#` comments skipped."""
+    with open(path, encoding="utf-8") as f:
+        return [ln.strip() for ln in f if ln.strip() and not ln.strip().startswith("#")]
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("verb", choices=["build", "check", "gen-dtos"])
+    ap.add_argument("verb", choices=["build", "check", "gen-dtos", "diff"])
     ap.add_argument("--src", default="content_src")
     ap.add_argument("--out", default="content")
     ap.add_argument("--dto-out", default=DTO_PATH)
+    ap.add_argument("--previous", help="previous build dir: version rules E090-E093, W030, W031 and hot_apply (6.3)")
+    ap.add_argument("--ui-keys", help="the client's ui_keys.txt for E072 / W021 (13.1)")
+    ap.add_argument("--strict-warnings", action="store_true", help="exit 1 on any W0xx warning (CI)")
+    ap.add_argument("--emit-invalid", action="store_true", help=argparse.SUPPRESS)   # content fixtures only
+    ap.add_argument("--a", help="diff: the old content dir")
+    ap.add_argument("--b", help="diff: the new content dir")
     args = ap.parse_args(argv)
+
+    if args.verb == "diff":
+        if not args.a or not args.b:
+            print("diff needs --a <dir> --b <dir>", file=sys.stderr)
+            return 2
+        try:
+            lines = diff_dirs(args.a, args.b)
+        except (OSError, ValueError, KeyError) as e:
+            print(f"diff: {e}", file=sys.stderr)
+            return 2
+        print("\n".join(lines))
+        return 0
 
     errs = Errors()
     check_dto_names(errs)
@@ -823,27 +1896,47 @@ def main(argv=None):
     if not os.path.isdir(args.src):
         print(f"source directory not found: {args.src}", file=sys.stderr)
         return 2
-    result, errs = build(args.src)
-    if errs:
-        for e in errs:
-            print(e, file=sys.stderr)
+    try:
+        previous = load_previous(args.previous) if args.previous else None
+        ui_keys = read_ui_keys(args.ui_keys) if args.ui_keys else None
+    except (OSError, ValueError) as e:
+        print(str(e), file=sys.stderr)
+        return 2
+    hot_apply_default = False
+    committed = os.path.join(args.out, "manifest.json")
+    if args.verb == "check" and previous is None and os.path.exists(committed):
+        try:   # check without --previous reproduces the committed hot_apply instead of recomputing it
+            with open(committed, encoding="utf-8") as f:
+                hot_apply_default = bool(json.load(f).get("hot_apply", False))
+        except ValueError:
+            pass
+    result, errs = build(args.src, previous=previous, ui_keys=ui_keys, emit_invalid=args.emit_invalid,
+                         hot_apply_default=hot_apply_default)
+    for e in errs:
+        print(e, file=sys.stderr)
+    for w in errs.warnings:
+        print(w, file=sys.stderr)
+    if result is None or (errs and not args.emit_invalid):
         return 1
     files, tables, manifest = result
+    failed = bool(errs) or (args.strict_warnings and bool(errs.warnings))
 
     if args.verb == "check":
         stale = []
         for fname, data in files.items():
             p = os.path.join(args.out, fname)
-            if not os.path.exists(p) or open(p, "rb").read() != data:
+            if read_bytes(p) != data:
                 stale.append(fname)
         if os.path.isdir(args.out):
             stale += [f"{f} (not produced by the build)" for f in sorted(os.listdir(args.out))
                       if f.endswith(".json") and f not in files]
-        if not os.path.exists(args.dto_out) or open(args.dto_out, "rb").read() != dto:
+        if read_bytes(args.dto_out) != dto:
             stale.append(args.dto_out)
         if stale:
             print(f"{args.out}/ is stale (run python3 tools/export_content.py build): " + ", ".join(sorted(stale)),
                   file=sys.stderr)
+            return 1
+        if failed:
             return 1
         print(f"{args.out}/ and {args.dto_out} are up to date ({manifest['content_version']} {manifest['content_hash'][:8]})")
         return 0
@@ -855,11 +1948,13 @@ def main(argv=None):
     for fname, data in files.items():
         with open(os.path.join(args.out, fname), "wb") as f:
             f.write(data)
+    if args.emit_invalid:
+        return 1 if failed else 0
     os.makedirs(os.path.dirname(args.dto_out), exist_ok=True)
     with open(args.dto_out, "wb") as f:
         f.write(dto)
     print_summary(tables, manifest)
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

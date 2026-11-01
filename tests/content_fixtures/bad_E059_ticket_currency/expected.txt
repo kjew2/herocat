@@ -1,0 +1,1 @@
+CONTENT E059 banners[SKILL].ticket_currency: ticket_currency 'TICKET_SUMMON_WEAPON' is not an allowed currency here (TICKET_SUMMON_SKILL for banner SKILL)

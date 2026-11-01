@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "banners",
+      "SKILL,true,M0,200,TICKET_SUMMON_SKILL",
+      "SKILL,true,M0,200,TICKET_SUMMON_WEAPON"
+    ]
+  ],
+  "csharp": true
+}

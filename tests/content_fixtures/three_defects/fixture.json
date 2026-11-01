@@ -1,0 +1,20 @@
+{
+  "edits": [
+    [
+      "dupe_levels",
+      "1,1\n",
+      "1,2\n"
+    ],
+    [
+      "banner_levels",
+      "WEAPON,1,0,0.6,0.28,0.09,0.025,0.005",
+      "WEAPON,1,0,0.61,0.28,0.09,0.025,0.005"
+    ],
+    [
+      "curves",
+      "enemy_hp,20,1.04",
+      "enemy_hp,20,1.0"
+    ]
+  ],
+  "csharp": true
+}

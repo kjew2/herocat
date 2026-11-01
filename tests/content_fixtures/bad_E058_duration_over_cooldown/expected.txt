@@ -1,0 +1,1 @@
+CONTENT E058 skills[skill_r_08].duration_ticks: duration_ticks 200 must be in 1..cooldown_ticks 150

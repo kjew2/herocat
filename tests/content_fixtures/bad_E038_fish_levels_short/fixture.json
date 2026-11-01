@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "constants",
+      "FISH_MAX_LVL0,int,10",
+      "FISH_MAX_LVL0,int,25"
+    ]
+  ],
+  "csharp": true
+}

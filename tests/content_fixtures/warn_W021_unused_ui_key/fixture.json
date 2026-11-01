@@ -1,0 +1,13 @@
+{
+  "append": [
+    [
+      "localization",
+      "ui.scr_main.unused,Unused,Unused,Unused,Unused,24,false"
+    ]
+  ],
+  "args": [
+    "--strict-warnings",
+    "--ui-keys",
+    "{ui_keys}"
+  ]
+}

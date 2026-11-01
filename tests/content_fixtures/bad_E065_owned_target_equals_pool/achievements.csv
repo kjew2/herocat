@@ -1,0 +1,2 @@
+id,ladder,rung,goal,target,reward_currency,reward_amount,tier,name_key
+ach_weapons_01,weapons,1,OWN_WEAPONS,5,DIAMOND,10,MVP,chapter.01.name

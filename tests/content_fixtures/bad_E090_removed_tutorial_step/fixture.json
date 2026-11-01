@@ -1,0 +1,15 @@
+{
+  "edits": [
+    [
+      "meta",
+      "content_version,2026.11.01",
+      "content_version,2026.11.02"
+    ],
+    [
+      "tutorial_steps",
+      "tut_hero_tab,3,PREVIOUS_DONE,,SCR_MAIN,tab_hero,tut.3.hero,,,,true,MVP\n",
+      ""
+    ]
+  ],
+  "previous": {}
+}

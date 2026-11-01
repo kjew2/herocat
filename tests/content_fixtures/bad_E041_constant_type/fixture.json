@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "constants",
+      "TICK_HZ,int,10",
+      "TICK_HZ,double,10"
+    ]
+  ],
+  "csharp": true
+}

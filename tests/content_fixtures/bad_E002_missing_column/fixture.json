@@ -1,0 +1,14 @@
+{
+  "edits": [
+    [
+      "hero_levels",
+      ",mult_per_level,level_cap",
+      ",mult_per_level"
+    ],
+    [
+      "hero_levels",
+      ",1.02,9999",
+      ",1.02"
+    ]
+  ]
+}
