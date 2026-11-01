@@ -16,6 +16,15 @@ namespace HeroCat.Sim.Commands
 
         /// <summary>BadArgument: TrainStat count &lt; 1, or TapZap count &lt; 0.</summary>
         public const string INVALID_COUNT = "INVALID_COUNT";
+
+        /// <summary>BadArgument: SelectStage with a stage &lt; 1 or &gt; STAGE_CAP.</summary>
+        public const string STAGE_OUT_OF_RANGE = "STAGE_OUT_OF_RANGE";
+
+        /// <summary>Locked: SelectStage above both Progress.HighestCleared and the frontier.</summary>
+        public const string STAGE_NOT_CLEARED = "STAGE_NOT_CLEARED";
+
+        /// <summary>NotAvailable: SelectStage while Combat.Mode == Dungeon (the stage fields are frozen during a run, 02 section 3.3).</summary>
+        public const string DUNGEON_RUN_IN_PROGRESS = "DUNGEON_RUN_IN_PROGRESS";
     }
 
     /// <summary>
@@ -47,5 +56,18 @@ namespace HeroCat.Sim.Commands
     public sealed record TapZap(int Count) : Command
     {
         internal override ApplyResult Execute(Simulation sim) => sim.HandleTapZap(this);
+    }
+
+    /// <summary>
+    /// Farms a cleared side stage, or returns to the frontier with null (03 section 2.7, 00 decision 67; issue #35).
+    /// Combat.Stage stays the frontier and keeps its KillsInStage, Boss phase and BossFailsOnStage; kills on the selected
+    /// stage pay its Gold and Exp and never advance anything. Selecting the frontier stage equals null. The current enemy
+    /// despawns with no reward. Rejects: BadArgument/STAGE_OUT_OF_RANGE (stage &lt; 1 or &gt; STAGE_CAP),
+    /// Locked/STAGE_NOT_CLEARED (stage &gt; max(HighestCleared, Stage)), NotAvailable/DUNGEON_RUN_IN_PROGRESS.
+    /// Emits StageChanged(fought stage); selecting what is already fought is accepted with no event.
+    /// </summary>
+    public sealed record SelectStage(int? Stage) : Command
+    {
+        internal override ApplyResult Execute(Simulation sim) => sim.HandleSelectStage(this);
     }
 }

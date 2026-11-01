@@ -99,11 +99,14 @@ class ErrorCodeTests(unittest.TestCase):
         return [e.split()[1] for e in errs]
 
     def test_content_version_formats(self):
+        # Edits the whole value, whatever content_src's current version is (a same-day bump adds a ".N").
+        with open(os.path.join(self.src, "meta.csv"), encoding="utf-8") as f:
+            cur = "content_version," + re.search(r"^content_version,(.*)$", f.read(), re.M).group(1).strip()
         for ok in ("2026.11.03", "2026.11.03.2"):
-            self.edit("meta", "2026.11.01", ok)
+            self.edit("meta", cur, "content_version," + ok)
             self.assertEqual(self.codes(), [])
-            self.edit("meta", ok, "2026.11.01")
-        self.edit("meta", "2026.11.01", "1.0")
+            self.edit("meta", "content_version," + ok, cur)
+        self.edit("meta", cur, "content_version,1.0")
         _, errs = build(self.src)
         self.assertEqual(errs, ["CONTENT E094 meta[content_version]: content_version '1.0' must be YYYY.MM.DD or YYYY.MM.DD.N"])
 

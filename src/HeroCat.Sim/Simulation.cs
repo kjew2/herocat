@@ -172,7 +172,7 @@ namespace HeroCat.Sim
                 }
                 if (e is CurrencyChanged cc && cc.Reason == CurrencyReason.KILL)
                 {
-                    OpenBatch(State.Combat.Stage);   // the kill's gold and EXP are summed through its EnemyKilled
+                    OpenBatch(FoughtStage);   // the kill's gold and EXP are summed through its EnemyKilled
                     return;
                 }
             }

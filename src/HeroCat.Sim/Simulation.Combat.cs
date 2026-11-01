@@ -55,7 +55,7 @@ namespace HeroCat.Sim
         }
 
         /// <summary>What Emit does with a coalesced CurrencyChanged(KILL): its amount is summed through the kill's EnemyKilled.</summary>
-        internal void FoldKillCurrency() => OpenBatch(State.Combat.Stage);
+        internal void FoldKillCurrency() => OpenBatch(FoughtStage);   // the fought stage, as FoldKill: a side stage when farming one
 
         /// <summary>The fought stage: the selected side stage, else the frontier (03 section 2.6; selection is MVP, #159).</summary>
         int FoughtStage => State.Combat.Selected ?? State.Combat.Stage;
@@ -398,6 +398,26 @@ namespace HeroCat.Sim
             }
             c.Boss = BossPhase.Pending;
             Despawn(EnsureFight());   // the current mob despawns: no gold, no EXP, no kill credit
+            return ApplyResult.Accepted;
+        }
+
+        /// <summary>03 section 2.7 SelectStage (issue #35): side-stage farming; the frontier's stage fields are never touched.</summary>
+        internal ApplyResult HandleSelectStage(SelectStage cmd)
+        {
+            var c = State.Combat;
+            var k = Db.Constants;
+            if (cmd.Stage is int s)
+            {
+                if (s < 1 || s > k.StageCap) return ApplyResult.Reject(RejectCode.BadArgument, CombatRejectReasons.STAGE_OUT_OF_RANGE);
+                int highest = State.Progress.HighestCleared > c.Stage ? State.Progress.HighestCleared : c.Stage;
+                if (s > highest) return ApplyResult.Reject(RejectCode.Locked, CombatRejectReasons.STAGE_NOT_CLEARED);
+            }
+            if (c.Mode != CombatMode.Stage) return ApplyResult.Reject(RejectCode.NotAvailable, CombatRejectReasons.DUNGEON_RUN_IN_PROGRESS);
+            int? target = cmd.Stage == c.Stage ? null : cmd.Stage;   // the frontier chip equals Return
+            if (target == c.Selected) return ApplyResult.Accepted;   // already fought: no despawn, no event
+            c.Selected = target;                                      // Stage, KillsInStage, Boss and BossFailsOnStage keep the frontier
+            Despawn(EnsureFight());                                   // the current enemy despawns: no gold, no EXP, no kill credit
+            Emit(new StageChanged(FoughtStage));
             return ApplyResult.Accepted;
         }
 
