@@ -14,7 +14,8 @@ namespace HeroCat.Sim
     /// <see cref="GameState.Quests"/> reads as IN_PROGRESS with progress 0 (02 rule P12): the rollover reset clears the
     /// kind's entries, which forfeits unclaimed rewards without a CurrencyChanged. <see cref="QuestsProgress"/> is called at
     /// the emitting sites (kills, boss spawns, stage clears, Training, summons, the Fish Board, dungeon clears); offline
-    /// catch-up never reaches them. Rewards are paid only by the claim commands. Achievements are issue #171.
+    /// catch-up never reaches them. Rewards are paid only by the claim commands. Achievement ladders (never reset, reason
+    /// ACHIEVEMENT) are in Simulation.Achievements.cs (issue #171).
     /// </summary>
     public sealed partial class Simulation
     {
@@ -43,7 +44,9 @@ namespace HeroCat.Sim
         {
             QuestProgressKind(QuestKind.DAILY, goal, delta, filter);
             QuestProgressKind(QuestKind.WEEKLY, goal, delta, filter);
-            // TODO(#171): QuestKind.ACHIEVEMENT ladders (LIFETIME_* sums here, OWN_*/REACH_*/FISH_LEVEL/AWAKEN_RANK via SetMax).
+            // The two sum ladders (06 section 5.4) count the same events; the max ladders are AchievementsSetMax's.
+            if (goal == QuestGoal.MERGE_FISH) AchievementsAdd(QuestGoal.LIFETIME_MERGES, delta);
+            else if (goal == QuestGoal.SUMMON) AchievementsAdd(QuestGoal.LIFETIME_SUMMONS, delta);
         }
 
         /// <summary>A dungeon clear or sweep (06 section 6.2, CLEAR_DUNGEON with the dungeon filter). TODO(#173): the dungeon issue calls this.</summary>
@@ -143,12 +146,16 @@ namespace HeroCat.Sim
             return ApplyResult.Accepted;
         }
 
-        /// <summary>COMPLETED -> CLAIMED, QuestClaimed, then the reward through the one Ledger path with reason QUEST.</summary>
+        /// <summary>
+        /// COMPLETED -> CLAIMED, QuestClaimed, then the reward through the one Ledger path with reason QUEST (ACHIEVEMENT for
+        /// an achievement rung, 06 section 5.1).
+        /// </summary>
         void PayQuest(QuestDef def, QuestProgress e)
         {
             e.State = QuestStatus.CLAIMED;
             Emit(new QuestClaimed(def.Id, def.RewardCurrency, def.RewardAmount));
-            Ledger.Apply(State, new CurrencyDelta(def.RewardCurrency, def.RewardAmount), CurrencyReason.QUEST, this);
+            var reason = def.Kind == QuestKind.ACHIEVEMENT ? CurrencyReason.ACHIEVEMENT : CurrencyReason.QUEST;
+            Ledger.Apply(State, new CurrencyDelta(def.RewardCurrency, def.RewardAmount), reason, this);
         }
     }
 }

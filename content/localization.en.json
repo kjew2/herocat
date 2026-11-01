@@ -3,6 +3,222 @@
   "locale": "en",
   "rows": [
     {
+      "key": "achievement.stage_01.name",
+      "text": "Clear stage 10"
+    },
+    {
+      "key": "achievement.stage_02.name",
+      "text": "Clear stage 30"
+    },
+    {
+      "key": "achievement.stage_03.name",
+      "text": "Clear stage 50"
+    },
+    {
+      "key": "achievement.stage_04.name",
+      "text": "Clear stage 100"
+    },
+    {
+      "key": "achievement.stage_05.name",
+      "text": "Clear stage 150"
+    },
+    {
+      "key": "achievement.stage_06.name",
+      "text": "Clear stage 200"
+    },
+    {
+      "key": "achievement.stage_07.name",
+      "text": "Clear stage 300"
+    },
+    {
+      "key": "achievement.stage_08.name",
+      "text": "Clear stage 400"
+    },
+    {
+      "key": "achievement.stage_09.name",
+      "text": "Clear stage 500"
+    },
+    {
+      "key": "achievement.stage_10.name",
+      "text": "Clear stage 700"
+    },
+    {
+      "key": "achievement.stage_11.name",
+      "text": "Clear stage 1,000"
+    },
+    {
+      "key": "achievement.hero_level_01.name",
+      "text": "Reach hero level 10"
+    },
+    {
+      "key": "achievement.hero_level_02.name",
+      "text": "Reach hero level 25"
+    },
+    {
+      "key": "achievement.hero_level_03.name",
+      "text": "Reach hero level 50"
+    },
+    {
+      "key": "achievement.hero_level_04.name",
+      "text": "Reach hero level 75"
+    },
+    {
+      "key": "achievement.hero_level_05.name",
+      "text": "Reach hero level 100"
+    },
+    {
+      "key": "achievement.hero_level_06.name",
+      "text": "Reach hero level 150"
+    },
+    {
+      "key": "achievement.hero_level_07.name",
+      "text": "Reach hero level 200"
+    },
+    {
+      "key": "achievement.weapons_01.name",
+      "text": "Own 5 different weapons"
+    },
+    {
+      "key": "achievement.weapons_02.name",
+      "text": "Own 10 different weapons"
+    },
+    {
+      "key": "achievement.weapons_03.name",
+      "text": "Own 20 different weapons"
+    },
+    {
+      "key": "achievement.weapons_04.name",
+      "text": "Own 25 different weapons"
+    },
+    {
+      "key": "achievement.skills_01.name",
+      "text": "Own 5 different skills"
+    },
+    {
+      "key": "achievement.skills_02.name",
+      "text": "Own 10 different skills"
+    },
+    {
+      "key": "achievement.skills_03.name",
+      "text": "Own 20 different skills"
+    },
+    {
+      "key": "achievement.skills_04.name",
+      "text": "Own 30 different skills"
+    },
+    {
+      "key": "achievement.skills_05.name",
+      "text": "Own 35 different skills"
+    },
+    {
+      "key": "achievement.companions_01.name",
+      "text": "Own 5 different companions"
+    },
+    {
+      "key": "achievement.companions_02.name",
+      "text": "Own 10 different companions"
+    },
+    {
+      "key": "achievement.companions_03.name",
+      "text": "Own 20 different companions"
+    },
+    {
+      "key": "achievement.companions_04.name",
+      "text": "Own 35 different companions"
+    },
+    {
+      "key": "achievement.companions_05.name",
+      "text": "Own 45 different companions"
+    },
+    {
+      "key": "achievement.merges_01.name",
+      "text": "Merge fish 50 times"
+    },
+    {
+      "key": "achievement.merges_02.name",
+      "text": "Merge fish 200 times"
+    },
+    {
+      "key": "achievement.merges_03.name",
+      "text": "Merge fish 500 times"
+    },
+    {
+      "key": "achievement.merges_04.name",
+      "text": "Merge fish 1,000 times"
+    },
+    {
+      "key": "achievement.merges_05.name",
+      "text": "Merge fish 3,000 times"
+    },
+    {
+      "key": "achievement.merges_06.name",
+      "text": "Merge fish 10,000 times"
+    },
+    {
+      "key": "achievement.fish_level_01.name",
+      "text": "Create a level 5 fish"
+    },
+    {
+      "key": "achievement.fish_level_02.name",
+      "text": "Create a level 8 fish"
+    },
+    {
+      "key": "achievement.fish_level_03.name",
+      "text": "Create a level 10 fish"
+    },
+    {
+      "key": "achievement.fish_level_04.name",
+      "text": "Create a level 12 fish"
+    },
+    {
+      "key": "achievement.fish_level_05.name",
+      "text": "Create a level 15 fish"
+    },
+    {
+      "key": "achievement.awakening_01.name",
+      "text": "Reach Awakening rank 1"
+    },
+    {
+      "key": "achievement.awakening_02.name",
+      "text": "Reach Awakening rank 2"
+    },
+    {
+      "key": "achievement.awakening_03.name",
+      "text": "Reach Awakening rank 3"
+    },
+    {
+      "key": "achievement.awakening_04.name",
+      "text": "Reach Awakening rank 4"
+    },
+    {
+      "key": "achievement.awakening_05.name",
+      "text": "Reach Awakening rank 5"
+    },
+    {
+      "key": "achievement.summons_01.name",
+      "text": "Summon 10 times"
+    },
+    {
+      "key": "achievement.summons_02.name",
+      "text": "Summon 50 times"
+    },
+    {
+      "key": "achievement.summons_03.name",
+      "text": "Summon 100 times"
+    },
+    {
+      "key": "achievement.summons_04.name",
+      "text": "Summon 300 times"
+    },
+    {
+      "key": "achievement.summons_05.name",
+      "text": "Summon 500 times"
+    },
+    {
+      "key": "achievement.summons_06.name",
+      "text": "Summon 1,000 times"
+    },
+    {
       "key": "awakening.rank_1.name",
       "text": "Awakened 1"
     },

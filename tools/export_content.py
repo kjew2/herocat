@@ -226,7 +226,7 @@ SCHEMA = {
     "achievements": T("AchievementRowDto", [c("id", "id"), c("ladder", "id"), c("rung", "int"),
                                             c("goal", "enum(QuestGoal)"), c("target", "long"),
                                             c("reward_currency", "enum(Currency)"), c("reward_amount", "long"), TIER,
-                                            NAME], "id", required=False, todo=171),
+                                            NAME], "id"),
     "dungeons": T("DungeonRowDto", [c("id", "id"), c("kind", "enum(Dungeon)", True),
                                     c("ticket_currency", "enum(Currency)", True), c("tickets_per_day", "int"),
                                     c("floor_stage_step", "int"), c("floors", "int"), c("sweep_allowed", "bool"), TIER,
@@ -601,7 +601,7 @@ def check_tutorial_events(tables, errs):
 # (TABLE_ORDER, the SCHEMA order) so a set of independent defects reports in table order (09 acceptance 7); within a
 # table the rule order below holds. ContentDb.Build (src/HeroCat.Sim/Content/ContentDb.Rules.cs) runs the loader-scope
 # rules in the same order with byte-identical messages (09 section 7.2, acceptance 20).
-# Rules over a table that is not authored yet (optional and absent: companions, research, achievements,
+# Rules over a table that is not authored yet (optional and absent: companions, research,
 # dungeons, enemies, bosses, shop) skip; each starts checking the day its table lands.
 
 TABLE_ORDER = list(SCHEMA)
@@ -1133,7 +1133,7 @@ def rule_e064_daily_bonus_rows(ctx):
 
 @rule
 def rule_e065_owned_counts_below_pool(ctx):
-    for r in ctx.rows("achievements"):   # TODO(#171): achievements are not authored yet
+    for r in ctx.rows("achievements"):
         table = {"OWN_WEAPONS": "weapons", "OWN_SKILLS": "skills", "OWN_COMPANIONS": "companions"}.get(r["goal"])
         if table is None or not ctx.has(table):
             continue

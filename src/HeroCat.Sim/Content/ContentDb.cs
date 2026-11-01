@@ -79,18 +79,38 @@ namespace HeroCat.Sim.Content
         /// <summary>quests_weekly rows by SortOrder (09 section 5.22). Empty in an M0 build.</summary>
         public IReadOnlyList<QuestDef> QuestsWeekly { get; private set; }
 
-        IReadOnlyDictionary<string, QuestDef> _dailyById, _weeklyById;
+        /// <summary>
+        /// achievements rungs (09 section 5.23, 06 section 5.4; issue #171) as <see cref="QuestKind.ACHIEVEMENT"/> quest rows,
+        /// grouped by ladder (in the order each ladder first appears) and by rung within it; SortOrder is that position.
+        /// Empty in an M0 build (tier MVP rows).
+        /// </summary>
+        public IReadOnlyList<QuestDef> Achievements { get; private set; }
 
-        /// <summary>The rows of one kind by SortOrder. ACHIEVEMENT rows are issue #171's (empty until then).</summary>
+        /// <summary>Each ladder's rungs by Rung (rung r is index r - 1, E060), keyed by ladder id.</summary>
+        public IReadOnlyDictionary<string, IReadOnlyList<QuestDef>> AchievementLadders { get; private set; }
+
+        IReadOnlyDictionary<string, QuestDef> _dailyById, _weeklyById, _achievementById;
+        IReadOnlyList<QuestDef>[] _achievementsByGoal;
+
+        /// <summary>The rows of one kind by SortOrder; empty for a kind outside <see cref="QuestKind"/>.</summary>
         public IReadOnlyList<QuestDef> QuestsOf(QuestKind kind) =>
-            kind == QuestKind.DAILY ? QuestsDaily : kind == QuestKind.WEEKLY ? QuestsWeekly : (IReadOnlyList<QuestDef>)Array.Empty<QuestDef>();
+            kind == QuestKind.DAILY ? QuestsDaily : kind == QuestKind.WEEKLY ? QuestsWeekly : kind == QuestKind.ACHIEVEMENT ? Achievements
+            : (IReadOnlyList<QuestDef>)Array.Empty<QuestDef>();
 
-        /// <summary>A daily row, else a weekly row, with this id; null if neither table (after the tier filter) has it.</summary>
+        /// <summary>The achievement rungs with <paramref name="goal"/>, by SortOrder (no allocation; the sim calls it per event).</summary>
+        public IReadOnlyList<QuestDef> AchievementsFor(QuestGoal goal)
+        {
+            int i = (int)goal;
+            return i >= 0 && i < _achievementsByGoal.Length ? _achievementsByGoal[i] : Array.Empty<QuestDef>();
+        }
+
+        /// <summary>A daily row, else a weekly row, else an achievement rung with this id; null if no table (after the tier filter) has it.</summary>
         public QuestDef Quest(string id)
         {
             if (id == null) return null;
             if (_dailyById.TryGetValue(id, out var d)) return d;
-            return _weeklyById.TryGetValue(id, out var w) ? w : null;
+            if (_weeklyById.TryGetValue(id, out var w)) return w;
+            return _achievementById.TryGetValue(id, out var a) ? a : null;
         }
 
         // ------------------------------------------------------------------------------------------- accessors

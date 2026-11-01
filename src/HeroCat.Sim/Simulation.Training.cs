@@ -65,6 +65,7 @@ namespace HeroCat.Sim
         {
             var h = State.Hero;
             int cap = Db.HeroLevels.LevelCap;
+            int from = h.Level;
             while (h.Level < cap)
             {
                 double need = Db.HeroLvlExp(h.Level);
@@ -74,6 +75,7 @@ namespace HeroCat.Sim
                 MarkDpsDirty();
                 Emit(new LevelUp(h.Level));
             }
+            if (h.Level > from) AchievementsSetMax(QuestGoal.REACH_HERO_LEVEL, h.Level);   // 06 section 5.4, after the LevelUps
         }
     }
 }

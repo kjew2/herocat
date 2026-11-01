@@ -77,7 +77,8 @@ namespace HeroCat.Sim.Tests
             Assert.That(sim.State.Wallet.RockCandy, Is.EqualTo(0));
             Assert.That(sim.State.Hero.AwakenRank, Is.EqualTo(1));
             var ev = sim.DrainEvents();
-            Assert.That(ev.Select(e => e.GetType()), Is.EqualTo(new[] { typeof(CurrencyChanged), typeof(Awakened) }));
+            Assert.That(ev.Select(e => e.GetType()), Is.EqualTo(new[] { typeof(CurrencyChanged), typeof(Awakened), typeof(QuestCompleted) }));
+            Assert.That(((QuestCompleted)ev[2]).QuestId, Is.EqualTo("ach_awakening_01"), "the Awakening ladder (06 section 5.4, issue #171)");
             Assert.That(ev[0], Is.EqualTo(new CurrencyChanged(Currency.ROCK_CANDY, -100, 0, CurrencyReason.AWAKENING)));
             Assert.That(ev[1], Is.EqualTo(new Awakened(1)));
             Assert.That(sim.Query.CompanionSlotsUnlocked, Is.EqualTo(2));

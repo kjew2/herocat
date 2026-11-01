@@ -8,6 +8,11 @@
    },
    {
     "properties": {
+     "title": "achievements"
+    }
+   },
+   {
+    "properties": {
      "title": "awakening"
     }
    },
@@ -126,6 +131,67 @@
  "batchGet": {
   "spreadsheetId": "fixture-sheet-id",
   "valueRanges": [
+   {
+    "range": "achievements!A1:I5",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "id",
+      "ladder",
+      "rung",
+      "goal",
+      "target",
+      "reward_currency",
+      "reward_amount",
+      "tier",
+      "name_key"
+     ],
+     [
+      "ach_stage_01",
+      "stage",
+      "1",
+      "REACH_STAGE",
+      "10",
+      "DIAMOND",
+      "20",
+      "MVP",
+      "chapter.01.name"
+     ],
+     [
+      "ach_stage_02",
+      "stage",
+      "2",
+      "REACH_STAGE",
+      "30",
+      "DIAMOND",
+      "30",
+      "MVP",
+      "chapter.01.name"
+     ],
+     [
+      "ach_weapons_01",
+      "weapons",
+      "1",
+      "OWN_WEAPONS",
+      "3",
+      "DIAMOND",
+      "30",
+      "MVP",
+      "chapter.01.name"
+     ],
+     [
+      "ach_weapons_02",
+      "weapons",
+      "2",
+      "OWN_WEAPONS",
+      "4",
+      "DIAMOND",
+      "50",
+      "MVP",
+      "chapter.01.name"
+     ]
+    ]
+   },
    {
     "range": "awakening!A1:I6",
     "majorDimension": "ROWS",

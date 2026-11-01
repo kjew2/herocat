@@ -25,7 +25,7 @@ namespace HeroCat.Sim
             State.Hero.AwakenRank = next.Rank;
             MarkDpsDirty();
             Emit(new Awakened(next.Rank));
-            // TODO(#170): Quests.OnAwakened(rank), 06's AWAKEN_RANK achievement ladder (SetMax).
+            AchievementsSetMax(QuestGoal.AWAKEN_RANK, next.Rank);   // the Awakening ladder (06 section 5.4)
             return ApplyResult.Accepted;
         }
     }

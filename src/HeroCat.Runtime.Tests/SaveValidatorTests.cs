@@ -290,12 +290,16 @@ namespace HeroCat.Runtime.Tests
             s.Quests.Daily["d_merge"] = new QuestProgress { Progress = 20, State = QuestStatus.COMPLETED };
             s.Quests.Daily["w_kills"] = new QuestProgress { Progress = 5 };   // a weekly id in the daily map
             s.Quests.Weekly["w_kills"] = new QuestProgress { Progress = 5 };
-            s.Quests.Achievement["pad_achievement"] = new QuestProgress { Progress = 1 };   // TODO(#171): not checked yet
+            s.Quests.Achievement["pad_achievement"] = new QuestProgress { Progress = 1 };   // unknown rung id (issue #171)
+            s.Quests.Achievement["ach_merges_01"] = new QuestProgress { Progress = -3 };
+            s.Quests.Achievement["ach_stage_01"] = new QuestProgress { Progress = 12, State = QuestStatus.CLAIMED };
+            s.Quests.Achievement["d_kills"] = new QuestProgress { Progress = 1 };            // a daily id in the achievement map
             Assert.That(SaveValidator.Run(s, Now, mvp, Opt()), Is.EqualTo(new[] { "P12" }));
             Assert.That(s.Quests.Daily.Keys.OrderBy(k => k), Is.EqualTo(new[] { "d_kills", "d_merge" }));
             Assert.That((s.Quests.Daily["d_kills"].Progress, s.Quests.Daily["d_merge"].State), Is.EqualTo((0L, QuestStatus.COMPLETED)));
             Assert.That(s.Quests.Weekly.Keys, Is.EqualTo(new[] { "w_kills" }));
-            Assert.That(s.Quests.Achievement.Keys, Is.EqualTo(new[] { "pad_achievement" }));
+            Assert.That(s.Quests.Achievement.Keys.OrderBy(k => k), Is.EqualTo(new[] { "ach_merges_01", "ach_stage_01" }));
+            Assert.That((s.Quests.Achievement["ach_merges_01"].Progress, s.Quests.Achievement["ach_stage_01"].State), Is.EqualTo((0L, QuestStatus.CLAIMED)));
             Assert.That(SaveValidator.Run(s, Now, mvp, Opt()), Is.Empty);
         }
 

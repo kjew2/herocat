@@ -538,6 +538,8 @@ Example: `{"id": "d_merge", "goal": "MERGE_FISH", "filter": null, "target": 15, 
 | `tier` | enum(Tier) | |
 | `name_key` | key | |
 
+The rows are 06 section 5.4's 54 rungs in nine ladders (ids `stage`, `hero_level`, `weapons`, `skills`, `companions`, `merges`, `fish_level`, `awakening`, `summons`), all `DIAMOND`, `tier` `MVP`, summing to 6,260. They are the only home of the achievement rewards. `ClaimAllQuests(ACHIEVEMENT)` claims in the built order: ladders in the order their first row appears, rungs ascending.
+
 Example: `{"id": "ach_merges_04", "ladder": "merges", "rung": 4, "goal": "LIFETIME_MERGES", "target": 1000, "reward_currency": "DIAMOND", "reward_amount": 80, "tier": "MVP", "name_key": "achievement.merges_04.name"}`.
 
 ### 5.24 `dungeons` (3 rows + Tower P1)
@@ -739,7 +741,7 @@ Localization file shape: `{"table": "localization", "locale": "ja", "rows": [{"k
   "source_revision": "sheet rev 118 kj",
   "hot_apply": false,
   "tables": {
-    "achievements":    { "file": "achievements.json",    "rows": 58,  "sha256": "9f1c..." },
+    "achievements":    { "file": "achievements.json",    "rows": 54,  "sha256": "9f1c..." },
     "awakening":       { "file": "awakening.json",       "rows": 5,   "sha256": "0b77..." },
     "banner_levels":   { "file": "banner_levels.json",   "rows": 30,  "sha256": "c2a0..." },
     "banners":         { "file": "banners.json",         "rows": 4,   "sha256": "5d1e..." },
@@ -909,14 +911,14 @@ CONTENT <code> <location>: <message>
 
 `W010` more than two `BUFF` skills in one rarity; `W011` a rarity `<= RARE` with no `MP_REGEN` companion; `W012` banners with different `banner_levels` counts; `W013` a reachable fish level reuses a lower sprite with no `tint` (issue #48); `W031` `FISH_MAX_LVL0` or the `res_fish_cap` max decreased against `--previous` (05, issue #41); `W020` missing non-ship-locale text; `W021` unused localization key; `W030` an `S` constant changed without a note in `meta.notes`.
 
-Loader scope: `ContentDb.Build` implements every `E0xx`, `E03x`-`E06x` rule that touches sim-read data, and `E9xx`. It does not implement `E07x` localization rules (strings are client-only) or `E09x` (no previous build). `check` in CI plus the hash check at load are what make a hand edit of `content/` visible. In code: the rules live in `ContentDb.Rules.cs`, mirror the exporter's `RULES` in order, and sort by table like it. Also left to the exporter: the warnings, `E039` (a budget check for the designer, not a sim guard) and the rules over tables the sim never reads (`enemies`/`bosses` `E057`, the shop tables, `inbox_templates`). The quest rules (`E043`, `E046`, `E054`, `E064` on `quests_daily` / `quests_weekly`) run in `Build` (issue #170); the achievement and dungeon rules join it when those tables are built into `ContentDb` (issues #171, #173).
+Loader scope: `ContentDb.Build` implements every `E0xx`, `E03x`-`E06x` rule that touches sim-read data, and `E9xx`. It does not implement `E07x` localization rules (strings are client-only) or `E09x` (no previous build). `check` in CI plus the hash check at load are what make a hand edit of `content/` visible. In code: the rules live in `ContentDb.Rules.cs`, mirror the exporter's `RULES` in order, and sort by table like it. Also left to the exporter: the warnings, `E039` (a budget check for the designer, not a sim guard) and the rules over tables the sim never reads (`enemies`/`bosses` `E057`, the shop tables, `inbox_templates`). The quest rules (`E043`, `E046`, `E054`, `E064` on `quests_daily` / `quests_weekly`) run in `Build` (issue #170), and so do the achievement rules (`E060`, `E043`, `E031`, `E056`, `E065` on `achievements`, issue #171); the dungeon rules join it when that table is built into `ContentDb` (issue #173).
 
 ### 8.7 How the rules read where the tables above leave it open
 
 Decided while implementing issues #122, #123 and #128; each is a default the design owner may veto.
 
 - **Order.** `validate` sorts its errors by table in `SCHEMA` order (acceptance 7). Within one table the rule order holds. `E020` comes first because the reader finds it before any rule runs.
-- **Tables not authored yet.** A rule whose table is optional and absent is skipped. That covers `E034` for a banner whose pool table is missing (`companions`, issue #161), `E039`/`E064` without `quests_daily`, `E065` without `achievements`, `E057` without `enemies`/`bosses`, and the research halves of `E038`, `E056` and `E063` (the shipped content has the `research` rows since issue #158; the table stays optional so minimal fixtures need not carry it).
+- **Tables not authored yet.** A rule whose table is optional and absent is skipped. That covers `E034` for a banner whose pool table is missing (`companions`, issue #161), `E039`/`E064` without `quests_daily`, `E065` for an `OWN_*` goal whose pool table is missing (`OWN_COMPANIONS` until `companions` lands, issue #161), `E057` without `enemies`/`bosses`, and the research halves of `E038`, `E056` and `E063` (the shipped content has the `research` rows since issue #158; the table stays optional so minimal fixtures need not carry it).
 - **Bounds that name no code** report as `E043` with the rule text. That includes `awakening.companion_slots_after <= COMPANION_SLOTS` and banner level 1's `exp_required = 0`. `E048` is kept for the ordering rules.
 - **`E055` and `E022`.** When a `training_curves` row names a stat that does not exist, `E022` reports it and `E055` stays silent.
 - **`E059` on banners**: `ticket_currency` must be exactly `TICKET_SUMMON_<id>`.
@@ -1110,8 +1112,8 @@ public sealed class HeroLevelsDef { CurveDef Exp; double? AtkPctPerLevel; double
 public sealed class ResearchDef   { string Id; ResearchEffect Effect; double EffectPerLevel; double? EffectFloor; int MaxLevel; CurveDef Cost; int UnlockAwakenRank; int LayoutRow, LayoutCol; Tier Tier; ... }
 public sealed class FishLevelDef  { int Level; long DiscoveryCoins; double MissilePct; double MergeCoins; double BoardDpsPct; /* derived */ string Sprite, Tint, NameKey; }
 public sealed class TankDef       { int Cap0; double RefillS0; int RefillTicks0; int ReleaseLevel; double RefillFloorS; }
-public sealed class QuestDef      { string Id; QuestKind Kind; QuestGoal Goal; string Filter; long Target; Currency RewardCurrency; long RewardAmount; int SortOrder; Tier Tier; string NameKey, Icon; }
-public sealed class AchievementDef{ string Id, Ladder; int Rung; QuestGoal Goal; long Target; Currency RewardCurrency; long RewardAmount; Tier Tier; string NameKey; }
+public sealed class QuestDef      { string Id; QuestKind Kind; QuestGoal Goal; string Filter; long Target; Currency RewardCurrency; long RewardAmount; int SortOrder; Tier Tier; string NameKey, Icon;
+                                    string Ladder; int Rung; }   // an achievements row is a QuestDef of Kind ACHIEVEMENT: Ladder and Rung set, Filter and Icon null (issue #171)
 public sealed class DungeonDef    { string Id; Dungeon? Kind; Currency? TicketCurrency; int TicketsPerDay, UnlockStage, FloorStageStep, Floors; bool SweepAllowed; Tier Tier; IReadOnlyList<DungeonFloorDef> FloorDefs; ... }
 public sealed class DungeonFloorDef { int Floor; int StageEquiv; Currency RewardCurrency; double RewardAmount; /* resolved at build for HERO_EXP */ string Boss; IReadOnlyList<Grant> FirstClearBonus; }
 public sealed class ShopProductDef{ string Sku, AppleProductId, GoogleProductId; int UsdTier; double Usd; long BaseAmount; double BonusPct; long TotalAmount; double FirstPurchaseMult; int SortOrder; bool Enabled; Tier Tier; ... }
@@ -1162,7 +1164,10 @@ public sealed partial class ContentDb
     public TankDef Tank { get; }
 
     public IReadOnlyList<QuestDef> QuestsDaily { get; }  public IReadOnlyList<QuestDef> QuestsWeekly { get; }   // by SortOrder
-    public IReadOnlyDictionary<string, IReadOnlyList<AchievementDef>> AchievementLadders { get; }           // by Rung
+    public IReadOnlyList<QuestDef> Achievements { get; }                          // by ladder (first-row order), then Rung; SortOrder is that position
+    public IReadOnlyDictionary<string, IReadOnlyList<QuestDef>> AchievementLadders { get; }                 // by Rung
+    public IReadOnlyList<QuestDef> QuestsOf(QuestKind kind);  public IReadOnlyList<QuestDef> AchievementsFor(QuestGoal goal);
+    public QuestDef Quest(string id);                                             // quests_daily, then quests_weekly, then achievements
     public IReadOnlyDictionary<string, DungeonDef> Dungeons { get; }
     public DungeonDef DungeonOf(Dungeon kind);
 

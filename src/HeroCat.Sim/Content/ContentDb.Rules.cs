@@ -17,8 +17,8 @@ namespace HeroCat.Sim.Content
         //
         // Not here, by design: E07x (strings never reach the Sim), E09x (no previous build), the warnings, E039
         // (a budget check for the designer, not a sim guard), and the rules over tables the sim does not read
-        // (enemies/bosses E057, shop E031/E046/E059, inbox). TODO(#171, #173): achievements (E031, E056, E060, E065)
-        // and dungeons (E034, E048, E054, E059, E060) join when those tables are built into ContentDb.
+        // (enemies/bosses E057, shop E031/E046/E059, inbox). TODO(#173): dungeons (E034, E048, E054, E059, E060) join
+        // when that table is built into ContentDb.
         sealed partial class Builder
         {
             // literal-ok-begin: validation bounds and tolerances 09 section 5 states (not balance), percent display
@@ -214,6 +214,11 @@ namespace HeroCat.Sim.Content
                         x["id"] = r.Id; x["goal"] = r.Goal; x["filter"] = r.Filter; x["target"] = r.Target;
                         x["reward_currency"] = r.RewardCurrency; x["reward_amount"] = r.RewardAmount; x["sort_order"] = r.SortOrder; x["tier"] = r.Tier;
                     });
+                Add(t, "achievements", d.Achievements, r => r.Id, (r, x) =>
+                {
+                    x["id"] = r.Id; x["ladder"] = r.Ladder; x["rung"] = r.Rung; x["goal"] = r.Goal; x["target"] = r.Target;
+                    x["reward_currency"] = r.RewardCurrency; x["reward_amount"] = r.RewardAmount; x["tier"] = r.Tier;
+                });
                 Add(t, "tutorial_steps", d.TutorialSteps, r => r.Id, (r, x) =>
                 {
                     x["order"] = r.Order; x["trigger"] = r.Trigger; x["trigger_value"] = r.TriggerValue; x["expect_event"] = r.ExpectEvent;
@@ -254,6 +259,7 @@ namespace HeroCat.Sim.Content
                 Unique("tank", Rows(d.Tank), r => r.Id);
                 Unique("quests_daily", Rows(d.QuestsDaily), r => r.Id);
                 Unique("quests_weekly", Rows(d.QuestsWeekly), r => r.Id);
+                Unique("achievements", Rows(d.Achievements), r => r.Id);
                 Unique("tutorial_steps", Rows(d.TutorialSteps), r => r.Id);
                 Unique("progress_targets", Rows(d.ProgressTargets), r => I(r.Day));
                 Unique("feature_unlocks", Rows(d.FeatureUnlocks), r => r.Feature);
@@ -332,6 +338,7 @@ namespace HeroCat.Sim.Content
                 RuleE062ProfileCreatedStep();
                 RuleE063FeatureGates();
                 RuleE064DailyBonusRows();
+                RuleE065OwnedCountsBelowPool();
             }
 
             /// <summary>Stable-sorts the errors from <paramref name="from"/> on by table (09 acceptance 7).</summary>
@@ -514,6 +521,8 @@ namespace HeroCat.Sim.Content
                     if (Has(tc.Item1)) ExactlyOneToN(tc.Item1, tc.Item2, Ints(T(tc.Item1), tc.Item2));
                 foreach (var g in Groups(T("banner_levels"), "banner"))
                     ExactlyOneToN("banner_levels", $"level for banner {g.Key}", Ints(g.Value, "level"));
+                foreach (var g in Groups(T("achievements"), "ladder"))
+                    ExactlyOneToN("achievements", $"rung for ladder {g.Key}", Ints(g.Value, "rung"));
                 if (Has("awakening_targets"))
                     ExactlyOneToN("awakening_targets", "rank", Ints(T("awakening_targets"), "rank"), Has("awakening") ? T("awakening").Count : (int?)null);
             }
@@ -570,6 +579,7 @@ namespace HeroCat.Sim.Content
                         Rng(q, "reward_amount", login ? ge0 : ge1, login ? ">= 0 for LOGIN" : ">= 1", new List<Row> { r });
                     }
                 }
+                Rng("achievements", "reward_amount", ge1, ">= 1");
                 Rng("tutorial_steps", "expect_count", ge1, ">= 1");
                 Rng("progress_targets", "stage", ge1, ">= 1");
                 Rng("feature_unlocks", "threshold", ge1, ">= 1");
@@ -614,6 +624,7 @@ namespace HeroCat.Sim.Content
                 NonDecreasing(T("awakening"), "rune_slots_after", "rank");
                 StrictlyIncreasing("E031", T("fish_levels"), "discovery_coins");
                 StrictlyIncreasing("E031", T("fish_levels"), "missile_pct");
+                foreach (var g in Groups(T("achievements"), "ladder")) StrictlyIncreasing("E031", g.Value, "target");
                 StrictlyIncreasing("E032", T("progress_targets"), "day");
                 NonDecreasing(T("progress_targets"), "stage", "day");
                 NonDecreasing(T("plausibility_stage_bound"), "stage", "day");
@@ -801,6 +812,13 @@ namespace HeroCat.Sim.Content
                     foreach (var r in T("tank"))
                         if (N(r["refill_floor_s"]) != N(node["effect_floor"]))
                             Err("E056", r.Loc + ".refill_floor_s", $"refill_floor_s must equal {Fmt(node["effect_floor"])} ({node.Loc}.effect_floor), got {Fmt(r["refill_floor_s"])}");
+                foreach (var g in Groups(T("achievements"), "ladder"))
+                {
+                    string first = g.Value[0].S("goal");
+                    for (int i = 1; i < g.Value.Count; i++)
+                        if (g.Value[i].S("goal") != first)
+                            Err("E056", g.Value[i].Loc + ".goal", $"goal must equal {first} (same goal for every rung of ladder {g.Key}), got {g.Value[i].S("goal")}");
+                }
             }
 
             void RuleE058DurationWithinCooldown()
@@ -859,6 +877,21 @@ namespace HeroCat.Sim.Content
                 foreach (var r in bonus)
                     if ((long)r["target"] > rows.Count)
                         Err("E064", r.Loc + ".target", $"missing or unreachable daily bonus rows ({r.S("id")} target {Fmt(r["target"])} exceeds the {I(rows.Count)} daily rows)");
+            }
+
+            /// <summary>00 pillar 4, issue #44: a count-owned rung never equals owning the whole pool (09 section 5.23).</summary>
+            void RuleE065OwnedCountsBelowPool()
+            {
+                foreach (var r in T("achievements"))
+                {
+                    string goal = r.S("goal");
+                    string table = goal == "OWN_WEAPONS" ? "weapons" : goal == "OWN_SKILLS" ? "skills" : goal == "OWN_COMPANIONS" ? "companions" : null;
+                    if (table == null || !Has(table)) continue;
+                    int pool = 0;
+                    foreach (var x in T(table)) if (TierLe(x)) pool++;
+                    if (!((long)r["target"] < pool))
+                        Err("E065", r.Loc + ".target", $"{goal} target {Fmt(r["target"])} must be below the pool size {I(pool)} (pillar 4)");
+                }
             }
         }
     }
