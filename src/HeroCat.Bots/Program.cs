@@ -62,6 +62,7 @@ namespace HeroCat.Bots
             "  save-fixture --check | --update [--out path]\n" +
             "  summon-stream --check | --update [--out path]\n" +
             "  fish-vectors --check | --update [--out path]\n" +
+            "  fish-check   --model tools/out/fish_attentive.json [--seed 7] [--tolerance 0.05]   05 AC14 vs fish_model.py\n" +
             "  bench        --ticks 1000000 --stage 300 --max-ms 2000\n" +
             "  stage-bound  --check | --update [--seeds 1-20] [--days 60]   TODO(#60): needs the whale bot\n" +
             "common: --content dir (default: the repo's content/), --tier M0|MVP (default M0: the systems the M0 sim has)\n" +
@@ -84,6 +85,7 @@ namespace HeroCat.Bots
                     case "save-fixture": return SaveFixtureCmd(a);
                     case "summon-stream": return SummonStreamCmd(a);
                     case "fish-vectors": return FishVectorsCmd(a);
+                    case "fish-check": return FishCheckCmd(a);
                     case "bench": return Bench(a);
                     case "help": case "--help": Console.Out.Write(Usage); return 0;
                     default: Console.Error.Write($"unknown verb '{a.Verb}'\n" + Usage); return 2;
@@ -321,6 +323,16 @@ namespace HeroCat.Bots
             bool same = File.Exists(path) && File.ReadAllText(path).Replace("\r\n", "\n") == text;
             Console.Out.Write(same ? $"OK   {path}\n" : $"FAIL {path} differs (regenerate: {FishBoardVectors.Regenerate})\n");
             return same ? 0 : 1;
+        }
+
+        /// <summary>05 AC14 (issue #105): the attentive fish policy's day-7 fishMult against tools/fish_model.py's.</summary>
+        static int FishCheckCmd(CliArgs a)
+        {
+            var db = LoadContent(a);
+            var o = FishCheck.Run(db, a.Str("model", null), (ulong)a.Long("seed", (long)HarnessConstants.DefaultSeed),
+                                  a.Double("tolerance", FishCheck.DefaultTolerance));
+            Console.Out.Write(o.Report);
+            return o.Ok ? 0 : 1;
         }
 
         /// <summary>The v1 save fixture: --update rewrites it (refused once V1 is frozen), otherwise checks it byte for byte.</summary>

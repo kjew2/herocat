@@ -199,7 +199,10 @@ namespace HeroCat.Bots
                               s.Wallet.Gold, s.Wallet.Gold + sink.GoldSpent, sink.GoldSpent, s.Wallet.Diamond, sink.DiamondsEarned, sink.DiamondsSpent,
                               sink.UsdSpent, (int)pulls, sink.LPlus, sink.HighestRarity, s.Hero.Level, s.Hero.AwakenRank,
                               s.Fish.HighestLevel, s.Wallet.FishCoin, s.Wallet.RockCandy,
-                              s.Stats.FirstWallStage, longest, current, LayerShares.From(p), sim.StateHash());
+                              s.Stats.FirstWallStage, longest, current, LayerShares.From(p), sim.StateHash())
+            {
+                Fish = sink.FishDay.Take(sim, HarnessConstants.ActiveMinutesPerDay * 60.0),
+            };
         }
     }
 }

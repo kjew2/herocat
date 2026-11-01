@@ -103,7 +103,7 @@ content_python() {
   echo "content/ and the DTO file match a fresh build"
 
   step "Tools: fish_model.py S-constant checks (05 section 9)"
-  $PY tools/fish_model.py --quiet
+  $PY tools/fish_model.py --quiet --out "$OUT_DIR/fish"
 
   step "Summons: tools/gacha_model.py matches content/, Fixtures/Summon/stream.json and vectors.json (04, decision 46)"
   $PY tools/gacha_model.py --check
@@ -206,8 +206,10 @@ pr_dotnet() {
 }
 
 content_dotnet() {
-  if [ "$FAST" -eq 1 ]; then return 0; fi
   build
+  step "Fish Board: the C# attentive policy matches fish_model.py's day-7 fishMult within 5% (05 AC14, issue #105)"
+  $BOTS fish-check --model "$OUT_DIR/fish/fish_attentive.json"
+  if [ "$FAST" -eq 1 ]; then return 0; fi
 
   rm -f "$OUT_DIR/acceptance.report-only"
   if [ "$REWRITE_REPORT_ONLY" -eq 1 ]; then

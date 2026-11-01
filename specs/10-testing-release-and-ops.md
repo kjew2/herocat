@@ -220,6 +220,7 @@ public interface IBotPolicy
 | Lazy F2P | `lazy-f2p` | `OnSessionStart` only: claim offline reward, daily gift, quests, run or sweep dungeons, Training `Max` on ATK, pull tickets, release and merge once, then `Decide` does nothing. Models 00 pillar 1's "logs in to claim and spend" player. | 0 |
 | Light spender | `light-spender` | Greedy F2P plus `pkg_monthly` on day 1 (drip via Inbox: every portion is created at purchase with a future `availableAt` and claimed as it comes due, issue #51) and `dia_3` with first-purchase double on day 2; $19.98, within `LightSpenderUsdPerMonth`, and nothing else in the month (issue #58). Purchases go through `LocalInboxService` so the IAP -> inbox -> claim path is exercised. | $20 |
 | Whale | `whale` | Greedy F2P plus `dia_6` on day 1 and `dia_4` every third day; always 10-pulls; buys every package once; limit-breaks as soon as affordable. | ~$300 / month |
+| Fish only | `fish-attentive`, `fish-lazy`, `fish-never` | Plays only the Fish Board with one of 05 section 8.2's policies (attentive: `ReleaseMax` + `MergeAll` every active minute, discarding to unjam below the ceiling; lazy: once per session start; never), and claims the offline reward. `fish-check` compares the attentive day-7 `fishMult` with `tools/fish_model.py` (05 AC14, issue #105). Not part of the acceptance sweep. | 0 |
 
 Each purchase is logged in `sink.Spend` as `(day, sku, usd, diamonds)` so the acceptance table's "diamonds spent" column separates earned and bought.
 
@@ -404,7 +405,8 @@ Test-count guard: `tests/counts.json` records the executed tests per test projec
 ```sh
 python3 tools/export_content.py build --out $CHECK_OUT_DIR/content --dto-out $CHECK_OUT_DIR/ContentDtos.g.cs
 diff -r $CHECK_OUT_DIR/content content                                            # same as check, with a readable diff (exporter.diff)
-python3 tools/fish_model.py --quiet                                               # 05 section 9 S-constants
+python3 tools/fish_model.py --quiet --out $CHECK_OUT_DIR/fish                     # 05 section 9 S-constants
+dotnet run -c Release --no-build --project src/HeroCat.Bots -- fish-check --model $CHECK_OUT_DIR/fish/fish_attentive.json   # 05 AC14 (issue #105)
 python3 tools/gacha_model.py --check                                              # oracle: content/, vectors.json and the C# stream golden (issues #14, #24)
 python3 tools/power_curve_model.py --check --quiet                                # 03 section 8.6; report-only until the balance call
 timeout 400 dotnet run -c Release --no-build --project src/HeroCat.Bots -- acceptance --tier M0 --seeds 1-20 --days 30 --time-budget-s 240 --table --verbose

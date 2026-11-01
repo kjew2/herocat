@@ -49,6 +49,10 @@ namespace HeroCat.Bots.Measure
         readonly List<PowerBreakdown> _minutes = new List<PowerBreakdown>();
         Simulation _sim;
         Wall _open;
+        readonly FishDayCounter _fish = new FishDayCounter();
+
+        /// <summary>The Fish Board counters of the day so far (05 section 8.2); the runner closes each day with Take.</summary>
+        public FishDayCounter FishDay => _fish;
 
         public const int UnblockWindowMinutes = 60;
         public const double UnblockRise = 1.10;
@@ -101,6 +105,7 @@ namespace HeroCat.Bots.Measure
         /// <summary>Handles <paramref name="e"/> as emitted at <paramref name="tick"/> (tests script events with their own ticks).</summary>
         public void OnEvent(Event e, long tick)
         {
+            _fish.On(e);
             switch (e)
             {
                 case BossFailed f:
