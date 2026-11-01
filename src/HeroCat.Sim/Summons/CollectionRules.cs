@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using HeroCat.Sim.Content;
+using HeroCat.Sim.Power;
 using HeroCat.Sim.State;
 
 namespace HeroCat.Sim.Summons
@@ -8,7 +9,7 @@ namespace HeroCat.Sim.Summons
     /// <summary>
     /// Shared collection reads (04 sections 5.1, 6.3, 7.2): which collection a banner feeds, an item's level and
     /// LevelMult, and the auto-equip ranking. The power-formula layers (weaponMult, skillMult and their breakdown) are
-    /// the Power layer's (03 section 7); this class only ranks items for equip and headline display.
+    /// the Power layer's (03 section 7); this class ranks items by the Power layer's per-item rated value.
     /// </summary>
     public static class CollectionRules
     {
@@ -31,11 +32,26 @@ namespace HeroCat.Sim.Summons
         public static int EffectiveLevel(ContentDb db, OwnedItem item) =>
             item == null || item.Copies <= 0 ? 0 : db.DupeLevel(item.Copies) + item.LimitBreaks;
 
-        /// <summary>1 + DUPE_LVL_BONUS * (EffectiveLevel - 1); 0 when unowned.</summary>
-        public static double LevelMult(ContentDb db, OwnedItem item)
+        /// <summary>1 + DUPE_LVL_BONUS * (EffectiveLevel - 1); 0 when unowned. The Power layer's LevelMult.</summary>
+        public static double LevelMult(ContentDb db, OwnedItem item) => PowerFormula.ItemLevelMult(db, item);
+
+        /// <summary>
+        /// The rated value auto-equip ranks by (04 sections 6.3 and 7.2), in percentage points after LevelMult:
+        /// WEAPON_ATK_PCT * LevelMult for a weapon, dps_pct * LevelMult for a skill. 0 when unowned or unknown.
+        /// </summary>
+        public static double RatedValue(ContentDb db, Banner b, CollectionState col, string id)
         {
-            int l = EffectiveLevel(db, item);
-            return l <= 0 ? 0.0 : db.LevelMult(l);
+            if (id == null || !col.Items.TryGetValue(id, out var item)) return 0.0;
+            return BaseValue(db, b, id) * LevelMult(db, item);
+        }
+
+        /// <summary>The level-1 value of <paramref name="id"/>: WEAPON_ATK_PCT for a weapon, dps_pct for a skill; 0 otherwise.</summary>
+        public static double BaseValue(ContentDb db, Banner b, string id)
+        {
+            if (id == null) return 0.0;
+            if (b == Banner.WEAPON && db.Weapons.TryGetValue(id, out var w)) return w.AtkPct;
+            if (b == Banner.SKILL && db.Skills.TryGetValue(id, out var k)) return k.DpsPct;
+            return 0.0;
         }
 
         public static Rarity RarityOf(ContentDb db, Banner b, string id)
@@ -58,10 +74,8 @@ namespace HeroCat.Sim.Summons
         }
 
         /// <summary>
-        /// Owned items of <paramref name="b"/> ordered best first: rarity (higher first), then EffectiveLevel (higher first),
-        /// then id ordinal. Deterministic for any dictionary order.
-        /// TODO(merge #85): rank by the Power layer's rated value (04 sections 6.3 and 7.2: WEAPON_ATK_PCT * LevelMult for
-        /// weapons, dps_pct * LevelMult for skills) once the combat track lands; the Power layer owns that math.
+        /// Owned items of <paramref name="b"/> ordered best first: <see cref="RatedValue"/> (higher first), ties by rarity
+        /// (higher first) then id ordinal (04 sections 6.3 and 7.2). Deterministic for any dictionary order.
         /// </summary>
         public static List<string> RankOwned(ContentDb db, GameState s, Banner b)
         {
@@ -75,24 +89,19 @@ namespace HeroCat.Sim.Summons
         /// <summary>Negative when <paramref name="x"/> ranks before (is better than) <paramref name="y"/>; see <see cref="RankOwned"/>.</summary>
         public static int Compare(ContentDb db, Banner b, CollectionState col, string x, string y)
         {
-            int c = RarityOf(db, b, y).CompareTo(RarityOf(db, b, x));
+            int c = RatedValue(db, b, col, y).CompareTo(RatedValue(db, b, col, x));
             if (c != 0) return c;
-            col.Items.TryGetValue(x, out var ix);
-            col.Items.TryGetValue(y, out var iy);
-            c = EffectiveLevel(db, iy).CompareTo(EffectiveLevel(db, ix));
+            c = RarityOf(db, b, y).CompareTo(RarityOf(db, b, x));
             if (c != 0) return c;
             return string.CompareOrdinal(x, y);
         }
 
-        /// <summary>True when <paramref name="x"/> ranks strictly above <paramref name="y"/> on rarity and level (ids aside).</summary>
-        public static bool StrictlyBetter(ContentDb db, Banner b, CollectionState col, string x, string y)
-        {
-            int c = RarityOf(db, b, x).CompareTo(RarityOf(db, b, y));
-            if (c != 0) return c > 0;
-            col.Items.TryGetValue(x, out var ix);
-            col.Items.TryGetValue(y, out var iy);
-            return EffectiveLevel(db, ix) > EffectiveLevel(db, iy);
-        }
+        /// <summary>
+        /// True when <paramref name="x"/>'s rated value is strictly above <paramref name="y"/>'s: the only case
+        /// AutoEquipBestWeapon switches (04 section 6.3). A tie on value never switches, whatever the rarity or id.
+        /// </summary>
+        public static bool StrictlyBetter(ContentDb db, Banner b, CollectionState col, string x, string y) =>
+            RatedValue(db, b, col, x) > RatedValue(db, b, col, y);
 
         /// <summary>The best owned weapon, or null when none is owned.</summary>
         public static string BestWeapon(ContentDb db, GameState s)
