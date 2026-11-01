@@ -17,9 +17,8 @@ namespace HeroCat.Sim.Content
         //
         // Not here, by design: E07x (strings never reach the Sim), E09x (no previous build), the warnings, E039
         // (a budget check for the designer, not a sim guard), and the rules over tables the sim does not read
-        // (enemies/bosses E057, shop E031/E046/E059, inbox). TODO(#170, #171, #173): quests (E054 filter, E064),
-        // achievements (E031, E056, E060, E065) and dungeons (E034, E048, E054, E059, E060) join when those tables
-        // are built into ContentDb.
+        // (enemies/bosses E057, shop E031/E046/E059, inbox). TODO(#171, #173): achievements (E031, E056, E060, E065)
+        // and dungeons (E034, E048, E054, E059, E060) join when those tables are built into ContentDb.
         sealed partial class Builder
         {
             // literal-ok-begin: validation bounds and tolerances 09 section 5 states (not balance), percent display
@@ -209,6 +208,12 @@ namespace HeroCat.Sim.Content
                     x["level"] = r.Level; x["discovery_coins"] = r.DiscoveryCoins; x["missile_pct"] = r.MissilePct;
                 });
                 Add(t, "tank", d.Tank, r => r.Id, (r, x) => { x["cap0"] = r.Cap0; x["refill_s0"] = r.RefillS0; x["refill_floor_s"] = r.RefillFloorS; });
+                foreach (var (table, rows) in new[] { ("quests_daily", d.QuestsDaily), ("quests_weekly", d.QuestsWeekly) })
+                    Add(t, table, rows, r => r.Id, (r, x) =>
+                    {
+                        x["id"] = r.Id; x["goal"] = r.Goal; x["filter"] = r.Filter; x["target"] = r.Target;
+                        x["reward_currency"] = r.RewardCurrency; x["reward_amount"] = r.RewardAmount; x["sort_order"] = r.SortOrder; x["tier"] = r.Tier;
+                    });
                 Add(t, "tutorial_steps", d.TutorialSteps, r => r.Id, (r, x) =>
                 {
                     x["order"] = r.Order; x["trigger"] = r.Trigger; x["trigger_value"] = r.TriggerValue; x["expect_event"] = r.ExpectEvent;
@@ -247,6 +252,8 @@ namespace HeroCat.Sim.Content
                 Unique("research", Rows(d.Research), r => r.Id);
                 Unique("fish_levels", Rows(d.FishLevels), r => I(r.Level));
                 Unique("tank", Rows(d.Tank), r => r.Id);
+                Unique("quests_daily", Rows(d.QuestsDaily), r => r.Id);
+                Unique("quests_weekly", Rows(d.QuestsWeekly), r => r.Id);
                 Unique("tutorial_steps", Rows(d.TutorialSteps), r => r.Id);
                 Unique("progress_targets", Rows(d.ProgressTargets), r => I(r.Day));
                 Unique("feature_unlocks", Rows(d.FeatureUnlocks), r => r.Feature);
@@ -324,6 +331,7 @@ namespace HeroCat.Sim.Content
                 RuleE061DupeLevelOne();
                 RuleE062ProfileCreatedStep();
                 RuleE063FeatureGates();
+                RuleE064DailyBonusRows();
             }
 
             /// <summary>Stable-sorts the errors from <paramref name="from"/> on by table (09 acceptance 7).</summary>
@@ -553,6 +561,15 @@ namespace HeroCat.Sim.Content
                 if (hz != null)
                     Rng("tank", "refill_s0", v => v * hz.Value == Math.Round(v * hz.Value, MidpointRounding.ToEven),
                         "refill_s0 * TICK_HZ must be a whole number of ticks");
+                foreach (var q in new[] { "quests_daily", "quests_weekly" })
+                {
+                    Rng(q, "target", ge1, ">= 1");
+                    foreach (var r in T(q))
+                    {
+                        bool login = r.S("goal") == "LOGIN";
+                        Rng(q, "reward_amount", login ? ge0 : ge1, login ? ">= 0 for LOGIN" : ">= 1", new List<Row> { r });
+                    }
+                }
                 Rng("tutorial_steps", "expect_count", ge1, ">= 1");
                 Rng("progress_targets", "stage", ge1, ">= 1");
                 Rng("feature_unlocks", "threshold", ge1, ">= 1");
@@ -692,6 +709,8 @@ namespace HeroCat.Sim.Content
                 UniqueCols(T("banners"), "sort_order");
                 UniqueCols(T("research"), "effect");
                 UniqueCols(T("research"), "layout_row", "layout_col");
+                UniqueCols(T("quests_daily"), "sort_order");
+                UniqueCols(T("quests_weekly"), "sort_order");
             }
 
             void RuleBannerPityAndGuarantee()
@@ -730,6 +749,16 @@ namespace HeroCat.Sim.Content
                         Cond(r, "mult_per_level", r["atk_pct_per_level"] == null, "atk_pct_per_level", r["atk_pct_per_level"]);
                 foreach (var r in T("research"))
                     if (r.S("effect") == "TANK_REFILL") Cond(r, "effect_floor", true, "effect", r["effect"]);
+                foreach (var q in new[] { "quests_daily", "quests_weekly" })
+                    foreach (var r in T(q))
+                    {
+                        // SUMMON and CLEAR_DUNGEON take an optional filter (empty = any, 09 section 5.21); every other goal none
+                        string goal = r.S("goal"), filter = r.S("filter");
+                        Type filterEnum = goal == "SUMMON" ? typeof(Banner) : goal == "CLEAR_DUNGEON" ? typeof(Dungeon) : null;
+                        if (filterEnum == null) Cond(r, "filter", false, "goal", r["goal"]);
+                        else if (filter != null && Array.IndexOf(System.Enum.GetNames(filterEnum), filter) < 0)
+                            Err("E021", r.Loc + ".filter", $"'{filter}' is not a valid {filterEnum.Name} (allowed: {string.Join(", ", System.Enum.GetNames(filterEnum))})");
+                    }
                 foreach (var r in T("tutorial_steps"))
                 {
                     Cond(r, "trigger_value", r.S("trigger") == "STAGE_REACHED" || r.S("trigger") == "SCREEN_OPENED", "trigger", r["trigger"]);
@@ -818,6 +847,18 @@ namespace HeroCat.Sim.Content
                             Err("E063", r.Loc + ".unlock_awaken_rank", $"research[{r.S("id")}] unlocks at {Fmt(r["unlock_awaken_rank"])}, before feature 'RESEARCH' ({Fmt(gate["threshold"])})");
                 Row shop = T("feature_unlocks").Find(r => r.S("feature") == "SHOP");
                 if (shop != null && shop.S("condition") != "ALWAYS") Err("E063", shop.Loc + ".condition", "feature 'SHOP' must be ALWAYS");
+            }
+
+            void RuleE064DailyBonusRows()
+            {
+                if (!Has("quests_daily")) return;
+                var rows = T("quests_daily").FindAll(r => TierLe(r));
+                var bonus = rows.FindAll(r => r.S("goal") == "DAILIES_COMPLETED");
+                if (bonus.Count == 0)
+                    Err("E064", "quests_daily", "missing or unreachable daily bonus rows (no DAILIES_COMPLETED row with tier <= MVP)");
+                foreach (var r in bonus)
+                    if ((long)r["target"] > rows.Count)
+                        Err("E064", r.Loc + ".target", $"missing or unreachable daily bonus rows ({r.S("id")} target {Fmt(r["target"])} exceeds the {I(rows.Count)} daily rows)");
             }
         }
     }

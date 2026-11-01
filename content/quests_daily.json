@@ -1,0 +1,173 @@
+{
+  "table": "quests_daily",
+  "rows": [
+    {
+      "id": "d_login",
+      "goal": "LOGIN",
+      "filter": null,
+      "target": 1,
+      "reward_currency": "DIAMOND",
+      "reward_amount": 0,
+      "sort_order": 1,
+      "tier": "MVP",
+      "name_key": "quest.d_login.name",
+      "icon": "icon_quest_login"
+    },
+    {
+      "id": "d_kills",
+      "goal": "KILL_ENEMIES",
+      "filter": null,
+      "target": 300,
+      "reward_currency": "DIAMOND",
+      "reward_amount": 20,
+      "sort_order": 2,
+      "tier": "MVP",
+      "name_key": "quest.d_kills.name",
+      "icon": "icon_quest_kills"
+    },
+    {
+      "id": "d_boss",
+      "goal": "ATTEMPT_BOSS",
+      "filter": null,
+      "target": 3,
+      "reward_currency": "DIAMOND",
+      "reward_amount": 20,
+      "sort_order": 3,
+      "tier": "MVP",
+      "name_key": "quest.d_boss.name",
+      "icon": "icon_quest_boss"
+    },
+    {
+      "id": "d_summon_weapon",
+      "goal": "SUMMON",
+      "filter": "WEAPON",
+      "target": 1,
+      "reward_currency": "DIAMOND",
+      "reward_amount": 20,
+      "sort_order": 4,
+      "tier": "MVP",
+      "name_key": "quest.d_summon_weapon.name",
+      "icon": "icon_quest_summon_weapon"
+    },
+    {
+      "id": "d_summon_skill",
+      "goal": "SUMMON",
+      "filter": "SKILL",
+      "target": 1,
+      "reward_currency": "DIAMOND",
+      "reward_amount": 20,
+      "sort_order": 5,
+      "tier": "MVP",
+      "name_key": "quest.d_summon_skill.name",
+      "icon": "icon_quest_summon_skill"
+    },
+    {
+      "id": "d_summon_companion",
+      "goal": "SUMMON",
+      "filter": "COMPANION",
+      "target": 1,
+      "reward_currency": "DIAMOND",
+      "reward_amount": 20,
+      "sort_order": 6,
+      "tier": "MVP",
+      "name_key": "quest.d_summon_companion.name",
+      "icon": "icon_quest_summon_companion"
+    },
+    {
+      "id": "d_release",
+      "goal": "RELEASE_FISH",
+      "filter": null,
+      "target": 30,
+      "reward_currency": "DIAMOND",
+      "reward_amount": 20,
+      "sort_order": 7,
+      "tier": "MVP",
+      "name_key": "quest.d_release.name",
+      "icon": "icon_quest_release"
+    },
+    {
+      "id": "d_merge",
+      "goal": "MERGE_FISH",
+      "filter": null,
+      "target": 15,
+      "reward_currency": "DIAMOND",
+      "reward_amount": 20,
+      "sort_order": 8,
+      "tier": "MVP",
+      "name_key": "quest.d_merge.name",
+      "icon": "icon_quest_merge"
+    },
+    {
+      "id": "d_dungeon_fish",
+      "goal": "CLEAR_DUNGEON",
+      "filter": "FISH_COIN",
+      "target": 1,
+      "reward_currency": "DIAMOND",
+      "reward_amount": 20,
+      "sort_order": 9,
+      "tier": "MVP",
+      "name_key": "quest.d_dungeon_fish.name",
+      "icon": "icon_quest_dungeon_fish"
+    },
+    {
+      "id": "d_dungeon_candy",
+      "goal": "CLEAR_DUNGEON",
+      "filter": "ROCK_CANDY",
+      "target": 1,
+      "reward_currency": "DIAMOND",
+      "reward_amount": 20,
+      "sort_order": 10,
+      "tier": "MVP",
+      "name_key": "quest.d_dungeon_candy.name",
+      "icon": "icon_quest_dungeon_candy"
+    },
+    {
+      "id": "d_dungeon_exp",
+      "goal": "CLEAR_DUNGEON",
+      "filter": "EXP",
+      "target": 1,
+      "reward_currency": "DIAMOND",
+      "reward_amount": 20,
+      "sort_order": 11,
+      "tier": "MVP",
+      "name_key": "quest.d_dungeon_exp.name",
+      "icon": "icon_quest_dungeon_exp"
+    },
+    {
+      "id": "d_watch_ad",
+      "goal": "WATCH_AD",
+      "filter": null,
+      "target": 1,
+      "reward_currency": "DIAMOND",
+      "reward_amount": 20,
+      "sort_order": 12,
+      "tier": "P1",
+      "name_key": "quest.d_watch_ad.name",
+      "icon": "icon_quest_watch_ad"
+    },
+    {
+      "id": "d_bonus_5",
+      "goal": "DAILIES_COMPLETED",
+      "filter": null,
+      "target": 5,
+      "reward_currency": "DIAMOND",
+      "reward_amount": 30,
+      "sort_order": 13,
+      "tier": "MVP",
+      "name_key": "quest.d_bonus_5.name",
+      "icon": "icon_quest_bonus"
+    },
+    {
+      "id": "d_bonus_8",
+      "goal": "DAILIES_COMPLETED",
+      "filter": null,
+      "target": 8,
+      "reward_currency": "DIAMOND",
+      "reward_amount": 70,
+      "sort_order": 14,
+      "tier": "MVP",
+      "name_key": "quest.d_bonus_8.name",
+      "icon": "icon_quest_bonus"
+    }
+  ]
+}

@@ -65,6 +65,16 @@
       "rows": 5,
       "sha256": "96c05f0a4376bcf4e6a035f9866bbcd197b3e2f97a1fdfa6fe0e5c92b451cd13"
     },
+    "quests_daily": {
+      "file": "quests_daily.json",
+      "rows": 14,
+      "sha256": "f7a8922fc481453dfe1561dddfc007697c93e548149264282b64797f128a8ecf"
+    },
+    "quests_weekly": {
+      "file": "quests_weekly.json",
+      "rows": 7,
+      "sha256": "670dbd3254d63e6512f2302e62e62cd85926d3848353f793428a954d5d26bd80"
+    },
     "rarities": {
       "file": "rarities.json",
       "rows": 5,
@@ -109,11 +119,11 @@
   "localization": {
     "en": {
       "file": "localization.en.json",
-      "rows": 454,
-      "sha256": "b4a60db0dc26ebb9d08a4122357ee75569cb57fbda81bd45b53815b4cceb5100"
+      "rows": 480,
+      "sha256": "723b04a07d3abca4267ae7f4a149311ab217e2456ad3182aa03ef81e47aab335"
     }
   },
-  "content_hash": "8ab307f53c3beea20e1f1bd7ed3bbe316ca7d1f146926b5a0146e36b489a4e71",
+  "content_hash": "09a65d3022e814c1919fa4c6208c6dd6a355bbf0427e445a88fe7e3c8e7bc6ec",
   "s_constants": [
     "BASE_HP",
     "BOSS_ROCK_CANDY_P",

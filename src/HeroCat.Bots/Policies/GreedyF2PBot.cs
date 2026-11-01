@@ -21,6 +21,8 @@ namespace HeroCat.Bots.Policies
     ///   Decide (every active minute): gold (step 1), Fish Board (step 5), boss (step 6). Steps 3-4 (Rock Candy, Fish
     ///                   Coins) are MVP systems (Awakening, limit breaks, Research): stubbed until the content tier has them
     ///                   (TODO(#214)).
+    ///   Quests:         10 section 3.4's "claim every quest when claimable" (ClaimAllQuests DAILY / WEEKLY, issue #170) is
+    ///                   an MVP-tier step: the M0 build has no quest rows, so it joins with the MVP bots (TODO(#214)).
     ///   OnSessionEnd:   diamonds (step 2: what first clears paid this session), gold (step 1), release the tank (step 5).
     ///
     /// Commands only (00 contract 5): the policy reads <see cref="BotContext.Query"/> and the state, and never writes it.

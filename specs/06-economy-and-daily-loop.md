@@ -86,7 +86,7 @@ Every economy command rejects through 01's `ApplyResult.Reject(RejectCode, reaso
 | Reason (`ApplyResult.Reason`) | `RejectCode` | Raised by |
 |---|---|---|
 | `NOT_ENOUGH_<CURRENCY>` (e.g. `NOT_ENOUGH_DIAMOND`) | `CannotAfford` | any command that debits (rule 4) |
-| `UNKNOWN_ID` | `InvalidTarget` | `ClaimQuest`, `ExchangeItem` with an id not in content |
+| `UNKNOWN_ID` | `InvalidTarget` | `ClaimQuest`, `ExchangeItem` with an id not in content; `ClaimAllQuests` with a kind outside `QuestKind` |
 | `BAD_QUANTITY` | `BadArgument` | `ExchangeItem` with `qty < 1` |
 | `QUEST_NOT_COMPLETED` | `NotAvailable` | `ClaimQuest` |
 | `QUEST_ALREADY_CLAIMED` | `AlreadyClaimed` | `ClaimQuest` |
@@ -243,7 +243,8 @@ public enum QuestGoal : byte
 // Content row (spec 09 table quests_daily / quests_weekly / achievements)
 public sealed record QuestDef(string Id, QuestKind Kind, QuestGoal Goal, string? Filter, long Target,
                               Currency RewardCurrency, double RewardAmount, int Order);
-// Filter: banner code for SUMMON, dungeon code for CLEAR_DUNGEON, null otherwise.
+// Filter: banner code for SUMMON, dungeon code for CLEAR_DUNGEON, null otherwise. A null filter on a SUMMON or
+// CLEAR_DUNGEON row matches any banner or dungeon (w_summons, w_dungeons).
 // One reward per row, as 09's quest tables have it; w_bonus_all (section 5.3) grants two tickets, and the shape that
 // carries it (a grant list or two rows) is open in issue #170.
 
@@ -254,7 +255,7 @@ public sealed class QuestProgress   // one per QuestDef, in GameState.Quests.Dai
 }
 ```
 
-`Quests.Progress(kind, goal, delta, filter = null)` is called by the sim at the emitting site (03 on `EnemyKilled`, 04 on each pull result, 05 on `FishReleased`/`FishMerged`, this spec on dungeon clears). It increments every matching `IN_PROGRESS` quest and flips it to `COMPLETED` when `Progress >= Target`, emitting `QuestCompleted(questId)`. Rewards are granted only by `ClaimQuest(questId)` or `ClaimAllQuests(kind)`, which emit `QuestClaimed(questId, currency, amount)` and apply the delta with `CurrencyReason.QUEST` (achievements use `CurrencyReason.ACHIEVEMENT`). A row with reward 0 (only `d_login` today) goes straight from `IN_PROGRESS` to `CLAIMED` when it completes: it emits `QuestCompleted`, pays nothing, raises no red dot and is never counted by `ClaimAllQuests`. Offline Catch-up advances no quest.
+`Quests.Progress(kind, goal, delta, filter = null)` is called by the sim at the emitting site (03 on `EnemyKilled`, 04 on each pull result, 05 on `FishReleased`/`FishMerged`, this spec on dungeon clears). It increments every matching quest, whatever its state (progress keeps counting past `Target` for display, acceptance criterion 8), and flips an `IN_PROGRESS` one to `COMPLETED` when `Progress >= Target`, emitting `QuestCompleted(questId)`. A boss attempt (`ATTEMPT_BOSS`) is one boss spawn, so the automatic attempt on reaching a boss stage and every accepted `AttemptBoss` count once each. When a daily mission completes (any daily row except the `DAILIES_COMPLETED` rows), the sim calls `Progress(DAILY, DAILIES_COMPLETED, 1)` and `Progress(WEEKLY, DAILIES_COMPLETED, 1)`; when a weekly mission completes (any weekly row except the `WEEKLIES_COMPLETED` rows), `Progress(WEEKLY, WEEKLIES_COMPLETED, 1)`. The bonus rows' own completion counts toward nothing. A missing `QuestProgress` entry reads as `IN_PROGRESS` with progress 0, so the rollover reset clears the kind's entries (02 rule P12). Rewards are granted only by `ClaimQuest(questId)` or `ClaimAllQuests(kind)`, which emit `QuestClaimed(questId, currency, amount)` and apply the delta with `CurrencyReason.QUEST` (achievements use `CurrencyReason.ACHIEVEMENT`). A row with reward 0 (only `d_login` today) goes straight from `IN_PROGRESS` to `CLAIMED` when it completes: it emits `QuestCompleted`, pays nothing, raises no red dot and is never counted by `ClaimAllQuests`. Offline Catch-up advances no quest.
 
 Unlock: the `feature_unlocks` row `QUESTS` (`STAGE_HIGHEST >= 10`, 09; issue #45) gates `SCR_QUESTS` and the claim commands, which reject `(Locked, QUESTS_LOCKED)` before it is met. Progress counts from profile creation, so missions completed before the gate are claimable once it opens.
 
@@ -331,6 +332,8 @@ Collection rungs pay for a count, never for a complete set (pillar 4): every `OW
 |---|---|---|
 | `ClaimQuest(questId)` | exists else `UNKNOWN_ID`; `State == COMPLETED` else `QUEST_NOT_COMPLETED` / `QUEST_ALREADY_CLAIMED` (section 1.3) | `State = CLAIMED`; `Wallet.Apply(reward)`; `QuestClaimed` |
 | `ClaimAllQuests(kind)` | at least one `COMPLETED` else `NOTHING_TO_CLAIM` | Claims in `Order`; one `QuestClaimed` per quest plus one `QuestsBulkClaimed(kind, count, totals[])` for the toast |
+
+Both run `EnsureDay` first (section 4.2), then the `QUESTS` gate (`QUESTS_LOCKED`), then the checks above. `ClaimQuest` looks the id up in `quests_daily`, then `quests_weekly` (MVP ids are `d_*` / `w_*`); a quest with no progress entry is `IN_PROGRESS`. `ClaimAllQuests` with a `kind` outside `QuestKind` is rejected `(InvalidTarget, UNKNOWN_ID)`. Each claim emits `QuestClaimed` and then its `CurrencyChanged`; `QuestsBulkClaimed.totals` holds one `CurrencyDelta` per currency claimed, in `Currency` order.
 
 ## 6. Dungeons (MVP) and Tower (P1)
 

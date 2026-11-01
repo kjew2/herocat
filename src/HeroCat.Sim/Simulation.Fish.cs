@@ -105,7 +105,7 @@ namespace HeroCat.Sim
                 Emit(new FishDiscovered(lvl, coins));
                 Ledger.Apply(State, new CurrencyDelta(Content.Currency.FISH_COIN, coins), CurrencyReason.FISH_DISCOVERY, this);
             }
-            // TODO(#170): Quests.OnFishReleased() (RELEASE_FISH).
+            QuestsProgress(Content.QuestGoal.RELEASE_FISH, 1);
             return ApplyResult.Accepted;
         }
 
@@ -169,7 +169,7 @@ namespace HeroCat.Sim
             if (discovered) Emit(new FishDiscovered(n, row.DiscoveryCoins));
             Ledger.Apply(State, new CurrencyDelta(Content.Currency.FISH_COIN, coins),
                          discovered ? CurrencyReason.FISH_DISCOVERY : CurrencyReason.FISH_MERGE, this);
-            // TODO(#170): Quests.OnFishMerged(n) (MERGE_FISH, LIFETIME_MERGES, FISH_LEVEL via SetMax).
+            QuestsProgress(Content.QuestGoal.MERGE_FISH, 1);   // TODO(#171): LIFETIME_MERGES and FISH_LEVEL (SetMax) achievement ladders
         }
 
         internal ApplyResult HandleMoveFish(MoveFish c)

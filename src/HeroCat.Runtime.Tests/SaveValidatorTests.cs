@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using HeroCat.Runtime.Content;
+using HeroCat.Runtime.Profile;
 using HeroCat.Runtime.Save;
 using HeroCat.Sim;
 using HeroCat.Sim.Content;
@@ -192,8 +194,10 @@ namespace HeroCat.Runtime.Tests
                                   s => Assert.That(s.Banners[Banner.SKILL].TotalPulls, Is.EqualTo(0)));
 
             // P12-P13: quests and research
-            yield return new Case("P12", "negative quest progress", s => s.Quests.Daily["d_kill"] = new QuestProgress { Progress = -4 },
-                                  s => Assert.That(s.Quests.Daily["d_kill"].Progress, Is.EqualTo(0)));
+            yield return new Case("P12", "quest id unknown to content dropped", s => s.Quests.Daily["d_kill"] = new QuestProgress { Progress = -4 },
+                                  s => Assert.That(s.Quests.Daily.ContainsKey("d_kill"), Is.False));
+            yield return new Case("P12", "null weekly entry dropped", s => s.Quests.Weekly["w_kills"] = null,
+                                  s => Assert.That(s.Quests.Weekly, Is.Empty));
             yield return new Case("P13", "research level below 1 removed", s => s.Research.Level["res_mp_pool"] = 0,
                                   s => Assert.That(s.Research.Level, Is.Empty));
 
@@ -275,6 +279,24 @@ namespace HeroCat.Runtime.Tests
             c.Check(s);
             Assert.That(SaveValidator.Run(s, Now, Db, Opt()), Is.Empty, "a repaired state validates clean");
             Assert.That(HeroCat.Sim.Fish.FishBoard.FirstViolation(s, Db), Is.Null, "a repaired state holds the Fish Board invariants (05)");
+        }
+
+        [Test]
+        public void P12_KnownQuestIds_AreKept_NegativeProgressClamped_UnknownDropped()   // 02 rule P12 (issue #170)
+        {
+            var mvp = ContentLoader.LoadFromDirectory(TestContent.Dir, Tier.MVP);
+            var s = ProfileFactory.Create(mvp, Guid.Empty, TestContent.T0, TestContent.Device, TestContent.Root);
+            s.Quests.Daily["d_kills"] = new QuestProgress { Progress = -4, State = QuestStatus.IN_PROGRESS };
+            s.Quests.Daily["d_merge"] = new QuestProgress { Progress = 20, State = QuestStatus.COMPLETED };
+            s.Quests.Daily["w_kills"] = new QuestProgress { Progress = 5 };   // a weekly id in the daily map
+            s.Quests.Weekly["w_kills"] = new QuestProgress { Progress = 5 };
+            s.Quests.Achievement["pad_achievement"] = new QuestProgress { Progress = 1 };   // TODO(#171): not checked yet
+            Assert.That(SaveValidator.Run(s, Now, mvp, Opt()), Is.EqualTo(new[] { "P12" }));
+            Assert.That(s.Quests.Daily.Keys.OrderBy(k => k), Is.EqualTo(new[] { "d_kills", "d_merge" }));
+            Assert.That((s.Quests.Daily["d_kills"].Progress, s.Quests.Daily["d_merge"].State), Is.EqualTo((0L, QuestStatus.COMPLETED)));
+            Assert.That(s.Quests.Weekly.Keys, Is.EqualTo(new[] { "w_kills" }));
+            Assert.That(s.Quests.Achievement.Keys, Is.EqualTo(new[] { "pad_achievement" }));
+            Assert.That(SaveValidator.Run(s, Now, mvp, Opt()), Is.Empty);
         }
 
         [Test]

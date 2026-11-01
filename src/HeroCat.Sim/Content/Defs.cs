@@ -404,4 +404,40 @@ namespace HeroCat.Sim.Content
         public int UnlockAwakenRank { get; }
         public Tier Tier { get; }
     }
+
+    /// <summary>
+    /// A daily or weekly mission row (09 sections 5.21-5.22, 06 sections 5.1-5.3). The rows are the only home of quest
+    /// reward amounts (issues #55, #244); <see cref="RewardAmount"/> 0 is a counting row (d_login) that pays nothing.
+    /// </summary>
+    public sealed class QuestDef
+    {
+        internal QuestDef(string id, QuestKind kind, QuestGoal goal, string filter, int filterValue, long target,
+                          Currency rewardCurrency, long rewardAmount, int sortOrder, Tier tier, string nameKey, string icon)
+        {
+            Id = id; Kind = kind; Goal = goal; Filter = filter; FilterValue = filterValue; Target = target;
+            RewardCurrency = rewardCurrency; RewardAmount = rewardAmount; SortOrder = sortOrder; Tier = tier;
+            NameKey = nameKey; Icon = icon;
+        }
+
+        public string Id { get; }
+        public QuestKind Kind { get; }
+        public QuestGoal Goal { get; }
+
+        /// <summary>A Banner name for SUMMON, a Dungeon name for CLEAR_DUNGEON; null matches any (w_summons, w_dungeons).</summary>
+        public string Filter { get; }
+
+        /// <summary><see cref="Filter"/> as its enum ordinal, or -1 for any; what the sim compares (no string per event).</summary>
+        internal int FilterValue { get; }
+
+        public long Target { get; }
+        public Currency RewardCurrency { get; }
+        public long RewardAmount { get; }
+        public int SortOrder { get; }
+        public Tier Tier { get; }
+        public string NameKey { get; }
+        public string Icon { get; }
+
+        /// <summary>True when an event with <paramref name="filter"/> (an enum ordinal, -1 for none) counts toward this row.</summary>
+        internal bool Matches(int filter) => FilterValue < 0 || FilterValue == filter;
+    }
 }

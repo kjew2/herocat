@@ -1,0 +1,3 @@
+id,goal,filter,target,reward_currency,reward_amount,sort_order,tier,name_key,icon
+w_kills,KILL_ENEMIES,,1000,DIAMOND,350,1,MVP,chapter.01.name,icon_quest_kill
+w_summons,SUMMON,,10,TICKET_SUMMON_SKILL,1,2,MVP,chapter.01.name,icon_quest_summon

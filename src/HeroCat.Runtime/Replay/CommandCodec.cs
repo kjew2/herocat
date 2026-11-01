@@ -50,6 +50,9 @@ namespace HeroCat.Runtime.Replay
             (typeof(LimitBreak), "LimitBreak"),
             // Awakening (03 section 5.3; issue #157).
             (typeof(Awaken), "Awaken"),
+            // Quest claims (06 section 5.5; issue #170).
+            (typeof(ClaimQuest), "ClaimQuest"),
+            (typeof(ClaimAllQuests), "ClaimAllQuests"),
         };
 
         static readonly object Lock = new object();

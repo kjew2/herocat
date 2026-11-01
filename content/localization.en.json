@@ -395,6 +395,90 @@
       "text": "A new game was started"
     },
     {
+      "key": "quest.d_bonus_5.name",
+      "text": "Complete 5 daily missions"
+    },
+    {
+      "key": "quest.d_bonus_8.name",
+      "text": "Complete 8 daily missions"
+    },
+    {
+      "key": "quest.d_boss.name",
+      "text": "Challenge a boss"
+    },
+    {
+      "key": "quest.d_dungeon_candy.name",
+      "text": "Clear the Rock Candy Dungeon"
+    },
+    {
+      "key": "quest.d_dungeon_exp.name",
+      "text": "Clear the EXP Dungeon"
+    },
+    {
+      "key": "quest.d_dungeon_fish.name",
+      "text": "Clear the Fish Coin Dungeon"
+    },
+    {
+      "key": "quest.d_kills.name",
+      "text": "Defeat enemies"
+    },
+    {
+      "key": "quest.d_login.name",
+      "text": "Log in"
+    },
+    {
+      "key": "quest.d_merge.name",
+      "text": "Merge fish"
+    },
+    {
+      "key": "quest.d_release.name",
+      "text": "Release fish"
+    },
+    {
+      "key": "quest.d_summon_companion.name",
+      "text": "Summon a companion"
+    },
+    {
+      "key": "quest.d_summon_skill.name",
+      "text": "Summon a skill"
+    },
+    {
+      "key": "quest.d_summon_weapon.name",
+      "text": "Summon a weapon"
+    },
+    {
+      "key": "quest.d_watch_ad.name",
+      "text": "Watch an ad"
+    },
+    {
+      "key": "quest.w_dailies.name",
+      "text": "Complete daily missions"
+    },
+    {
+      "key": "quest.w_dungeons.name",
+      "text": "Clear dungeons"
+    },
+    {
+      "key": "quest.w_kills.name",
+      "text": "Defeat enemies"
+    },
+    {
+      "key": "quest.w_login.name",
+      "text": "Log in on different days"
+    },
+    {
+      "key": "quest.w_merges.name",
+      "text": "Merge fish"
+    },
+    {
+      "key": "quest.w_summons.name",
+      "text": "Summon on any banner"
+    },
+    {
+      "key": "quest.w_train.name",
+      "text": "Buy Training levels"
+    },
+    {
       "key": "rarity.common.name",
       "text": "Common"
     },
@@ -583,6 +667,22 @@
       "text": "You don't own this"
     },
     {
+      "key": "reject.nothing_to_claim",
+      "text": "Nothing to claim"
+    },
+    {
+      "key": "reject.quest_already_claimed",
+      "text": "Already claimed"
+    },
+    {
+      "key": "reject.quest_not_completed",
+      "text": "Mission not completed yet"
+    },
+    {
+      "key": "reject.quests_locked",
+      "text": "Missions unlock at stage 10"
+    },
+    {
       "key": "reject.rate_limited",
       "text": "Too fast, try again"
     },
@@ -641,6 +741,10 @@
     {
       "key": "reject.tank_empty",
       "text": "The tank is empty"
+    },
+    {
+      "key": "reject.unknown_id",
+      "text": "Not found"
     },
     {
       "key": "reject.unknown_item",
