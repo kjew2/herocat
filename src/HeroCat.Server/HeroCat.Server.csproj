@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <!-- The backend deployable (specs/08 section 1, 9.1). Not Unity code: net8.0 and NuGet packages are fine here.
+       It references HeroCat.Sim for ContentDb, rate tables and re-simulation, and never HeroCat.Runtime (01 section 1.2). -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>HeroCat.Server</RootNamespace>
+    <AssemblyName>HeroCat.Server</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" Version="3.7.405" />
+    <PackageReference Include="Npgsql" Version="8.0.5" />
+    <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../HeroCat.Sim/HeroCat.Sim.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The SQL migration set (specs/02 section 12, server/db/migrations/NNNN_<name>.sql) ships inside the image. -->
+    <None Include="../../server/db/migrations/*.sql" LinkBase="db/migrations" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="HeroCat.Server.Tests" />
+  </ItemGroup>
+  <!-- The migration directory exists in the output even while the set is empty, so the runner can require it. -->
+  <Target Name="EnsureMigrationsDirectory" AfterTargets="Build">
+    <MakeDir Directories="$(OutDir)db/migrations" />
+  </Target>
+  <Target Name="EnsurePublishedMigrationsDirectory" AfterTargets="Publish">
+    <MakeDir Directories="$(PublishDir)db/migrations" />
+  </Target>
+</Project>

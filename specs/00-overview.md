@@ -410,6 +410,7 @@ src/HeroCat.Runtime.Tests/
 src/HeroCat.Bots/           headless harness (spec 10)
 src/HeroCat.Server/         ASP.NET Core API (spec 08)
 src/HeroCat.Server.Tests/
+server/db/migrations/       NNNN_<name>.sql, the server schema's SQL migration set (02 section 12, issue #33)
 unity/HeroCatClient/        Unity project; Assets/HeroCat.Client references Sim + Runtime as local packages
 content/                    JSON tables exported from the sheet (spec 09); lowercase, replaces today's Content/ (issue #1)
 tools/                      Python models and the sheet exporter (export_content.py replaces content_build.py)
