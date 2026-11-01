@@ -1213,6 +1213,9 @@ Redis structures (P1 leaderboards, MVP rate limits and sessions):
 | `save_history` | Last `SAVE_HISTORY_KEEP = 10` blobs per player | Trigger on insert deletes the oldest; S3 lifecycle removes orphaned keys after 7 days |
 | `idempotency` | `IDEMPOTENCY_TTL_H = 24` | Hourly purge job |
 | `summon_log`, `diamond_ledger` | 7 years (financial audit; loot-box disclosure disputes) | Partitioned by month |
+| `ticket_ledger`, `granted_items` | While account active | Deleted with the account (13.2) |
+| `store_notifications` | 90 days | Daily purge (dedupe only needs the stores' retry window) |
+| `account_exports` | Row 30 days; export object 7 days | Daily purge; S3 lifecycle on the export prefix |
 | `purchases` + raw receipts | 7 years | Tax law in several launch regions |
 | `dungeon_seeds` | 30 days | Daily purge |
 | `refresh_tokens` | 60 days from issue or until revoked | |
@@ -1237,14 +1240,15 @@ sequenceDiagram
     Job->>Job: for accounts with delete_requested_at < now - grace: hard delete
 ```
 
-Hard delete, in one transaction per account:
-1. Delete S3 objects `saves/{playerId}/*`.
-2. `delete from accounts where player_id = ?` cascades to `account_links`, `devices`, `refresh_tokens`, `saves`, `save_history`, `inbox_items`, `banner_pity`, `dungeon_seeds`, `guild_members`, `moderation_actions`, `diamond_ledger`, `summon_log`.
-3. **Exception**: `purchases` rows and `summon_log`/`diamond_ledger` rows for players who ever purchased are retained with `player_id` replaced by a one-way tombstone id (`sha256(player_id || server_pepper)`) so financial records survive without a link to the person. This is the legal-obligation basis under GDPR art. 17(3)(b).
-4. Analytics: publish `player_deleted{playerIdHash}` to the warehouse; the warehouse job removes raw events for that hash within 30 days.
-5. `guild_chat.player_id` is set null by the cascade; message bodies remain (they are the guild's record, and contain no identifier).
+Hard delete, in one transaction per account (issue #32). The three financial tables (`purchases`, `summon_log`, `diamond_ledger`) reference `accounts` with `on delete restrict`, so a job bug that skips step 2 or 3 fails the transaction instead of destroying financial records.
+1. Delete S3 objects `saves/{playerId}/*` and `exports/{playerId}/*`.
+2. **Purchaser** (any `purchases` row for the player): insert a tombstone `accounts` row with `player_id = tombstone_id`, where `tombstone_id` is the UUID made of the first 16 bytes of `sha256(player_id || server_pepper)`, `status = 'deleted'`, `display_name = ''`, `avatar_id = 'avatar_default'`, `region = 'ZZ'`, `age_gate = 0` and every other nullable column null (`on conflict do nothing`, so a rerun is harmless). Then `update purchases, summon_log, diamond_ledger set player_id = tombstone_id where player_id = ?`. This keeps referential integrity and retains the financial records without a link to the person: the legal-obligation basis under GDPR art. 17(3)(b).
+3. **Non-purchaser**: delete the player's `summon_log` and `diamond_ledger` rows (open question 8 default).
+4. `delete from accounts where player_id = ?` cascades to `account_links`, `devices`, `refresh_tokens`, `saves`, `save_history`, `inbox_items`, `banner_pity`, `ticket_ledger`, `granted_items`, `dungeon_seeds`, `account_exports`, `guild_members`, `moderation_actions`, P1 `coupon_redemptions`; `delete from idempotency where player_id = ?` (no FK).
+5. Analytics: publish `player_deleted{playerIdHash}` to the warehouse; the warehouse job removes raw `events` rows for that hash within 30 days.
+6. `guild_chat.player_id` is set null by the cascade; message bodies remain (they are the guild's record, and contain no identifier).
 
-Export (`POST /account/export`): assembles `accounts`, `account_links` (provider only), `devices` (model/os), current save JSON, `purchases`, `inbox_items`, `diamond_ledger`, `summon_log`, `moderation_actions` into one JSON file in S3 with a 7-day presigned link mailed to the linked platform email or shown in `SCR_SETTINGS`. Rate limit one per 7 days.
+Export (`POST /account/export`, job state in `account_exports`): assembles `accounts`, `account_links` (provider only), `devices` (model/os), current save JSON, `purchases`, `inbox_items`, `diamond_ledger`, `ticket_ledger`, `granted_items`, `summon_log`, `moderation_actions` into one JSON file in S3 with a 7-day presigned link mailed to the linked platform email or shown in `SCR_SETTINGS`. Rate limit one per 7 days.
 
 ## 14. Analytics event schema (economy events)
 
@@ -1282,7 +1286,7 @@ Names snake_case; properties camelCase. Economy events go to the backend `events
 | `clock_anomaly` | `kind` (backwards/gap/resync), `seconds` | Runtime | |
 | `plausibility_flag` | `flags[]`, `action` | Server | Mirrors the server's decision for the warehouse. |
 
-The warehouse `events` table: `(ts timestamptz, name text, player_id_hash bytea, session_id uuid, day_index int, stage int, props jsonb, env text)` partitioned by day, with a materialized `currency_daily (player_id_hash, day_index, currency, reason, sum_delta)` rebuilt nightly for the 06 source/sink dashboards.
+The backend `events` table and its nightly `currency_daily` materialized view (06 source/sink dashboards) are defined in section 12 (issue #34).
 
 ## Open questions
 
@@ -1293,7 +1297,7 @@ The warehouse `events` table: `(ts timestamptz, name text, player_id_hash bytea,
 5. **OS backup exclusion** (8.4). Excluding saves means a player who loses a phone before linking an account loses progress unless cloud save (guest accounts upload too). Owner: 08. Default: exclude; guest cloud save covers it.
 6. **`PENDING_STALE_DAYS = 7` vs `IDEMPOTENCY_TTL_H = 24`.** A pending summon older than 24 h cannot be replayed; the server will execute it fresh. Is that acceptable (the player did intend it) or should the client ask first. Owner: 08. Default: execute fresh silently up to 7 days, since the diamonds were never charged.
 7. **Week start** (`WEEK_EPOCH_OFFSET`). Monday 00:00 UTC assumed. Owner: 06.
-8. **Tombstone retention for non-purchasers' `summon_log`.** Loot-box regulators may ask for odds evidence beyond the player's lifetime. Owner: legal/08. Default: delete with the account unless the player purchased.
+8. **Tombstone retention for non-purchasers' `summon_log`.** Resolved: default taken; a non-purchaser's `summon_log` and `diamond_ledger` rows are deleted with the account, a purchaser's are re-pointed to the tombstone account (13.2), unless legal later says otherwise (issue #32).
 
 ## Acceptance criteria
 
@@ -1312,7 +1316,7 @@ The warehouse `events` table: `(ts timestamptz, name text, player_id_hash bytea,
 13. Uploads are suspended while `Status == Conflict` is unresolved (no `PUT` observed by a fake API during that window).
 14. `ServerClock`: `Observe` makes `IsAuthoritative` true; a device clock change of +1 day between observations changes `NowServerSeconds` by the monotonic elapsed only; before any observation, `NowServerSeconds >= floor`.
 15. Backwards clock: `dayKey(now) < DayKey` resets nothing and emits `clock_anomaly`; `now < LastTickServerTime` credits zero.
-16. The server schema applies from empty with `dotnet ef database update` (or the SQL migration set) and a GDPR hard delete of a player with purchases leaves exactly the tombstoned `purchases`, `summon_log`, `diamond_ledger` rows and nothing else referencing the id.
+16. The SQL migration set (section 12; issue #33) applies to an empty PostgreSQL 15 database and creates every table in section 12, including `ticket_ledger`, `granted_items`, `store_notifications`, `account_exports`, `events` and the P1 stubs (issue #53). A GDPR hard delete of a player with purchases leaves no row in any table referencing the old `player_id`, and exactly the player's `purchases`, `summon_log` and `diamond_ledger` rows referencing the tombstone account (`status = 'deleted'`); for a player without purchases, nothing remains. Deleting an `accounts` row that still has financial rows fails (`on delete restrict`; issue #32). Runs in CI and in `check.sh` when Postgres is available.
 17. `currency_changed` events for one simulated hour with `KILL` reason number at most `60 / CURRENCY_AGG_SEC * 60 = 60` per currency, and the sum of their deltas equals the wallet delta.
 18. No `UnityEngine`, `DateTime*.Now`, `Stopwatch` in `HeroCat.Sim`; in `HeroCat.Runtime` only `ServerClock.cs` and `SessionRunner.cs` reference the clock APIs (CI grep).
 19. IL2CPP build: a save produced by the editor loads on an ARM64 device build and vice versa with zero repairs (device-farm test, 10).

@@ -585,7 +585,7 @@ Example: `{"dungeon": "dungeon_exp", "floor": 12, "reward_currency": "HERO_EXP",
 | `name_key` | key | |
 | `icon` | asset | |
 
-Derived at build: `TotalAmount = base_amount + floor(base_amount * bonus_pct)`. This table is `hotApply`-eligible (section 10.4) because the sim never reads it.
+Derived at build: `TotalAmount = base_amount + floor(base_amount * bonus_pct)`. This table is `hotApply`-eligible (section 10.4) because the sim never reads it; so are `shop_packages` and `inbox_templates` (issue #54).
 
 ### 5.27 `shop_packages`
 
@@ -754,7 +754,7 @@ Localization file shape: `{"table": "localization", "locale": "ja", "rows": [{"k
 - `schema_version` is the version of this document's table layout; the loader refuses an unknown value (`E901`). It changes only when exporter and `ContentDb.Build` change together.
 - No timestamp anywhere. `source_revision` is the human provenance.
 - `content_hash` is what the save (02), the analytics envelope (02 section 14), the bot reports (10) and `GET /config` (08) carry.
-- `hot_apply` is computed by the exporter: `true` only when the diff against `--previous` touches nothing but `localization.*` and `shop_products` (01 section 8.12).
+- `hot_apply` is computed by the exporter: `true` only when the diff against `--previous` touches nothing but the hot-apply allowlist `localization.*`, `shop_products`, `shop_packages`, `inbox_templates` (00 contract 3, 01 section 8.12; issue #54). This bool is the single source; 08's `hotApplyTables` in `GET /config` echoes the exporter's allowlist constant.
 
 ### 6.3 `content_version` ordering and compatibility
 
@@ -768,11 +768,11 @@ Change classes the exporter detects against `--previous`:
 | B2 additive | new row, new nullable column, new enum value, new table | new `content_version` | `E091` |
 | B3 removed id in a keyed table | deleting `skill_c_07` | forbidden; set `enabled=false` / `tier=P2` instead | `E090` |
 | B4 pool index shift | inserting `skill_c_00` before `skill_c_01` | forbidden on a shipped banner | `E090` (detected as an index change in the derived pool list) |
-| B5 fewer rows in `dupe_levels`, `awakening`, `banner_levels`, `fish_levels`, `stats` | | forbidden | `E090` |
+| B5 fewer rows in `dupe_levels`, `awakening`, `banner_levels`, `fish_levels`, `stats`, `tutorial_steps`; a reordered `tutorial_steps` | | forbidden (new tutorial steps are appended, issue #46) | `E090` |
 | B6 schema change needing new client code | new required column, removed enum value | bump `min_client_version` and `schema_version` together with the client release | `E092` if the schema changed and `min_client_version` did not increase |
 | B7 version went backwards | | | `E093` |
 
-Save compatibility (02 owns the load path): the save stores `ContentVersion` and `ContentHash`. On load with a different content, `ContentReconcile.Run(state, db)` drops collection entries whose id is not in `db`, clamps `Training` levels to `stats.cap`, clamps Research levels to `max_level`, clamps `Fish.Cells` levels and `Fish.TankCount` to the current caps, drops quest progress for unknown quest ids, and logs each change as an analytics `content_reconciled` event. Nothing is refunded in MVP. `content_migrations` (old id -> new id) is P1.
+Save compatibility (02 owns it, issue #56): the save stores `ContentVersion` and `ContentHash` (02 `GameState`). Reconciling a save against content is the content-dependent part of 02's load validator (rules P10-P14), one pass with one test list; there is no separate `ContentReconcile` pass here. What this spec guarantees that pass: ids are never deleted (section 3.4) and the B5 tables never shrink, so the drop path is rare; saved fish levels are clamped only to the `fish_levels` row count (`FISH_MAX_LVL_HARD`), never to a lowered reachable cap, while `Fish.TankCount` is still clamped to `TankCap` (05, issue #41). Nothing is refunded in MVP. `content_migrations` (old id -> new id) is P1.
 
 ## 7. The exporter: `tools/export_content.py`
 
@@ -860,16 +860,16 @@ CONTENT <code> <location>: <message>
 | `E030` | banner_levels | `rates sum to {sum} (abs error {abs_error}), expected 1 within 1e-9` |
 | `E031` | banner_levels, dupe_levels, fish_levels, achievements, shop_products | `{column} must be strictly increasing; {row} has {value} <= previous {prev}` |
 | `E032` | awakening, progress_targets | `{column} must be strictly increasing; ...` |
-| `E034` | banners vs pool tables, dungeons vs dungeon_floors | `{table} has {actual} rows of {rarity or dungeon}, expected {expected} from {source}` |
+| `E034` | banners vs pool tables, dungeons vs dungeon_floors, awakening_targets vs awakening | `{table} has {actual} rows of {rarity or dungeon}, expected {expected} from {source}` |
 | `E035` | weapons, skills, companions, runes | `{column} {value} deviates {pct}% from rarities default {default} (tolerance {tol}%)` |
 | `E036` | banners, runes | `banner RUNE is enabled but runes has no rows` |
 | `E037` | banner_levels | `rate_{l or m} must not change with level; level {level} has {value}, level 1 has {base}` |
 | `E038` | fish_levels vs research | `fish_levels has {n} rows but FISH_MAX_LVL0 + research cap needs {needed}` |
-| `E039` | quests_daily, quests_weekly | `daily diamond sum {sum} is outside 10% of DIAMONDS_PER_DAY_F2P {target}` |
+| `E039` | quests_daily, quests_weekly | `reference-day diamond sum {sum} is outside 10% of DIAMONDS_PER_DAY_F2P {target}` |
 | `E044` | enum-keyed tables | `missing row for {enum} value '{value}'` |
 | `E045` | hero_levels, tank | `exactly one row required, found {n}` |
 | `E046` | sort_order / unique columns | `duplicate {column} {value} (also at {other_row})` |
-| `E048` | rarities, awakening, dungeon_floors, banner_levels, progress_targets | `{column} must be non-decreasing in {order}; {row} has {value} < previous {prev}` |
+| `E048` | rarities, awakening, dungeon_floors, banner_levels, progress_targets, plausibility_stage_bound | `{column} must be non-decreasing in {order}; {row} has {value} < previous {prev}` |
 | `E051` | banners | `pity_hard ({hard}) must be greater than pity_soft_start ({soft})` |
 | `E052` | banners | `guarantee_min_rarity '{r}' has zero combined level-1 rate` |
 | `E054` | conditional columns | `{column} must be {set or empty} when {cond_column} = {cond_value}` |
@@ -881,6 +881,9 @@ CONTENT <code> <location>: <message>
 | `E060` | index columns | `{column} must be exactly 1..{n} in row order, got {values}` |
 | `E061` | dupe_levels | `cum_copies for level 1 must be 1, got {value}` |
 | `E062` | tutorial_steps | `exactly one PROFILE_CREATED step at order 1 required` |
+| `E063` | feature_unlocks vs research, dungeons | `{table}[{id}] unlocks at {value}, before feature '{feature}' ({threshold})` / `feature 'shop' must be ALWAYS` |
+| `E064` | quests_daily | `missing or unreachable daily bonus rows ({detail})` |
+| `E065` | achievements | `{goal} target {target} must be below the pool size {pool} (pillar 4)` |
 
 ### 8.5 Versioning and manifest (`E09x`, `E9xx`)
 
@@ -898,7 +901,7 @@ CONTENT <code> <location>: <message>
 
 ### 8.6 Warnings
 
-`W010` more than two `BUFF` skills in one rarity; `W011` a rarity `<= RARE` with no `MP_REGEN` companion; `W012` banners with different `banner_levels` counts; `W020` missing non-ship-locale text; `W021` unused localization key; `W030` an `S` constant changed without a note in `meta.notes`.
+`W010` more than two `BUFF` skills in one rarity; `W011` a rarity `<= RARE` with no `MP_REGEN` companion; `W012` banners with different `banner_levels` counts; `W013` a reachable fish level reuses a lower sprite with no `tint` (issue #48); `W031` `FISH_MAX_LVL0` or the `res_fish_cap` max decreased against `--previous` (05, issue #41); `W020` missing non-ship-locale text; `W021` unused localization key; `W030` an `S` constant changed without a note in `meta.notes`.
 
 Loader scope: `ContentDb.Build` implements every `E0xx`, `E03x`-`E06x` rule that touches sim-read data, and `E9xx`. It does not implement `E07x` localization rules (strings are client-only) or `E09x` (no previous build). `check` in CI plus the hash check at load are what make a hand edit of `content/` visible.
 
@@ -927,7 +930,8 @@ namespace HeroCat.Sim.Content.Dto
         public DungeonRowDto[] Dungeons;     public DungeonFloorRowDto[] DungeonFloors;
         public ShopProductRowDto[] ShopProducts; public ShopPackageRowDto[] ShopPackages;
         public InboxTemplateRowDto[] InboxTemplates; public TutorialStepRowDto[] TutorialSteps;
-        public ProgressTargetRowDto[] ProgressTargets;
+        public ProgressTargetRowDto[] ProgressTargets; public FeatureUnlockRowDto[] FeatureUnlocks;
+        public AwakeningTargetRowDto[] AwakeningTargets; public PlausibilityStageBoundRowDto[] PlausibilityStageBound;
         // Localization is NOT here: strings never enter Sim (section 13).
     }
 
@@ -1005,13 +1009,12 @@ public sealed class Constants
     public double MpRegen0 { get; }               // MP_REGEN0 (03)
     public double BossRockCandyP { get; }         // BOSS_ROCK_CANDY_P (03)
     public int    FirstClearDiamonds { get; }     // FIRST_CLEAR_DIAMONDS (06)
-    public int    QuestDailyDiamonds { get; }     // QUEST_DAILY_DIAMONDS (06)
-    public int    QuestDailyBonus5 { get; }       // QUEST_DAILY_BONUS_5 (06)
-    public int    QuestDailyBonus8 { get; }       // QUEST_DAILY_BONUS_8 (06)
-    public int    QuestWeeklyDiamonds { get; }    // QUEST_WEEKLY_DIAMONDS (06)
     public int    InboxExpiryDays { get; }        // INBOX_EXPIRY_DAYS (06)
     public int    DailyGiftWeaponTickets { get; } // DAILY_GIFT_WEAPON_TICKETS (06)
     public int    LoginDiamonds { get; }          // LOGIN_DIAMONDS (06)
+    public int    LimitBreakRanks { get; }        // LIMIT_BREAK_RANKS (00, 04)
+    public int    RefDailiesDone { get; }         // REF_DAILIES_DONE (06 reference day; validator and bots only)
+    public int    RefNewBosses { get; }           // REF_NEW_BOSSES (06 reference day; validator and bots only)
 
     public bool IsBossStage(int s) => s % BossEvery == 0;
     public int  ChapterOf(int s)   => (s - 1) / ChapterWidth + 1;
@@ -1060,12 +1063,12 @@ public enum Rarity { COMMON, RARE, EPIC, LEGENDARY, MYTHIC }
 public enum Stat { ATK, HP, DEF, CRIT_RATE, CRIT_DMG, ATK_SPD, GOLD_GAIN, EXP_GAIN }
 public enum Banner { WEAPON, SKILL, COMPANION, RUNE }
 public enum Tier { M0, MVP, P1, P2 }
-// Currency, Dungeon, CastType, AbilityType, ResearchEffect, QuestKind, QuestGoal, Element, PackageLimit, InboxKind, TutorialTrigger likewise.
+// Currency, Dungeon, CastType, AbilityType, ResearchEffect, QuestKind, QuestGoal, Element, PackageLimit, InboxKind, TutorialTrigger, FeatureCondition likewise.
 
 public sealed class StatDef       { Stat Id; bool Trainable; double? PerLvl; int? Cap; double? Base; Tier Tier; string NameKey, DescKey, Icon; }
 public sealed class TrainingCurveDef { Stat Stat; CurveDef Cost; }
 public sealed class ChapterDef    { string Id; int Index; int FromStage; string NameKey, Background, Music; Tier Tier; }
-public sealed class RarityDef     { Rarity Id; string Code, Color, ShapeIcon; double WeaponAtkPct, WeaponPassivePct, SkillDpsPct, CompanionDpsPct, RuneStatPct, OverrideTolerance; string NameKey; }
+public sealed class RarityDef     { Rarity Id; string Code, Color, ShapeIcon; double WeaponAtkPct, WeaponPassivePct, SkillDpsPct, CompanionDpsPct, RuneStatPct, OverrideTolerance; long LimitBreakCost, DupeOverflowRockCandy; string NameKey; }
 public sealed class WeaponDef     { string Id; Rarity Rarity; double AtkPct, PassivePct; Element Element; Tier Tier; string NameKey, DescKey, Icon, Sprite; }
 public sealed class SkillDef      { string Id; Rarity Rarity; double DpsPct; CastType CastType; int CooldownTicks; int? DurationTicks; double? BuffPct;
                                     double DamagePctPerCast; double DamagePctPerTick;   /* derived, 04 section 7.1 */ Tier Tier; string NameKey, DescKey, Icon, Vfx; }
@@ -1089,17 +1092,20 @@ public sealed class BannerLevelDef { int Level; int ExpRequired; IReadOnlyDictio
 public sealed class AwakeningDef  { int Rank; int StageGate; long RockCandyCost; double Mult; int CompanionSlotsAfter, RuneSlotsAfter; Tier Tier; string NameKey, Icon; }
 public sealed class HeroLevelsDef { CurveDef Exp; double? AtkPctPerLevel; double? MultPerLevel; int LevelCap; }
 public sealed class ResearchDef   { string Id; ResearchEffect Effect; double EffectPerLevel; double? EffectFloor; int MaxLevel; CurveDef Cost; int UnlockAwakenRank; int LayoutRow, LayoutCol; Tier Tier; ... }
-public sealed class FishLevelDef  { int Level; long DiscoveryCoins; double MissilePct; double MergeCoins; double BoardDpsPct; /* derived */ string Sprite, NameKey; }
+public sealed class FishLevelDef  { int Level; long DiscoveryCoins; double MissilePct; double MergeCoins; double BoardDpsPct; /* derived */ string Sprite, Tint, NameKey; }
 public sealed class TankDef       { int Cap0; double RefillS0; int RefillTicks0; int ReleaseLevel; double RefillFloorS; }
-public sealed class QuestDef      { string Id; QuestKind Kind; QuestGoal Goal; string Filter; long Target; Currency RewardCurrency; long RewardAmount; bool Budgeted; int SortOrder; Tier Tier; string NameKey, Icon; }
+public sealed class QuestDef      { string Id; QuestKind Kind; QuestGoal Goal; string Filter; long Target; Currency RewardCurrency; long RewardAmount; int SortOrder; Tier Tier; string NameKey, Icon; }
 public sealed class AchievementDef{ string Id, Ladder; int Rung; QuestGoal Goal; long Target; Currency RewardCurrency; long RewardAmount; Tier Tier; string NameKey; }
 public sealed class DungeonDef    { string Id; Dungeon? Kind; Currency? TicketCurrency; int TicketsPerDay, UnlockStage, FloorStageStep, Floors; bool SweepAllowed; Tier Tier; IReadOnlyList<DungeonFloorDef> FloorDefs; ... }
 public sealed class DungeonFloorDef { int Floor; int StageEquiv; Currency RewardCurrency; double RewardAmount; /* resolved at build for HERO_EXP */ string Boss; IReadOnlyList<Grant> FirstClearBonus; }
 public sealed class ShopProductDef{ string Sku, AppleProductId, GoogleProductId; int UsdTier; double Usd; long BaseAmount; double BonusPct; long TotalAmount; double FirstPurchaseMult; int SortOrder; bool Enabled; Tier Tier; ... }
 public sealed class ShopPackageDef{ ... IReadOnlyList<Grant> Grants; PackageLimit Limit; int LimitCount; IReadOnlyList<Grant> DailyDrip; int? DripDays; ... }
 public sealed class InboxTemplateDef { string Id; InboxKind Kind; string TitleKey, BodyKey; IReadOnlyList<Grant> Grants; int ExpiryDays; string Icon; Tier Tier; }
-public sealed class TutorialStepDef  { string Id; int Order; TutorialTrigger Trigger; string TriggerValue, Screen, Highlight, TextKey, ExpectCommand; IReadOnlyList<Grant> Grants; bool Skippable; Tier Tier; }
+public sealed class TutorialStepDef  { string Id; int Order; TutorialTrigger Trigger; string TriggerValue, Screen, Highlight, TextKey, ExpectEvent; int? ExpectCount; IReadOnlyList<Grant> Grants; bool Skippable; Tier Tier; }
 public sealed class ProgressTargetDef{ int Day; int Stage; double Tolerance; }
+public sealed class FeatureUnlockDef { string Feature; FeatureCondition Condition; int? Threshold; string Screen, LockedTextKey; Tier Tier; }
+public sealed class AwakeningTargetDef { int Rank; int MaxDaysAfterGate; }
+public sealed class PlausibilityStageBoundDef { int Day; int Stage; }
 public readonly struct Grant      { Currency? Currency; string ItemKind; string ItemId; long Amount; }
 ```
 
@@ -1148,6 +1154,10 @@ public sealed partial class ContentDb
     public IReadOnlyDictionary<string, InboxTemplateDef> InboxTemplates { get; }
     public IReadOnlyList<TutorialStepDef> TutorialSteps { get; }                  // by Order
     public IReadOnlyList<ProgressTargetDef> ProgressTargets { get; }              // by Day
+    public IReadOnlyDictionary<string, FeatureUnlockDef> FeatureUnlocks { get; }
+    public bool IsUnlocked(string feature, GameState s);                          // the one gate evaluator (section 5.34)
+    public IReadOnlyList<AwakeningTargetDef> AwakeningTargets { get; }            // by Rank; tools and bots only
+    public int PlausibleStage(int day);                                           // plausibility_stage_bound, clamps past the last day; 08 only
 }
 ```
 
@@ -1171,13 +1181,13 @@ Every client build copies `content/` into `StreamingAssets/content/` at build ti
 
 01 section 8.12 owns the sequence; the rules it applies are these:
 
-1. `GET /config` (08) returns `content.version`, `content.url`, `content.sha256` (of `manifest.json`), `content.minClientVersion`, `content.rolloutPct`.
-2. If `ContentVersion.Compare(config.version, loaded.Version) <= 0`, or the client is outside the rollout bucket, stop.
+1. `GET /config` (08) returns `content.version`, `content.url`, `content.sha256` (of `manifest.json`), `content.minClientVersion`. The rollout bucket is applied server-side from the caller's JWT; a request without one gets the non-rollout default, and the client re-fetches config once after auth at boot (issue #31). The client computes no bucket.
+2. If `ContentVersion.Compare(config.version, loaded.Version) <= 0`, stop.
 3. If `config.minClientVersion > clientVersion`, stop and set `SCR_SETTINGS` note "update the app for new content"; the server will still accept this client's current content until `minContentVersion[clientVersion]` moves (08).
 4. Download `manifest.json`; verify its sha256 against `config.content.sha256` (`E900`); verify `schema_version` (`E901`). Download every listed file; verify each sha256 (`E900`). All to `persistentDataPath/content/<version>.tmp/`.
 5. Parse into `ContentDtos` and run `ContentDb.Build` on the thread pool. A `ContentBuildException` deletes the temp dir and logs `content_update_failed` with the first error; the client keeps running.
 6. Rename `<version>.tmp` to `<version>` (atomic on both platforms). Mark ready.
-7. Apply: if `manifest.hot_apply` is `true`, swap `Localizer` strings and `ShopProducts` at a safe point (no modal open, not in a boss); the live `ContentDb` instance stays the same object for the sim. Otherwise the new version loads at the next cold boot (01: "Update ready, restarts on next launch").
+7. Apply: if `manifest.hot_apply` is `true`, swap `Localizer` strings, `ShopProducts`, `ShopPackages` and `InboxTemplates` at a safe point (no modal open, not in a boss); the live `ContentDb` instance stays the same object for the sim. Otherwise the new version loads at the next cold boot (01: "Update ready, restarts on next launch").
 8. Cold boot prefers the newest verified cached version whose `min_client_version <= clientVersion`; falls back to the bundle. Older cached versions beyond the two newest are deleted.
 
 Server-side gate: `config.content.minContentVersion` is a map `clientVersion range -> content_version`; routes that re-simulate (`/summon/pull`, `/dungeon/seed`, `PUT /save`) return `409 CONTENT_TOO_OLD` when `X-Content-Version` is below the entry for the caller's client (08 section 2). The server keeps a `ContentDb` per content version it is willing to accept (the current one and the previous two).
@@ -1186,7 +1196,7 @@ Server-side gate: `config.content.minContentVersion` is a map `clientVersion ran
 
 | Table group | Hot-apply | Needs cold boot | Needs client release |
 |---|---|---|---|
-| `localization.*`, `shop_products` | yes | | |
+| `localization.*`, `shop_products`, `shop_packages`, `inbox_templates` | yes | | |
 | Every other table (sim-read) | | yes | |
 | New enum value, new required column, `schema_version` bump | | | yes (`min_client_version`) |
 
@@ -1194,7 +1204,7 @@ Server-side gate: `config.content.minContentVersion` is a map `clientVersion ran
 
 `tools/content.py` (stdlib only): `load(content_dir="content") -> Content`, which verifies `manifest.json` hashes first (same `E900` text as the loader), then exposes `constants` (dict key -> value), `curves` (dict id -> `(base, growth, x_offset)`), and every other table as a list of row dicts straight from `rows`. It imports `SCHEMA` from `export_content.py` for column names and folds.
 
-- `tools/power_curve_model.py` (03 section 8.6) builds its parameter block from `content.load()`: `HP0, HP_G = curves["enemy_hp"][:2]`, `STAT_PER_LVL = {r["id"]: r["per_lvl"] for r in stats if r["trainable"]}`, Research nodes from `research`, awakening from `awakening`, pity and pool sizes from `banners`, rate tables from `banner_levels`, `DUPE_LVL_CUM` from `dupe_levels`, progress targets from `progress_targets`. Its `pow` calls are fine: the model is an estimator, not the sim.
+- `tools/power_curve_model.py` (03 section 8.6) builds its parameter block from `content.load()`: `HP0, HP_G = curves["enemy_hp"][:2]`, `STAT_PER_LVL = {r["id"]: r["per_lvl"] for r in stats if r["trainable"]}`, Research nodes from `research`, awakening from `awakening`, pity and pool sizes from `banners`, rate tables from `banner_levels`, `DUPE_LVL_CUM` from `dupe_levels`, progress targets from `progress_targets`, the Awakening cadence check from `awakening_targets` (issue #43). Its `pow` calls are fine: the model is an estimator, not the sim.
 - `tools/gacha_model.py` (04 section 11): banner row and `banner_levels` rows replace its module constants; `--banner WEAPON --level 4` selects the rate table; `GUARANTEE_N = guarantee_batch_size`.
 - `tools/fish_model.py` (05): `fish_levels`, `tank`, `research[TANK_*|FISH_CAP]`, `FISH_BOARD_*`, `FISH_MERGE_COINS_PCT`, `FISH_BOARD_DPS_FACTOR`.
 
@@ -1226,8 +1236,8 @@ Rules:
 
 1. A PR that changes `content_src/` must change `content/` identically (CI `check`) and must bump `content_version` (`E091`).
 2. A PR that changes any `S` constant carries the tuning tool's before/after table in its description (`W030` reminds). The bot acceptance gate (10) is the real check; a content PR cannot merge while it fails.
-3. Golden bot files (10) change in the same PR as the content that moved them; a golden change without a content or sim change is rejected.
-4. `hot_apply` content (strings, shop) may be published any weekday; sim-affecting content publishes Tuesday to Thursday mornings in the main market's time zone, never inside the last hour before day rollover (06), so the catch-up a returning player sees was computed and applied under one content version.
+3. Golden bot files (10) and the generated `plausibility_stage_bound` table (section 5.36) change in the same PR as the content that moved them; a golden change without a content or sim change is rejected.
+4. `hot_apply` content (strings, shop products and packages, inbox templates) may be published any weekday; sim-affecting content publishes Tuesday to Thursday mornings in the main market's time zone, never inside the last hour before day rollover (06), so the catch-up a returning player sees was computed and applied under one content version.
 5. Staged rollout is a config change (`rolloutPct`), not a re-publish; rollback is pointing `config.content.version` back to the previous version, which every client still has cached or bundled (10 runbook "bad content push").
 6. Publish is atomic: files first, `manifest.json` last; `deploy.yml` verifies every CDN file's sha256 after upload before flipping config.
 
@@ -1296,11 +1306,11 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 
 1. **Who owns the sheet.** Default: design owns values and row additions; engineering owns structure (columns, enums) through `SCHEMA` and the C# DTOs. Owner guess: design lead.
 2. **Service-account vs CSV pull.** The service account needs a Google Cloud project and a non-stdlib dependency; the CSV export URL needs the sheet to be link-readable, which exposes live tuning data to anyone with the link. Default: service account, credentials in CI secrets only; designers use the manual File > Download path locally. Owner guess: engineering.
-3. **Limit-break constants.** 04 section 5 names limit breaks past level 10 as a Rock Candy sink but has not fixed constant names. Default: `LIMIT_BREAK_MAX` (5) and `LIMIT_BREAK_COST_ROCK_CANDY` (intlist) in `constants` once 04 settles; not in `REQUIRED_CONSTANTS` until then. Owner: 04.
+3. **Limit-break constants.** Resolved: `constants.LIMIT_BREAK_RANKS` (00's name) in `REQUIRED_CONSTANTS`, per-rarity `rarities.limit_break_cost` and `rarities.dupe_overflow_rock_candy` (issue #37).
 4. **`hero_levels` linear vs compounding.** 00 section 6.5 has `HERO_LVL_ATK_PCT` 0.01 (linear); 03 proposes `HERO_LVL_MULT` 1.02 (compounding). The schema admits either (one of two nullable columns). Default: ship whatever 00 says after 03's tool runs; the exporter rejects both set or both empty. Owner: 03 and 00.
-5. **`E039` daily diamond sum tolerance.** 10% may be too tight when 06 moves the budget between quests and first clears. Default: keep 10%; loosen to 15% only with 06's agreement. Owner: 06.
+5. **`E039` daily diamond sum tolerance.** Resolved: 10%, recomputed from the quest rows plus `REF_DAILIES_DONE` and `REF_NEW_BOSSES` (issue #55).
 6. **Enemy skin draw on the `combat` stream.** Resolved: skin picks use a hash of `(stage, killIndex)` and consume no stream, since `combat` is reserved with `Counter == 0` in MVP (issue #8). Section 5.6 says so.
-7. **Rollout bucket.** `rolloutPct` is evaluated client-side from `playerId` hash in 01's flow; a guest without a `playerId` (M0 path) is always in. Default: accept. Owner: 08.
+7. **Rollout bucket.** Resolved: bucketed server-side by `GET /config` from the JWT; no client hash (issue #31, section 10.3).
 
 ## Acceptance criteria
 
@@ -1318,11 +1328,12 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 12. **Banner-level invariants.** For each enabled banner and each level, rates sum to 1 within 1e-9, `rate_l` and `rate_m` equal level 1 within 1e-12, and `BannerDef.LevelFor` returns 1, 1, 2, 9, 10, 10 for exp 0, 49, 50, 2999, 3000, 10000 (04 test 16).
 13. **Tier filter.** An M0 build with a `companions` row of tier `MVP` exposes `Companions.Count == 0` and `Banners[COMPANION].Enabled == false`.
 14. **Localization completeness.** With `ship_locales = en,ja`, a key missing `ja` fails `E073`; a `ja` string over `max_chars` fails `E074`; a `ui.*` key not in `--ui-keys` and not referenced by a row warns `W021`, and `--strict-warnings` turns it into exit 1.
-15. **Hot-apply classification.** A build whose only diff against `--previous` is `localization.ja.json` sets `hot_apply: true`; adding one changed `skills` row flips it to `false`.
+15. **Hot-apply classification.** A build whose only diff against `--previous` is in `localization.ja.json`, `shop_products`, `shop_packages` or `inbox_templates` sets `hot_apply: true`; adding one changed `skills` row flips it to `false`. A Sim test proves no `HeroCat.Sim` code path reads `ShopProducts`, `ShopPackages` or `InboxTemplates` (issue #54).
 16. **Update flow.** `ContentLoader` given a manifest whose `min_client_version` is above the client's logs `E903`, keeps the bundled content, and the sim's `ContentDb` instance identity is unchanged (01 acceptance 11).
 17. **Build time.** `ContentDb.Build` of the shipped MVP set completes in under 30 ms warm on the CI runner and under 100 ms on the slowest reference device (10).
 18. **Culture invariance.** `Build` under `CultureInfo.CurrentCulture = de-DE` yields `EnemyHp.Growth == 1.07`.
-19. **Reconcile.** Loading a save that references `weapon_e_99` (not in content) against the shipped content drops the entry, keeps everything else, and emits one `content_reconciled` analytics event.
+19. **Reconcile.** Covered by 02's load-validator tests (P10-P14, issue #56): a save that references `weapon_e_99` (not in content) loses that entry and keeps everything else; a level-12 fish under content with a lower reachable cap stays level 12 (issue #41).
+21. **New-table rules.** Fixtures prove `E063` (Research node below the Research gate; `shop` not `ALWAYS`), `E064` (no `DAILIES_COMPLETED` row), `E065` (`OWN_WEAPONS` target equal to the weapon row count), and that the shipped `E039` sum equals 06 section 2's 400 within 10%.
 20. **Exporter parity on messages.** For every fixture in criterion 6, the Python and C# messages are string-equal, including the `repr` of doubles.
 
 ## Constants introduced
@@ -1334,9 +1345,12 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 | `CONTENT_CACHE_KEEP` | 2 | S (engineering) | 10.3 step 8 | none; 10's storage budget |
 | `CONTENT_BUILD_MS_MAX` | 30 (CI), 100 (device) | S (engineering) | 9.5 | 10 perf test |
 | `PSEUDO_LOC_PAD_PCT` | 0.40 | I (07) | 13.3 | none |
+| `REF_DAILIES_DONE` | 8 | S (named here; 06 section 2 reference day, issue #55) | 5.1, 5.21 | `E039` |
+| `REF_NEW_BOSSES` | 4 | S (named here; 06 section 2 reference day, issues #55, #244) | 5.1, 5.21 | `E039` |
+| `awakening_targets.max_days_after_gate` | 2 per rank | S (03, 06; issue #43) | 5.35 | `power_curve_model.py`, bot sweep |
 | `content_version` format | `YYYY.MM.DD[.N]` | - | 6.3 | matches 02 and 08 examples (`2026.11.03`) |
-| Table set | 31 tables + `localization.<locale>` + `meta` | - | 5 | - |
-| Enums added for content | `Element`, `PackageLimit`, `InboxKind`, `TutorialTrigger`, `ConstantType`, `Tier` as data | - | 3.3 | - |
-| Hosted from siblings (not mine; lift to 00) | 03: `ATTACK_PROGRESS_UNIT`, `CRIT_DMG_BASE`, `MP_POOL0`, `MP_REGEN0`, `BOSS_ROCK_CANDY_P`, `TRAIN_CAP[*]`, `RES_*`; 04: `WEAPON_ATK_PCT[r]`, `SKILL_DPS_PCT[r]`, `COMPANION_DPS_PCT[r]`, `BANNER_LVL_EXP`, `TUTORIAL_WEAPON_ID`; 06: `QUEST_*`, `FIRST_CLEAR_DIAMONDS`, `DUNGEON_*`, `INBOX_EXPIRY_DAYS`, `DAILY_GIFT_WEAPON_TICKETS` | per owner | 4, 5.1 | per owner |
+| Table set | 34 tables (adds `feature_unlocks`, `awakening_targets`, generated `plausibility_stage_bound`) + `localization.<locale>` + `meta` | - | 5 | - |
+| Enums added for content | `Element`, `PackageLimit`, `InboxKind`, `TutorialTrigger`, `FeatureCondition`, `ConstantType`, `Tier` as data | - | 3.3 | - |
+| Hosted from siblings (not mine; lift to 00) | 03: `ATTACK_PROGRESS_UNIT`, `CRIT_DMG_BASE`, `MP_POOL0`, `MP_REGEN0`, `BOSS_ROCK_CANDY_P`, `TRAIN_CAP[*]`, `RES_*`; 04: `WEAPON_ATK_PCT[r]`, `SKILL_DPS_PCT[r]`, `COMPANION_DPS_PCT[r]`, `BANNER_LVL_EXP`, `TUTORIAL_WEAPON_ID`, `LIMIT_BREAK_COST[r]`, `DUPE_OVERFLOW_ROCK_CANDY[r]`; 00: `LIMIT_BREAK_RANKS`; 06: `FIRST_CLEAR_DIAMONDS`, `DUNGEON_*`, `INBOX_EXPIRY_DAYS`, `DAILY_GIFT_WEAPON_TICKETS` | per owner | 4, 5.1 | per owner |
 
 Used from 00 by name: every row of section 6.1 to 6.6.
