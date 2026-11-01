@@ -31,6 +31,10 @@ step "Content: exporter tests, and content_src builds to content/ (and the Sim D
 python3 tools/test_export_content.py
 python3 tools/export_content.py check
 
+step "Clock purity: no clock reads in HeroCat.Sim, only ServerClock.cs/SessionRunner.cs in HeroCat.Runtime (specs/02 AC 18)"
+python3 tools/check_clock_apis.py --self-test
+python3 tools/check_clock_apis.py
+
 step "Release: build-android.yml helpers (version.json, size gate)"
 python3 .github/scripts/test_android_release.py
 

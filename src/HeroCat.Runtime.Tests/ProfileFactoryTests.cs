@@ -1,5 +1,7 @@
 using System;
+using System.Linq;
 using HeroCat.Runtime.Profile;
+using HeroCat.Runtime.Save;
 using HeroCat.Sim.Content;
 using HeroCat.Sim.Economy;
 using HeroCat.Sim.Rng;
@@ -61,6 +63,52 @@ namespace HeroCat.Runtime.Tests
             Assert.That(s.Loadout.Weapon, Is.EqualTo(db.TutorialWeaponId));
             Assert.That(ProfileGrants.ApplyWelcome(s, db, TestContent.T0), Is.False, "a second call grants nothing");
             Assert.That(s.Wallet.Diamond, Is.EqualTo(1500));
+        }
+
+        static readonly Guid KnownPlayer = new Guid("6b1f2c40-1234-4abc-8def-0123456789ab");
+
+        // Frozen vectors (issue #73), computed independently in Python: sha256(uuid.bytes_le + name)[:8], little-endian.
+        [TestCase("combat", "5b6cb1b172a8d45e")]
+        [TestCase("crit", "65fd0459791f96e9")]
+        [TestCase("fish_spawn", "5992599aaa231034")]
+        [TestCase("dungeon", "1a64341c45fe5fc3")]
+        [TestCase("loot", "aac755d66e8bef8c")]
+        [TestCase("summon_weapon", "65b883c6c50706c5")]
+        [TestCase("summon_skill", "b34788b123bd255b")]
+        [TestCase("summon_companion", "b11187f2d851c86a")]
+        public void StreamSeed_Vectors_ForAKnownPlayer(string stream, string expectedHex)
+        {
+            var s = ProfileFactory.Create(TestContent.Db, KnownPlayer, TestContent.T0, TestContent.Device);
+            Assert.That(s.RngRoot, Is.EqualTo(KnownPlayer), "a known player is its own RngRoot (issue #9)");
+            Assert.That(s.Rng[stream].Seed, Is.EqualTo(expectedHex));
+        }
+
+        [Test]
+        public void Guest_GetsARandomRngRoot_AndItsSeedsSurviveLinkingAndAnotherDevice()
+        {
+            var guest = ProfileFactory.Create(TestContent.Db, Guid.Empty, TestContent.T0, TestContent.Device);
+            Assert.That(guest.PlayerId, Is.EqualTo(Guid.Empty));
+            Assert.That(guest.RngRoot, Is.Not.EqualTo(Guid.Empty));
+            var seeds = guest.Rng.ToDictionary(kv => kv.Key, kv => kv.Value.Seed);
+
+            // The first guest auth assigns PlayerId; another install then writes the save.
+            var json = SaveSerializer.ToJson(guest);
+            json["PlayerId"] = KnownPlayer.ToString();
+            var linked = SaveSerializer.Materialize(json);
+            SaveStamp.Apply(linked, TestContent.T0 + 60, TestContent.Db, new Guid("0f9e8d7c-0000-4000-8000-000000000002"), ticking: false);
+            var back = SaveSystem.DecodeFull(SaveSerializer.Encode(linked), TestContent.Db).state;
+
+            Assert.That(back.PlayerId, Is.EqualTo(KnownPlayer));
+            Assert.That(back.RngRoot, Is.EqualTo(guest.RngRoot));
+            Assert.That(back.Rng.ToDictionary(kv => kv.Key, kv => kv.Value.Seed), Is.EqualTo(seeds));
+            Assert.That(SaveValidator.Run(back, TestContent.T0 + 60, TestContent.Db), Is.Empty);
+        }
+
+        [Test]
+        public void Create_PassesTheValidator_WithZeroRepairs()   // issue #73 acceptance
+        {
+            var s = ProfileFactory.Create(TestContent.Db, Guid.Empty, TestContent.T0, TestContent.Device);
+            Assert.That(SaveValidator.Run(s, TestContent.T0, TestContent.Db, new SaveValidatorOptions { InstallId = TestContent.Device }), Is.Empty);
         }
 
         [Test]
