@@ -10,9 +10,10 @@ namespace HeroCat.Client.Boot
     /// Finds content/*.json and builds the ContentDb through Runtime's ContentLoader (09 section 2; the Sim never sees
     /// JSON). Order:
     ///   1. Editor / desktop dev: walk up from Assets/ to the repository's content/ folder.
-    ///   2. StreamingAssets/content (desktop players, if someone copies it there).
-    ///   3. Resources/content TextAssets (device builds: Editor/ContentPreBuild.cs copies them in before each build).
-    /// TODO(#133): bundle content/ into StreamingAssets per 09 section 10.1; TODO(#212): the CDN cache.
+    ///   2. StreamingAssets/content: the bundled floor (09 section 10.1) on iOS and desktop players.
+    ///   3. Resources/content TextAssets: Android, whose StreamingAssets is inside the APK and not a folder.
+    /// Editor/ContentPreBuild.cs verifies content/ and writes both copies before every player build (issue #133).
+    /// TODO(#212): the CDN cache.
     /// Unity-only: not compiled in cloud sessions.
     /// </summary>
     public static class ContentLocator

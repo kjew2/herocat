@@ -1169,7 +1169,7 @@ Sim code takes `ContentDb` through its constructor (`new Simulation(db, state, c
 
 ### 10.1 Bundled fallback
 
-Every client build copies `content/` into `StreamingAssets/content/` at build time (`build-android.yml` / `build-ios.yml` in 10 run `export_content.py check` first, so a stale bundle cannot ship). The bundled set is the floor: a client always boots, offline, with the content it was built with.
+Every client build copies `content/` into `StreamingAssets/content/` at build time (`build-android.yml` / `build-ios.yml` in 10 run `export_content.py check` first, so a stale bundle cannot ship). The bundled set is the floor: a client always boots, offline, with the content it was built with. The Unity pre-build step (`Editor/ContentPreBuild`, issue #133) verifies the manifest and every table's sha256 before copying, and also writes the same files into `Resources/content/` as TextAssets: Android's StreamingAssets lives inside the APK and is not a folder, so the Android player reads the Resources copy (iOS and desktop players read StreamingAssets). It then runs the `asset` address check of section 3.2 (a warning for the M0 tier, whose screens draw code-built placeholders; a build failure for any other tier).
 
 ### 10.2 CDN layout
 

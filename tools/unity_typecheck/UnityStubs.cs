@@ -292,3 +292,24 @@ namespace UnityEngine.InputSystem.UI
 {
     public class InputSystemUIInputModule : UnityEngine.Behaviour { public void AssignDefaultActions() { } }
 }
+
+// UnityEditor: only what Editor/ContentPreBuild.cs uses (the other Editor scripts are not type-checked).
+namespace UnityEditor
+{
+    [System.AttributeUsage(System.AttributeTargets.Method)]
+    public sealed class MenuItem : System.Attribute { public MenuItem(string itemName) { } }
+    [System.Flags] public enum ImportAssetOptions { Default = 0, ForceUpdate = 1, ForceSynchronousImport = 8 }
+    public static class AssetDatabase { public static void Refresh(ImportAssetOptions options = ImportAssetOptions.Default) { } }
+}
+
+namespace UnityEditor.Build.Reporting
+{
+    public sealed class BuildReport { }
+}
+
+namespace UnityEditor.Build
+{
+    public class BuildFailedException : System.Exception { public BuildFailedException(string message) : base(message) { } }
+    public interface IOrderedCallback { int callbackOrder { get; } }
+    public interface IPreprocessBuildWithReport : IOrderedCallback { void OnPreprocessBuild(UnityEditor.Build.Reporting.BuildReport report); }
+}

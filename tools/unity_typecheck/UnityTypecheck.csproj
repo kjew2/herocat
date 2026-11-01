@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
-    Type-checks the client's Unity-only code (Assets/HeroCat.Client/Boot and Screens) in sessions without Unity, against
+    Type-checks the client's Unity-only code (Assets/HeroCat.Client/Boot, Screens and Editor/ContentPreBuild.cs) in sessions without Unity, against
     UnityStubs.cs: minimal UnityEngine / uGUI / TextMeshPro / Input System declarations with only the members the client
     uses. It catches drift between the screens and Core's view-models; it proves nothing about Unity behaviour. Not in
     HeroCat.sln; check.sh builds it. When a screen uses a new Unity API, add that member to the stubs.
@@ -24,5 +24,7 @@
     <Compile Include="../../unity/HeroCatClient/Assets/HeroCat.Client/Core/**/*.cs" LinkBase="Core" />
     <Compile Include="../../unity/HeroCatClient/Assets/HeroCat.Client/Boot/**/*.cs" LinkBase="Boot" />
     <Compile Include="../../unity/HeroCatClient/Assets/HeroCat.Client/Screens/**/*.cs" LinkBase="Screens" />
+    <!-- The one Editor script with logic the build depends on (content bundle and asset check, issue #133). -->
+    <Compile Include="../../unity/HeroCatClient/Assets/HeroCat.Client/Editor/ContentPreBuild.cs" LinkBase="Editor" />
   </ItemGroup>
 </Project>
