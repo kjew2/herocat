@@ -72,7 +72,7 @@ public readonly record struct PullResult(
     Banner Banner, string ItemId, Rarity Rarity, bool IsNew,
     int CopiesAfter, int LevelBefore, int LevelAfter, int OverflowRockCandy, int PityAfter, int BannerLevelAfter);
 
-// Shared by LocalSummonService (M0, Whisker.Runtime) and the server (MVP, Whisker.Server). Lives in Whisker.Sim.Summons.
+// Shared by LocalSummonService (M0, HeroCat.Runtime) and the server (MVP, HeroCat.Server). Lives in HeroCat.Sim.Summons.
 public static PullResult Pull(BannerDef def, BannerState st, CollectionState col, IUniformSource rng, bool forceEplus)
 {
     st.PityCounter += 1; st.TotalPulls += 1; st.BannerExp += def.BannerExpPerPull;
@@ -119,7 +119,7 @@ Wallet and quest effects are applied by the caller (`Simulation.ApplySummonResul
 
 ### 3.4 Test vectors
 
-`Whisker.Sim.Tests/SummonTests.cs` and `Whisker.Server.Tests/SummonAlgorithmTests.cs` run the same vectors; the Python model prints them with `--vectors`.
+`HeroCat.Sim.Tests/SummonTests.cs` and `HeroCat.Server.Tests/SummonAlgorithmTests.cs` run the same vectors; the Python model prints them with `--vectors`.
 
 | # | Setup | Expect |
 |---|---|---|
@@ -342,7 +342,7 @@ Rate-up banners (P1): a child banner with the parent's pool, pity and level, plu
 Whether the result came from the local M0 roll or the server, the sim applies it the same way:
 
 ```
-ApplySummonResult(SummonRequest req, SummonResult res):     # Whisker.Sim, called by Whisker.Runtime.SummonClient
+ApplySummonResult(SummonRequest req, SummonResult res):     # HeroCat.Sim, called by HeroCat.Runtime.SummonClient
   if Applied.Contains(req.RequestId): return                 # idempotent against retries (01, 08)
   pay: Tickets  -> Wallet.Apply(-req.Count TICKET_SUMMON_<banner>, SUMMON)
        Diamonds -> Wallet.Apply(-req.Count * PULL_COST[banner] DIAMOND, SUMMON)
@@ -387,7 +387,7 @@ Sort options (client-side, over the VM): rarity desc then level desc (default), 
 ## 12. `ISummonService`: M0 local roll, MVP server roll
 
 ```csharp
-namespace Whisker.Runtime.Summons
+namespace HeroCat.Runtime.Summons
 {
     public sealed record SummonResultDto(
         Guid RequestId, Banner Banner, PullResult[] Results,
@@ -405,7 +405,7 @@ namespace Whisker.Runtime.Summons
 }
 ```
 
-**M0: `LocalSummonService`** (`Whisker.Runtime`). Holds a reference to the `GameState`, runs `Whisker.Sim.Summons.Pull` on the banner's local stream `summon_<banner>` (`summon_weapon`, `summon_skill`; `summon_companion` is created unused), checks the wallet before drawing, returns synchronously-completed tasks. The stream is `(seed, counter)` in the save like every other stream (02); its counter invariant is `3 * TotalPulls`. The MVP migration (02) removes `summon_*` streams and ignores them if present. The algorithm, pity state and result shape are identical to the server's, so M0 saves carry forward with no re-roll.
+**M0: `LocalSummonService`** (`HeroCat.Runtime`). Holds a reference to the `GameState`, runs `HeroCat.Sim.Summons.Pull` on the banner's local stream `summon_<banner>` (`summon_weapon`, `summon_skill`; `summon_companion` is created unused), checks the wallet before drawing, returns synchronously-completed tasks. The stream is `(seed, counter)` in the save like every other stream (02); its counter invariant is `3 * TotalPulls`. The MVP migration (02) removes `summon_*` streams and ignores them if present. The algorithm, pity state and result shape are identical to the server's, so M0 saves carry forward with no re-roll.
 
 **MVP: `RemoteSummonService`**. POSTs `SummonRequest` to 08's summon endpoint with the auth header and `requestId`; on a network error it retries with backoff (01) using the same `requestId`, and the server replays the stored result (00 section 8 item 13). The UI (07) shows a spinner on the summon button, disables summon-again until the result is applied, and after a timeout shows "Checking your summon..." rather than an error, because the pull may have landed. The client never holds a seed or sees `u1..u3`; it receives `PullResult[]` and applies it (section 10). The server's pity state is authoritative; `ApplySummonResult` overwrites the local `PityCounter` with `PityAfter`.
 
@@ -427,7 +427,7 @@ Dashboards 10 wants from these: L+ frequency per banner vs the published 3.657% 
 
 ## 14. `tools/gacha_model.py`
 
-Copied from `idle-rng-game/tools/gacha_model.py` into `whisker-hero/tools/` and extended. It remains closed-form (no simulation) except for the optional Monte Carlo cross-check.
+Copied from `idle-rng-game/tools/gacha_model.py` into `herocat/tools/` and extended. It remains closed-form (no simulation) except for the optional Monte Carlo cross-check.
 
 Changes:
 
@@ -453,7 +453,7 @@ It must print, in this order: the pity block (section 3.1 numbers), the soft ram
 
 ## 16. Acceptance criteria
 
-1. All 16 test vectors in section 3.4 pass in `Whisker.Sim.Tests` and `Whisker.Server.Tests` against the same JSON produced by `gacha_model.py --vectors`.
+1. All 16 test vectors in section 3.4 pass in `HeroCat.Sim.Tests` and `HeroCat.Server.Tests` against the same JSON produced by `gacha_model.py --vectors`.
 2. Every row of the `banner_levels` table sums to 1.0 within 1e-9; L and M columns are constant across rows; the content validator fails otherwise.
 3. `PityRate` is monotone non-decreasing in `n` for every banner; `PityCounter` is always in `0..PITY_HARD-1` after any pull.
 4. A `Pull10` whose first nine results are below E yields an E+ in slot 10; a `Pull10` with an E+ in slots 1-9 rolls slot 10 normally; across 100,000 scripted 10-pulls at level 1 the guarantee fires in 31.6% +/- 0.5 pp.

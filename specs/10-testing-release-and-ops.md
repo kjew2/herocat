@@ -1,6 +1,6 @@
 ## 10 - Testing, Release and Ops
 
-This spec says how Whisker Hero is proven, shipped and kept alive: the test pyramid per assembly with counts, the golden-file determinism test, the headless bot harness `Whisker.Bots` that is the acceptance test for every balance change (00 section 8 item 12), server load tests, client performance budgets, the CI/CD workflows, versioning and the compatibility matrix, the store release checklist, the soft-launch plan and its KPIs, live-ops runbooks, dashboards and alarms, and the 12-month roadmap. Constants are 00's names; harness-only constants are declared in section 3.2 and listed at the end.
+This spec says how Whisker Hero is proven, shipped and kept alive: the test pyramid per assembly with counts, the golden-file determinism test, the headless bot harness `HeroCat.Bots` that is the acceptance test for every balance change (00 section 8 item 12), server load tests, client performance budgets, the CI/CD workflows, versioning and the compatibility matrix, the store release checklist, the soft-launch plan and its KPIs, live-ops runbooks, dashboards and alarms, and the 12-month roadmap. Constants are 00's names; harness-only constants are declared in section 3.2 and listed at the end.
 
 Tiers covered: **M0** (Sim and Runtime tests, bots with the local seams, `pr.yml`, `content.yml`, a local Android build), **MVP** (Server tests, load tests, device farm, store builds, blue/green deploy, soft-launch KPIs, runbooks), **P1** (rotated seeds, lapsed-player bots, guild/leaderboard load profiles).
 
@@ -10,20 +10,20 @@ Depends on: 00 (sections 6.6, 8, 11), 01 (`SessionRunner`, network layer, error 
 
 | Layer | Project / place | Count (MVP) | Runs | Budget |
 |---|---|---|---|---|
-| Sim unit | `src/Whisker.Sim.Tests` (NUnit) | ~420 | every PR | < 20 s |
-| Runtime unit | `src/Whisker.Runtime.Tests` | ~180 | every PR | < 20 s |
-| Server unit + integration | `src/Whisker.Server.Tests` (Testcontainers Postgres + Redis) | ~160 | every PR touching `src/Whisker.Server` or Sim | < 3 min |
-| Bot acceptance + golden | `src/Whisker.Bots.Tests` | 6 ACs + 4 goldens + 28 unit | every PR touching Sim, content or bots | < 4 min |
+| Sim unit | `src/HeroCat.Sim.Tests` (NUnit) | ~420 | every PR | < 20 s |
+| Runtime unit | `src/HeroCat.Runtime.Tests` | ~180 | every PR | < 20 s |
+| Server unit + integration | `src/HeroCat.Server.Tests` (Testcontainers Postgres + Redis) | ~160 | every PR touching `src/HeroCat.Server` or Sim | < 3 min |
+| Bot acceptance + golden | `src/HeroCat.Bots.Tests` | 6 ACs + 4 goldens + 28 unit | every PR touching Sim, content or bots | < 4 min |
 | Unity EditMode | `unity/Assets/Tests/EditMode` | ~60 (view-model binding, formatting, `ScreenRouter`) | every PR touching `unity/` | < 2 min |
 | Unity PlayMode smoke | `unity/Assets/Tests/PlayMode` | 4 | nightly and release builds | < 6 min |
 | Device-farm smoke | Firebase Test Lab / AWS Device Farm, 4 devices | 1 scripted run per device | release candidates | < 30 min |
-| Load | `src/Whisker.Server.LoadTests` (k6 scripts) | 3 profiles | weekly on stage, before every server release | 20 min |
+| Load | `src/HeroCat.Server.LoadTests` (k6 scripts) | 3 profiles | weekly on stage, before every server release | 20 min |
 
 Counts are targets at MVP exit; `pr.yml` fails if a project's test count drops below 90% of the number recorded in `tests/counts.json` (someone deleted tests to go green).
 
-### 1.1 `Whisker.Sim.Tests`
+### 1.1 `HeroCat.Sim.Tests`
 
-Grouped by what they protect. Each group names the fixtures it uses; fixtures are JSON `GameState` bodies under `src/Whisker.Sim.Tests/Fixtures/` built by `Whisker.Runtime` in a `[OneTimeSetUp]` (Sim has no JSON; the test project references Runtime).
+Grouped by what they protect. Each group names the fixtures it uses; fixtures are JSON `GameState` bodies under `src/HeroCat.Sim.Tests/Fixtures/` built by `HeroCat.Runtime` in a `[OneTimeSetUp]` (Sim has no JSON; the test project references Runtime).
 
 | Group | Tests | What they assert |
 |---|---|---|
@@ -41,7 +41,7 @@ Grouped by what they protect. Each group names the fixtures it uses; fixtures ar
 | Snapshot and events | 20 | Per-tick snapshot fields match state; event buffer coalescing at `EVENT_COALESCE_AT` (01); every `Event` type serialises to the analytics envelope. |
 | Perf (`[Category("Perf")]`) | 6 | 03 criterion 19: `Advance(1_000_000)` from stage 300 under 2 s Release; under 128 B allocated per kill with the default sink; `Build` under 30 ms. |
 
-### 1.2 `Whisker.Runtime.Tests`
+### 1.2 `HeroCat.Runtime.Tests`
 
 | Group | Tests | What they assert |
 |---|---|---|
@@ -49,16 +49,16 @@ Grouped by what they protect. Each group names the fixtures it uses; fixtures ar
 | Migrations | 1 per version + 8 | 02 M1-M7: every `Fixtures/Saves/v{n}.json` migrates to `Current` with zero repairs; a `v{Current+1}` body raises `SaveTooNewException`; each step is idempotent; the migration log names every step. The "every fixture migrates" test is parameterised over the directory so adding `v{n+1}.json` is the only step when the schema bumps. |
 | `LocalSaveStore` | 24 | 02 section 7: atomic write via temp + rename (kill the process between write and rename with a fault-injecting `IFileSystem` and reload); two slots rotate; checksum mismatch falls to `prev`; both corrupt -> `SaveCorruptException` with both files preserved under `corrupt/`; `SAVE_REPAIR_MAX` repairs then reject; a write fails `SAVE_FAIL_WARN_COUNT` times -> warning event. |
 | `CloudSaveClient` | 26 | 02 section 9: upload triggers and `CLOUD_UPLOAD_MIN_SEC` debounce; `If-Match` ETag flow; conflict table (higher server time wins unless local `progressScore` exceeds by `CONFLICT_PROGRESS_MARGIN`); the user-facing conflict decision is surfaced exactly once; a 409 with a newer server save never overwrites the local without the decision; HMAC envelope present and valid. |
-| Clock seams | 18 | 02 section 11: `ServerClock` keeps a monotonic offset, a backwards wall clock does not move `Now`; `CLOCK_JUMP_WARN_SEC`; `CLOCK_RESYNC_SEC` triggers a `/time` call; `FakeClock` is the only clock the bots see; `IClock.Now` is never read inside `Whisker.Sim` (analyzer test). |
+| Clock seams | 18 | 02 section 11: `ServerClock` keeps a monotonic offset, a backwards wall clock does not move `Now`; `CLOCK_JUMP_WARN_SEC`; `CLOCK_RESYNC_SEC` triggers a `/time` call; `FakeClock` is the only clock the bots see; `IClock.Now` is never read inside `HeroCat.Sim` (analyzer test). |
 | `SessionRunner` | 22 | 01 section 3.2: `MAX_TICKS_PER_FRAME` cap; pause on background, catch-up on resume; `IN_APP_GAP_SEC` rule; autosave every `AUTOSAVE_INTERVAL_SEC`; command log capped at `CMDLOG_MAX_BYTES`; events delivered on the main thread only. |
 | `ContentLoader` | 16 | 09 section 10.3 steps 2-8 with a fake HTTP layer: hash failure keeps the bundle; `min_client_version` gate; atomic rename; hot-apply swaps strings and shop only; `ContentDb` identity stable across a config refresh. |
 | Network | 20 | 01 section 5: retry/backoff (`HTTP_RETRY_*`), `requestId` reuse on retry, 426/409/503 mapping to the error taxonomy, offline-mode allow list. |
 | Local seams | 14 | `LocalSummonService` equals the server algorithm on 04's test vectors; `LocalConfigService` returns "everything on"; `LocalInboxService` claim idempotent. |
 | Analytics | 12 | 02 section 14: envelope fields, batching at `ANALYTICS_BATCH_MAX`, queue cap, `currency_changed` carries `reason`, `playerIdHash` never raw. |
 
-### 1.3 `Whisker.Server.Tests`
+### 1.3 `HeroCat.Server.Tests`
 
-Integration tests run against real Postgres and Redis in containers; unit tests mock nothing in the Sim path because the server references `Whisker.Sim` directly.
+Integration tests run against real Postgres and Redis in containers; unit tests mock nothing in the Sim path because the server references `HeroCat.Sim` directly.
 
 | Group | Tests | What they assert |
 |---|---|---|
@@ -96,7 +96,7 @@ Inputs, committed under `golden/`:
 | `golden/seed7-hashes.txt` | `day, tick, stateHash` after each day's catch-up, plus the final hash, as produced on CI x64 Linux |
 | `golden/content-hash.txt` | the `content_hash` the run used |
 
-Procedure (`Whisker.Bots golden --replay`): build `ContentDb`, create the seed-7 profile with `FakeClock` at the harness epoch, replay the command log by tick with `Advance` between commands, and print the day hashes. `StateHash` is a 64-bit FNV-1a over the canonical binary encoding of `GameState` that `Whisker.Sim.Hashing` produces (doubles as `DoubleToInt64Bits`, strings UTF-8, collections in storage order); it is not the JSON, so Newtonsoft formatting cannot cause a false mismatch.
+Procedure (`HeroCat.Bots golden --replay`): build `ContentDb`, create the seed-7 profile with `FakeClock` at the harness epoch, replay the command log by tick with `Advance` between commands, and print the day hashes. `StateHash` is a 64-bit FNV-1a over the canonical binary encoding of `GameState` that `HeroCat.Sim.Hashing` produces (doubles as `DoubleToInt64Bits`, strings UTF-8, collections in storage order); it is not the JSON, so Newtonsoft formatting cannot cause a false mismatch.
 
 Where it runs:
 
@@ -109,12 +109,12 @@ Where it runs:
 
 A mismatch is a P0 for the sim: first suspects are a `float`, a `Math.Pow`, a `Dictionary` enumeration order feeding arithmetic, or a `foreach` over a `HashSet`. The regenerate command (`golden --update`) is refused unless the content hash changed or the PR carries the label `sim-behaviour-change`.
 
-## 3. Headless bot harness: `Whisker.Bots`
+## 3. Headless bot harness: `HeroCat.Bots`
 
 ### 3.1 Layout
 
 ```
-src/Whisker.Bots/                       net8.0 console; public types so Whisker.Bots.Tests drives it in-process
+src/HeroCat.Bots/                       net8.0 console; public types so HeroCat.Bots.Tests drives it in-process
   Program.cs                            CLI (section 3.8)
   HarnessConstants.cs                   section 3.2
   BotRunner.cs                          day schedule (section 3.3)
@@ -130,11 +130,11 @@ src/Whisker.Bots/                       net8.0 console; public types so Whisker.
   Report/Sweep.cs                       percentiles
   Acceptance/AcceptanceChecker.cs       section 3.6
   Golden/Golden.cs                      section 2 and 3.7
-src/Whisker.Bots.Tests/
+src/HeroCat.Bots.Tests/
 golden/
 ```
 
-References `Whisker.Sim`, `Whisker.Runtime` (for `FakeClock`, `ContentLoader`, the local seams and the save round trip) and nothing else. No Unity.
+References `HeroCat.Sim`, `HeroCat.Runtime` (for `FakeClock`, `ContentLoader`, the local seams and the save round trip) and nothing else. No Unity.
 
 ### 3.2 Harness constants
 
@@ -235,7 +235,7 @@ Wall rules: a wall opens on the first `BossFailed` at a stage and closes on `Sta
 
 ### 3.6 Acceptance table and CI gate
 
-Targets are read from `ContentDb.ProgressTargets` (09 section 5.31), so a target change is a content PR like any other. Thresholds that are not in 00 live in `src/Whisker.Bots/Acceptance/acceptance.json`:
+Targets are read from `ContentDb.ProgressTargets` (09 section 5.31), so a target change is a content PR like any other. Thresholds that are not in 00 live in `src/HeroCat.Bots/Acceptance/acceptance.json`:
 
 ```json
 {
@@ -264,12 +264,12 @@ Targets are read from `ContentDb.ProgressTargets` (09 section 5.31), so a target
 | AC9 | Determinism: seed 7 run twice in-process is byte-identical; the golden replay (section 2) matches | 00 section 3 |
 | AC10 | Wall time of the whole sweep under `timeBudgetSeconds` | section 3.3 |
 
-The CLI prints one `PASS`/`FAIL` line per check with the measured numbers and exits 1 on any failure. `content.yml` runs it on every PR that touches `content/`, `src/Whisker.Sim` or `src/Whisker.Bots`; a failing AC blocks merge. The example output format is the sibling's (`PASS AC1 day 7: median stage 371 in 304..456 (target 380)`), which reviewers already read.
+The CLI prints one `PASS`/`FAIL` line per check with the measured numbers and exits 1 on any failure. `content.yml` runs it on every PR that touches `content/`, `src/HeroCat.Sim` or `src/HeroCat.Bots`; a failing AC blocks merge. The example output format is the sibling's (`PASS AC1 day 7: median stage 371 in 304..456 (target 380)`), which reviewers already read.
 
 Acceptance table (printed by `acceptance --table`; the columns the brief asks for), illustrative shape only:
 
 ```
-# whisker-hero acceptance table   bot=greedy-f2p seeds=1-20 days=30 content=2026.11.03/3f9c1a2e
+# herocat acceptance table   bot=greedy-f2p seeds=1-20 days=30 content=2026.11.03/3f9c1a2e
 day  stageMed  goldEarnedMed  diaEarnedMed  diaSpentMed  pulls  highestRarity  fishLvlMed  longestWallH
   1        88        1.2e+04         1540         1500     16        EPIC             5          0.3
   7       371        9.8e+06         4180         4000     46        LEGENDARY        8          6.5
@@ -287,7 +287,7 @@ day  stageMed  goldEarnedMed  diaEarnedMed  diaSpentMed  pulls  highestRarity  f
 ### 3.8 CLI
 
 ```
-dotnet run -c Release --project src/Whisker.Bots -- <verb> [options]
+dotnet run -c Release --project src/HeroCat.Bots -- <verb> [options]
 
 run         --bot greedy-f2p|lazy-f2p|light-spender|whale  --seed 7  --days 30  [--all-days] [--record path] [--format table|csv|json] [--diamonds content|flat] [--content dir] [--tier M0|MVP]
 sweep       --bot  --seeds 1-20  --days 30  [--parallel N]
@@ -302,7 +302,7 @@ bench       --ticks 1000000 --stage 300 --max-ms 2000
 
 ## 4. Server load tests (MVP)
 
-k6 scripts under `src/Whisker.Server.LoadTests/`, run against the stage environment sized like prod, weekly and before every server release. Each profile runs 10 minutes after a 2-minute ramp; the pass line is the p99 column.
+k6 scripts under `src/HeroCat.Server.LoadTests/`, run against the stage environment sized like prod, weekly and before every server release. Each profile runs 10 minutes after a 2-minute ramp; the pass line is the p99 column.
 
 | Profile | Mix | Rate | p50 target | p99 target | Error budget |
 |---|---|---|---|---|---|
@@ -320,7 +320,7 @@ Measured on the four devices of section 1.5; the budget column is the low-end de
 |---|---|---|---|
 | Frame time on `SCR_MAIN` with board full and six skills casting | <= 33.3 ms p95 (30 fps floor, 00 section 3) | Unity Profiler recorder in PlayMode test 1; device-farm trace | release candidate gate |
 | Sim tick cost | <= 0.5 ms per tick on the low-end device; <= 8 ms per frame for catch-up bursts (`TICK_BUDGET_MS`, 01) | `Stopwatch` around `SessionRunner.Tick` logged to analytics `perf_tick` | nightly dashboard |
-| GC alloc per tick | 0 B steady state; <= 128 B per kill with the default event mask | `Whisker.Sim.Tests` perf group (`GC.GetAllocatedBytesForCurrentThread`) | every PR |
+| GC alloc per tick | 0 B steady state; <= 128 B per kill with the default event mask | `HeroCat.Sim.Tests` perf group (`GC.GetAllocatedBytesForCurrentThread`) | every PR |
 | Memory | <= 450 MB total on the 2 GB device at `SCR_MAIN`; <= 600 MB with `SCR_SUMMON_RESULT` 10x reveal | device-farm peak RSS | release candidate gate |
 | Cold boot to interactive `SCR_MAIN` | <= 4.0 s on mid device, <= 6.0 s low-end (content load <= 300 ms of it, 01) | `boot_ms` analytics event with phase breakdown | nightly dashboard, release gate |
 | Warm resume | <= 1.0 s to first frame | `resume_ms` event | nightly |
@@ -350,36 +350,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4 { with: { dotnet-version: 8.0.x } }
-      - run: dotnet restore Whisker.sln
-      - run: dotnet build Whisker.sln -c Release --no-restore -warnaserror
-      - run: dotnet test Whisker.sln -c Release --no-build --filter "TestCategory!=Perf&TestCategory!=Acceptance" --logger trx
-      - run: dotnet test Whisker.sln -c Release --no-build --filter "TestCategory=Perf"        # separate so a perf flake reads as one
-      - run: dotnet run -c Release --no-build --project src/Whisker.Bots -- bench --ticks 1000000 --max-ms 2000
-      - run: dotnet run -c Release --no-build --project src/Whisker.Bots -- golden --check --replay
+      - run: dotnet restore HeroCat.sln
+      - run: dotnet build HeroCat.sln -c Release --no-restore -warnaserror
+      - run: dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory!=Perf&TestCategory!=Acceptance" --logger trx
+      - run: dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory=Perf"        # separate so a perf flake reads as one
+      - run: dotnet run -c Release --no-build --project src/HeroCat.Bots -- bench --ticks 1000000 --max-ms 2000
+      - run: dotnet run -c Release --no-build --project src/HeroCat.Bots -- golden --check --replay
       - run: python3 tools/export_content.py check                                             # committed JSON matches CSVs
       - run: python3 -m pytest tools/tests -q                                                  # exporter fixtures
       - run: python3 tools/ci/test_counts.py --min-ratio 0.9                                   # section 1 count guard
-      - run: python3 tools/ci/no_literals.py src/Whisker.Sim                                   # 09 acceptance 1
+      - run: python3 tools/ci/no_literals.py src/HeroCat.Sim                                   # 09 acceptance 1
   server:
-    if: contains(github.event.pull_request.changed_files, 'src/Whisker.Server') || contains(..., 'src/Whisker.Sim')
+    if: contains(github.event.pull_request.changed_files, 'src/HeroCat.Server') || contains(..., 'src/HeroCat.Sim')
     services: { postgres: { image: postgres:16 }, redis: { image: redis:7 } }
-    steps: [checkout, setup-dotnet, dotnet test src/Whisker.Server.Tests -c Release]
+    steps: [checkout, setup-dotnet, dotnet test src/HeroCat.Server.Tests -c Release]
   unity-editmode:
     if: contains(..., 'unity/')
     runs-on: [self-hosted, unity-2022-lts]
     steps: [checkout, game-ci/unity-test-runner@v4 with testMode EditMode]
 ```
 
-`.github/workflows/content.yml` (PRs touching `content/`, `content_src/`, `src/Whisker.Sim`, `src/Whisker.Bots`; ~8 min):
+`.github/workflows/content.yml` (PRs touching `content/`, `content_src/`, `src/HeroCat.Sim`, `src/HeroCat.Bots`; ~8 min):
 
 ```yaml
 steps:
-  - run: python3 tools/export_content.py build --src content_src --out $KIROCREW_SCRATCH/content --previous content --strict-warnings --ui-keys unity/Assets/Whisker.Client/ui_keys.txt
+  - run: python3 tools/export_content.py build --src content_src --out $KIROCREW_SCRATCH/content --previous content --strict-warnings --ui-keys unity/Assets/HeroCat.Client/ui_keys.txt
   - run: diff -r $KIROCREW_SCRATCH/content content                                            # same as check, with a readable diff
   - run: python3 tools/gacha_model.py --content content --banner WEAPON --level 1 > gacha.txt   # the oracle for the server test
-  - run: timeout 400 dotnet run -c Release --project src/Whisker.Bots -- acceptance --table --verbose --time-budget-s 240
-  - run: dotnet run -c Release --project src/Whisker.Bots -- report --layer-shares --seeds 1-20 --days 30 > shares.txt
-  - run: dotnet run -c Release --project src/Whisker.Bots -- golden --check
+  - run: timeout 400 dotnet run -c Release --project src/HeroCat.Bots -- acceptance --table --verbose --time-budget-s 240
+  - run: dotnet run -c Release --project src/HeroCat.Bots -- report --layer-shares --seeds 1-20 --days 30 > shares.txt
+  - run: dotnet run -c Release --project src/HeroCat.Bots -- golden --check
   - uses: actions/upload-artifact (acceptance table, shares, golden diff, exporter diff)
   - run: python3 tools/ci/pr_comment.py (posts the acceptance table and the day-30 median into the PR)
 ```
@@ -513,7 +513,7 @@ Every runbook has the same four parts. "Communicate" always means: in-game mail 
 - **Detect**: `iap_completed` without a matching `inbox_items` row within 5 min > 0.5% of purchases; App Store Server Notifications / RTDN backlog > 100; support tickets tagged `missing-purchase`.
 - **Mitigate**: the client retries receipt validation every `RECEIPT_RETRY_S` and "Restore purchases" re-submits; if the validator is down, queue receipts and grant on recovery (idempotent by transaction id). Manual grant via the admin mail tool against the store transaction id when the store's API confirms the purchase.
 - **Communicate**: mail with the grant and a small apology grant; store review replies for anyone who left a one-star review about it.
-- **Postmortem**: which stub in `Whisker.Server.Tests` receipt group was missing.
+- **Postmortem**: which stub in `HeroCat.Server.Tests` receipt group was missing.
 
 ### 9.5 Exploit found
 
@@ -581,11 +581,11 @@ Team-weeks for a 2-3 person team (one gameplay/sim engineer, one client engineer
 
 | Month | Milestone | Scope | Exit (00 section 11) | Team-weeks (2-3 people) | Solo-dev variant |
 |---|---|---|---|---|---|
-| 1 | M0 foundations | Repo, `Whisker.Sim` combat + stages + Training + hero level, `ContentDb` + exporter (09), RNG streams, `Whisker.Bots` greedy F2P with the day table, `pr.yml` | bots print the day table; determinism test green on x64 | 8 | 5 weeks, same scope minus Windows/mac golden runners |
+| 1 | M0 foundations | Repo, `HeroCat.Sim` combat + stages + Training + hero level, `ContentDb` + exporter (09), RNG streams, `HeroCat.Bots` greedy F2P with the day table, `pr.yml` | bots print the day table; determinism test green on x64 | 8 | 5 weeks, same scope minus Windows/mac golden runners |
 | 2 | M0 systems | Weapon + skill summon (local), Fish Board + tank, offline catch-up, local save with migrations v1, `content.yml` with AC1-AC4, AC9 | `acceptance --tier M0 --days 14` passes | 9 | 6 weeks |
 | 3 | M0 client | Unity project, `SCR_MAIN`, `SCR_HERO`, `SCR_WEAPONS`, `SCR_SKILLS`, `SCR_SUMMON`, `SCR_SUMMON_RESULT`, `SCR_OFFLINE_REWARD`, `SCR_ITEM_DETAIL`, placeholder art, `build-android.yml` | one person plays 20 min on device unprompted | 10 | 7 weeks |
 | 4 | MVP sim | Companions + MP, Research, Awakening, quests, dungeons, day/week keys, inbox (local), bots: lazy, light spender, whale; AC5-AC8 | all bots within tolerance; 03 layer shares in band | 9 | 6 weeks |
-| 5 | MVP backend 1 | ASP.NET skeleton, auth (guest + link), cloud save with conflict rules, config, server summons with audit log, `Whisker.Server.Tests`, `deploy.yml` to stage | summon test vs Python model green; idempotency replay green | 10 | skip; keep local seams. 2 weeks hardening local save instead |
+| 5 | MVP backend 1 | ASP.NET skeleton, auth (guest + link), cloud save with conflict rules, config, server summons with audit log, `HeroCat.Server.Tests`, `deploy.yml` to stage | summon test vs Python model green; idempotency replay green | 10 | skip; keep local seams. 2 weeks hardening local save instead |
 | 6 | MVP backend 2 + client 2 | IAP receipts both stores, inbox, plausibility checks, admin mail; client: `SCR_COMPANIONS`, `SCR_RESEARCH`, `SCR_DUNGEONS`, `SCR_DUNGEON_RUN`, `SCR_QUESTS`, `SCR_SHOP`, `SCR_INBOX`, `SCR_SETTINGS`, `SCR_TITLE` | sandbox purchase grants end to end on stage | 11 | 6 weeks client only; no shop, settings without account |
 | 7 | MVP polish | Tutorial, analytics, localization EN + ja/ko, art pass on hero/fish/boards, `SCR_STAGE_SELECT`, `SCR_PROFILE`, PlayMode smoke, device farm, perf budgets | section 5 budgets met on 4 devices | 9 | 6 weeks, EN only |
 | 8 | Closed beta | 50 players (TestFlight + Play internal), D7 measured, save-loss zero, load tests, runbooks drafted, dashboards | 00 MVP exit | 6 | 4 weeks; beta of 20 via TestFlight |

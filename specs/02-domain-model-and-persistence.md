@@ -10,9 +10,9 @@ Depends on: 00 (sections 4, 5, 6, 8), 01 (SessionRunner, flows, command payloads
 
 | Thing | Assembly | Why |
 |---|---|---|
-| `GameState` and every record under it, `RngStreamState`, `Catchup.Compute` | `Whisker.Sim` | The sim reads and writes them; pure data, no serializer attributes. |
-| `Profile`, `SaveSerializer`, `SaveMigrations`, `SaveValidator`, `LocalSaveStore`, `CloudSaveClient`, `ServerClock`, `FakeClock`, `IntegrityEnvelope` | `Whisker.Runtime` | Need Newtonsoft, IO, HTTP, clocks. |
-| Relational schema, retention jobs, GDPR flow | `Whisker.Server` | |
+| `GameState` and every record under it, `RngStreamState`, `Catchup.Compute` | `HeroCat.Sim` | The sim reads and writes them; pure data, no serializer attributes. |
+| `Profile`, `SaveSerializer`, `SaveMigrations`, `SaveValidator`, `LocalSaveStore`, `CloudSaveClient`, `ServerClock`, `FakeClock`, `IntegrityEnvelope` | `HeroCat.Runtime` | Need Newtonsoft, IO, HTTP, clocks. |
+| Relational schema, retention jobs, GDPR flow | `HeroCat.Server` | |
 
 Goals, in priority order:
 
@@ -25,7 +25,7 @@ Goals, in priority order:
 
 ## 2. Constants
 
-Engineering constants in `Whisker.Runtime.SaveConfig` (code, not `ContentDb`; migrations must not depend on content). All are `S` unless marked `I` (same role in the sibling project). None is a balance number; 10's fault-injection and perf tests are the check.
+Engineering constants in `HeroCat.Runtime.SaveConfig` (code, not `ContentDb`; migrations must not depend on content). All are `S` unless marked `I` (same role in the sibling project). None is a balance number; 10's fault-injection and perf tests are the check.
 
 | Name | Value | Tag | Meaning |
 |---|---|---|---|
@@ -56,7 +56,7 @@ Engineering constants in `Whisker.Runtime.SaveConfig` (code, not `ContentDb`; mi
 Records are `sealed`, mutable via `set` where the sim writes them, `init` where only profile creation does. Collections default to empty. Every `double` is finite and non-negative by invariant; every id is a content id string (09). Comments give unit, range and owner spec.
 
 ```csharp
-namespace Whisker.Sim.State;
+namespace HeroCat.Sim.State;
 
 public sealed class GameState
 {
@@ -315,14 +315,14 @@ public sealed class LifetimeStats
 | `loot` | boss Rock Candy drop, any drop table | 1 per kill | M0 | `Counter == Stats.Kills` |
 | `summon_weapon`, `summon_skill`, `summon_companion` | `LocalSummonService` only (M0 and bots) | 3 per pull (rarity, item, guarantee reroll; 04) | M0 | `Counter == 3 * Banners[b].TotalPulls` in Local mode; ignored in Remote mode |
 
-Seed derivation at profile creation: `seed(name) = first 8 bytes of SHA-256(PlayerId.ToByteArray() ++ UTF8(name))` little-endian, computed in `Whisker.Runtime.ProfileFactory` (the sim has no hashing). For a local guest with `PlayerId == Guid.Empty`, a random `Guid` is used as the hashing input and stored as `DeviceId`; seeds are never re-derived when `PlayerId` is later assigned. Generator: SplitMix64 stateless derive, `Derive(seed, k)` (03 owns the code; same as the sibling).
+Seed derivation at profile creation: `seed(name) = first 8 bytes of SHA-256(PlayerId.ToByteArray() ++ UTF8(name))` little-endian, computed in `HeroCat.Runtime.ProfileFactory` (the sim has no hashing). For a local guest with `PlayerId == Guid.Empty`, a random `Guid` is used as the hashing input and stored as `DeviceId`; seeds are never re-derived when `PlayerId` is later assigned. Generator: SplitMix64 stateless derive, `Derive(seed, k)` (03 owns the code; same as the sibling).
 
 Summon streams exist in the save so M0, bots and the server-side re-simulator (which runs in Local mode against a save) share one schema. In Remote mode their counters stay at whatever M0 left (or 0) and the validator does not check them.
 
 ## 4. `Profile` (account level, not in sim)
 
 ```csharp
-namespace Whisker.Runtime.Account;
+namespace HeroCat.Runtime.Account;
 
 public sealed record Profile(
     Guid     PlayerId,
@@ -474,7 +474,7 @@ Newtonsoft.Json 13.x (`com.unity.nuget.newtonsoft-json` in Unity; the NuGet pack
 | `TypeNameHandling` | `None` | Never emit `$type`. |
 | `ReferenceLoopHandling` | `Error` | The tree has no cycles; a cycle is a bug. |
 
-IL2CPP: every record in section 3 is referenced from a `[Preserve]`d `SaveTypes.Touch()` method and `link.xml` preserves `Whisker.Sim.State` so stripping cannot remove a setter.
+IL2CPP: every record in section 3 is referenced from a `[Preserve]`d `SaveTypes.Touch()` method and `link.xml` preserves `HeroCat.Sim.State` so stripping cannot remove a setter.
 
 ### 6.2 API
 
@@ -581,7 +581,7 @@ public static class SaveMigrations
 
 ### 7.3 Fixtures and the test
 
-Directory `src/Whisker.Runtime.Tests/Fixtures/Saves/`:
+Directory `src/HeroCat.Runtime.Tests/Fixtures/Saves/`:
 
 ```
 v1.json                      a real save at v1 taken from a device or the bot the day v1 froze
@@ -775,7 +775,7 @@ Why last-writer-wins with a progress override and not a merge: the save is a sin
 
 ### 10.1 Device key and HMAC
 
-At first launch `Whisker.Runtime.DeviceKey.Create()` generates `HMAC_KEY_BYTES` random bytes, stores them in platform secure storage, and registers the public half of the device record with `POST /v1/devices` (08): `{deviceId, keyId, model, os, clientVersion}` plus the key itself over TLS. The server stores the key in `devices.hmac_key` (encrypted at rest). Every save header carries `hmac = HMAC-SHA256(deviceKey, body)`.
+At first launch `HeroCat.Runtime.DeviceKey.Create()` generates `HMAC_KEY_BYTES` random bytes, stores them in platform secure storage, and registers the public half of the device record with `POST /v1/devices` (08): `{deviceId, keyId, model, os, clientVersion}` plus the key itself over TLS. The server stores the key in `devices.hmac_key` (encrypted at rest). Every save header carries `hmac = HMAC-SHA256(deviceKey, body)`.
 
 What it is for: the server can tell a save written by this client build on this registered device from a hand-edited blob. What it is not: protection against a rooted device, which can extract the key. The key makes casual editing fail and makes a cheater's edits attributable to a device; the plausibility checks make them detectable.
 
@@ -791,7 +791,7 @@ The server runs these on every upload and attaches `flags[]` to the response. Th
 | `SEQ_REGRESSION` | `saveSeq` lower than the stored one for the same `deviceId`. |
 | `CLOCK_AHEAD` | `lastSavedServerTime > serverNow + CLOCK_MAX_SKEW_ACCEPT_S`. |
 | `STAGE_VS_TIME` | `HighestCleared` exceeds the bot-curve stage for `(now - CreatedServerTime)` by more than the 08 bound. |
-| `DPS_VS_STAGE` | DPS re-derived via `Whisker.Sim` from the uploaded state cannot clear `HighestCleared`'s boss in `BOSS_TIME_TICKS`. |
+| `DPS_VS_STAGE` | DPS re-derived via `HeroCat.Sim` from the uploaded state cannot clear `HighestCleared`'s boss in `BOSS_TIME_TICKS`. |
 | `GOLD_DELTA_BOUND` | Gold gained since the previous upload exceeds the maximum the sim could produce in the elapsed time at `HighestCleared`. |
 | `DIAMOND_LEDGER_MISMATCH` | `Wallet.Diamond` exceeds the server ledger (grants - spends) by more than the per-day F2P cap times days. |
 | `ITEM_WITHOUT_PULL` | A collection copy count exceeds what `summon_log` plus inbox grants account for. |
@@ -806,7 +806,7 @@ The server runs these on every upload and attaches `flags[]` to the response. Th
 ### 11.1 Interface and implementations
 
 ```csharp
-namespace Whisker.Runtime.Time;
+namespace HeroCat.Runtime.Time;
 
 public interface IClock
 {
@@ -851,7 +851,7 @@ public sealed class FakeClock : IClock
 
 ### 11.2 Rules
 
-1. Nothing in `Whisker.Sim` reads a clock. The sim receives `now` through `ApplyServerTime` and `Catchup.Compute(state, now, db)`. In `Whisker.Runtime`, only `ServerClock.cs` and `SessionRunner.cs` may touch `DateTimeOffset.UtcNow` or `Stopwatch`. CI grep (10).
+1. Nothing in `HeroCat.Sim` reads a clock. The sim receives `now` through `ApplyServerTime` and `Catchup.Compute(state, now, db)`. In `HeroCat.Runtime`, only `ServerClock.cs` and `SessionRunner.cs` may touch `DateTimeOffset.UtcNow` or `Stopwatch`. CI grep (10).
 2. Consumers of `IClock`: `SaveStamp`, `ApplyServerTime` (day/week keys, login grant), `Catchup.Compute`, `Pending*` timestamps, analytics timestamps, cloud-save metadata. Combat ticks never read the clock; the monotonic accumulator in `SessionRunner` drives them.
 3. Between observations time advances by the monotonic clock, so a device clock change mid-session has no effect once `IsAuthoritative`.
 4. Until the first observation (offline launch), the device clock is served floored at `LastSavedServerTime`, so time cannot run backwards past the last save. `IsAuthoritative = false` flows into the save metadata and into the conflict rule (9.3 step 4).
@@ -1179,7 +1179,7 @@ The warehouse `events` table: `(ts timestamptz, name text, player_id_hash bytea,
 15. Backwards clock: `dayKey(now) < DayKey` resets nothing and emits `clock_anomaly`; `now < LastTickServerTime` credits zero.
 16. The server schema applies from empty with `dotnet ef database update` (or the SQL migration set) and a GDPR hard delete of a player with purchases leaves exactly the tombstoned `purchases`, `summon_log`, `diamond_ledger` rows and nothing else referencing the id.
 17. `currency_changed` events for one simulated hour with `KILL` reason number at most `60 / CURRENCY_AGG_SEC * 60 = 60` per currency, and the sum of their deltas equals the wallet delta.
-18. No `UnityEngine`, `DateTime*.Now`, `Stopwatch` in `Whisker.Sim`; in `Whisker.Runtime` only `ServerClock.cs` and `SessionRunner.cs` reference the clock APIs (CI grep).
+18. No `UnityEngine`, `DateTime*.Now`, `Stopwatch` in `HeroCat.Sim`; in `HeroCat.Runtime` only `ServerClock.cs` and `SessionRunner.cs` reference the clock APIs (CI grep).
 19. IL2CPP build: a save produced by the editor loads on an ARM64 device build and vice versa with zero repairs (device-farm test, 10).
 
 ## Constants introduced

@@ -1,6 +1,6 @@
 #!/bin/bash
-# Cloud sessions start without the .NET SDK, which ./check.sh needs. Install it (and the wasm-tools
-# workload the full check runs the web steps with) so agents can run ./check.sh without --no-dotnet.
+# Cloud sessions start without the .NET SDK, which ./check.sh needs. Install it so agents can run
+# ./check.sh without --no-dotnet.
 set -euo pipefail
 
 if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
@@ -14,12 +14,6 @@ if ! command -v dotnet >/dev/null 2>&1 || ! dotnet --list-sdks | grep -q '^8\.';
   SUDO=""; [ "$(id -u)" -eq 0 ] || SUDO="sudo"
   $SUDO apt-get update -qq
   $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq dotnet-sdk-8.0
-fi
-
-# Full ./check.sh builds the WebAssembly bundle only when this workload is present. Not fatal: check.sh
-# then skips the web steps locally (CI still requires them).
-if ! dotnet workload list 2>/dev/null | grep -q wasm-tools; then
-  dotnet workload install wasm-tools >&2 || echo "warning: wasm-tools workload install failed; ./check.sh will skip the web steps" >&2
 fi
 
 # Warm the NuGet cache so the first ./check.sh does not pay for restore.

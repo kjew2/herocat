@@ -1,6 +1,6 @@
 ## 08 - Backend and Live Ops
 
-Specifies `Whisker.Server`: every service and endpoint the client calls, the auth model, the server-authoritative summon algorithm and its audit trail, receipt validation for both stores, remote config and content versioning, anti-cheat plausibility checks and the action matrix, live-ops tooling, infrastructure and cost, and compliance. Everything here sits behind the six interfaces of 00 section 8.11 with local implementations, so M0 ships with no server at all; the server is additive from MVP.
+Specifies `HeroCat.Server`: every service and endpoint the client calls, the auth model, the server-authoritative summon algorithm and its audit trail, receipt validation for both stores, remote config and content versioning, anti-cheat plausibility checks and the action matrix, live-ops tooling, infrastructure and cost, and compliance. Everything here sits behind the six interfaces of 00 section 8.11 with local implementations, so M0 ships with no server at all; the server is additive from MVP.
 
 Tiers covered: MVP (everything not marked otherwise), P1 (Guild, Leaderboard, Coupon, Rewarded Ads, Events schedule), with M0 notes where the local implementation differs.
 
@@ -8,7 +8,7 @@ Depends on: 00 (sections 3, 4, 6.3, 8), 01 (flows, `ApiClient`, error taxonomy),
 
 ## 1. Service inventory
 
-One ASP.NET Core 8 deployable (`Whisker.Server`), organised as feature folders; "service" below is a code boundary, not a separate process. Splitting into processes is a P2 question that nothing here forecloses because services share no in-memory state.
+One ASP.NET Core 8 deployable (`HeroCat.Server`), organised as feature folders; "service" below is a code boundary, not a separate process. Splitting into processes is a P2 question that nothing here forecloses because services share no in-memory state.
 
 | Service | Owns | Tables (02 section 12) | Tier | M0 local implementation |
 |---|---|---|---|---|
@@ -217,7 +217,7 @@ Below-L+ rarities on a pull with `pLPlus > table.LPlus` are scaled so the total 
 
 ### 4.2 The pull as a pure function
 
-The algorithm is a pure function in `Whisker.Sim.Summon` shared by the server, `LocalSummonService` and the Python model (04). Only the source of the uniforms differs: the server draws from a CSPRNG, the local service from the `summon_<banner>` stream, the model from `random`. Three uniforms per pull, always consumed, even when unused, so stream counters stay `3 * TotalPulls` (02 section 3.4).
+The algorithm is a pure function in `HeroCat.Sim.Summon` shared by the server, `LocalSummonService` and the Python model (04). Only the source of the uniforms differs: the server draws from a CSPRNG, the local service from the `summon_<banner>` stream, the model from `random`. Three uniforms per pull, always consumed, even when unused, so stream counters stay `3 * TotalPulls` (02 section 3.4).
 
 ```csharp
 public static class SummonAlgorithm
@@ -268,7 +268,7 @@ public static class SummonAlgorithm
 
 Notes: `forceEplus` reuses the same three uniforms (no extra draw), so the guarantee changes the outcome but not the stream consumption. Pity continues to advance correctly through a forced E (not L+), and resets on a forced L/M. The order "u1 rarity, u2 M-vs-L, u3 item" is fixed so the test vectors are meaningful.
 
-Test vectors (`Fixtures/Summon/vectors.json`, shared by `Whisker.Sim.Tests`, `Whisker.Server.Tests` and `tools/gacha_model.py`): 500 rows of `(table, pity, u1, u2, u3, forceEplus) -> (rarity, pityAfter, guarantee)` plus 20 batch rows. Server and client must reproduce every row.
+Test vectors (`Fixtures/Summon/vectors.json`, shared by `HeroCat.Sim.Tests`, `HeroCat.Server.Tests` and `tools/gacha_model.py`): 500 rows of `(table, pity, u1, u2, u3, forceEplus) -> (rarity, pityAfter, guarantee)` plus 20 batch rows. Server and client must reproduce every row.
 
 ### 4.3 Handler
 
@@ -458,7 +458,7 @@ Each check yields `(flag, severity, evidence)`; severity `info | suspicious | ce
 | `SEQ_REGRESSION` | `saveSeq` below the stored value for another device of the same player. | `info` (normal with two devices) |
 | `CLOCK_AHEAD` | `lastSavedServerTime > now + CLOCK_MAX_SKEW_ACCEPT_S`. | `suspicious` |
 | `STAGE_VS_TIME` | `HighestCleared > botStage(daysSinceCreated) * STAGE_BOUND_MULT` where `botStage` is the whale-policy curve from the 10 acceptance table (the fastest legitimate path), `STAGE_BOUND_MULT = 1.5`. | `suspicious`; `certain` above `3x` |
-| `DPS_VS_STAGE` | Re-derive DPS with `Whisker.Sim.Power.Dps(state, db)` from the uploaded state. If `DPS * BOSS_TIME_TICKS / TICK_HZ < BossHp(HighestCleared) * DPS_BOUND_MARGIN` with `DPS_BOUND_MARGIN = 0.5` (allowing for fish missiles and tap zap the formula underestimates), the player could not have cleared it. | `certain` |
+| `DPS_VS_STAGE` | Re-derive DPS with `HeroCat.Sim.Power.Dps(state, db)` from the uploaded state. If `DPS * BOSS_TIME_TICKS / TICK_HZ < BossHp(HighestCleared) * DPS_BOUND_MARGIN` with `DPS_BOUND_MARGIN = 0.5` (allowing for fish missiles and tap zap the formula underestimates), the player could not have cleared it. | `certain` |
 | `GOLD_DELTA_BOUND` | `Stats.GoldEarned - prev.GoldEarned > maxGoldRate(HighestCleared, DPS) * elapsedSec * GOLD_BOUND_MULT`, `GOLD_BOUND_MULT = 2` (covers `GOLD_GAIN` training and boss multipliers). | `suspicious`; `certain` above `10x` |
 | `DIAMOND_LEDGER_MISMATCH` | `Wallet.Diamond > serverLedgerBalance + clientSideAllowance` where `clientSideAllowance = DIAMONDS_PER_DAY_F2P * daysSinceLastUpload + TUTORIAL_DIAMONDS (once) + firstClearDiamondsPossible(HighestCleared)`. Client-side diamond sources (quests, login, first clears) are bounded per day; anything above is impossible. | `certain` |
 | `ITEM_WITHOUT_PULL` | Any collection `Copies` exceeds `summon_log` count + `granted_items` for that id. | `certain` |
@@ -472,7 +472,7 @@ Each check yields `(flag, severity, evidence)`; severity `info | suspicious | ce
 
 ### 7.3 Re-simulation spot check
 
-The server references `Whisker.Sim`, so it can replay. Sampling: 1% of uploads at random plus 100% of uploads carrying any `suspicious` flag. The server requests the command log (`GET` is impossible server-side; the next `PUT /save` response carries `"requestCmdLog": true` and the client includes `saves/cmdlog.ndjson` in its next upload as a second part). Replay: load previous blob, apply `ApplyServerTime`/`Advance`/commands in log order with `LocalSummonService` replaced by a replayer that injects the logged `ApplySummonResult` payloads, compare the resulting state hash to the uploaded one. Divergence -> `REPLAY_DIVERGENCE`. Cost: one replay of a 2 h session is ~72,000 ticks, under 2 s on one core; at 1% sampling and 100k DAU that is ~2,000 replays a day, negligible.
+The server references `HeroCat.Sim`, so it can replay. Sampling: 1% of uploads at random plus 100% of uploads carrying any `suspicious` flag. The server requests the command log (`GET` is impossible server-side; the next `PUT /save` response carries `"requestCmdLog": true` and the client includes `saves/cmdlog.ndjson` in its next upload as a second part). Replay: load previous blob, apply `ApplyServerTime`/`Advance`/commands in log order with `LocalSummonService` replaced by a replayer that injects the logged `ApplySummonResult` payloads, compare the resulting state hash to the uploaded one. Divergence -> `REPLAY_DIVERGENCE`. Cost: one replay of a 2 h session is ~72,000 ticks, under 2 s on one core; at 1% sampling and 100k DAU that is ~2,000 replays a day, negligible.
 
 Dungeon correlation: for every `dungeon_seeds` row with `result null` older than its TTL, compare `BestFloor[kind]` and `Stats.DungeonClears` between the two uploads bracketing the issue time; a `BestFloor` increase with no issued seed for that floor is `DUNGEON_WITHOUT_SEED` (`certain`).
 
@@ -537,7 +537,7 @@ flowchart LR
     Client -->|HTTPS| CF[CloudFront CDN]
     CF -->|/content/*| S3C[(S3 content bucket)]
     Client -->|HTTPS api.| ALB[Application Load Balancer]
-    ALB --> API1[ECS Fargate: Whisker.Server x N]
+    ALB --> API1[ECS Fargate: HeroCat.Server x N]
     API1 --> RDS[(RDS PostgreSQL 15 Multi-AZ)]
     API1 --> Redis[(ElastiCache Redis, replica)]
     API1 --> S3S[(S3 saves + receipts, SSE-KMS)]
@@ -545,7 +545,7 @@ flowchart LR
     API1 --> Google[Play Developer API]
     Apple -->|notifications v2| ALB
     Google -->|Pub/Sub push| ALB
-    Worker[ECS Fargate: Whisker.Server --worker] --> RDS
+    Worker[ECS Fargate: HeroCat.Server --worker] --> RDS
     Worker --> S3S
     API1 --> OTel[OpenTelemetry collector]
     OTel --> Metrics[CloudWatch / Grafana]
@@ -715,7 +715,7 @@ Shapes fixed now so MVP code leaves room; no detailed design.
 
 ## 12. M0 note
 
-M0 has no server. Every service above is reached through an interface in `Whisker.Runtime.Services` with a local implementation (01 section 1.2): `ServerClock(api: null)`, `LocalSummonService` (section 4.6), `LocalSaveStore`, `LocalInboxService` (empty list, `claim` -> `INBOX_NOT_FOUND`), `DisabledReceiptValidator`, `LocalConfigService` (bundled manifest, all switches on, no maintenance), `LocalDungeonSeedService`. The bot harness uses the same set with `FakeClock`. Nothing in the client branches on "local or remote"; the composition root picks. When the server arrives, the only client change is `BackendMode.Remote` and the base URL.
+M0 has no server. Every service above is reached through an interface in `HeroCat.Runtime.Services` with a local implementation (01 section 1.2): `ServerClock(api: null)`, `LocalSummonService` (section 4.6), `LocalSaveStore`, `LocalInboxService` (empty list, `claim` -> `INBOX_NOT_FOUND`), `DisabledReceiptValidator`, `LocalConfigService` (bundled manifest, all switches on, no maintenance), `LocalDungeonSeedService`. The bot harness uses the same set with `FakeClock`. Nothing in the client branches on "local or remote"; the composition root picks. When the server arrives, the only client change is `BackendMode.Remote` and the base URL.
 
 ## Open questions
 
@@ -731,7 +731,7 @@ M0 has no server. Every service above is reached through an interface in `Whiske
 
 ## Acceptance criteria
 
-1. `SummonAlgorithm` reproduces every row of `Fixtures/Summon/vectors.json` in `Whisker.Sim.Tests`, `Whisker.Server.Tests` and `tools/gacha_model.py` (10 CI gate).
+1. `SummonAlgorithm` reproduces every row of `Fixtures/Summon/vectors.json` in `HeroCat.Sim.Tests`, `HeroCat.Server.Tests` and `tools/gacha_model.py` (10 CI gate).
 2. One million simulated pulls at level 1 through `SummonAlgorithm.Batch` with pity realise L+ in `[0.040, 0.043]` and never exceed 80 pulls between L+ results; the per-pull L+ probability at `pity = 79` is exactly 1.0.
 3. 10-pull batches: in 100,000 simulated batches with slots 1-9 forced below EPIC, slot 10 is EPIC or better 100% of the time, and the stream/CSPRNG consumption is exactly 30 uniforms per batch.
 4. `/summon/pull` replay: a request that times out after commit and is retried with the same `X-Request-Id` produces one `diamond_ledger` row, `count` `summon_log` rows, and a byte-identical response with `X-Idempotent-Replay: true`.
@@ -758,7 +758,7 @@ M0 has no server. Every service above is reached through an interface in `Whiske
 
 ## Constants introduced
 
-Engineering/operational constants, code- or config-resident (`Whisker.Server` `appsettings` or `config_versions.payload.limits`), not `ContentDb`. `I` = same role in the sibling project; `S` = new. The tuning tool does not validate these; 10's load, contract and fault tests and the alarm thresholds are the check.
+Engineering/operational constants, code- or config-resident (`HeroCat.Server` `appsettings` or `config_versions.payload.limits`), not `ContentDb`. `I` = same role in the sibling project; `S` = new. The tuning tool does not validate these; 10's load, contract and fault tests and the alarm thresholds are the check.
 
 | Name | Value | Tag | Section |
 |---|---|---|---|

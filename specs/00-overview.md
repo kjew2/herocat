@@ -69,10 +69,10 @@ Each row maps a reference-game feature to our system name, its tier, and the spe
 
 | Layer | Choice | Why, and what was rejected |
 |---|---|---|
-| Client engine | **Unity 2022 LTS**, C#, URP 2D, uGUI + TextMeshPro, Addressables, Unity 2D Animation (Spine if budget allows) | Reference game is Unity; 2D chibi animation, IAP, ads and analytics SDKs are all first-class. Godot 4 C# was considered: fine engine, but mobile IAP/ads SDK maturity is behind. Flutter + Flame rejected: weak for skeletal animation and particle-heavy combat. |
-| Simulation core | **`Whisker.Sim`**, pure C# netstandard2.1, no `UnityEngine`, no IO, no clock, no JSON, no reflection | One implementation runs on device, in server validation and in bots. Determinism across x64/ARM64/IL2CPP requires no `Math.Pow/Exp/Log` on the hot path (repeated multiplication only), no floating-point reductions in unspecified order, no `DateTime.Now`. |
-| Runtime glue | **`Whisker.Runtime`**, plain C#, references Sim + Newtonsoft.Json | Save serialization, migrations, clock, local store, HTTP clients, content loading. Shared by client and bots. No `UnityEngine`. |
-| Backend | **ASP.NET Core 8** stateless API, **PostgreSQL** (accounts, saves, purchases, guilds, mail), **Redis** (leaderboards, rate limits, sessions), **S3-compatible object store** (save blobs, content bundles), CDN in front of content | C# so the server references `Whisker.Sim` for re-simulation and rate tables, no second implementation. Nakama/PlayFab were considered as a lighter path for a solo dev; rejected because server-authoritative summons with our own pity rules and save plausibility checks need custom code either way, and BaaS pricing scales badly with DAU. If the team is one person at M0, the backend is skipped entirely (local seams, see 01). |
+| Client engine | **Unity 6 (`6000.6.7f1`, pinned in `unity/HeroCatClient/ProjectSettings/ProjectVersion.txt`)**, C#, URP 2D, uGUI + TextMeshPro (UI stack under review, issue #2), Addressables, Unity 2D Animation (Spine if budget allows) | Reference game is Unity; Unity 6 rather than 2022 LTS because 2022.3 is out of support and current Google Play requirements (target API 35, 16 KB pages) need Unity 6. 2D chibi animation, IAP, ads and analytics SDKs are all first-class. Godot 4 C# was considered: fine engine, but mobile IAP/ads SDK maturity is behind. Flutter + Flame rejected: weak for skeletal animation and particle-heavy combat. |
+| Simulation core | **`HeroCat.Sim`**, pure C# netstandard2.1, no `UnityEngine`, no IO, no clock, no JSON, no reflection | One implementation runs on device, in server validation and in bots. Determinism across x64/ARM64/IL2CPP requires no `Math.Pow/Exp/Log` on the hot path (repeated multiplication only), no floating-point reductions in unspecified order, no `DateTime.Now`. |
+| Runtime glue | **`HeroCat.Runtime`**, plain C#, references Sim + Newtonsoft.Json | Save serialization, migrations, clock, local store, HTTP clients, content loading. Shared by client and bots. No `UnityEngine`. |
+| Backend | **ASP.NET Core 8** stateless API, **PostgreSQL** (accounts, saves, purchases, guilds, mail), **Redis** (leaderboards, rate limits, sessions), **S3-compatible object store** (save blobs, content bundles), CDN in front of content | C# so the server references `HeroCat.Sim` for re-simulation and rate tables, no second implementation. Nakama/PlayFab were considered as a lighter path for a solo dev; rejected because server-authoritative summons with our own pity rules and save plausibility checks need custom code either way, and BaaS pricing scales badly with DAU. If the team is one person at M0, the backend is skipped entirely (local seams, see 01). |
 | Content | Google Sheet -> JSON tables -> versioned content bundle served via CDN, fallback copy shipped in the app | Designers edit the sheet. Exporter validates and emits JSON. Spec 09. |
 | Analytics | Event pipeline to a warehouse (Firebase Analytics for MVP, own events table on the backend for economy events) | Economy events need joins with purchases and saves, which third-party analytics cannot do. |
 | CI | GitHub Actions: Sim + Runtime tests on every PR, bot acceptance table on every content change, Unity build via self-hosted runner or Unity Cloud Build | Spec 10. |
@@ -90,19 +90,19 @@ Full detail in `01-architecture-and-data-flow.md`. This section fixes the shape.
 +------------------------------+--------------------------------+
                                |
 +------------------------------v--------------------------------+
-|  Whisker.Runtime   SessionRunner, SaveSerializer, Migrations,  |
+|  HeroCat.Runtime   SessionRunner, SaveSerializer, Migrations,  |
 |                    LocalSaveStore, CloudSaveClient, ServerClock,|
 |                    SummonClient, ContentLoader, Analytics       |
 +------------------------------+--------------------------------+
                                |
 +------------------------------v--------------------------------+
-|  Whisker.Sim       GameState, Simulation.Tick(), Commands,     |
+|  HeroCat.Sim       GameState, Simulation.Tick(), Commands,     |
 |                    Events, RNG streams, Catch-up, ContentDb    |
 +---------------------------------------------------------------+
             ^                                        ^
             | same assembly                          | same assembly
 +-----------+-----------+              +-------------+-------------+
-|  Whisker.Bots         |              |  Whisker.Server (ASP.NET) |
+|  HeroCat.Bots         |              |  HeroCat.Server (ASP.NET) |
 |  headless harness     |              |  Auth, Save, Summon, IAP, |
 |                       |              |  Guild, Config, Mail      |
 +-----------------------+              +---------------------------+
@@ -334,7 +334,7 @@ The hero cannot die. `HP` and `DEF` remain in the `Stat` enum but are not traina
 
 ## 8. Cross-spec contracts
 
-1. **Sim is pure.** `Whisker.Sim` has no `UnityEngine`, IO, clock, JSON, reflection, `Math.Pow/Exp/Log`. Curves are evaluated by repeated multiplication from tables. Everything that needs IO lives in `Whisker.Runtime`.
+1. **Sim is pure.** `HeroCat.Sim` has no `UnityEngine`, IO, clock, JSON, reflection, `Math.Pow/Exp/Log`. Curves are evaluated by repeated multiplication from tables. Everything that needs IO lives in `HeroCat.Runtime`.
 2. **Named RNG streams.** Each consumer owns a stream `(seed, counter)` persisted in the save: `combat`, `crit` (one draw per hero hit), `fish_spawn` (one draw per successful release), `dungeon`, `loot` (one draw per boss kill), plus `summon_weapon`, `summon_skill`, `summon_companion` (three draws per pull). The summon streams are consumed only by `LocalSummonService` (M0 and bots); in Remote mode (MVP+) their counters are ignored, not removed, so schema v1 is one shape for every mode (02 section 3.4). Invariants: `loot.Counter == Stats.Kills`-derived, `fish_spawn.Counter == Stats.FishReleased`, Local-mode `summon_x.Counter == 3 * TotalPulls`. Enemy skins are chosen by hashing `(stage, killIndex)` and consume no stream (09 section 5.6).
 3. **Content is data.** Every number in section 6 is a row in a table from spec 09. Code receives a `ContentDb` and never a literal. Content versions are `YYYY.MM.DD[.N]` with no major/minor semantics; breaking changes are expressed through `min_client_version` plus `schema_version` in the manifest. Content applies at the next cold boot, except the hot-apply allowlist `localization`, `shop_products`, `shop_packages`, `inbox_templates` (01 section on content hot update).
 4. **Save schema is versioned from v1** with forward-only migrations and a fixture per version (02).
@@ -362,7 +362,7 @@ Rules: use the names from section 5 exactly; mark every feature with its tier ta
 ## 10. File map
 
 ```
-whisker-hero/
+herocat/
   README.md
   specs/
     00-overview.md                     this file
@@ -385,15 +385,15 @@ whisker-hero/
 Planned source layout:
 
 ```
-src/Whisker.Sim/            GameState, Simulation, Commands, Events, Rng, Economy, FishBoard, Catchup, ContentDb
-src/Whisker.Runtime/        SaveSerializer, Migrations, LocalSaveStore, CloudSaveClient, ServerClock, FakeClock,
+src/HeroCat.Sim/            GameState, Simulation, Commands, Events, Rng, Economy, FishBoard, Catchup, ContentDb
+src/HeroCat.Runtime/        SaveSerializer, Migrations, LocalSaveStore, CloudSaveClient, ServerClock, FakeClock,
                             SummonClient, LocalSummonService, SessionRunner, ContentLoader, Analytics
-src/Whisker.Sim.Tests/
-src/Whisker.Runtime.Tests/
-src/Whisker.Bots/           headless harness (spec 10)
-src/Whisker.Server/         ASP.NET Core API (spec 08)
-src/Whisker.Server.Tests/
-unity/                      Unity project; Assets/Whisker.Client references Sim + Runtime as local packages
+src/HeroCat.Sim.Tests/
+src/HeroCat.Runtime.Tests/
+src/HeroCat.Bots/           headless harness (spec 10)
+src/HeroCat.Server/         ASP.NET Core API (spec 08)
+src/HeroCat.Server.Tests/
+unity/                      Unity project; Assets/HeroCat.Client references Sim + Runtime as local packages
 content/                    JSON tables exported from the sheet (spec 09)
 tools/                      Python models and the sheet exporter
 ```
@@ -448,3 +448,10 @@ These were open or contradictory across the writer-produced specs and are now se
 29. **Soft-launch markets**: Philippines and Canada, with a New Zealand technical launch (10). Belgium paid-summon handling is deferred to soft launch (08 open question 5).
 
 Known stale spots left for the next pass rather than patched blind: early-day stage numbers in 06 and 07 worked examples (written against day 1 = stage 90); 03 section 10's summon-stream migration sentence (decision 14); 04's per-day ticket assumption (decision 15); 05 lacks `MoveFish` (decision 22); the Fish Coin Dungeon reward `50 * f` may overshoot the 25-50% income share band and `tools/fish_model.py` must decide between it and `50 * f^0.7` (06 open question).
+
+### 12.2 Decisions made after the spec rewrite
+
+30. **Code names stay `HeroCat.*`** (`HeroCat.Sim`, `HeroCat.Runtime`, `HeroCat.Bots`, `HeroCat.Server`, `HeroCat.Client`, `HeroCat.sln`). "Whisker Hero" is the working title of the product only. Issue #1.
+31. **Unity 6 (`6000.6.7f1`)**, not 2022 LTS. Issue #2.
+32. **No web prototype.** The WebAssembly playtest build (`web/`, `src/HeroCat.Web`, `play.sh`) is removed; the Unity client is the only client. Issue #3.
+33. **Clean replacement of the old design.** The previous prototype's systems (hero party gacha, gear, class advances, gems, chest timer) are deleted, not migrated. Nothing has shipped, so the new `GameState` is schema v1 from scratch, old dev saves are not migrated, and golden files and acceptance targets are regenerated from the new bots. Infrastructure (RNG, clock, replay, state hasher, save store, bot harness, content build) is reused. Issue #4.

@@ -18,9 +18,6 @@ env:
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
   DOTNET_NOLOGO: "1"
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
-  # Playwright version for the browser tests (web/wasm/test/*.js). The repo has no package.json; the tests do
-  # require('playwright') and CI provides it through NODE_PATH (see "Install Playwright" below).
-  PLAYWRIGHT_VERSION: "1.63.0"
 
 jobs:
   check:
@@ -35,12 +32,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-
-      # Install the SDK into its own directory so `dotnet` sees only .NET 8. The runner image ships newer
-      # SDKs in /usr/share/dotnet; with one of those selected, `wasm-tools` would be the wrong workload for net8.0.
+      # Install the SDK into its own directory so `dotnet` sees only .NET 8 (the runner image ships newer SDKs).
       - uses: actions/setup-dotnet@v4
         env:
           DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
@@ -58,16 +50,5 @@ jobs:
           key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.*.props', '**/Directory.*.targets') }}
           restore-keys: nuget-${{ runner.os }}-
 
-      - name: Install the wasm-tools workload
-        run: dotnet workload install wasm-tools
-
-      - name: Install Playwright and Chromium
-        run: |
-          dir="$RUNNER_TEMP/node-tools"
-          npm install --prefix "$dir" --no-save --no-package-lock --no-audit --no-fund "playwright@$PLAYWRIGHT_VERSION"
-          "$dir/node_modules/.bin/playwright" install --with-deps chromium
-          echo "NODE_PATH=$dir/node_modules" >> "$GITHUB_ENV"
-
-      # CI=true (set by GitHub Actions) makes check.sh fail instead of skipping the WebAssembly steps.
       - name: ./check.sh
         run: ./check.sh

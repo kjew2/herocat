@@ -1,6 +1,6 @@
 ## 03 - Combat and Progression
 
-This spec owns the per-tick combat loop in `Whisker.Sim`, the stage and boss rules, the eight `Stat`s and their Training curves, Hero Level, Awakening, Research, and the power formula that ties every layer together. It also specifies `tools/power_curve_model.py`, the greedy F2P bot that validates every `S` constant below and produces the day-stage table in 00 section 6.6. Where this spec and `00-overview.md` disagree, 00 wins; section 10 lists the places where this spec proposes that 00 change.
+This spec owns the per-tick combat loop in `HeroCat.Sim`, the stage and boss rules, the eight `Stat`s and their Training curves, Hero Level, Awakening, Research, and the power formula that ties every layer together. It also specifies `tools/power_curve_model.py`, the greedy F2P bot that validates every `S` constant below and produces the day-stage table in 00 section 6.6. Where this spec and `00-overview.md` disagree, 00 wins; section 10 lists the places where this spec proposes that 00 change.
 
 Tiers covered: M0 (combat, stages, Tap Zap, Training, Hero Level), MVP (Awakening, Research, companions and fish missiles in the tick loop), P1 (Runes term, auto boss retry, Tower survival fights).
 
@@ -460,7 +460,7 @@ The bot is the reference player for every balance number. It plays `ACTIVE_MIN =
 
 Inputs the bot takes from other specs, with the values assumed for the numbers above: `DIAMONDS_PER_DAY_F2P = 400` and `TUTORIAL_DIAMONDS = 1500` (00); summon tickets per day `WEAPON 2, SKILL 1, COMPANION 1` (06 quests; **assumption to confirm**); `ROCK_CANDY_PER_DAY_ASSUMED = 100` and `FISH_COIN_PER_DAY_DUNGEON_ASSUMED = 1000` from the dungeons (06; **assumptions to confirm**). If 06 lands on different numbers the bot reruns and this section is regenerated.
 
-Pseudocode, as `Whisker.Bots` will implement it on the real sim (10):
+Pseudocode, as `HeroCat.Bots` will implement it on the real sim (10):
 
 ```csharp
 void EndOfActiveMinute(Simulation sim)
@@ -549,7 +549,7 @@ Never change `HP_G` to fix a local problem; it moves every stage at once and eve
 
 | Stream | Draws | When | Counter invariant | Consumer rule |
 |---|---|---|---|---|
-| `combat` | 0 in MVP | reserved: P1 enemy variance, skill proc chances | `== 0` | Only `Whisker.Sim.Combat` may draw. |
+| `combat` | 0 in MVP | reserved: P1 enemy variance, skill proc chances | `== 0` | Only `HeroCat.Sim.Combat` may draw. |
 | `crit` | 1 per hero hit | section 2.2, including hits at `critRate == 0` | `== Lifetime.HeroHits` | Only `HeroHit()`. Fish missiles, skills, companions and Tap Zap never draw. |
 | `loot` | 1 per boss kill | `BOSS_ROCK_CANDY_P` roll | `== Lifetime.BossKills` | Only `Kill()` on a boss. P1 drop tables add draws and a new invariant. |
 | `fish_spawn` | per 05 | release cell choice | 05 owns | Fish Board only. |

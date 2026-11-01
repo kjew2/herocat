@@ -1,6 +1,6 @@
 ## 01 - Architecture and Data Flow
 
-Fixes how the four assemblies (`Whisker.Sim`, `Whisker.Runtime`, Unity client, `Whisker.Server`) depend on each other, the `Command -> Simulation -> Event` pipeline every feature goes through, the `SessionRunner` that drives ticks under mobile lifecycle, the threading and network rules, and a sequence diagram plus step list for every end-to-end flow in the game. Other specs describe what a feature does; this one describes which assembly does it, in what order, and what happens when the network or the OS interrupts it.
+Fixes how the four assemblies (`HeroCat.Sim`, `HeroCat.Runtime`, Unity client, `HeroCat.Server`) depend on each other, the `Command -> Simulation -> Event` pipeline every feature goes through, the `SessionRunner` that drives ticks under mobile lifecycle, the threading and network rules, and a sequence diagram plus step list for every end-to-end flow in the game. Other specs describe what a feature does; this one describes which assembly does it, in what order, and what happens when the network or the OS interrupts it.
 
 Tiers covered: M0, MVP, P1 (where a P1 flow changes a seam, it is marked).
 
@@ -12,13 +12,13 @@ Depends on: 00 (sections 3, 4, 8), 02 (save, clock, cloud save), 04 (summon resu
 
 ```mermaid
 flowchart TB
-    subgraph Unity["unity/ Assets/Whisker.Client (UnityEngine allowed)"]
+    subgraph Unity["unity/ Assets/HeroCat.Client (UnityEngine allowed)"]
         Screens["Screens (uGUI prefabs)"]
         VMs["ViewModels"]
         Boot["Bootstrapper (composition root)"]
         Platform["Platform adapters: IAP SDK, Firebase, Addressables"]
     end
-    subgraph Runtime["src/Whisker.Runtime (plain C#, Newtonsoft.Json, System.Net.Http)"]
+    subgraph Runtime["src/HeroCat.Runtime (plain C#, Newtonsoft.Json, System.Net.Http)"]
         Runner["SessionRunner"]
         Save["SaveSerializer, Migrations, LocalSaveStore, CloudSaveClient"]
         Clock["ServerClock, FakeClock"]
@@ -27,7 +27,7 @@ flowchart TB
         Content["ContentLoader"]
         Analytics["Analytics sinks"]
     end
-    subgraph Sim["src/Whisker.Sim (netstandard2.1, no UnityEngine/IO/clock/JSON/reflection)"]
+    subgraph Sim["src/HeroCat.Sim (netstandard2.1, no UnityEngine/IO/clock/JSON/reflection)"]
         GS["GameState"]
         Simulation["Simulation: Apply(Command), Advance(ticks)"]
         Cmds["Commands"]
@@ -36,12 +36,12 @@ flowchart TB
         Catchup["Catchup"]
         ContentDb["ContentDb"]
     end
-    subgraph Server["src/Whisker.Server (ASP.NET Core 8)"]
+    subgraph Server["src/HeroCat.Server (ASP.NET Core 8)"]
         Api["Controllers"]
         Resim["Plausibility re-simulator"]
         SummonSvc["SummonService (authoritative)"]
     end
-    subgraph Bots["src/Whisker.Bots"]
+    subgraph Bots["src/HeroCat.Bots"]
         Harness["Headless harness"]
     end
     Screens --> VMs --> Runner
@@ -62,13 +62,13 @@ flowchart TB
 
 | Rule | Enforced by |
 |---|---|
-| `Whisker.Sim` references nothing but `netstandard2.1`. No `UnityEngine`, `System.IO`, `System.Net`, `Newtonsoft`, `System.Reflection`, `System.DateTime`/`DateTimeOffset.Now`, `Stopwatch`, `Math.Pow/Exp/Log`. | `Whisker.Sim.csproj` has no package references; a CI source grep (10) fails the build on any of the banned identifiers. |
-| `Whisker.Runtime` references `Whisker.Sim` and `Newtonsoft.Json`. No `UnityEngine`. | asmdef in Unity marks it `noEngineReferences: true`; the .NET csproj has no Unity reference. |
-| `Whisker.Client` references `Whisker.Sim` and `Whisker.Runtime` as local UPM packages (`unity/Packages/com.whisker.sim`, `com.whisker.runtime`, both `file:` references to `src/`). | Unity asmdef `references`. |
-| Screens never reference `GameState` or `Simulation`. They reference a `ViewModel`. | asmdef split: `Whisker.Client.Screens` references `Whisker.Client.ViewModels` only; `ViewModels` references Runtime + Sim. |
-| `Whisker.Server` references `Whisker.Sim` for `ContentDb`, rate tables and re-simulation. It never references `Whisker.Runtime` (the server has its own persistence). | csproj. |
-| `Whisker.Bots` references `Whisker.Sim` and `Whisker.Runtime` (for `SessionRunner`, `FakeClock`, `LocalSummonService`). | csproj. |
-| Server-sensitive operations go through the six interfaces of 00 section 8.11 (`IClock`, `ISummonService`, `ISaveStore`, `IInboxService`, `IReceiptValidator`, `IConfigService`). Interfaces live in `Whisker.Runtime.Services`. Local and remote implementations live beside them. The sim never sees any of them. | Code review; `Whisker.Sim` cannot reference `Runtime`, so the sim cannot see them by construction. |
+| `HeroCat.Sim` references nothing but `netstandard2.1`. No `UnityEngine`, `System.IO`, `System.Net`, `Newtonsoft`, `System.Reflection`, `System.DateTime`/`DateTimeOffset.Now`, `Stopwatch`, `Math.Pow/Exp/Log`. | `HeroCat.Sim.csproj` has no package references; a CI source grep (10) fails the build on any of the banned identifiers. |
+| `HeroCat.Runtime` references `HeroCat.Sim` and `Newtonsoft.Json`. No `UnityEngine`. | asmdef in Unity marks it `noEngineReferences: true`; the .NET csproj has no Unity reference. |
+| `HeroCat.Client` references `HeroCat.Sim` and `HeroCat.Runtime` as local UPM packages (`unity/Packages/com.whisker.sim`, `com.whisker.runtime`, both `file:` references to `src/`). | Unity asmdef `references`. |
+| Screens never reference `GameState` or `Simulation`. They reference a `ViewModel`. | asmdef split: `HeroCat.Client.Screens` references `HeroCat.Client.ViewModels` only; `ViewModels` references Runtime + Sim. |
+| `HeroCat.Server` references `HeroCat.Sim` for `ContentDb`, rate tables and re-simulation. It never references `HeroCat.Runtime` (the server has its own persistence). | csproj. |
+| `HeroCat.Bots` references `HeroCat.Sim` and `HeroCat.Runtime` (for `SessionRunner`, `FakeClock`, `LocalSummonService`). | csproj. |
+| Server-sensitive operations go through the six interfaces of 00 section 8.11 (`IClock`, `ISummonService`, `ISaveStore`, `IInboxService`, `IReceiptValidator`, `IConfigService`). Interfaces live in `HeroCat.Runtime.Services`. Local and remote implementations live beside them. The sim never sees any of them. | Code review; `HeroCat.Sim` cannot reference `Runtime`, so the sim cannot see them by construction. |
 
 The composition root (`Bootstrapper`, Unity `MonoBehaviour` on `SCR_BOOT`) picks implementations from a build-time `BackendMode`:
 
@@ -105,7 +105,7 @@ public static Services Build(BackendMode mode, string dataDir, ContentDb db, Sim
 ### 2.1 Base types
 
 ```csharp
-namespace Whisker.Sim;
+namespace HeroCat.Sim;
 
 public abstract record Command
 {
@@ -159,7 +159,7 @@ Concrete commands (`VerbNoun`, 00 section 5.1) and the events they emit. Full fi
 | `ApplyServerTime` | `long serverSeconds` | 02/06 | `DayRolledOver?`, `WeekRolledOver?` |
 | `SetTutorialStep` | `int step` | 07 | `TutorialStepChanged` |
 
-System commands (`ApplySummonResult`, `ApplyInboxGrant`, `ApplyServerTime`) are issued by `Whisker.Runtime`, never by a screen. They exist so that a server result enters the sim through the same validated door as a tap, which is what lets the re-simulator replay a command log that includes them.
+System commands (`ApplySummonResult`, `ApplyInboxGrant`, `ApplyServerTime`) are issued by `HeroCat.Runtime`, never by a screen. They exist so that a server result enters the sim through the same validated door as a tap, which is what lets the re-simulator replay a command log that includes them.
 
 ### 2.2 `Simulation` surface
 
@@ -251,7 +251,7 @@ public sealed record GrantLine(string Kind, string Id, long Amount);   // Kind: 
 
 ### 2.6 Command log
 
-`Whisker.Runtime.CommandLog` appends every applied command as one NDJSON line `{tick, type, fields...}` to `saves/cmdlog.ndjson`, rotating at `CMDLOG_MAX_BYTES = 1 MiB` (oldest dropped). It is uploaded with the save in MVP (02 section 7) only when the server asks for it (08 anti-cheat spot check), never routinely. The bot harness keeps it in memory and uses it for the golden-file determinism test (10).
+`HeroCat.Runtime.CommandLog` appends every applied command as one NDJSON line `{tick, type, fields...}` to `saves/cmdlog.ndjson`, rotating at `CMDLOG_MAX_BYTES = 1 MiB` (oldest dropped). It is uploaded with the save in MVP (02 section 7) only when the server asks for it (08 anti-cheat spot check), never routinely. The bot harness keeps it in memory and uses it for the golden-file determinism test (10).
 
 ### 2.7 What is not in the sim
 
@@ -261,7 +261,7 @@ public sealed record GrantLine(string Kind, string Id, long Amount);   // Kind: 
 
 ### 3.1 Responsibilities
 
-Lives in `Whisker.Runtime`. Owns one `Simulation`, drives ticks from a monotonic clock, applies lifecycle transitions, schedules autosaves, and drains events. The Unity side forwards four callbacks and nothing else.
+Lives in `HeroCat.Runtime`. Owns one `Simulation`, drives ticks from a monotonic clock, applies lifecycle transitions, schedules autosaves, and drains events. The Unity side forwards four callbacks and nothing else.
 
 ```csharp
 public sealed class SessionRunner
@@ -891,7 +891,7 @@ sequenceDiagram
 
 ## Acceptance criteria
 
-1. `Whisker.Sim.dll` built in Release references only `netstandard`; the CI identifier grep for `UnityEngine`, `System.IO`, `Newtonsoft`, `DateTime.Now`, `DateTime.UtcNow`, `Stopwatch`, `Math.Pow`, `Math.Exp`, `Math.Log`, `System.Reflection` finds zero hits in `src/Whisker.Sim/`.
+1. `HeroCat.Sim.dll` built in Release references only `netstandard`; the CI identifier grep for `UnityEngine`, `System.IO`, `Newtonsoft`, `DateTime.Now`, `DateTime.UtcNow`, `Stopwatch`, `Math.Pow`, `Math.Exp`, `Math.Log`, `System.Reflection` finds zero hits in `src/HeroCat.Sim/`.
 2. Every `Command` in table 2.1 has an `Apply` branch that returns a `RejectCode` for each listed invalid input without mutating state (unit test per command: state hash before == after on reject, no events emitted).
 3. `Simulation.Apply` never throws for any command constructed from fuzzed field values (property-based test, 10,000 cases per command type).
 4. A frame gap of 25 s produces `25 * TICK_HZ` ticks over at most 3 frames with `TICK_BUDGET_MS` disabled; a gap of 31 s produces 0 ticks and one `Catchup.Compute` for 31 s.
@@ -909,7 +909,7 @@ sequenceDiagram
 
 ## Constants introduced
 
-Engineering constants, code-resident in `Whisker.Runtime.RuntimeConfig` (not balance; not in `ContentDb`). `I` = carried from the sibling project where it had the same role; `S` = new here. Tuning tool: none of these are balance constants; 10's perf and fault tests are the check.
+Engineering constants, code-resident in `HeroCat.Runtime.RuntimeConfig` (not balance; not in `ContentDb`). `I` = carried from the sibling project where it had the same role; `S` = new here. Tuning tool: none of these are balance constants; 10's perf and fault tests are the check.
 
 | Name | Value | Tag | Where |
 |---|---|---|---|

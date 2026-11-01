@@ -1,6 +1,6 @@
 ## 09 - Content Data Pipeline
 
-This spec is the implementation of 00 section 8 item 3 ("content is data"): how every number in 00 section 6, every collectible, quest, dungeon floor, shop row and user-visible string travels from a Google Sheet through `tools/export_content.py` into `content/*.json`, is validated, is handed to `Whisker.Sim` as an immutable `ContentDb`, is shipped inside the app and later over the CDN, and is read by the Python tuning tools. Constants are referred to by their 00 names; their values appear only in the example rows and files. Where this spec and 00 disagree on a name or value, 00 wins.
+This spec is the implementation of 00 section 8 item 3 ("content is data"): how every number in 00 section 6, every collectible, quest, dungeon floor, shop row and user-visible string travels from a Google Sheet through `tools/export_content.py` into `content/*.json`, is validated, is handed to `HeroCat.Sim` as an immutable `ContentDb`, is shipped inside the app and later over the CDN, and is read by the Python tuning tools. Constants are referred to by their 00 names; their values appear only in the example rows and files. Where this spec and 00 disagree on a name or value, 00 wins.
 
 Tiers covered: **M0** (sheet, exporter, validator, bundled content, `ContentDb`, English strings), **MVP** (CDN delivery with hash verification and min-content-version gate, `hotApply` for sim-neutral tables, `en` plus one locale, pseudo-localization), **P1** (`runes` consumers, `content_migrations`, per-locale asset overrides).
 
@@ -9,10 +9,10 @@ Depends on: 00 (sections 5, 6, 8), 01 (`ContentLoader`, boot flow 8.1, content h
 ## 1. Principles
 
 1. **One source of truth.** One Google Sheet workbook, one tab per table. CSV, JSON, `ContentDb` and the Python models are derived. Nobody edits `content/*.json` by hand; CI rejects a commit whose JSON does not match what the exporter produces from the committed CSVs.
-2. **No balance literal in code.** `Whisker.Sim` receives a `ContentDb` and reads typed properties and rows. Acceptance criterion 1 is a grep: the only numeric literals in `Whisker.Sim` are 0, 1, -1, array indices and the `ATTACK_PROGRESS_UNIT` fixed-point scale that 03 declares.
+2. **No balance literal in code.** `HeroCat.Sim` receives a `ContentDb` and reads typed properties and rows. Acceptance criterion 1 is a grep: the only numeric literals in `HeroCat.Sim` are 0, 1, -1, array indices and the `ATTACK_PROGRESS_UNIT` fixed-point scale that 03 declares.
 3. **Fail at export time, never in a tick.** The exporter rejects bad content with coded errors (section 8). `ContentDb.Build` re-runs the subset of rules that protect the sim (ids resolve, rates sum, curves monotonic, counts match) so a stale or hand-edited bundle fails at boot with a readable list, not inside `Simulation.Advance`.
 4. **Deterministic bytes.** Same CSV input produces byte-identical JSON and the same `content_hash`. The save (02) and every bot report (10) record `content_version` and `content_hash`, so a regression can be tied to the exact data it ran on.
-5. **Sim stays JSON-free.** JSON parsing lives in `Whisker.Runtime` (`ContentLoader`). It fills plain DTO classes and hands them to `ContentDb.Build(ContentDtos)` in `Whisker.Sim`. No `Newtonsoft`, no reflection, no file IO in Sim (00 section 8 item 1).
+5. **Sim stays JSON-free.** JSON parsing lives in `HeroCat.Runtime` (`ContentLoader`). It fills plain DTO classes and hands them to `ContentDb.Build(ContentDtos)` in `HeroCat.Sim`. No `Newtonsoft`, no reflection, no file IO in Sim (00 section 8 item 1).
 6. **Immutable after build.** Every `*Def` is a sealed class with get-only properties; collections are read-only wrappers over arrays. A content update builds a new `ContentDb`; the live one is never mutated, and the swap happens only where 01 section 8.12 allows.
 
 ## 2. Pipeline overview
@@ -26,13 +26,13 @@ flowchart TD
     Main -->|"publish --env stage|prod"| CDN["CDN /content/{version}/"]
     JSON -->|"copied at Unity build"| SA["StreamingAssets/content/<br/>bundled fallback"]
     CDN -->|"ContentLoader download<br/>verify hashes"| Cache["persistentDataPath/content/{version}/"]
-    SA --> Loader["Whisker.Runtime.ContentLoader<br/>JSON -> ContentDtos"]
+    SA --> Loader["HeroCat.Runtime.ContentLoader<br/>JSON -> ContentDtos"]
     Cache --> Loader
-    Loader -->|"ContentDb.Build(dtos)"| DB["Whisker.Sim.ContentDb<br/>immutable"]
+    Loader -->|"ContentDb.Build(dtos)"| DB["HeroCat.Sim.ContentDb<br/>immutable"]
     DB --> Sim["Simulation"]
     DB --> VM["Client view-models"]
-    DB --> Bots["Whisker.Bots"]
-    DB --> Server["Whisker.Server<br/>summon, plausibility"]
+    DB --> Bots["HeroCat.Bots"]
+    DB --> Server["HeroCat.Server<br/>summon, plausibility"]
     JSON -->|"tools/content.py"| Py["power_curve_model.py<br/>gacha_model.py<br/>fish_model.py"]
 ```
 
@@ -77,7 +77,7 @@ Nullable columns are marked `?` (`duration_ticks?`). A nullable column accepts a
 
 ### 3.3 Enums
 
-Enums are defined once in C# (`Whisker.Sim.Content.Enums`) and mirrored in `tools/export_content.py` (`ENUMS`). Adding a value is a code change in both places plus a content export; removing one is a breaking content change (section 6.3). Order is load-bearing where noted.
+Enums are defined once in C# (`HeroCat.Sim.Content.Enums`) and mirrored in `tools/export_content.py` (`ENUMS`). Adding a value is a code change in both places plus a content export; removing one is a breaking content change (section 6.3). Order is load-bearing where noted.
 
 | Enum | Values | Order matters |
 |---|---|---|
@@ -706,7 +706,7 @@ Localization file shape: `{"table": "localization", "locale": "ja", "rows": [{"k
 
 ### 6.3 `content_version` ordering and compatibility
 
-`content_version` is `YYYY.MM.DD` with an optional `.N` (`N >= 1`) for a second publish on the same day. Ordering is numeric per component with a missing `N` read as 0; `ContentVersion.Compare(a, b)` lives in `Whisker.Sim.Content` and is what 08's `minContentVersion[clientVersion]` gate and 01's "is the CDN manifest newer" check use. The format carries no major/minor semantics; breaking changes are expressed through `min_client_version` and the reconcile rules below.
+`content_version` is `YYYY.MM.DD` with an optional `.N` (`N >= 1`) for a second publish on the same day. Ordering is numeric per component with a missing `N` read as 0; `ContentVersion.Compare(a, b)` lives in `HeroCat.Sim.Content` and is what 08's `minContentVersion[clientVersion]` gate and 01's "is the CDN manifest newer" check use. The format carries no major/minor semantics; breaking changes are expressed through `min_client_version` and the reconcile rules below.
 
 Change classes the exporter detects against `--previous`:
 
@@ -738,7 +738,7 @@ Python 3.9+, stdlib only for `build`, `check`, `diff` and `translator-csv`; `pul
 
 ```
 python3 tools/export_content.py pull  --sheet <id> [--service-account creds.json | --csv-export] [--src content_src]
-python3 tools/export_content.py build [--src content_src] [--out content] [--previous content] [--ui-keys unity/Assets/Whisker.Client/ui_keys.txt] [--strict-warnings]
+python3 tools/export_content.py build [--src content_src] [--out content] [--previous content] [--ui-keys unity/Assets/HeroCat.Client/ui_keys.txt] [--strict-warnings]
 python3 tools/export_content.py check [--src content_src] [--out content]
 python3 tools/export_content.py diff  --a content --b <dir>          # human-readable row diff for a PR description
 python3 tools/export_content.py translator-csv --out $KIROCREW_SCRATCH/strings_ja.csv --locale ja [--missing-only]
@@ -850,16 +850,16 @@ CONTENT <code> <location>: <message>
 
 Loader scope: `ContentDb.Build` implements every `E0xx`, `E03x`-`E06x` rule that touches sim-read data, and `E9xx`. It does not implement `E07x` localization rules (strings are client-only) or `E09x` (no previous build). `check` in CI plus the hash check at load are what make a hand edit of `content/` visible.
 
-## 9. `ContentDb` in `Whisker.Sim`
+## 9. `ContentDb` in `HeroCat.Sim`
 
-Namespace `Whisker.Sim.Content`. No `UnityEngine`, no JSON, no IO, no reflection, no `Math.Pow`. Every public type is `sealed`, every property get-only, every collection an `IReadOnlyList<T>` or `IReadOnlyDictionary<K,V>` over a private array or dictionary. `ContentDb` is constructed once per process by `Whisker.Runtime.ContentLoader` (client), `Whisker.Bots` (one shared instance across all seeds) and `Whisker.Server` (one per loaded `content_version`).
+Namespace `HeroCat.Sim.Content`. No `UnityEngine`, no JSON, no IO, no reflection, no `Math.Pow`. Every public type is `sealed`, every property get-only, every collection an `IReadOnlyList<T>` or `IReadOnlyDictionary<K,V>` over a private array or dictionary. `ContentDb` is constructed once per process by `HeroCat.Runtime.ContentLoader` (client), `HeroCat.Bots` (one shared instance across all seeds) and `HeroCat.Server` (one per loaded `content_version`).
 
 ### 9.1 DTOs and `Build`
 
-The DTOs are plain mutable classes with public fields in `Whisker.Sim.Content.Dto`, one per table row, mirroring section 5 column for column (`double?` for nullable doubles, `string` for enums and refs, `Grant[]` for grantlists). They exist so Sim can accept data without knowing JSON; Runtime fills them with Newtonsoft and Sim never sees a `JObject`.
+The DTOs are plain mutable classes with public fields in `HeroCat.Sim.Content.Dto`, one per table row, mirroring section 5 column for column (`double?` for nullable doubles, `string` for enums and refs, `Grant[]` for grantlists). They exist so Sim can accept data without knowing JSON; Runtime fills them with Newtonsoft and Sim never sees a `JObject`.
 
 ```csharp
-namespace Whisker.Sim.Content.Dto
+namespace HeroCat.Sim.Content.Dto
 {
     public sealed class ContentDtos
     {
@@ -887,7 +887,7 @@ namespace Whisker.Sim.Content.Dto
     }
 }
 
-namespace Whisker.Sim.Content
+namespace HeroCat.Sim.Content
 {
     public sealed class ContentBuildException : Exception
     {
@@ -1098,7 +1098,7 @@ public sealed partial class ContentDb
 }
 ```
 
-Sim code takes `ContentDb` through its constructor (`new Simulation(db, state, clock, sink)`) and never through a static. The view-models (07) read the same instance for names, icons and costs. Strings are not here: the client resolves `NameKey` through `Whisker.Runtime.Localizer` (section 13.4).
+Sim code takes `ContentDb` through its constructor (`new Simulation(db, state, clock, sink)`) and never through a static. The view-models (07) read the same instance for names, icons and costs. Strings are not here: the client resolves `NameKey` through `HeroCat.Runtime.Localizer` (section 13.4).
 
 ### 9.5 Performance
 
@@ -1182,7 +1182,7 @@ Rules:
 
 ### 13.1 Extraction
 
-Keys are declared where they are used: table rows carry `name_key`/`desc_key`, and the Unity client declares its `ui.*` keys in `unity/Assets/Whisker.Client/ui_keys.txt` (one per line, generated by an editor script that scans `TextKeyLabel` components, 07 section 12). `export_content.py build --ui-keys <file>` checks both directions: every key referenced exists (`E072`), every row is referenced (`W021`). Keys are never built by string concatenation at runtime; the single exception is the per-locale suffix ladder which 07 keeps in code.
+Keys are declared where they are used: table rows carry `name_key`/`desc_key`, and the Unity client declares its `ui.*` keys in `unity/Assets/HeroCat.Client/ui_keys.txt` (one per line, generated by an editor script that scans `TextKeyLabel` components, 07 section 12). `export_content.py build --ui-keys <file>` checks both directions: every key referenced exists (`E072`), every row is referenced (`W021`). Keys are never built by string concatenation at runtime; the single exception is the per-locale suffix ladder which 07 keeps in code.
 
 ### 13.2 Translator round trip
 
@@ -1194,7 +1194,7 @@ Keys are declared where they are used: table rows carry `name_key`/`desc_key`, a
 
 ### 13.4 Runtime
 
-`Whisker.Runtime.Localizer` loads `localization.en.json` plus the active locale's file (if present) into two dictionaries. `Text(key)` returns active, then `en`, then the key itself in square brackets (`[skill.e_03.name]`): ugly, visible, greppable. `Format(key, args)` runs the ICU MessageFormat subset the client ships (plural, select, number). Locale changes re-resolve every live `TextKeyLabel` through an event (07). Strings never enter `Whisker.Sim`.
+`HeroCat.Runtime.Localizer` loads `localization.en.json` plus the active locale's file (if present) into two dictionaries. `Text(key)` returns active, then `en`, then the key itself in square brackets (`[skill.e_03.name]`): ugly, visible, greppable. `Format(key, args)` runs the ICU MessageFormat subset the client ships (plural, select, number). Locale changes re-resolve every live `TextKeyLabel` through an event (07). Strings never enter `HeroCat.Sim`.
 
 ### 13.5 Per-locale screenshots and store listings
 
@@ -1251,7 +1251,7 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 
 ## Acceptance criteria
 
-1. **No balance literals.** A CI grep over `src/Whisker.Sim/**/*.cs` for numeric literals, excluding `0`, `1`, `-1`, `2` (bit ops), array indices, `ATTACK_PROGRESS_UNIT` references and lines marked `// literal-ok: <reason>`, finds nothing.
+1. **No balance literals.** A CI grep over `src/HeroCat.Sim/**/*.cs` for numeric literals, excluding `0`, `1`, `-1`, `2` (bit ops), array indices, `ATTACK_PROGRESS_UNIT` references and lines marked `// literal-ok: <reason>`, finds nothing.
 2. **Shipped content builds.** `ContentDb.Build(load("content"), Tier.MVP)` succeeds; `Version` and `ContentHash` equal the manifest; `Build(..., Tier.M0)` also succeeds and has exactly 2 enabled banners and 0 companions.
 3. **Deterministic export.** `export_content.py build` twice from the same `content_src/` produces byte-identical `content/`; `check` exits 0 on the committed tree.
 4. **Constants pinned.** The set of `REQUIRED_CONSTANTS` keys in the exporter equals the set of `constants.json` keys equals the set of `Constants` properties (snake-cased), and every property is non-default after build.

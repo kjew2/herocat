@@ -105,7 +105,7 @@ Band budget: 120 + 800 + 100 + 640 + 160 = 1,820 rp. The remaining 100 rp of a 1
 ## 3. Binding conventions used by every screen section
 
 - A screen is a uGUI prefab with a `ScreenBase` subclass. `Bind(vm)` resolves references once; `Refresh()` writes only changed values through change-only setters (`NumberLabel`, `IntLabel`, `TextKeyLabel`, `BarFill`, `BadgeDot`); `OnEvent(Event e)` handles the events listed per screen.
-- View-models live in `Whisker.Client.ViewModels`, one class per screen named `<Screen>Vm` (`MainVm`, `HeroVm`, ...). They are plain C#, no `UnityEngine`. They are filled from `Simulation.Snapshot()` after any tick that ran and from events as they drain (01).
+- View-models live in `HeroCat.Client.ViewModels`, one class per screen named `<Screen>Vm` (`MainVm`, `HeroVm`, ...). They are plain C#, no `UnityEngine`. They are filled from `Simulation.Snapshot()` after any tick that ran and from events as they drain (01).
 - A view-model field listed as `bind` is read-only display; `cmd` means the element sends that `Command` through `Commands.Send(cmd)`; a rejection comes back as `Rejected(code)` and renders as a toast with the localized reason (`err.<CODE>`).
 - States every screen implements unless the section says otherwise: **Loading** (skeleton rows, shimmer, no spinner longer than 2 s before a retry link), **Empty** (illustration key + one-line copy + the primary action that fills it), **Error** (inline card from 01 taxonomy with Retry), **Locked** (greyed content, lock icon, unlock condition text, no interaction), **First-time** (one coach-mark overlay pointing at the primary action, shown once, stored in `Profile.SeenCoachMarks`).
 
@@ -748,7 +748,7 @@ Applies to `SCR_SUMMON_RESULT`. The sim and HUD already reflect the result when 
 
 ## 7. Number and time formatting
 
-`Whisker.Sim.Format.BigNumber.Short(double)` is the single implementation shared by client, bots and server rate tables (00 item 9). Contract:
+`HeroCat.Sim.Format.BigNumber.Short(double)` is the single implementation shared by client, bots and server rate tables (00 item 9). Contract:
 
 1. `v < 1000`: rounded to an integer, no suffix (`0`, `2`, `999`). Negative values format the magnitude with a leading `-`. NaN or infinity formats `?` and is a bug.
 2. `v >= 1000`: `k = floor(log1000 v)` by repeated division (never `Math.Log`), mantissa `m = v / 1000^k` to three significant digits (`1.23`, `12.3`, `123`); if rounding carries to 1000, bump `k`.
@@ -914,11 +914,11 @@ No artist in M0. Everything is a coloured `Image` with a TMP label, so the slice
 
 ## 16. Unity implementation notes
 
-- **uGUI + TextMeshPro** (00 section 3). One prefab per screen under `Assets/Whisker.Client/Screens/<ScreenId>/<ScreenId>.prefab` with a `ScreenBase` subclass. Sub-prefabs for repeated rows (collection tile, quest row, inbox row, dungeon card, shop card) are nested prefabs instantiated into pooled lists.
-- **`ScreenRouter`** (`Whisker.Client.Navigation`): a stack of `ScreenEntry { ScreenId, Type, Instance, Args }`. `Push(id, args)`, `Replace(id, args)` (tab bar), `Pop()`, `PopTo(id)`, `ShowModal(id, args)` (queues if a modal is visible), `ShowOverlay(id)`. It owns the Android back-button mapping (section 1) and the LRU cache of three Full screens. Screens are loaded through Addressables by `ScreenId` and released when evicted.
-- **ViewModels** in `Whisker.Client.ViewModels`, plain C# (no `UnityEngine`), one per screen plus `HudVm`, `BadgesVm`, `ToastQueue`, `RevealSequencer`. `GameViewModel` owns them and is the only client type holding a `Simulation` reference besides `SessionRunner`. `Refresh()` runs on frames where a tick ran, an event arrived or a command marked dirty (01); screens update from their vm with change-only setters.
+- **uGUI + TextMeshPro** (00 section 3). One prefab per screen under `Assets/HeroCat.Client/Screens/<ScreenId>/<ScreenId>.prefab` with a `ScreenBase` subclass. Sub-prefabs for repeated rows (collection tile, quest row, inbox row, dungeon card, shop card) are nested prefabs instantiated into pooled lists.
+- **`ScreenRouter`** (`HeroCat.Client.Navigation`): a stack of `ScreenEntry { ScreenId, Type, Instance, Args }`. `Push(id, args)`, `Replace(id, args)` (tab bar), `Pop()`, `PopTo(id)`, `ShowModal(id, args)` (queues if a modal is visible), `ShowOverlay(id)`. It owns the Android back-button mapping (section 1) and the LRU cache of three Full screens. Screens are loaded through Addressables by `ScreenId` and released when evicted.
+- **ViewModels** in `HeroCat.Client.ViewModels`, plain C# (no `UnityEngine`), one per screen plus `HudVm`, `BadgesVm`, `ToastQueue`, `RevealSequencer`. `GameViewModel` owns them and is the only client type holding a `Simulation` reference besides `SessionRunner`. `Refresh()` runs on frames where a tick ran, an event arrived or a command marked dirty (01); screens update from their vm with change-only setters.
 - **Binding approach**: explicit. No reflection binding, no per-frame polling of properties. A screen's `Refresh()` is a flat list of setter calls; `OnEvent` is a `switch` on event type. Reasons: zero allocation is easy to audit, and the bot harness's view-model tests (10) run without Unity.
-- **Commands**: `Commands.Send(Command)` -> `Simulation.Apply` on the main thread between frames; result `Accepted` or `Rejected(code)`; the screen toasts `err.<code>`. Server-backed commands (summon, inbox, shop) go through `Whisker.Runtime` clients and return a `Task<Result>`; the vm sets `InFlight` flags for spinners.
+- **Commands**: `Commands.Send(Command)` -> `Simulation.Apply` on the main thread between frames; result `Accepted` or `Rejected(code)`; the screen toasts `err.<code>`. Server-backed commands (summon, inbox, shop) go through `HeroCat.Runtime` clients and return a `Task<Result>`; the vm sets `InFlight` flags for spinners.
 - **Addressables groups**: `always` (`SCR_MAIN`, HUD, tab bar, fish atlas, `ui_icons`, `ui_frames`, chapter 1 skin, hero), one group per Full screen prefab + its atlas, `chapters` (one bundle per chapter skin, downloaded ahead when the player enters the previous chapter), `audio_sfx`, `audio_music` (one bundle per loop), `collection_icons` (three icon atlases, loaded on first collection screen).
 - **Input**: Input System package; `TapZap` from a full-viewport `IPointerClickHandler` behind the combat UI; Fish Board drag through `IBeginDragHandler` / `IDragHandler` / `IEndDragHandler` on cells; back button via `Keyboard.current.escapeKey`.
 - **Safe area**: one `SafeAreaFitter` on the root `RectTransform`; bands are children with fixed heights and the combat band `flexibleHeight = 1`.

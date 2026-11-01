@@ -12,10 +12,9 @@ build/
 *.user
 TestResults/
 
-# C# and wasm build output
+# C# build output
 src/**/bin/
 src/**/obj/
-web/wasm/dist/
 
 # Unity (unity/HeroCatClient)
 unity/**/[Ll]ibrary/

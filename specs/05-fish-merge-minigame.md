@@ -18,7 +18,7 @@ Depends on: 00 (section 6.4 constants), 02 (`FishBoardState` persistence), 03 (t
 ### 2.1 State
 
 ```csharp
-namespace Whisker.Sim.State
+namespace HeroCat.Sim.State
 {
     public sealed class FishBoardState
     {
@@ -380,7 +380,7 @@ Questions the dashboard should answer (10): share of sessions with at least one 
 11. Offline: a 3 h catch-up changes only `Tank.Stock` and `Tank.RefillProgressTicks` in `FishBoardState`; `Cells`, `DiscoveredMask`, the Wallet's Fish Coins and `fish_spawn.Counter` are unchanged.
 12. With cap 10 and 20 occupied cells there is always at least one mergeable pair (pigeonhole); a property test over 10,000 random full boards finds `MergeAll` returns >= 1.
 13. `tools/fish_model.py --policy attentive` reports between 1,000 and 1,500 fish on day 1 at Research 0, a full cap-10 board between day 6 and day 12, `fishMult` at day 7 between x12 and x25; `--policy lazy` reports `fishMult` at day 7 between x1.5 and x3; the ratio is between x3 and x12.
-14. `tools/fish_model.py` and the C# `Whisker.Bots` fish policy agree on day-7 `fishMult` within 5% for the attentive policy (10's cross-check).
+14. `tools/fish_model.py` and the C# `HeroCat.Bots` fish policy agree on day-7 `fishMult` within 5% for the attentive policy (10's cross-check).
 15. PlayMode (07): dragging a fish onto an equal fish sends exactly one `MergeFish(source, target)` with `target` the cell under the release point; dropping on a mismatched fish sends nothing and plays the spring-back; a tap-tap on two equal fish sends one `MergeFish`; `Merge all` with nothing to merge is disabled and shows "Nothing to merge".
 
 ## 16. Constants introduced

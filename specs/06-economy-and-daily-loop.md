@@ -11,7 +11,7 @@ Depends on: 00 (constants, names, authority split), 02 (`GameState` fields this 
 All balances live in `GameState.Wallet`. Every mutation goes through `Wallet.Apply(CurrencyDelta, Reason)` with a reason from the closed enum in 00 section 8 item 6. There is no second path.
 
 ```csharp
-// Whisker.Sim
+// HeroCat.Sim
 public enum Currency : byte
 {
     GOLD, DIAMOND, FISH_COIN, ROCK_CANDY, HERO_EXP,
@@ -367,7 +367,7 @@ A fourth card on `SCR_DUNGEONS`. One ladder of 100 fixed boss fights with `TOWER
 
 ### 7.1 Algorithm
 
-Runs in `Whisker.Sim.Catchup` on session open and on resume from background, called by `SessionRunner` (01) with the trusted server time. Nothing else calls it.
+Runs in `HeroCat.Sim.Catchup` on session open and on resume from background, called by `SessionRunner` (01) with the trusted server time. Nothing else calls it.
 
 ```csharp
 public sealed record OfflineReward(long ElapsedSec, long CreditedSec, bool Capped, double Gold, double Exp,
