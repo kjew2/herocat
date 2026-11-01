@@ -20,14 +20,29 @@ namespace HeroCat.Client.Screens
 
         static TMP_FontAsset _font;
 
-        /// <summary>TMP's default font, or a dynamic one from the built-in font when TMP Essentials were not imported.</summary>
+        /// <summary>Resources path of the M0 UI font (07 section 15.1): DejaVu Sans has every placeholder glyph.</summary>
+        public const string FontResource = "Fonts/DejaVuSans";
+
+        /// <summary>
+        /// A dynamic TMP font built at runtime from DejaVu Sans, because TMP's LiberationSans lacks the placeholder
+        /// glyphs (rarity shapes, crown, gear, envelope, close). Built at runtime so no project asset is modified.
+        /// Falls back to TMP's default font, then the built-in font.
+        /// </summary>
         public static TMP_FontAsset Font
         {
             get
             {
                 if (_font != null) return _font;
-                try { _font = TMP_Settings.defaultFontAsset; }
-                catch (Exception) { _font = null; }
+                var dejavu = Resources.Load<Font>(FontResource);
+                if (dejavu != null) _font = TMP_FontAsset.CreateFontAsset(dejavu);
+                // TODO(#268): TMP cannot find the ellipsis in this runtime font and falls back to Truncate.
+                if (_font != null) _font.name = "DejaVuSans (runtime)";   // TMP warnings name the font
+                if (_font == null)
+                {
+                    Debug.LogWarning("HeroCat: " + FontResource + " not found; placeholder glyphs will show as boxes.");
+                    try { _font = TMP_Settings.defaultFontAsset; }
+                    catch (Exception) { _font = null; }
+                }
                 if (_font == null)
                 {
                     var f = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");

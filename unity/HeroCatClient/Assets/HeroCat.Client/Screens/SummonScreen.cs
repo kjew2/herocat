@@ -69,8 +69,8 @@ namespace HeroCat.Client.Screens
 
             _rates = UiKit.Panel("RatesPanel", Content, Palette.PanelRaised).rectTransform;
             UiKit.Place(_rates, 16, 840, 1048, 360);
-            s.RatesOpen.Bind(new ActiveSink(_rates.gameObject));
             _rates.gameObject.SetActive(false);
+            s.RatesOpen.Bind(new ActiveSink(_rates.gameObject));   // after the hide: Bind pushes the current value
             SetContentHeight(1240);
         }
 

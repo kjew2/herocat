@@ -68,8 +68,8 @@ namespace HeroCat.Client.Screens
             var info = UiKit.Button("Info", Selected, () => c.OnInfo(Vm.ItemDetail), Palette.Panel, UiKit.Body);
             UiKit.Place(info.GetComponent<RectTransform>(), 912, 16, 112, 112);
             UiKit.LabelOf(info).text = "i";
-            c.HasSelection.Bind(new ActiveSink(Selected.gameObject));
             Selected.gameObject.SetActive(false);
+            c.HasSelection.Bind(new ActiveSink(Selected.gameObject));   // after the hide: Bind pushes the current value
         }
 
         protected abstract void OnEquip();
