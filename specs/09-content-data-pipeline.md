@@ -923,7 +923,7 @@ Decided while implementing issues #122, #123 and #128; each is a default the des
 - **`E064`**: "the number of daily rows" counts every `quests_daily` row with `tier <= MVP`, the bonus rows included.
 - **`E074` length**: the longest rendering, where a plural or select counts its longest branch and `#` or an argument counts as one character.
 - **`W020`**: a non-ship locale with no text at all warns once (`ja has no text; all N keys fall back to en`), not once per key.
-- **`W021`**: rows whose keys start `err.`, `reject.` or `notice.` are exempt, because section 13.1 checks them elsewhere. `ui.*` rows are judged only when `--ui-keys` is given.
+- **`W021`**: rows whose keys start `err.`, `reject.` or `notice.` are exempt, because section 13.1 checks them elsewhere. Client UI rows (`ui.*`, `scr.*`, `boot.*`, the prefixes the client Core view-models use) are judged only when `--ui-keys` is given.
 - **`W030`**: a "note" means the constant's key appears somewhere in `meta.notes`.
 - **Version rules.** B3 (`E090`) applies to every table keyed by an `id`, enum or `ref`, plus the B5 tables. B4 compares each banner that was enabled in the previous build, using pool lists over all of its rows. B6 (`E092`) is detected two ways: a non-nullable column the previous rows lack, or an enum value the previous rows use that no longer exists. `E091` compares data files only. A `source_revision` or `notes` change on its own rewrites only the manifest.
 - **`hot_apply` without a diff.** A build identical to `--previous` keeps the previous `hot_apply`. `check` without `--previous` keeps the committed manifest's value rather than recomputing it. `./check.sh` runs `build --previous` against the merge base's `content/`.

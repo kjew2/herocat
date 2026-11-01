@@ -597,6 +597,8 @@ POOL_COLS = ["pool_c", "pool_r", "pool_e", "pool_l", "pool_m"]
 POOL_TABLES = {"WEAPON": "weapons", "SKILL": "skills", "COMPANION": "companions", "RUNE": "runes"}
 UI_FISH_SPRITE_LEVELS = 12   # 07 section 13 (issue #48): distinct fish sprites in the MVP art set
 CODE_BUILT_KEY_PREFIXES = ("err.", "reject.", "notice.")   # 13.1: built from wire codes, checked by 01 AC 14's test
+# Keys the Unity client builds its screens from (07; client Core view-models). Judged only with --ui-keys.
+CLIENT_UI_KEY_PREFIXES = ("ui.", "scr.", "boot.")
 RULES = []
 
 
@@ -1346,8 +1348,8 @@ def rule_localization(ctx):
         key = r["key"]
         if key in referenced or key.startswith(CODE_BUILT_KEY_PREFIXES):
             continue
-        if key.startswith("ui.") and ctx.ui_keys is None:
-            continue   # the client's ui_keys.txt (07 section 12) was not given; ui.* rows cannot be judged
+        if key.startswith(CLIENT_UI_KEY_PREFIXES) and ctx.ui_keys is None:
+            continue   # the client's ui_keys.txt (07 section 12) was not given; client UI rows cannot be judged
         ctx.warn("W021", r["_loc"], f"key '{key}' is not referenced by any table or by --ui-keys")
 
 
