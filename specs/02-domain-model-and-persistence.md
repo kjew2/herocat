@@ -958,7 +958,7 @@ As built (issues #78, #149): `ServerClock.cs` holds both clocks. `SystemClock` i
 
 All timestamps `timestamptz`, all ids `uuid` unless noted. Money is never stored as float: prices are `integer` minor units plus `char(3)` currency. Row-level comments give the owning API (08). This section owns every server table, including the server-only ones 08 reads and writes, so the GDPR delete job (13.2) can enumerate them from here (issue #53).
 
-**Migration tooling** (issue #33): the schema ships as plain versioned SQL files, `server/db/migrations/NNNN_<name>.sql` (`0001_init.sql` is the DDL below, verbatim), applied in order by a small in-house runner (`HeroCat.Server --migrate` in the deploy pipeline's pre-deploy job and in CI; `HeroCat:Database:MigrateOnStartup` also runs it at api startup, off by default; issue #192) that records applied files in a `schema_migrations` table. No EF Core migrations; queries use Npgsql/Dapper, or EF Core for queries only, never to change the schema. A migration file is immutable once merged. CI applies the set to an empty PostgreSQL 16 container (`postgres:16`, as in 10) and runs AC 16; `check.sh` runs the same job behind a "Postgres available" guard and reports it as skipped, not passed, where no Postgres or Docker exists (cloud sessions).
+**Migration tooling** (issue #33): the schema ships as plain versioned SQL files, `server/db/migrations/NNNN_<name>.sql` (`0001_init.sql` is the DDL below, verbatim; `0002_save_history_trim.sql` adds the 13.1 trim trigger and `0003_partitions.sql` the partitions, both described after the DDL; issue #154), applied in order by a small in-house runner (`HeroCat.Server --migrate` in the deploy pipeline's pre-deploy job and in CI; `HeroCat:Database:MigrateOnStartup` also runs it at api startup, off by default; issue #192) that records applied files in a `schema_migrations` table. No EF Core migrations; queries use Npgsql/Dapper, or EF Core for queries only, never to change the schema. A migration file is immutable once merged. CI applies the set to an empty PostgreSQL 16 container (`postgres:16`, as in 10) and runs AC 16; `check.sh` runs the same job behind a "Postgres available" guard and reports it as skipped, not passed, where no Postgres or Docker exists (cloud sessions).
 
 ```sql
 create table accounts (
@@ -1228,6 +1228,10 @@ create table guild_members (guild_id uuid references guilds on delete cascade, p
 create table guild_chat (id bigserial primary key, guild_id uuid references guilds on delete cascade, player_id uuid references accounts on delete set null, body text not null, created_at timestamptz not null default now());
 ```
 
+**Trim trigger** (`0002`): `save_history_trim`, after each insert into `save_history`, deletes the player's rows beyond the newest `SAVE_HISTORY_KEEP` (newest by `uploaded_at`, then `save_seq`).
+
+**Partitions** (`0003`; issue #154): `ensure_partitions(p_parent regclass, p_grain text, p_from timestamptz, p_until timestamptz) returns integer` creates every missing partition whose range touches `[p_from, p_until]`: UTC month ranges named `<parent>_pYYYYMM` for `p_grain = 'month'`, UTC day ranges named `<parent>_pYYYYMMDD` for `'day'`; it returns how many it created and a rerun is harmless. The migration creates the current month plus 3 months for `diamond_ledger` and `summon_log` and today plus 14 days for `events`; the worker's partition job keeps that horizon ahead of now (issue #262). There is no default partition: a row outside every partition fails its insert, so a missing partition is loud, and a new range partition never collides with rows parked in a default one.
+
 Redis structures (P1 leaderboards, MVP rate limits and sessions):
 
 | Key | Type | Content | TTL |
@@ -1240,6 +1244,8 @@ Redis structures (P1 leaderboards, MVP rate limits and sessions):
 | `summon:lock:{playerId}` | STRING | per-player mutex for the summon handler | 10 s |
 | `maint` | STRING | maintenance JSON | none |
 
+As built (issue #154): `HeroCat.Server.Infrastructure.Redis.RedisKeys` holds these keys and TTLs for every handler (a test diffs it against this table). `{playerId}` is the lowercase 36-character GUID, `{weekKey}` the integer week key of 00 section 8 item 7, `{route}` a key segment without spaces or braces.
+
 ## 13. Data retention and GDPR/CCPA delete
 
 ### 13.1 Retention
@@ -1247,9 +1253,9 @@ Redis structures (P1 leaderboards, MVP rate limits and sessions):
 | Data | Retention | Mechanism |
 |---|---|---|
 | Current save blob + `saves` row | While account active | |
-| `save_history` | Last `SAVE_HISTORY_KEEP = 10` blobs per player | Trigger on insert deletes the oldest; S3 lifecycle removes orphaned keys after 7 days |
+| `save_history` | Last `SAVE_HISTORY_KEEP = 10` blobs per player | Trigger on insert (`save_history_trim`, section 12) deletes the oldest; S3 lifecycle removes orphaned keys after 7 days |
 | `idempotency` | `IDEMPOTENCY_TTL_H = 24` | Hourly purge job |
-| `summon_log`, `diamond_ledger` | 7 years (financial audit; loot-box disclosure disputes) | Partitioned by month |
+| `summon_log`, `diamond_ledger` | 7 years (financial audit; loot-box disclosure disputes) | Partitioned by month; partitions created ahead by `ensure_partitions` (section 12) |
 | `ticket_ledger`, `granted_items` | While account active | Deleted with the account (13.2) |
 | `store_notifications` | 90 days | Daily purge (dedupe only needs the stores' retry window) |
 | `account_exports` | Row 30 days; export object 7 days | Daily purge; S3 lifecycle on the export prefix |
@@ -1363,7 +1369,7 @@ As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
 13. Uploads are suspended while `Status == Conflict` is unresolved (no `PUT` observed by a fake API during that window).
 14. `ServerClock`: `Observe` makes `IsAuthoritative` true; a device clock change of +1 day between observations changes `NowServerSeconds` by the monotonic elapsed only; before any observation, `NowServerSeconds >= floor`.
 15. Backwards clock: `dayKey(now) < DayKey` resets nothing and emits `clock_anomaly`; `now < LastTickServerTime` credits zero.
-16. The SQL migration set (section 12; issue #33) applies to an empty PostgreSQL 16 database and creates every table in section 12, including `ticket_ledger`, `granted_items`, `store_notifications`, `account_exports`, `events` and the P1 stubs (issue #53). A GDPR hard delete of a player with purchases leaves no row in any table referencing the old `player_id`, and exactly the player's `purchases`, `summon_log` and `diamond_ledger` rows referencing the tombstone account (`status = 'deleted'`); for a player without purchases, nothing remains. Deleting an `accounts` row that still has financial rows fails (`on delete restrict`; issue #32). Runs in CI and in `check.sh` when Postgres is available.
+16. The SQL migration set (section 12; issue #33) applies to an empty PostgreSQL 16 database and creates every table in section 12, including `ticket_ledger`, `granted_items`, `store_notifications`, `account_exports`, `events` and the P1 stubs (issue #53), with section 12's columns, types, nullability, foreign-key delete rules and indexes, the partitions, and the trim trigger (an 11th `save_history` row for a player leaves `SAVE_HISTORY_KEEP`; issue #154). A GDPR hard delete of a player with purchases leaves no row in any table referencing the old `player_id`, and exactly the player's `purchases`, `summon_log` and `diamond_ledger` rows referencing the tombstone account (`status = 'deleted'`); for a player without purchases, nothing remains. Deleting an `accounts` row that still has financial rows fails (`on delete restrict`; issue #32). Runs in CI and in `check.sh` when Postgres is available.
 17. Moved to 06 acceptance 25 (`currency_changed` is owned by 06 section 13; issue #245).
 18. No `UnityEngine`, `DateTime*.Now`, `Stopwatch` in `HeroCat.Sim`; in `HeroCat.Runtime` only `ServerClock.cs` and `SessionRunner.cs` reference the clock APIs (CI grep: `tools/check_clock_apis.py` in `check.sh`, with a self-test that proves it catches a bad line).
 19. IL2CPP build: a save produced by the editor loads on an ARM64 device build and vice versa with zero repairs (device-farm test, 10).
