@@ -35,7 +35,7 @@ namespace HeroCat.Bots.Golden
                     body = SaveSerializer.ToJson(ctx.State).ToString(Formatting.Indented).Replace("\r\n", "\n") + "\n";
                 },
             };
-            runner.Run(new IdleBot(), Seed, Days);
+            runner.Run(BotPolicies.Create("greedy-f2p"), Seed, Days);
             return body;
         }
 

@@ -14,10 +14,11 @@ namespace HeroCat.Bots.Report
         public string Bot { get; set; }
         public string SeedSpec { get; set; }
         public int Days { get; set; }
+        public DiamondMode Diamonds { get; set; }
         public RunResult[] Runs { get; set; }   // in seed-list order
     }
 
-    /// <summary>Multi-seed runs and nearest-rank percentiles (10 section 3.7).</summary>
+    /// <summary>Multi-seed runs and nearest-rank percentiles (10 section 3.7). Output is independent of the parallelism.</summary>
     public static class Sweep
     {
         static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
@@ -27,6 +28,8 @@ namespace HeroCat.Bots.Report
             if (sortedAscending.Count == 0) throw new ArgumentException("empty");
             return sortedAscending[Math.Max(0, (int)Math.Ceiling(p * sortedAscending.Count) - 1)];
         }
+
+        public static T Median<T>(IEnumerable<T> xs) => Percentile(xs.OrderBy(x => x).ToList(), 0.5);
 
         /// <summary>"1-20", "3,5,9", "7", or a mix ("1-3,9"). Seeds are positive; ranges must be ascending.</summary>
         public static ulong[] ParseSeeds(string spec)
@@ -55,16 +58,22 @@ namespace HeroCat.Bots.Report
             return v;
         }
 
-        public static SweepResult Run(ContentDb content, string bot, string seedSpec, int days, int parallel)
+        public static SweepResult Run(ContentDb content, string bot, string seedSpec, int days, int parallel,
+                                      DiamondMode diamonds = DiamondMode.Content)
         {
             var seeds = ParseSeeds(seedSpec);
+            BotPolicies.Create(bot);   // validate the name before spinning up workers
             var runs = new RunResult[seeds.Length];
             var opts = new ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, parallel) };
-            Parallel.For(0, seeds.Length, opts, i => { runs[i] = new BotRunner(content).Run(BotPolicies.Create(bot), seeds[i], days); });
-            return new SweepResult { Bot = bot, SeedSpec = seedSpec, Days = days, Runs = runs };
+            Parallel.For(0, seeds.Length, opts, i =>
+            {
+                runs[i] = new BotRunner(content) { Diamonds = diamonds }.Run(BotPolicies.Create(bot), seeds[i], days);
+            });
+            return new SweepResult { Bot = bot, SeedSpec = seedSpec, Days = days, Diamonds = diamonds, Runs = runs };
         }
 
-        public sealed record DayAggregate(int Day, int StageP10, int StageMed, int StageP90, int HeroLevelMed, long DiamondsMed);
+        public sealed record DayAggregate(int Day, int StageP10, int StageMed, int StageP90, int HeroLevelMed, double DpsMed,
+                                          long DiamondsEarnedMed, int PullsMed, int FishLevelMed, double LongestWallHMed);
 
         public static IEnumerable<DayAggregate> Aggregate(SweepResult sw)
         {
@@ -73,29 +82,34 @@ namespace HeroCat.Bots.Report
                 var rows = sw.Runs.Select(r => r.Rows[d]).ToList();
                 var stage = rows.Select(r => r.Stage).OrderBy(x => x).ToList();
                 yield return new DayAggregate(d + 1, Percentile(stage, 0.1), Percentile(stage, 0.5), Percentile(stage, 0.9),
-                                              Percentile(rows.Select(r => r.HeroLevel).OrderBy(x => x).ToList(), 0.5),
-                                              Percentile(rows.Select(r => r.Diamonds).OrderBy(x => x).ToList(), 0.5));
+                                              Median(rows.Select(r => r.HeroLevel)), Median(rows.Select(r => r.Dps)),
+                                              Median(rows.Select(r => r.DiamondsEarned)), Median(rows.Select(r => r.Pulls)),
+                                              Median(rows.Select(r => r.FishMaxLevel)), Median(rows.Select(r => r.LongestWallHours)));
             }
         }
 
-        const string Fmt = "{0,3} {1,8} {2,8} {3,8} {4,10} {5,11}";
+        const string Fmt = "{0,3} {1,8} {2,8} {3,8} {4,8} {5,10:0.00e+00} {6,8} {7,6} {8,7} {9,10:0.0}";
 
         public static string Table(SweepResult sw, string contentTag)
         {
             var sb = new StringBuilder();
-            sb.Append("# herocat sweep v2\n");
-            sb.Append(string.Format(Inv, "# bot={0} seeds={1} days={2} content={3}\n", sw.Bot, sw.SeedSpec, sw.Days, contentTag));
-            sb.Append(string.Format(Inv, Fmt, "day", "stageP10", "stageMed", "stageP90", "heroLMed", "diamondsMed")).Append('\n');
+            sb.Append("# herocat sweep v3\n");
+            sb.Append(string.Format(Inv, "# bot={0} seeds={1} days={2} diamonds={3} content={4}\n", sw.Bot, sw.SeedSpec, sw.Days,
+                                    sw.Diamonds.ToString().ToLowerInvariant(), contentTag));
+            sb.Append(string.Format(Inv, Fmt.Replace(":0.00e+00", "").Replace(":0.0", ""), "day", "stageP10", "stageMed", "stageP90", "heroLMed",
+                                    "dpsMed", "diaEarn", "pulls", "fishLvl", "longWallH")).Append('\n');
             foreach (var a in Aggregate(sw))
-                sb.Append(string.Format(Inv, Fmt, a.Day, a.StageP10, a.StageMed, a.StageP90, a.HeroLevelMed, a.DiamondsMed)).Append('\n');
+                sb.Append(string.Format(Inv, Fmt, a.Day, a.StageP10, a.StageMed, a.StageP90, a.HeroLevelMed, a.DpsMed, a.DiamondsEarnedMed,
+                                        a.PullsMed, a.FishLevelMed, a.LongestWallHMed)).Append('\n');
             return sb.ToString();
         }
 
         public static string Csv(SweepResult sw)
         {
-            var sb = new StringBuilder("day,stageP10,stageMed,stageP90,heroLevelMed,diamondsMed\n");
+            var sb = new StringBuilder("day,stageP10,stageMed,stageP90,heroLevelMed,dpsMed,diamondsEarnedMed,pullsMed,fishLevelMed,longestWallHMed\n");
             foreach (var a in Aggregate(sw))
-                sb.Append(string.Format(Inv, "{0},{1},{2},{3},{4},{5}\n", a.Day, a.StageP10, a.StageMed, a.StageP90, a.HeroLevelMed, a.DiamondsMed));
+                sb.Append(string.Format(Inv, "{0},{1},{2},{3},{4},{5:R},{6},{7},{8},{9:R}\n", a.Day, a.StageP10, a.StageMed, a.StageP90,
+                                        a.HeroLevelMed, a.DpsMed, a.DiamondsEarnedMed, a.PullsMed, a.FishLevelMed, a.LongestWallHMed));
             return sb.ToString();
         }
     }
