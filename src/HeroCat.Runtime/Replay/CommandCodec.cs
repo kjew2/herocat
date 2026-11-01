@@ -44,6 +44,8 @@ namespace HeroCat.Runtime.Replay
             // The rest of the Fish Board commands (05 section 6; issue #103), pinned for the board vectors and the client log.
             (typeof(ReleaseFish), "ReleaseFish"),
             (typeof(MoveFish), "MoveFish"),
+            // Stage select (03 section 2.7; issue #159).
+            (typeof(SelectStage), "SelectStage"),
         };
 
         static readonly object Lock = new object();
