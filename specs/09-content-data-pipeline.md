@@ -788,7 +788,7 @@ Python 3.9+, stdlib only for `build`, `check`, `diff` and `translator-csv`; `pul
 - `validate(tables, ui_keys) -> list[Error]`: every rule in section 8, one small function per rule appended to a rule list.
 - `emit(tables, meta, out_dir)`: deterministic JSON per 6.1, then the manifest.
 - `version_rules(current, previous)`: 6.3.
-- `pull(sheet_id, mode)`: fetch tabs to `content_src/`.
+- `pull(sheet_id, src, mode)`: fetch tabs to `content_src/` (7.1).
 
 ### 7.1 Command line
 
@@ -805,7 +805,7 @@ python3 tools/export_content.py pseudo --locale xx --out content_pseudo         
 
 | Verb | Does | Exit codes |
 |---|---|---|
-| `pull` | `--service-account`: Sheets API v4 `spreadsheets.values.batchGet` for every tab, written as CSV. `--csv-export`: the `gviz/tq?tqx=out:csv&sheet=<tab>` URL per tab, which works for link-readable sheets without OAuth. Either way the result is the committed `content_src/`. | 0, 2 (network/auth) |
+| `pull` | `--service-account`: Sheets API v4 `spreadsheets.get` for the tab titles, then one `spreadsheets.values.batchGet` (`ROWS`, `FORMATTED_VALUE`) for every tab, written as CSV. `--csv-export`: the `gviz/tq?tqx=out:csv&headers=1&sheet=<tab>` URL per table name, which works for link-readable sheets without OAuth; gviz answers a missing tab with the first tab, so a response that repeats another tab's bytes, or an optional table whose header has none of its columns, counts as absent. One of the two flags is required. Either way the result is the committed `content_src/`: every tab named as a section 5 table or `meta` is written as `<tab>.csv` (other tabs are skipped and listed), the CSV of a known table the workbook no longer has is removed, other files are left alone. Cells are read as displayed text, so tabs are formatted as Plain text in the en-US workbook (gviz blanks cells whose type differs from the column's majority). The CSV form is fixed (minimal quoting, LF, UTF-8 without BOM, rows padded to the header width, trailing blank rows dropped) and a file is rewritten only when its bytes change, so pulling an unchanged sheet changes nothing in git. The optional Google client is imported only by `pull --service-account`; without it `pull` prints the install hint and exits 2. `--help` prints the section 12 workflow. | 0, 2 (usage, network, auth, missing dependency) |
 | `build` | Parse, validate, emit. Lists every error, not the first. Prints `content_version`, `content_hash`, row count per table, pool sizes per rarity, the `S` constant list, and `hot_apply`. | 0, 1 (validation), 2 (usage/IO) |
 | `check` | Build to memory; exit 1 if the result differs byte-for-byte from `--out`, or the generated DTO file differs from `--dto-out`. CI's stale-JSON guard. Writes nothing. | 0, 1 |
 | `gen-dtos` | Writes the `HeroCat.Sim.Content.Dto` classes (section 9.1) from `SCHEMA`; `build` does it too. Field names are the PascalCase of the columns, so the Runtime loader maps them back with Newtonsoft's snake-case naming. | 0 |

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unit tests for tools/export_content.py (issues #121-#124, #128) and the content fixtures in tests/content_fixtures/.
+"""Unit tests for tools/export_content.py (issues #121-#124, #128, #132, #250) and the content fixtures in tests/content_fixtures/.
 Run: python3 tools/test_export_content.py (check.sh does, --no-dotnet included)."""
 import json
 import os
@@ -335,6 +335,156 @@ class VersioningTests(unittest.TestCase):
         self.assertEqual(lines[0], "content 2026.11.01 -> 2026.11.02")
         self.assertIn("skills:", lines)
         self.assertIn("  ~ skill_c_01: dps_pct 10.0 -> 10.5", lines)
+
+
+class FakeSheets:
+    """The slice of googleapiclient's Sheets v4 resource pull calls, answering from the recorded responses."""
+
+    def __init__(self, recorded):
+        self.recorded, self.calls = recorded, []
+
+    def spreadsheets(self):
+        return self
+
+    def values(self):
+        return self
+
+    def get(self, **kw):
+        self.calls.append(("get", kw))
+        return FakeRequest(self.recorded["get"])
+
+    def batchGet(self, **kw):
+        self.calls.append(("batchGet", kw))
+        return FakeRequest(self.recorded["batchGet"])
+
+
+class FakeRequest:
+    def __init__(self, doc):
+        self.doc = doc
+
+    def execute(self):
+        return json.loads(json.dumps(self.doc))
+
+
+def gviz_csv(path):
+    """A good_minimal CSV the way the gviz endpoint answers: every cell quoted, CRLF-free, UTF-8."""
+    import csv
+    import io
+    with open(path, newline="", encoding="utf-8") as f:
+        rows = list(csv.reader(f))
+    buf = io.StringIO()
+    csv.writer(buf, quoting=csv.QUOTE_ALL, lineterminator="\n").writerows(rows)
+    return buf.getvalue().encode("utf-8")
+
+
+class PullTests(unittest.TestCase):
+    """`pull` (09 sections 3.1, 7.1, 12; issue #132): no network, recorded batchGet responses."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.src = os.path.join(self.tmp, "content_src")
+        with open(fx.PULL_FIXTURE, encoding="utf-8") as f:
+            self.recorded = json.load(f)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def snapshot(self):
+        out = {}
+        for f in sorted(os.listdir(self.src)):
+            with open(os.path.join(self.src, f), "rb") as fh:
+                out[f] = fh.read()
+        return out
+
+    def test_service_account_pull_writes_csvs_build_accepts_and_repulls_byte_identical(self):
+        svc = FakeSheets(self.recorded)
+        written, removed, skipped = ex.pull(fx.PULL_SHEET_ID, self.src, service_account="unused.json", service=svc)
+        self.assertEqual(skipped, ["README"])
+        self.assertEqual(removed, [])
+        self.assertEqual(svc.calls[1][1]["valueRenderOption"], "FORMATTED_VALUE")
+        self.assertNotIn("'README'", svc.calls[1][1]["ranges"], "only table tabs are fetched")
+        first = self.snapshot()
+        base = sorted(f for f in os.listdir(fx.BASE) if f.endswith(".csv"))
+        self.assertEqual(sorted(first), base)
+        for f in base:
+            with open(os.path.join(fx.BASE, f), "rb") as fh:
+                self.assertEqual(first[f], fh.read(),
+                                 f"{f}: pull differs from good_minimal (python3 tools/content_fixtures.py record-pull)")
+        result, errs = ex.build(self.src)
+        self.assertEqual(list(errs), [])
+        self.assertIsNotNone(result)
+        written2, removed2, _ = ex.pull(fx.PULL_SHEET_ID, self.src, service_account="unused.json",
+                                        service=FakeSheets(self.recorded))
+        self.assertEqual((written2, removed2), ([], []))
+        self.assertEqual(self.snapshot(), first)
+
+    def test_pull_removes_the_csv_of_a_table_the_workbook_dropped(self):
+        os.makedirs(self.src)
+        for name in ("runes.csv", "notes.txt"):
+            with open(os.path.join(self.src, name), "w", encoding="utf-8") as f:
+                f.write("stale\n")
+        _, removed, _ = ex.pull(fx.PULL_SHEET_ID, self.src, service_account="x", service=FakeSheets(self.recorded))
+        self.assertEqual(removed, ["runes"])
+        self.assertTrue(os.path.exists(os.path.join(self.src, "notes.txt")), "files that are not tables stay")
+
+    def test_service_account_without_the_google_client_exits_2_with_an_install_hint(self):
+        saved = {m: sys.modules.get(m) for m in ("googleapiclient", "googleapiclient.discovery", "google.oauth2")}
+        for m in saved:
+            sys.modules[m] = None   # makes `import` raise ImportError even where the client is installed
+        try:
+            rc, lines = fx.run_main(["pull", "--sheet", "abc", "--service-account", "creds.json", "--src", self.src])
+        finally:
+            for m, v in saved.items():
+                if v is None:
+                    sys.modules.pop(m, None)
+                else:
+                    sys.modules[m] = v
+        self.assertEqual(rc, 2)
+        self.assertIn("pip install google-api-python-client", lines[0])
+        self.assertFalse(os.path.exists(self.src), "nothing written")
+
+    def test_pull_usage_errors_exit_2(self):
+        self.assertEqual(fx.run_main(["pull", "--csv-export"])[0], 2)
+        self.assertEqual(fx.run_main(["pull", "--sheet", "abc"])[0], 2)
+
+    def test_csv_export_resolves_gviz_first_tab_fallback(self):
+        bodies = {f[:-4]: gviz_csv(os.path.join(fx.BASE, f)) for f in os.listdir(fx.BASE) if f.endswith(".csv")}
+        first = bodies["awakening"]   # gviz answers an unknown tab name with the first tab
+        urls = []
+
+        def get(url):
+            urls.append(url)
+            tab = url.rsplit("sheet=", 1)[1]
+            return bodies.get(tab, first)
+
+        written, removed, skipped = ex.pull("abc", self.src, csv_export=True, get=get)
+        self.assertTrue(all(u.startswith("https://docs.google.com/spreadsheets/d/abc/gviz/tq?tqx=out:csv&headers=1&")
+                            for u in urls))
+        self.assertEqual(sorted(written), sorted(bodies))
+        for f, data in self.snapshot().items():
+            with open(os.path.join(fx.BASE, f), "rb") as fh:
+                self.assertEqual(data, fh.read(), f)
+
+    def test_csv_export_network_error_exits_2(self):
+        import urllib.error
+
+        def boom(url):
+            raise urllib.error.URLError("no route to host")
+
+        saved = ex.http_get
+        ex.http_get = boom
+        try:
+            rc, lines = fx.run_main(["pull", "--sheet", "abc", "--csv-export", "--src", self.src])
+        finally:
+            ex.http_get = saved
+        self.assertEqual(rc, 2)
+        self.assertIn("no route to host", lines[0])
+
+    def test_normalize_tab(self):
+        rows = [["id", "a", "", ""], ["x", None], ["", ""], ["y", "2", "", ""], [], [""]]
+        self.assertEqual(ex.normalize_tab(rows), [["id", "a"], ["x", ""], ["", ""], ["y", "2"]])
+        self.assertEqual(ex.csv_bytes([["k", "v"], ["ship_locales", "en,ja"], ["n", 'say "hi"\nnow']]),
+                         b'k,v\nship_locales,"en,ja"\nn,"say ""hi""\nnow"\n')
 
 
 class IcuTests(unittest.TestCase):

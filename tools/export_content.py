@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Content exporter: content_src/<table>.csv -> content/<table>.json + manifest.json (specs/09).
 
+    python3 tools/export_content.py pull  --sheet <id> [--service-account creds.json | --csv-export] [--src content_src]
     python3 tools/export_content.py build [--src content_src] [--out content] [--dto-out PATH] [--previous DIR]
                                           [--ui-keys FILE] [--strict-warnings]
     python3 tools/export_content.py check [--src content_src] [--out content] [--dto-out PATH] [--previous DIR]
@@ -14,24 +15,31 @@ DTO file (`HeroCat.Sim.Content.Dto`, 09 section 9.1) from SCHEMA, so the Python 
 --previous it reproduces the committed manifest's hot_apply instead of recomputing it.
 `--previous` runs 6.3's version rules (E090-E093, W030, W031) and computes hot_apply from the changed-file set.
 `diff` prints the row-level changes between two built content dirs for a PR description (7.1).
+`pull` fetches every workbook tab named as a table (or `meta`) to content_src/<tab>.csv in one canonical CSV form, so a
+pull of an unchanged sheet leaves no git diff (7.1, issue #132). `--service-account` uses Sheets API v4 batchGet and
+needs the optional google-api-python-client (imported only by pull); `--csv-export` uses the gviz CSV URL.
 
 Implemented: SCHEMA for every 09 section 5 table, column types (3.2), ENUMS (3.3), REQUIRED_CONSTANTS (5.1),
 SCREEN_IDS (00 section 5.3), structural codes E001-E003, E010, E011, E020-E022, E070, E071, E094, constants
 E040-E043, the table rules of 8.4 and warnings W010-W013 (RULES, issue #122), versioning E090-E093 / W030 / W031 /
 hot_apply / diff (issue #123), localization E072-E075 / W020 / W021 (issue #128). Fixtures for every code live in
-tests/content_fixtures/ (tools/content_fixtures.py, issue #124). Not yet: pull (TODO(#132)), translator-csv,
+tests/content_fixtures/ (tools/content_fixtures.py, issue #124), pull (issue #132). Not yet: translator-csv,
 import-translations (E076) and pseudo (13.2, 13.3).
 
-Exit codes: 0 ok, 1 validation errors (all listed) or drift, 2 usage / IO error. Python 3.9+, stdlib only.
+Exit codes: 0 ok, 1 validation errors (all listed) or drift, 2 usage / IO / network / auth error. Python 3.9+, stdlib
+only except `pull --service-account`.
 """
 import argparse
 import csv
 import hashlib
+import io
 import json
 import math
 import os
 import re
 import sys
+import urllib.parse
+import urllib.request
 
 SCHEMA_VERSION = 1
 DTO_PATH = "src/HeroCat.Sim/Content/Dto/ContentDtos.g.cs"
@@ -1866,6 +1874,159 @@ def check_dto_names(errs):
                 errs.add("E003", name, f"unknown column '{col}' (its C# field {pascal(col)} does not snake-case back)")
 
 
+# ------------------------------------------------------------------------------------------------- pull (7.1)
+SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly"
+GVIZ_URL = "https://docs.google.com/spreadsheets/d/{sheet}/gviz/tq?tqx=out:csv&headers=1&sheet={tab}"
+PULL_INSTALL_HINT = ("pull --service-account needs the optional Google API client: "
+                     "python3 -m pip install google-api-python-client google-auth "
+                     "(or use --csv-export for a link-readable sheet)")
+
+
+class PullError(Exception):
+    """A network, auth, dependency or workbook-shape failure: `pull` exits 2 (7.1)."""
+
+
+def pull_tables():
+    """The tab names `pull` writes: every SCHEMA table plus `meta` (3.1)."""
+    return sorted(SCHEMA) + ["meta"]
+
+
+def normalize_tab(rows):
+    """Cells as text, rows padded to the header width (the API omits trailing empty cells), trailing empty cells past
+    the header and trailing blank rows dropped. Interior blank rows stay so build's row numbers match the sheet."""
+    rows = [["" if c is None else str(c) for c in r] for r in rows]
+    header = rows[0] if rows else []
+    while header and header[-1] == "":
+        header = header[:-1]
+    width = len(header)
+    out = [header]
+    for r in rows[1:]:
+        r = r + [""] * (width - len(r))
+        while len(r) > width and r[-1] == "":
+            r = r[:-1]
+        out.append(r)
+    while len(out) > 1 and all(c == "" for c in out[-1]):
+        out.pop()
+    return out
+
+
+def csv_bytes(rows):
+    """The one CSV form content_src/ is committed in: minimal quoting, LF line ends, UTF-8 without BOM."""
+    buf = io.StringIO()
+    csv.writer(buf, lineterminator="\n").writerows(rows)
+    return buf.getvalue().encode("utf-8")
+
+
+def tabs_from_batchget(titles, response):
+    """{title: rows} from a spreadsheets.values.batchGet response; valueRanges come back in request order."""
+    ranges = response.get("valueRanges", [])
+    if len(ranges) != len(titles):
+        raise PullError(f"batchGet returned {len(ranges)} ranges for {len(titles)} tabs")
+    return {t: vr.get("values", []) for t, vr in zip(titles, ranges)}
+
+
+def fetch_service_account(sheet, creds_path, service=None):
+    """Every tab via Sheets API v4: spreadsheets.get for the tab titles, then one values.batchGet. FORMATTED_VALUE
+    returns the text a cell displays, the same text --csv-export and File > Download produce."""
+    if service is None:
+        try:
+            from google.oauth2 import service_account
+            from googleapiclient.discovery import build as discovery_build
+        except ImportError:
+            raise PullError(PULL_INSTALL_HINT) from None
+        try:
+            creds = service_account.Credentials.from_service_account_file(creds_path, scopes=[SHEETS_SCOPE])
+            service = discovery_build("sheets", "v4", credentials=creds, cache_discovery=False)
+        except (OSError, ValueError) as e:
+            raise PullError(f"--service-account {creds_path}: {e}") from None
+    try:
+        meta = service.spreadsheets().get(spreadsheetId=sheet, fields="sheets.properties.title").execute()
+        titles = [sh["properties"]["title"] for sh in meta.get("sheets", [])]
+        wanted = [t for t in titles if t in pull_tables()]
+        quoted = ["'" + t.replace("'", "''") + "'" for t in wanted]
+        resp = service.spreadsheets().values().batchGet(
+            spreadsheetId=sheet, ranges=quoted, majorDimension="ROWS", valueRenderOption="FORMATTED_VALUE").execute()
+    except Exception as e:   # googleapiclient.errors.HttpError, auth and transport errors: all exit 2
+        raise PullError(f"Sheets API: {e}") from None
+    tabs = tabs_from_batchget(wanted, resp)
+    return tabs, [t for t in titles if t not in tabs]
+
+
+def header_score(table, rows):
+    """How many of the CSV's header cells are columns of `table` (meta: key, value)."""
+    names = {c[0] for c in SCHEMA[table]["columns"]} if table in SCHEMA else {"key", "value"}
+    return sum(1 for h in (rows[0] if rows else []) if h.strip() in names)
+
+
+def http_get(url):
+    with urllib.request.urlopen(url, timeout=60) as r:
+        return r.read()
+
+
+def fetch_csv_export(sheet, get=http_get):
+    """Every known tab via the gviz CSV URL (link-readable sheets, no OAuth). gviz answers a tab name it does not
+    have with the workbook's first tab, so a tab counts as absent when its bytes repeat another tab's and its header
+    fits its schema worse, or when it is an optional table whose header has none of its columns. Format every tab
+    as Plain text: gviz blanks cells whose type differs from the column's majority type."""
+    bodies = {}
+    for table in pull_tables():
+        url = GVIZ_URL.format(sheet=urllib.parse.quote(sheet), tab=urllib.parse.quote(table))
+        try:
+            bodies[table] = get(url)
+        except Exception as e:   # urllib.error.URLError / HTTPError, timeouts: all exit 2
+            raise PullError(f"{url}: {e}") from None
+    by_body = {}
+    for table, body in bodies.items():
+        by_body.setdefault(body, []).append(table)
+    tabs = {}
+    for body, names in by_body.items():
+        try:
+            text = body.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            raise PullError(f"tab {names[0]}: the response is not UTF-8") from None
+        if text.lstrip().startswith("<"):
+            raise PullError(f"tab {names[0]}: got HTML instead of CSV (is the sheet link-readable?)")
+        rows = list(csv.reader(io.StringIO(text, newline="")))
+        scores = sorted(((header_score(t, rows), t) for t in names), reverse=True)
+        if len(scores) > 1 and scores[0][0] > 0 and scores[0][0] == scores[1][0]:
+            raise PullError("tabs " + ", ".join(sorted(names)) + " returned the same CSV; cannot tell which exists")
+        best_score, best = scores[0]
+        optional = best in SCHEMA and not SCHEMA[best]["required"]
+        if len(scores) > 1 and best_score == 0 or optional and best_score == 0:
+            continue
+        tabs[best] = rows
+    return tabs, []
+
+
+def pull(sheet, src, service_account=None, csv_export=False, service=None, get=None):
+    """Fetches the workbook into `src` (09 sections 3.1, 7.1). Writes `<tab>.csv` for every tab named as a table or
+    `meta`, only when its bytes change; removes the CSV of a known table the workbook no longer has; leaves every other
+    file alone. Returns (written, removed, skipped tab titles)."""
+    if csv_export:
+        tabs, skipped = fetch_csv_export(sheet, get=get or http_get)
+    else:
+        tabs, skipped = fetch_service_account(sheet, service_account, service=service)
+    if "meta" not in tabs or not any(t in tabs for t in SCHEMA):
+        raise PullError(f"sheet {sheet} has no meta tab or no table tabs (tab names are table names, 3.1)")
+    os.makedirs(src, exist_ok=True)
+    written, removed = [], []
+    for table in pull_tables():
+        path = os.path.join(src, table + ".csv")
+        if table not in tabs:
+            if os.path.exists(path):
+                os.remove(path)
+                removed.append(table)
+            continue
+        data = csv_bytes(normalize_tab(tabs[table]))
+        if read_bytes(path) != data:
+            tmp = path + ".tmp"
+            with open(tmp, "wb") as f:
+                f.write(data)
+            os.replace(tmp, path)
+            written.append(table)
+    return written, removed, skipped
+
+
 # ------------------------------------------------------------------------------------------------------- CLI
 def print_summary(tables, manifest):
     print(f"content_version {manifest['content_version']}  content_hash {manifest['content_hash']}  "
@@ -1895,9 +2056,31 @@ def read_ui_keys(path):
         return [ln.strip() for ln in f if ln.strip() and not ln.strip().startswith("#")]
 
 
+WORKFLOW_HELP = """content change workflow (specs/09 section 12):
+  1. Edit values in the sheet; bump meta.content_version (YYYY.MM.DD[.N]) and meta.source_revision.
+  2. python3 tools/export_content.py pull --sheet <id> --service-account creds.json   (or --csv-export)
+  3. python3 tools/export_content.py build --previous <last shipped content dir>   (fix every CONTENT E0xx;
+     W0xx fail CI). ./check.sh --content runs the same rules against the merge base's content/.
+  4. python3 tools/export_content.py diff --a <last shipped content dir> --b content   (paste into the PR)
+  5. Open a PR with content_src/*.csv and content/*.json together; one that changes an S constant carries the
+     tuning tool's before/after table (W030). CI re-runs check, build --strict-warnings and the bot acceptance.
+  6. Golden bot files and plausibility_stage_bound change in the same PR as the content that moved them.
+
+pull notes: every tab whose name is a table name (or meta) is written; other tabs are skipped and listed. The CSV
+of a known table the workbook no longer has is removed. Cells are read as displayed text, so format every tab as
+Plain text in an en-US workbook (--csv-export blanks mixed-type cells otherwise). Exit 2 on network, auth or a
+missing optional dependency (pip install google-api-python-client google-auth)."""
+
+
 def main(argv=None):
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("verb", choices=["build", "check", "gen-dtos", "diff"])
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0], epilog=WORKFLOW_HELP,
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("verb", choices=["pull", "build", "check", "gen-dtos", "diff"])
+    ap.add_argument("--sheet", help="pull: the Google Sheet id (the part of its URL after /d/)")
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--service-account", metavar="CREDS_JSON",
+                      help="pull: Sheets API v4 with this service-account key file (needs google-api-python-client)")
+    mode.add_argument("--csv-export", action="store_true", help="pull: the gviz CSV URL (link-readable sheets only)")
     ap.add_argument("--src", default="content_src")
     ap.add_argument("--out", default="content")
     ap.add_argument("--dto-out", default=DTO_PATH)
@@ -1908,6 +2091,22 @@ def main(argv=None):
     ap.add_argument("--a", help="diff: the old content dir")
     ap.add_argument("--b", help="diff: the new content dir")
     args = ap.parse_args(argv)
+
+    if args.verb == "pull":
+        if not args.sheet or not (args.service_account or args.csv_export):
+            print("pull needs --sheet <id> and one of --service-account <creds.json> / --csv-export", file=sys.stderr)
+            return 2
+        try:
+            written, removed, skipped = pull(args.sheet, args.src, service_account=args.service_account,
+                                             csv_export=args.csv_export)
+        except (PullError, OSError) as e:
+            print(f"pull: {e}", file=sys.stderr)
+            return 2
+        print(f"pulled sheet {args.sheet} into {args.src}/: {len(written)} file(s) changed"
+              + (" (" + ", ".join(written) + ")" if written else "")
+              + (f"; removed {', '.join(removed)}" if removed else "")
+              + (f"; skipped tabs {', '.join(skipped)}" if skipped else ""))
+        return 0
 
     if args.verb == "diff":
         if not args.a or not args.b:
