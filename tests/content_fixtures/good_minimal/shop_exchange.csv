@@ -1,0 +1,2 @@
+id,price_currency,price_amount,grant_currency,grant_amount,daily_limit,sort_order,tier,name_key,icon
+ex_ticket_fish,DIAMOND,50,TICKET_FISH_COIN,1,2,1,MVP,chapter.01.name,icon_ticket_fish_coin

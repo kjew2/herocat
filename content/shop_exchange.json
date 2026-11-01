@@ -1,0 +1,41 @@
+{
+  "table": "shop_exchange",
+  "rows": [
+    {
+      "id": "ex_ticket_fish",
+      "price_currency": "DIAMOND",
+      "price_amount": 50,
+      "grant_currency": "TICKET_FISH_COIN",
+      "grant_amount": 1,
+      "daily_limit": 2,
+      "sort_order": 1,
+      "tier": "MVP",
+      "name_key": "shop.ex_ticket_fish.name",
+      "icon": "icon_ticket_fish_coin"
+    },
+    {
+      "id": "ex_ticket_candy",
+      "price_currency": "DIAMOND",
+      "price_amount": 50,
+      "grant_currency": "TICKET_ROCK_CANDY",
+      "grant_amount": 1,
+      "daily_limit": 2,
+      "sort_order": 2,
+      "tier": "MVP",
+      "name_key": "shop.ex_ticket_candy.name",
+      "icon": "icon_ticket_rock_candy"
+    },
+    {
+      "id": "ex_ticket_exp",
+      "price_currency": "DIAMOND",
+      "price_amount": 50,
+      "grant_currency": "TICKET_EXP",
+      "grant_amount": 1,
+      "daily_limit": 2,
+      "sort_order": 3,
+      "tier": "MVP",
+      "name_key": "shop.ex_ticket_exp.name",
+      "icon": "icon_ticket_exp"
+    }
+  ]
+}

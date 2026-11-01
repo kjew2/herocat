@@ -157,6 +157,7 @@ The exporter checks `constants` against this list (`E040` missing, `E042` unknow
 | `HERO_LVL_MULT` | `hero_levels.mult_per_level` | double |
 | Section 6.6 day/stage targets | `progress_targets` | int, int |
 | Feature unlock gates (Research, Companions, Quests, Dungeons, Shop) | `feature_unlocks` (issue #45) | enum, int |
+| Exchange offers (06 section 8.4: price, grant, daily limit) | `shop_exchange` (issue #174) | enum, long, int |
 | Awakening cadence target (03, 06) | `awakening_targets.max_days_after_gate` (issue #43) | int |
 | 08's `STAGE_VS_TIME` whale curve | `plausibility_stage_bound` (generated, issue #60) | int, int |
 | 06 section 2 reference-day parameters | `constants.REF_DAILIES_DONE`, `.REF_NEW_BOSSES` *(named here, issue #55)* | int |
@@ -711,6 +712,25 @@ The whale stage curve 08's `STAGE_VS_TIME` check multiplies by `STAGE_BOUND_MULT
 | `day` | int | Key. Exactly `1..60` (`E060`). Past the last row 08 does not run the check. |
 | `stage` | int | `>= 1`; non-decreasing (`E048`). |
 
+### 5.37 `shop_exchange` (3 rows)
+
+The diamond-for-dungeon-ticket offers of 06 section 8.4 (issue #174). Sim-read (`ExchangeItem`), so not `hotApply`-eligible; tier MVP, so an M0 build has none.
+
+| Column | Type | Constraint |
+|---|---|---|
+| `id` | id | Key. 06's `ex_ticket_fish`, `ex_ticket_candy`, `ex_ticket_exp`. |
+| `price_currency` | enum(Currency) | Must be `DIAMOND` (`E059`). |
+| `price_amount` | long | Per unit; `>= 1` (`E043`). |
+| `grant_currency` | enum(Currency) | One of `TICKET_FISH_COIN`, `TICKET_ROCK_CANDY`, `TICKET_EXP` (`E059`; 06 section 8.5: nothing else is sold). |
+| `grant_amount` | long | Per unit; `>= 1` (`E043`). |
+| `daily_limit` | int | Units per day key; `>= 1` (`E043`). |
+| `sort_order` | int | Unique (`E046`); display order on `SCR_SHOP`. |
+| `tier` | enum(Tier) | |
+| `name_key` | key | |
+| `icon` | asset | |
+
+Example: `{"id": "ex_ticket_fish", "price_currency": "DIAMOND", "price_amount": 50, "grant_currency": "TICKET_FISH_COIN", "grant_amount": 1, "daily_limit": 2, "sort_order": 1, "tier": "MVP", "name_key": "shop.ex_ticket_fish.name", "icon": "icon_ticket_fish_coin"}`.
+
 ## 6. JSON layout, manifest and versioning
 
 ### 6.1 One file per table
@@ -885,7 +905,7 @@ CONTENT <code> <location>: <message>
 | `E056` | chapters, tank, achievements | `{column} must equal {expected} ({reason}), got {value}` |
 | `E057` | enemies, bosses | `chapter '{chapter}' has {n} {enemies or bosses}, expected {rule}` |
 | `E058` | skills, companions | `duration_ticks {d} must be in 1..cooldown_ticks {c}` |
-| `E059` | banners, dungeons, shop_products | `{column} '{value}' is not an allowed currency here ({rule})` |
+| `E059` | banners, dungeons, shop_products, shop_exchange | `{column} '{value}' is not an allowed currency here ({rule})` |
 | `E060` | index columns | `{column} must be exactly 1..{n} in row order, got {values}` |
 | `E061` | dupe_levels | `cum_copies for level 1 must be 1, got {value}` |
 | `E062` | tutorial_steps | `exactly one PROFILE_CREATED step at order 1 required` |
@@ -911,7 +931,7 @@ CONTENT <code> <location>: <message>
 
 `W010` more than two `BUFF` skills in one rarity; `W011` a rarity `<= RARE` with no `MP_REGEN` companion; `W012` banners with different `banner_levels` counts; `W013` a reachable fish level reuses a lower sprite with no `tint` (issue #48); `W031` `FISH_MAX_LVL0` or the `res_fish_cap` max decreased against `--previous` (05, issue #41); `W020` missing non-ship-locale text; `W021` unused localization key; `W030` an `S` constant changed without a note in `meta.notes`.
 
-Loader scope: `ContentDb.Build` implements every `E0xx`, `E03x`-`E06x` rule that touches sim-read data, and `E9xx`. It does not implement `E07x` localization rules (strings are client-only) or `E09x` (no previous build). `check` in CI plus the hash check at load are what make a hand edit of `content/` visible. In code: the rules live in `ContentDb.Rules.cs`, mirror the exporter's `RULES` in order, and sort by table like it. Also left to the exporter: the warnings, `E039` (a budget check for the designer, not a sim guard) and the rules over tables the sim never reads (`enemies`/`bosses` `E057`, the shop tables, `inbox_templates`). The quest rules (`E043`, `E046`, `E054`, `E064` on `quests_daily` / `quests_weekly`) run in `Build` (issue #170), and so do the achievement rules (`E060`, `E043`, `E031`, `E056`, `E065` on `achievements`, issue #171); the dungeon rules join it when that table is built into `ContentDb` (issue #173).
+Loader scope: `ContentDb.Build` implements every `E0xx`, `E03x`-`E06x` rule that touches sim-read data, and `E9xx`. It does not implement `E07x` localization rules (strings are client-only) or `E09x` (no previous build). `check` in CI plus the hash check at load are what make a hand edit of `content/` visible. In code: the rules live in `ContentDb.Rules.cs`, mirror the exporter's `RULES` in order, and sort by table like it. Also left to the exporter: the warnings, `E039` (a budget check for the designer, not a sim guard) and the rules over tables the sim never reads (`enemies`/`bosses` `E057`, the shop tables, `inbox_templates`). The quest rules (`E043`, `E046`, `E054`, `E064` on `quests_daily` / `quests_weekly`) run in `Build` (issue #170), and so do the achievement rules (`E060`, `E043`, `E031`, `E056`, `E065` on `achievements`, issue #171) and `shop_exchange`'s (`E043`, `E046`, `E059`; issue #174); the dungeon rules join it when that table is built into `ContentDb` (issue #173).
 
 ### 8.7 How the rules read where the tables above leave it open
 
@@ -1172,6 +1192,7 @@ public sealed partial class ContentDb
     public DungeonDef DungeonOf(Dungeon kind);
 
     public IReadOnlyList<ShopProductDef> ShopProducts { get; }  public IReadOnlyList<ShopPackageDef> ShopPackages { get; }
+    public IReadOnlyList<ExchangeOfferDef> ExchangeOffers { get; }  public ExchangeOfferDef ExchangeOffer(string id);   // by SortOrder; null if unknown
     public IReadOnlyDictionary<string, InboxTemplateDef> InboxTemplates { get; }
     public IReadOnlyList<TutorialStepDef> TutorialSteps { get; }                  // by Order
     public IReadOnlyList<ProgressTargetDef> ProgressTargets { get; }              // by Day

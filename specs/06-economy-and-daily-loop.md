@@ -73,7 +73,7 @@ Rules that hold for every row:
 3. Nothing converts between currencies except the exchange offers in section 8.4, each with a daily limit.
 4. A debit that would go negative is rejected by `Wallet.Apply` before any state changes; commands check `CanAfford` first and return `Reject(CannotAfford, "NOT_ENOUGH_<CURRENCY>")` (section 1.3) so the UI can name the shortfall. Tickets follow the same pattern, e.g. `NOT_ENOUGH_TICKET_FISH_COIN`, `NOT_ENOUGH_TICKET_SUMMON_WEAPON` (issue #244).
 5. **Sim-granted diamonds and tickets reach the server ledgers on upload** (issue #49). Login, quests, first clears, achievements, the tutorial grant, the daily gift and quest ticket grants are credited locally by the sim and work offline. Each `PUT /save` reports cumulative per-reason counters (`Stats.ClientDiamondsEarned[reason]`, `Stats.ClientTicketsEarned[kind][reason]`, plus the client-side spends such as `SHOP_EXCHANGE`; 02), and the server credits the delta since the last upload into `diamond_ledger` / `ticket_ledger` with `ref_type = save_reconcile`, clamped to the per-day allowance (08 section 3.1). A summon can only spend what has been uploaded, so the client uploads before a pull when it has unsynced earnings (01).
-6. **`maxTicketsPerDay(ticket)`** is the per-day bound 08 section 3.1 clamps a summon ticket's upload credit to. It is derived from content, not hand-entered: that ticket's daily client-side grants (`DAILY_GIFT_WEAPON_TICKETS` and daily quest rows granting it) plus its weekly grants (weekly quest rows and `w_bonus_all`) in full, since a weekly grant lands on one day. Achievement ticket rewards are bounded like first-clear diamonds, by the achievement rows the uploaded progress has reached. MVP values: Weapon 1, Skill 1, Companion 1.
+6. **`maxTicketsPerDay(ticket)`** is the per-day bound 08 section 3.1 clamps a summon ticket's upload credit to. It is derived from content, not hand-entered: that ticket's daily client-side grants (`DAILY_GIFT_WEAPON_TICKETS` and daily quest rows granting it) plus its weekly grants (weekly quest rows, the bonus rows `w_bonus_all_skill` / `w_bonus_all_companion` included) in full, since a weekly grant lands on one day. Achievement ticket rewards are bounded like first-clear diamonds, by the achievement rows the uploaded progress has reached. MVP values: Weapon 1, Skill 1, Companion 1.
 
 ### 1.2 M0 subset
 
@@ -86,7 +86,7 @@ Every economy command rejects through 01's `ApplyResult.Reject(RejectCode, reaso
 | Reason (`ApplyResult.Reason`) | `RejectCode` | Raised by |
 |---|---|---|
 | `NOT_ENOUGH_<CURRENCY>` (e.g. `NOT_ENOUGH_DIAMOND`) | `CannotAfford` | any command that debits (rule 4) |
-| `UNKNOWN_ID` | `InvalidTarget` | `ClaimQuest`, `ExchangeItem` with an id not in content; `ClaimAllQuests` with a kind outside `QuestKind` |
+| `UNKNOWN_ID` | `InvalidTarget` | `ClaimQuest`, `ExchangeItem` with an id not in content (`shop_exchange` for `ExchangeItem`); `ClaimAllQuests` with a kind outside `QuestKind` |
 | `BAD_QUANTITY` | `BadArgument` | `ExchangeItem` with `qty < 1` |
 | `QUEST_NOT_COMPLETED` | `NotAvailable` | `ClaimQuest` |
 | `QUEST_ALREADY_CLAIMED` | `AlreadyClaimed` | `ClaimQuest` |
@@ -97,8 +97,9 @@ Every economy command rejects through 01's `ApplyResult.Reject(RejectCode, reaso
 | `DUNGEON_RUN_IN_PROGRESS` | `NotAvailable` | `StartDungeon`, `SweepDungeon` |
 | `BOSS_ATTEMPT_IN_PROGRESS` | `NotAvailable` | `StartDungeon` while a boss fight is active (issue #42); a sweep has no fight and is allowed |
 | `NOTHING_TO_SWEEP` | `NotAvailable` | `SweepDungeon` |
+| `SHOP_LOCKED` | `Locked` | `ClaimDailyGift`, `ExchangeItem` when the `feature_unlocks` row `SHOP` is not met: never in MVP (`ALWAYS`, 09 `E063`), always in an M0 build, which has no shop (section 1.2; issue #174) |
 | `DAILY_GIFT_ALREADY_CLAIMED` | `AlreadyClaimed` | `ClaimDailyGift` |
-| `EXCHANGE_LIMIT_REACHED` | `Capped` | `ExchangeItem` |
+| `EXCHANGE_LIMIT_REACHED` | `Capped` | `ExchangeItem` with `qty` above the offer's remaining daily limit |
 | `NO_PENDING_OFFLINE_REWARD` | `NotAvailable` | `ClaimOfflineReward` |
 
 `Awaken` is 03's command; its reject reasons are 03's.
@@ -252,8 +253,8 @@ public sealed record QuestDef(string Id, QuestKind Kind, QuestGoal Goal, string?
                               Currency RewardCurrency, double RewardAmount, int Order);
 // Filter: banner code for SUMMON, dungeon code for CLEAR_DUNGEON, null otherwise. A null filter on a SUMMON or
 // CLEAR_DUNGEON row matches any banner or dungeon (w_summons, w_dungeons).
-// One reward per row, as 09's quest tables have it; w_bonus_all (section 5.3) grants two tickets, and the shape that
-// carries it (a grant list or two rows) is open in issue #170.
+// One reward per row, as 09's quest tables have it; the weekly complete-all bonus (section 5.3), which grants two tickets,
+// is therefore two rows, w_bonus_all_skill and w_bonus_all_companion (issue #170).
 
 public sealed class QuestProgress   // one per QuestDef, in GameState.Quests.Daily / .Weekly / .Achievement[questId] (02, issue #7)
 {
@@ -311,7 +312,14 @@ Each row's `reward_amount` is 50 diamonds (issue #55). All seven complete-able b
 | `w_dungeons` | `CLEAR_DUNGEON` (any) | 25 | 6 per day for 4 days |
 | `w_train` | `TRAIN_LEVELS` | 300 | Training levels bought, any stat; the bot buys far more |
 
-Weekly complete-all bonus `w_bonus_all`: goal `WEEKLIES_COMPLETED` (in `QuestGoal`, section 5.1; not `DAILIES_COMPLETED`), target 7, reward 1 `TICKET_SUMMON_SKILL` + 1 `TICKET_SUMMON_COMPANION`. Non-diamond on purpose so the section 2 arithmetic stays a diamond sum. A `QuestDef` carries one reward, so how the row holds two tickets is open (issue #170).
+Weekly complete-all bonus: 1 `TICKET_SUMMON_SKILL` + 1 `TICKET_SUMMON_COMPANION` for completing all seven missions above. A `QuestDef` carries one reward, so the bonus is two rows (issue #170, the user's call):
+
+| Id | Goal | Target | Reward |
+|---|---|---|---|
+| `w_bonus_all_skill` | `WEEKLIES_COMPLETED` | 7 | 1 `TICKET_SUMMON_SKILL` |
+| `w_bonus_all_companion` | `WEEKLIES_COMPLETED` | 7 | 1 `TICKET_SUMMON_COMPANION` |
+
+`WEEKLIES_COMPLETED` is in `QuestGoal` (section 5.1; not `DAILIES_COMPLETED`). Only the seven missions count toward it: the two bonus rows complete together on the seventh mission and do not count each other, so their progress tops out at 7 (section 5.1). Non-diamond on purpose so the section 2 arithmetic stays a diamond sum. `SCR_QUESTS` shows them as the weekly tab's bonus chips (07).
 
 ### 5.4 Achievement ladders
 
@@ -535,7 +543,7 @@ The modal cannot be dismissed without claiming (there is no reason to refuse fre
 
 ## 8. Shop (MVP)
 
-All prices are content rows (09 `shop_products`, `shop_packages`). USD tiers map to Apple and Google price tiers in 08; other currencies use store-side tier conversion. Diamonds are the only thing money buys (00 decision 7).
+All prices are content rows (09 `shop_products`, `shop_packages`, and `shop_exchange` for section 8.4). USD tiers map to Apple and Google price tiers in 08; other currencies use store-side tier conversion. Diamonds are the only thing money buys (00 decision 7).
 
 ### 8.1 Diamond packs
 
@@ -564,7 +572,7 @@ The monthly card is the best value in the shop by a factor of 2.7 over the large
 
 ### 8.3 Daily free gift
 
-`ClaimDailyGift`: once per day key, grants 1 `TICKET_SUMMON_WEAPON` (`DAILY_GIFT_WEAPON_TICKETS` = 1) with `CurrencyReason.DAILY_GIFT`. Rejection `(AlreadyClaimed, DAILY_GIFT_ALREADY_CLAIMED)`. This is what makes `d_summon_weapon` free and is one of the ticket sources the tuning tool feeds into each banner's pull cadence (section 2, issue #38). The grant is a sim grant like quest tickets; it reaches the server `ticket_ledger` on the next upload (section 1.1 rule 5). The bot claims it first thing.
+`ClaimDailyGift`: once per day key, grants 1 `TICKET_SUMMON_WEAPON` (`DAILY_GIFT_WEAPON_TICKETS` = 1) with `CurrencyReason.DAILY_GIFT`, sets `Shop.DailyGiftClaimed` and emits `DailyGiftClaimed(currency, amount)` before its `CurrencyChanged`. It runs `EnsureDay` (section 4.2), then the `SHOP` gate (`SHOP_LOCKED`), then rejects `(AlreadyClaimed, DAILY_GIFT_ALREADY_CLAIMED)` when the flag is set. This is what makes `d_summon_weapon` free and is one of the ticket sources the tuning tool feeds into each banner's pull cadence (section 2, issue #38). The grant is a sim grant like quest tickets; it reaches the server `ticket_ledger` on the next upload (section 1.1 rule 5). The bot claims it first thing.
 
 ### 8.4 Exchange
 
@@ -576,7 +584,9 @@ Diamonds for tickets, with daily limits, so a player who wants more dungeon runs
 | `ex_ticket_candy` | 50 diamonds | 1 `TICKET_ROCK_CANDY` | 2 |
 | `ex_ticket_exp` | 50 diamonds | 1 `TICKET_EXP` | 2 |
 
-`ExchangeItem(offerId, qty)`: `qty` in 1..remaining limit; rejections `UNKNOWN_ID`, `BAD_QUANTITY`, `EXCHANGE_LIMIT_REACHED`, `NOT_ENOUGH_DIAMOND` (section 1.3). The count lives in `Shop.ExchangeCounts[offerId]` (02 `ShopState`). Summon tickets are not sold here; a pull is already priced in diamonds on `SCR_SUMMON`. Fish Coins, Rock Candy and gold are not sold for diamonds either; see 8.5.
+The offers are the rows of 09's `shop_exchange` (section 5.37; issue #174): `price_currency` must be `DIAMOND` and `grant_currency` a dungeon ticket (`E059`), so nothing else can be put on sale by a sheet edit.
+
+`ExchangeItem(offerId, qty)`: `qty` in 1..remaining limit. It runs `EnsureDay`, then the `SHOP` gate (`SHOP_LOCKED`), then rejects in this order: `UNKNOWN_ID`, `BAD_QUANTITY` (`qty < 1`), `EXCHANGE_LIMIT_REACHED` (`qty` above `daily_limit - ExchangeCounts[offerId]`), `NOT_ENOUGH_DIAMOND` for `qty * price_amount` (section 1.3); a rejected purchase changes nothing, so there is no partial buy. Accepted, it adds `qty` to `Shop.ExchangeCounts[offerId]` (02 `ShopState`), emits `ItemExchanged(offerId, qty, diamonds)`, then debits `qty * price_amount` diamonds and grants `qty * grant_amount` tickets, both with `CurrencyReason.SHOP_EXCHANGE` (the debit is a client-side spend, counted in `Stats.ClientDiamondsSpent`, section 1.1 rule 5). Summon tickets are not sold here; a pull is already priced in diamonds on `SCR_SUMMON`. Fish Coins, Rock Candy and gold are not sold for diamonds either; see 8.5.
 
 ### 8.5 Never sold
 
@@ -668,8 +678,8 @@ This section owns these events' fields (issue #245); every event also carries 02
 | `offline_catchup` | `elapsedSec`, `creditedSec`, `capped`, `gold`, `exp`, `tankFill`, `stage` (the pending record's) | `ComputeOfflineCatchup` that credits a gap of at least `OFFLINE_MIN_S` (section 7); a catch-up with no later `offline_claimed` is a reward cleared unclaimed (02 P18) |
 | `offline_claimed` | `elapsedSec`, `creditedSec`, `capped`, `gold`, `exp`, `tankFill`, `x2` | `OfflineRewardClaimed` |
 | `day_rollover` | `dayKey`, `skippedDays`, `secondsSinceLastTick` | `DayRolledOver` |
-| `daily_gift_claimed` | | `ClaimDailyGift` |
-| `exchange` | `offerId`, `qty`, `diamonds` | `ExchangeItem` |
+| `daily_gift_claimed` | | `DailyGiftClaimed` (`ClaimDailyGift`) |
+| `exchange` | `offerId`, `qty`, `diamonds` | `ItemExchanged` (`ExchangeItem`) |
 | `shop_view` | `tab` | `SCR_SHOP` opened (07 section 4.16) |
 | `iap_initiated`, `iap_completed`, `iap_failed` | `sku`, `platform`, `priceTier`, `priceMinor`, `currency` (store ISO code), `firstPurchase`, `latencyMs`, `errorCode` (`iap_failed` only; `RECEIPT_INVALID` for a `400` from validate) | client purchase flow (01, 08 section 5): store sheet opened, store success, store or validate failure |
 | `iap_status` | `sku`, `platform`, `status` (validated/granted/invalid/refunded/chargeback), `transactionIdHash`, `priceMinor`, `currency`, `firstPurchase` | server, on each `purchases` status change (08 sections 5.2 and 5.4) |
@@ -743,7 +753,7 @@ This section owns these events' fields (issue #245); every event also carries 02
 | `DAILY_GIFT_WEAPON_TICKETS` | 1 | S | Open question 3; input to the tool's per-banner pull cadence (issue #38) |
 | `awakening_targets.max_days_after_gate` | 2 per rank | S | AC 18 (issue #43) |
 | `INBOX_EXPIRY_DAYS` | 30 | S | |
-| Shop rows (8.1, 8.2, 8.4) | as tabled | S | Conversion KPIs in 10 |
+| Shop rows (8.1, 8.2, 8.4) | as tabled; 8.4's are 09 `shop_exchange` rows | S | Conversion KPIs in 10 |
 | `CurrencyReason` | 00 section 8 item 6's list (section 1) | | Resolved, issue #11 |
 | Reject reasons | section 1.3 | | |
 | `QuestGoal` enum, `WEEKLIES_COMPLETED` | section 5.1 | | |

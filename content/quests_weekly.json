@@ -84,6 +84,30 @@
       "tier": "MVP",
       "name_key": "quest.w_train.name",
       "icon": "icon_quest_train"
+    },
+    {
+      "id": "w_bonus_all_skill",
+      "goal": "WEEKLIES_COMPLETED",
+      "filter": null,
+      "target": 7,
+      "reward_currency": "TICKET_SUMMON_SKILL",
+      "reward_amount": 1,
+      "sort_order": 8,
+      "tier": "MVP",
+      "name_key": "quest.w_bonus_all_skill.name",
+      "icon": "icon_quest_bonus"
+    },
+    {
+      "id": "w_bonus_all_companion",
+      "goal": "WEEKLIES_COMPLETED",
+      "filter": null,
+      "target": 7,
+      "reward_currency": "TICKET_SUMMON_COMPANION",
+      "reward_amount": 1,
+      "sort_order": 9,
+      "tier": "MVP",
+      "name_key": "quest.w_bonus_all_companion.name",
+      "icon": "icon_quest_bonus"
     }
   ]
 }

@@ -43,6 +43,7 @@ namespace HeroCat.Sim.Content.Dto
         public FeatureUnlockRowDto[] FeatureUnlocks;
         public AwakeningTargetRowDto[] AwakeningTargets;
         public PlausibilityStageBoundRowDto[] PlausibilityStageBound;
+        public ShopExchangeRowDto[] ShopExchange;
     }
 
     /// <summary>manifest.json (09 section 6.2). Localization entries are listed but their contents never reach Sim.</summary>
@@ -495,6 +496,21 @@ namespace HeroCat.Sim.Content.Dto
         public int Stage;
     }
 
+    /// <summary>shop_exchange (09 section 5).</summary>
+    public sealed class ShopExchangeRowDto
+    {
+        public string Id;
+        public string PriceCurrency;
+        public long PriceAmount;
+        public string GrantCurrency;
+        public long GrantAmount;
+        public int DailyLimit;
+        public int SortOrder;
+        public string Tier;
+        public string NameKey;
+        public string Icon;
+    }
+
     /// <summary>The exporter's rule data ContentDb.Build re-checks (09 section 8.6 loader scope), so the lists cannot drift.</summary>
     public static class ContentRules
     {
@@ -505,7 +521,7 @@ namespace HeroCat.Sim.Content.Dto
             "skills", "companions", "runes", "banners", "banner_levels", "dupe_levels", "awakening", "hero_levels",
             "research", "fish_levels", "tank", "quests_daily", "quests_weekly", "achievements", "dungeons", "dungeon_floors",
             "shop_products", "shop_packages", "inbox_templates", "tutorial_steps", "progress_targets", "feature_unlocks",
-            "awakening_targets", "plausibility_stage_bound",
+            "awakening_targets", "plausibility_stage_bound", "shop_exchange",
         };
 
         /// <summary>Constants that must be &gt; 0 (09 section 5.1).</summary>

@@ -667,6 +667,14 @@
       "text": "Watch an ad"
     },
     {
+      "key": "quest.w_bonus_all_companion.name",
+      "text": "Complete all weekly missions"
+    },
+    {
+      "key": "quest.w_bonus_all_skill.name",
+      "text": "Complete all weekly missions"
+    },
+    {
       "key": "quest.w_dailies.name",
       "text": "Complete daily missions"
     },
@@ -731,6 +739,10 @@
       "text": "Invalid cell"
     },
     {
+      "key": "reject.bad_quantity",
+      "text": "Choose at least one"
+    },
+    {
       "key": "reject.bad_server_time",
       "text": "Clock error"
     },
@@ -771,12 +783,20 @@
       "text": "Not ready yet"
     },
     {
+      "key": "reject.daily_gift_already_claimed",
+      "text": "Already claimed today"
+    },
+    {
       "key": "reject.dungeon_run_in_progress",
       "text": "Finish the dungeon run first"
     },
     {
       "key": "reject.empty_cell",
       "text": "No fish there"
+    },
+    {
+      "key": "reject.exchange_limit_reached",
+      "text": "Daily limit reached"
     },
     {
       "key": "reject.fish_at_level_cap",
@@ -901,6 +921,10 @@
     {
       "key": "reject.rate_limited",
       "text": "Too fast, try again"
+    },
+    {
+      "key": "reject.shop_locked",
+      "text": "Shop not available yet"
     },
     {
       "key": "reject.skill_in_other_slot",
@@ -1457,6 +1481,18 @@
     {
       "key": "scr.weapons.title",
       "text": "Weapons"
+    },
+    {
+      "key": "shop.ex_ticket_candy.name",
+      "text": "Rock Candy ticket"
+    },
+    {
+      "key": "shop.ex_ticket_exp.name",
+      "text": "EXP ticket"
+    },
+    {
+      "key": "shop.ex_ticket_fish.name",
+      "text": "Fish Coin ticket"
     },
     {
       "key": "skill.c_01.desc",

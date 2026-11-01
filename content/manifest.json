@@ -77,8 +77,8 @@
     },
     "quests_weekly": {
       "file": "quests_weekly.json",
-      "rows": 7,
-      "sha256": "670dbd3254d63e6512f2302e62e62cd85926d3848353f793428a954d5d26bd80"
+      "rows": 9,
+      "sha256": "beb9a2912a70980edfb2e6c4349041fd59baf3e525817bb8e0d52a027bb9c383"
     },
     "rarities": {
       "file": "rarities.json",
@@ -94,6 +94,11 @@
       "file": "runes.json",
       "rows": 0,
       "sha256": "3261e985463cf5bc04fc2980bab3ccc3559fc1aa0e9f270d9e1e80b76593b1b4"
+    },
+    "shop_exchange": {
+      "file": "shop_exchange.json",
+      "rows": 3,
+      "sha256": "338fa2140a85ecbd5a010d65ac11429f2b6ea3ad0a8ef43879cbad101173037a"
     },
     "skills": {
       "file": "skills.json",
@@ -129,11 +134,11 @@
   "localization": {
     "en": {
       "file": "localization.en.json",
-      "rows": 553,
-      "sha256": "6d7f5dc9c5de3d6d999cee4c3da8fcdb9e317d6ef6ac5d0416e896bd4f8facc8"
+      "rows": 562,
+      "sha256": "e36d99976b22a1ff9f7509425631dbcb601a2a7f0fbcda9e1a94f050e12eeb4c"
     }
   },
-  "content_hash": "59d461aabeba2a0e7d378b758ab838c63b1713d0a97e90d8edc1a92525a0b191",
+  "content_hash": "8e2b3cc39003a8d3cf7dc0bd89c11bd7999887ebc64a5d1b0608ce3fe3930197",
   "s_constants": [
     "BASE_HP",
     "BOSS_ROCK_CANDY_P",

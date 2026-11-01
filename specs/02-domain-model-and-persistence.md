@@ -240,7 +240,7 @@ public sealed class ProgressState
 public sealed class QuestState                                          // reset off Time.DayKey / Time.WeekKey (06 EnsureDay); no keys of its own
 {
     public Dictionary<string, QuestProgress> Daily       { get; init; } = new();   // key: quest id from quests_daily (09), bonus rows (d_bonus_5, d_bonus_8) included; reset on rollover
-    public Dictionary<string, QuestProgress> Weekly      { get; init; } = new();   // w_bonus_all included
+    public Dictionary<string, QuestProgress> Weekly      { get; init; } = new();   // key: quest id from quests_weekly (09), bonus rows (w_bonus_all_skill, w_bonus_all_companion) included; reset on weekly rollover
     public Dictionary<string, QuestProgress> Achievement { get; init; } = new();   // key: rung id (`ach_<ladder>_<rung>`, 09), one entry per rung; never reset
 }
 
