@@ -261,7 +261,11 @@ namespace TMPro
     public enum TextAlignmentOptions { MidlineLeft, MidlineRight, Center, Bottom }
     public enum TextOverflowModes { Ellipsis }
     [Flags] public enum FontStyles { Normal = 0, Bold = 1 }
-    public class TMP_FontAsset : UnityEngine.Object { public static TMP_FontAsset CreateFontAsset(UnityEngine.Font f) => null; }
+    public class TMP_FontAsset : UnityEngine.Object
+    {
+        public static TMP_FontAsset CreateFontAsset(UnityEngine.Font f) => null;
+        public bool TryAddCharacters(string characters, out string missingCharacters) { missingCharacters = null; return true; }
+    }
     public static class TMP_Settings { public static TMP_FontAsset defaultFontAsset => null; }
     public class TMP_Text : UnityEngine.UI.Graphic
     {
