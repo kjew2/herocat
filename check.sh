@@ -27,8 +27,9 @@ done
 
 step() { printf '\n== %s\n' "$1"; }
 
-step "Content: content_src builds to content/ with no drift"
-python3 tools/content_build.py --check
+step "Content: exporter tests, and content_src builds to content/ (and the Sim DTOs) with no drift"
+python3 tools/test_export_content.py
+python3 tools/export_content.py check
 
 if [ "$DOTNET" -eq 0 ]; then
   printf '\nSkipped .NET checks (--no-dotnet). Not a full pass.\n'
@@ -44,6 +45,9 @@ step ".NET: build"
 dotnet build HeroCat.sln -c Release
 
 BOTS="dotnet run -c Release --no-build --project src/HeroCat.Bots --"
+
+step "Saves: the v1 fixture matches what the bot CLI generates (until SaveSchema.V1Frozen)"
+$BOTS save-fixture --check
 
 if [ "$FAST" -eq 1 ]; then
   step ".NET: unit tests (no golden)"

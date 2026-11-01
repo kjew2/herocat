@@ -1,8 +1,9 @@
-using System.Text;
+using System;
+using HeroCat.Sim.State;
 
 namespace HeroCat.Sim.Rng
 {
-    /// <summary>SplitMix64 as a stateless derive (specs/03 section 5.2).</summary>
+    /// <summary>SplitMix64 as a stateless derive (02 section 3.4; same generator as the sibling project).</summary>
     public static class SplitMix64
     {
         public const ulong Gamma = 0x9E3779B97F4A7C15UL;
@@ -24,62 +25,55 @@ namespace HeroCat.Sim.Rng
         public static double ToUnit(ulong x) => (x >> 11) * (1.0 / (1UL << 53));
     }
 
-    public static class Fnv1a64
+    /// <summary>
+    /// The eight persisted streams of 02 section 3.4 (00 contract 2). Every save holds all of them in every mode
+    /// (00 decision 14). Seeds are derived once in Runtime's ProfileFactory from RngRoot; the sim stays hash-free.
+    /// </summary>
+    public static class RngStreams
     {
-        public static ulong Hash(string s)
+        public const string Combat = "combat";                    // reserved: Counter == 0 in MVP
+        public const string Crit = "crit";                        // one draw per stage-fight hero hit
+        public const string FishSpawn = "fish_spawn";             // one draw per successful release
+        public const string Dungeon = "dungeon";                  // M0 dungeon seed derivation
+        public const string Loot = "loot";                        // one draw per boss kill
+        public const string SummonWeapon = "summon_weapon";       // three draws per pull, LocalSummonService only
+        public const string SummonSkill = "summon_skill";
+        public const string SummonCompanion = "summon_companion";
+
+        /// <summary>In 02's order. `dungeon_run` is temporary (Combat.DungeonRun) and never in this list.</summary>
+        public static readonly string[] All = { Combat, Crit, FishSpawn, Dungeon, Loot, SummonWeapon, SummonSkill, SummonCompanion };
+
+        /// <summary>16 lowercase hex chars, the persisted seed form.</summary>
+        public static string SeedToHex(ulong seed) => seed.ToString("x16", System.Globalization.CultureInfo.InvariantCulture);
+
+        /// <summary>Parses a persisted seed. False unless exactly 16 hex chars (02 R4).</summary>
+        public static bool TryParseSeed(string hex, out ulong seed)
         {
-            ulong h = 0xCBF29CE484222325UL;
-            foreach (byte b in Encoding.UTF8.GetBytes(s))
+            seed = 0;
+            if (hex == null || hex.Length != 16) return false;
+            foreach (char ch in hex)
             {
-                h ^= b;
-                h = unchecked(h * 0x100000001B3UL);
+                int v = ch >= '0' && ch <= '9' ? ch - '0' : ch >= 'a' && ch <= 'f' ? ch - 'a' + 10 : ch >= 'A' && ch <= 'F' ? ch - 'A' + 10 : -1;
+                if (v < 0) { seed = 0; return false; }
+                seed = (seed << 4) | (uint)v;
             }
-            return h;
+            return true;
         }
-    }
 
-    public static class StreamNames
-    {
-        public const string Combat = "combat", GearDrop = "gear_drop", GearRarity = "gear_rarity",
-                            Enhance = "enhance", GachaHero = "gacha_hero";
-
-        public static readonly string[] All = { Combat, GearDrop, GearRarity, Enhance, GachaHero };
-
-        /// <summary>Per-stream seed derived from the profile seed.</summary>
-        public static ulong StreamSeed(ulong profileSeed, string name) =>
-            SplitMix64.Mix(unchecked(profileSeed + Fnv1a64.Hash(name)));
-    }
-
-    /// <summary>Anything that hands out uniform doubles in [0,1). Lets tests script gacha/enhance outcomes.</summary>
-    public interface IRandomSource
-    {
-        double NextDouble();
-    }
-
-    /// <summary>Persisted in GameState.Rng. Seed and Counter are the entire state.</summary>
-    public sealed class RngStream : IRandomSource
-    {
-        public RngStream() { }
-
-        public RngStream(string name, ulong seed, ulong counter = 0)
+        /// <summary>The next uniform draw of a persisted stream; advances its counter.</summary>
+        public static double NextUnit(RngStreamState s)
         {
-            Name = name;
-            Seed = seed;
-            Counter = counter;
+            if (!TryParseSeed(s.Seed, out ulong seed)) throw new InvalidOperationException("stream seed is not 16 hex chars");
+            ulong k = (ulong)s.Counter;
+            s.Counter++;
+            return SplitMix64.ToUnit(SplitMix64.Derive(seed, k));
         }
 
-        public string Name { get; set; }
-        public ulong Seed { get; set; }
-        public ulong Counter { get; set; }
-
-        public double NextDouble() => SplitMix64.ToUnit(SplitMix64.Derive(Seed, Counter++));
-
-        /// <summary>0..n-1, same arithmetic as specs/01 section 8.</summary>
-        public int NextIndex(int n) => (int)(NextDouble() * n);
-
-        /// <summary>Audit/tests only: the value draw <paramref name="counter"/> would return.</summary>
-        public double PeekDouble(ulong counter) => SplitMix64.ToUnit(SplitMix64.Derive(Seed, counter));
-
-        public RngStream Clone() => new RngStream(Name, Seed, Counter);
+        /// <summary>What the next draw would return, without consuming it (LocalDungeonSeedService peeks, 01 section 8.8).</summary>
+        public static double PeekUnit(RngStreamState s)
+        {
+            if (!TryParseSeed(s.Seed, out ulong seed)) throw new InvalidOperationException("stream seed is not 16 hex chars");
+            return SplitMix64.ToUnit(SplitMix64.Derive(seed, (ulong)s.Counter));
+        }
     }
 }

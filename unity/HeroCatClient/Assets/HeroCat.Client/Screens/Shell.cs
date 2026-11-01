@@ -6,9 +6,10 @@ using UnityEngine.UIElements;
 namespace HeroCat.Client.Screens
 {
     /// <summary>
-    /// The whole UI tree (specs/07 section 5): HUD bar, combat strip, tab bar, content panel (one screen per tab),
-    /// toast line and a modal layer for the offline-earnings / class-advance popups. Built from code into the
-    /// UIDocument root; screens refresh at most 10 times a second, or right after a tap.
+    /// The M0 skeleton's UI tree: HUD bar, combat strip, tab bar (Debug only in dev builds), toast line and a modal layer.
+    /// Built from code into the UIDocument root; refreshes at most 10 times a second, or right after a tap.
+    /// The old prototype's Combat/Stats/Gear/Heroes/Gacha/Class tabs are deleted (00 decision 33); the uGUI rewrite of
+    /// SCR_MAIN and the M0 screens is TODO(#111) and #113-#118 (decision 35). Unity-only: not compiled in cloud sessions.
     /// </summary>
     public sealed class Shell
     {
@@ -68,12 +69,6 @@ namespace HeroCat.Client.Screens
             Ui.Pad(content, 8);
             column.Add(content);
 
-            _screens.Add(new CombatScreen(vm));
-            _screens.Add(new StatsScreen(vm));
-            _screens.Add(new GearScreen(vm));
-            _screens.Add(new HeroesScreen(vm));
-            _screens.Add(new GachaScreen(vm));
-            _screens.Add(new ClassScreen(vm));
 #if UNITY_EDITOR || DEVELOPMENT_BUILD || HEROCAT_CHEATS
             _screens.Add(new DebugScreen(vm));
 #endif
@@ -121,7 +116,7 @@ namespace HeroCat.Client.Screens
             // Any tap anywhere forces a refresh on the next frames so commands show their result immediately.
             _root.RegisterCallback<PointerUpEvent>(_ => Force(), TrickleDown.TrickleDown);
 
-            Select(0);
+            if (_screens.Count > 0) Select(0);
         }
 
         public void Dispose() => _root.RemoveFromHierarchy();
@@ -149,7 +144,7 @@ namespace HeroCat.Client.Screens
 
             _hud.Refresh();
             _strip.Refresh();
-            _screens[_active].Refresh();
+            if (_screens.Count > 0) _screens[_active].Refresh();
 
             string toast = _vm.Toasts.Current(now);
             Ui.Show(_toast, toast != null);

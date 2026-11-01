@@ -1,7 +1,6 @@
 using System;
 using System.Globalization;
 using HeroCat.Sim.Content;
-using HeroCat.Sim.Format;
 
 namespace HeroCat.Client.Core
 {
@@ -48,11 +47,11 @@ namespace HeroCat.Client.Core
 
         public static string Tier(Rarity r) => r switch
         {
-            Rarity.C => "Common",
-            Rarity.R => "Rare",
-            Rarity.E => "Epic",
-            Rarity.L => "Legendary",
-            Rarity.M => "Mythic",
+            Rarity.COMMON => "Common",
+            Rarity.RARE => "Rare",
+            Rarity.EPIC => "Epic",
+            Rarity.LEGENDARY => "Legendary",
+            Rarity.MYTHIC => "Mythic",
             _ => r.ToString(),
         };
     }
@@ -61,23 +60,19 @@ namespace HeroCat.Client.Core
     public static class Palette
     {
         public const uint Background = 0x121212, Panel = 0x1E1E1E, Text = 0xEEEEEE, Muted = 0x9E9E9E;
-        public const uint Gold = 0xFFD54F, Gems = 0x4DD0E1, Ok = 0x66BB6A, Bad = 0xEF5350, BarBack = 0x424242;
+        public const uint Gold = 0xFFD54F, Diamond = 0x4DD0E1, FishCoin = 0x26C6DA, RockCandy = 0xF06292, Ok = 0x66BB6A, Bad = 0xEF5350, BarBack = 0x424242;
 
         public static uint RarityColor(Rarity r) => r switch
         {
-            Rarity.C => 0x9E9E9E,
-            Rarity.R => 0x42A5F5,
-            Rarity.E => 0xAB47BC,
-            Rarity.L => 0xFFA726,
-            Rarity.M => 0xEF5350,
+            Rarity.COMMON => 0x9E9E9E,
+            Rarity.RARE => 0x42A5F5,
+            Rarity.EPIC => 0xAB47BC,
+            Rarity.LEGENDARY => 0xFFA726,
+            Rarity.MYTHIC => 0xEF5350,
             _ => 0x9E9E9E,
         };
 
-        static readonly uint[] ClassColors = { 0xBDBDBD, 0x81C784, 0x64B5F6, 0xBA68C8, 0xFFB74D };
-
-        public static uint ClassColor(int advances) => ClassColors[Math.Max(0, Math.Min(advances, ClassColors.Length - 1))];
-
         /// <summary>White text on E/M, black on C/R/L (section 8.2).</summary>
-        public static bool DarkTextOn(Rarity r) => r == Rarity.C || r == Rarity.R || r == Rarity.L;
+        public static bool DarkTextOn(Rarity r) => r == Rarity.COMMON || r == Rarity.RARE || r == Rarity.LEGENDARY;
     }
 }

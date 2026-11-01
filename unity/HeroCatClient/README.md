@@ -19,7 +19,7 @@ For a phone-like view, set the Game view to a portrait resolution such as 1080x1
 layout centred.
 
 Content is read directly from the repo's `content/` folder: the loader walks up from `Assets/`. Nothing is copied for Play. Edit
-`content_src/*.csv`, run `python3 tools/content_build.py`, then press Play again.
+`content_src/*.csv`, run `python3 tools/export_content.py build`, then press Play again.
 
 **iOS player settings** (bundle ID, version, IL2CPP, .NET Standard 2.1, iOS 15 minimum, portrait only, Input
 System, app icon, plain launch screen) and the URP asset (`Assets/Settings/HeroCat_URP.asset`: 2D Renderer; HDR, MSAA,
@@ -32,7 +32,7 @@ and `Assets/Settings/`. Re-running is safe. **Tools → HeroCat → Configure UR
 `Editor/ContentPreBuild.cs` (an `IPreprocessBuildWithReport`) checks the repo's `content/` against its
 `manifest.json`, copies the `*.json` files into `Assets/Resources/content`, and checks the copy. The loader falls back
 to `Resources/content` on device. The build fails if `manifest.json` is missing or a hash doesn't match; fix that with
-`python3 tools/content_build.py`. The copy is git-ignored, so don't commit it or edit it. **Tools → HeroCat → Copy
+`python3 tools/export_content.py build`. The copy is git-ignored, so don't commit it or edit it. **Tools → HeroCat → Copy
 Content into Resources** runs the same step without building.
 
 **Code stripping.** `Assets/link.xml` keeps IL2CPP from stripping the Sim, Runtime and Newtonsoft.Json code that save

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using HeroCat.Runtime.Content;
 using HeroCat.Sim.Content;
 using UnityEditor;
 using UnityEditor.Build;
@@ -52,7 +53,7 @@ namespace HeroCat.Client.Editor
             if (src == null)
                 throw new BuildFailedException(
                     "HeroCat: content/manifest.json not found above " + Application.dataPath +
-                    ". Run python3 tools/content_build.py.");
+                    ". Run python3 tools/export_content.py build.");
             Validate(src);
 
             string dst = Path.GetFullPath(Path.Combine(Application.dataPath, "Resources", "content"));
@@ -81,9 +82,9 @@ namespace HeroCat.Client.Editor
         {
             try
             {
-                ContentDb.LoadFromDirectory(dir, verifyHashes: true);
+                ContentLoader.LoadFromDirectory(dir, HeroCat.Client.Boot.ContentLocator.BuildTier);   // E900-E902 plus ContentDb.Build
             }
-            catch (ContentLoadException e)
+            catch (ContentBuildException e)
             {
                 throw new BuildFailedException("HeroCat: " + dir + ": " + e.Message);
             }

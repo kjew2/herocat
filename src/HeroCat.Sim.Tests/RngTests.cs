@@ -1,4 +1,5 @@
 using HeroCat.Sim.Rng;
+using HeroCat.Sim.State;
 using NUnit.Framework;
 
 namespace HeroCat.Sim.Tests
@@ -21,41 +22,36 @@ namespace HeroCat.Sim.Tests
             Assert.That(SplitMix64.ToUnit(SplitMix64.Derive(seed, k)), Is.EqualTo(unit));
         }
 
-        [TestCase("combat", 0xCA0BF97CCE717B21UL, 0xD638BA460341F349UL)]
-        [TestCase("gear_drop", 0xC1A5A0EE94A0A3BAUL, 0xFB1D7F3436BC41A4UL)]
-        [TestCase("gear_rarity", 0x6AB86776709CD868UL, 0x9A1426458CA81741UL)]
-        [TestCase("enhance", 0xDC465426329C1EE9UL, 0x84C074F86395F937UL)]
-        [TestCase("gacha_hero", 0x8C00A1F67FD04D96UL, 0x9BB72FE2750126ACUL)]
-        public void Fnv_And_StreamSeed_MatchSpecVectors(string name, ulong fnv, ulong streamSeed)
-        {
-            Assert.That(Fnv1a64.Hash(name), Is.EqualTo(fnv));
-            Assert.That(StreamNames.StreamSeed(7, name), Is.EqualTo(streamSeed));
-        }
-
         [Test]
-        public void Stream_CounterAndPeek()
+        public void PersistedStream_DrawsDeriveSeedCounter_AndAdvancesTheCounter()
         {
-            var s = new RngStream("x", 7);
-            for (ulong j = 0; j < 100; j++)
-                Assert.That(s.NextDouble(), Is.EqualTo(s.PeekDouble(j)));
-            Assert.That(s.Counter, Is.EqualTo(100UL));
-        }
-
-        [Test]
-        public void NextIndex_CoversRange()
-        {
-            var s = new RngStream("x", 7);
-            foreach (int n in new[] { 3, 6, 20 })
+            var s = new RngStreamState { Seed = RngStreams.SeedToHex(7), Counter = 0 };
+            for (ulong k = 0; k < 100; k++)
             {
-                var seen = new bool[n];
-                for (int i = 0; i < 100000; i++)
-                {
-                    int v = s.NextIndex(n);
-                    Assert.That(v, Is.InRange(0, n - 1));
-                    seen[v] = true;
-                }
-                Assert.That(seen, Is.All.True);
+                Assert.That(RngStreams.PeekUnit(s), Is.EqualTo(SplitMix64.ToUnit(SplitMix64.Derive(7, k))));
+                Assert.That(RngStreams.NextUnit(s), Is.EqualTo(SplitMix64.ToUnit(SplitMix64.Derive(7, k))));
             }
+            Assert.That(s.Counter, Is.EqualTo(100));
+        }
+
+        [Test]
+        public void SeedHex_RoundTrips_AndRejectsBadForms()
+        {
+            Assert.That(RngStreams.SeedToHex(0x123456789ABCDEF0UL), Is.EqualTo("123456789abcdef0"));
+            Assert.That(RngStreams.TryParseSeed("123456789abcdef0", out ulong v), Is.True);
+            Assert.That(v, Is.EqualTo(0x123456789ABCDEF0UL));
+            Assert.That(RngStreams.TryParseSeed("123", out _), Is.False);
+            Assert.That(RngStreams.TryParseSeed("123456789abcdefg", out _), Is.False);
+            Assert.That(RngStreams.TryParseSeed(null, out _), Is.False);
+        }
+
+        [Test]
+        public void EightStreams_InSpecOrder()
+        {
+            Assert.That(RngStreams.All, Is.EqualTo(new[]
+            {
+                "combat", "crit", "fish_spawn", "dungeon", "loot", "summon_weapon", "summon_skill", "summon_companion",
+            }));
         }
     }
 }

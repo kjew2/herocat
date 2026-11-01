@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using HeroCat.Runtime.Services;
-using HeroCat.Sim;
 using HeroCat.Sim.Content;
 using HeroCat.Sim.Rng;
 using HeroCat.Sim.State;
@@ -10,16 +9,16 @@ namespace HeroCat.Runtime.Save
 {
     public enum LoadStatus
     {
-        /// <summary>Primary slot loaded.</summary>
+        /// <summary>slot0.sav loaded.</summary>
         Loaded,
 
-        /// <summary>Primary was absent or bad; the previous save loaded (bad primary was quarantined).</summary>
-        LoadedFromBackup,
+        /// <summary>slot0.sav was absent or bad; slot0.prev.sav loaded (the bad one was quarantined).</summary>
+        LoadedFromPrev,
 
         /// <summary>No save existed. State is null; create a profile.</summary>
         NoSave,
 
-        /// <summary>Saves existed but none was usable; both were quarantined. State is null; create a profile.</summary>
+        /// <summary>Saves existed but none was usable; both were quarantined (an old-design dev save lands here). State is null.</summary>
         Corrupt,
     }
 
@@ -30,29 +29,30 @@ namespace HeroCat.Runtime.Save
         /// <summary>Null for NoSave / Corrupt.</summary>
         public GameState State { get; internal set; }
 
-        public SaveMeta Meta { get; internal set; }
-
-        /// <summary>Schema version found on disk before migration (== SaveSchema.Current when nothing migrated).</summary>
+        /// <summary>Schema version found on disk before migration.</summary>
         public int FromSchemaVersion { get; internal set; }
 
-        /// <summary>Why rejected slots were rejected (for logs).</summary>
+        public bool HmacValid { get; internal set; }
+
+        /// <summary>Why rejected files were rejected (for logs).</summary>
         public List<string> Problems { get; } = new List<string>();
 
         public bool HasState => State != null;
     }
 
     /// <summary>
-    /// The save pipeline (specs/06 sections 5 and 7) on top of any <see cref="ISaveStore"/>:
-    /// Load = read -> Decode (header/len/CRC) -> Migrate -> Materialize -> Validate, primary then backup.
-    /// Write = Stamp -> Encode -> store.Write (atomic, rotating).
+    /// The save pipeline on top of any <see cref="ISaveStore"/> (02 sections 6-8): Load = read, Decode (R1), Migrate,
+    /// Materialize, Validate (R2-R5), slot0.sav then slot0.prev.sav; Write = Stamp, Encode, atomic rotating write.
+    /// TODO(#75): the repair rules P1-P21 and the content-dependent validator; TODO(#77): 02 section 8's
+    /// LocalSaveStore interface, recovery order and quarantine retention.
     /// </summary>
     public static class SaveSystem
     {
         /// <summary>
-        /// Load the newest usable save. Throws <see cref="SaveTooNewException"/> (nothing touched, backup not
-        /// consulted) if a slot was written by a newer build; every other failure falls through to the next slot.
+        /// Load the newest usable save. Throws <see cref="SaveTooNewException"/> (nothing touched, prev not consulted) if a
+        /// file was written by a newer build; every other failure falls through to the next file.
         /// </summary>
-        public static LoadResult Load(ISaveStore store, ContentDb db, long nowServerSec, IAnalytics analytics = null)
+        public static LoadResult Load(ISaveStore store, ContentDb db, long nowServerSec, IAnalytics analytics = null, byte[] deviceKey = null)
         {
             analytics ??= NullAnalytics.Instance;
             var result = new LoadResult();
@@ -64,11 +64,11 @@ namespace HeroCat.Runtime.Save
                 anyExisted = true;
                 try
                 {
-                    var (state, meta, from) = DecodeFull(bytes, db, analytics);
+                    var (state, from, hmacValid) = DecodeFull(bytes, db, analytics, deviceKey);
                     result.State = state;
-                    result.Meta = meta;
                     result.FromSchemaVersion = from;
-                    result.Status = slot == SaveSlot.Primary ? LoadStatus.Loaded : LoadStatus.LoadedFromBackup;
+                    result.HmacValid = hmacValid;
+                    result.Status = slot == SaveSlot.Primary ? LoadStatus.Loaded : LoadStatus.LoadedFromPrev;
                     if (slot == SaveSlot.Backup)
                     {
                         if (primaryBad) store.Quarantine(SaveSlot.Primary, nowServerSec);
@@ -79,6 +79,7 @@ namespace HeroCat.Runtime.Save
                 catch (Exception e) when (e is SaveCorruptException || e is SaveInvalidException)
                 {
                     result.Problems.Add($"{slot}: {e.Message}");
+                    analytics.Track("save_reject", new Dictionary<string, object> { ["file"] = slot.ToString(), ["reason"] = e.Message });
                     if (slot == SaveSlot.Primary) primaryBad = true;
                 }
             }
@@ -95,68 +96,83 @@ namespace HeroCat.Runtime.Save
             return result;
         }
 
-        /// <summary>Decode + migrate + materialise + validate one file. Throws SaveCorrupt/SaveInvalid/SaveTooNew.</summary>
-        public static (GameState state, SaveMeta meta, int fromVersion) DecodeFull(byte[] bytes, ContentDb db, IAnalytics analytics = null)
+        /// <summary>Decode + migrate + materialize + validate one file. Throws SaveCorrupt / SaveInvalid / SaveTooNew.</summary>
+        public static (GameState state, int fromVersion, bool hmacValid) DecodeFull(byte[] bytes, ContentDb db, IAnalytics analytics = null,
+                                                                                   byte[] deviceKey = null)
         {
-            var (version, body) = SaveSerializer.Decode(bytes);
+            var file = SaveSerializer.Decode(bytes, deviceKey);
+            if (file.SchemaVersion > SaveSchema.Current) throw new SaveTooNewException(file.SchemaVersion, SaveSchema.Current);
+            Newtonsoft.Json.Linq.JObject body;
             try
             {
-                body = SaveMigrations.Migrate(version, body, (from, to) =>
-                    (analytics ?? NullAnalytics.Instance).Track("migration_applied", new Dictionary<string, object> { ["from"] = from, ["to"] = to }));
+                body = SaveMigrations.Migrate(file.SchemaVersion, file.Body, new AnalyticsMigrationLog(analytics ?? NullAnalytics.Instance));
             }
             catch (Exception e) when (!(e is SaveTooNewException) && !(e is SaveInvalidException))
             {
-                throw new SaveInvalidException($"migration from v{version} failed: {e.Message}", e);
+                throw new SaveInvalidException($"migration from v{file.SchemaVersion} failed: {e.Message}", e);
             }
-            var (state, meta) = SaveSerializer.Materialize(body);
+            var state = SaveSerializer.Materialize(body);
             Validate(state, db);
-            return (state, meta, version);
+            return (state, file.SchemaVersion, file.HmacValid);
         }
 
-        /// <summary>
-        /// Reject rules (specs/06 7.2, R3-R5) plus the sim's own invariant check. Constructing a Simulation also
-        /// normalises array lengths to the loaded content (a light version of the spec's repair rules).
-        /// Throws <see cref="SaveInvalidException"/>.
-        /// </summary>
+        /// <summary>The structural reject rules R2-R5 (02 section 6.4). Throws <see cref="SaveInvalidException"/>.</summary>
         public static void Validate(GameState s, ContentDb db)
         {
             if (s == null) throw new SaveInvalidException("state is null");
-            if (s.ProfileId == Guid.Empty) throw new SaveInvalidException("ProfileId is empty");
-            if (s.Clock == null || s.Daily == null || s.Currencies == null || s.Progression == null || s.Stage == null ||
-                s.Combat == null || s.Gear == null || s.Heroes == null || s.HeroBanner == null || s.Rng == null ||
-                s.Rng.Streams == null || s.Lifetime == null)
-                throw new SaveInvalidException("a root section is null");
-            foreach (var name in StreamNames.All)
-                if (!s.Rng.Streams.TryGetValue(name, out var st) || st == null)
-                    throw new SaveInvalidException($"rng stream '{name}' missing");
-            try
+            if (s.SchemaVersion < 1) throw new SaveInvalidException("R2: SchemaVersion missing or < 1");
+            if (s.Time == null || s.Hero == null || s.Training == null || s.Wallet == null || s.Weapons == null || s.Skills == null ||
+                s.Companions == null || s.Runes == null || s.Loadout == null || s.Fish == null || s.Banners == null || s.Combat == null ||
+                s.Progress == null || s.Quests == null || s.Dungeons == null || s.Shop == null || s.Research == null || s.Inbox == null ||
+                s.Offline == null || s.Pending == null || s.Tutorial == null || s.Rng == null || s.Stats == null)
+                throw new SaveInvalidException("R3: a root section is null");
+            if (s.RngRoot == Guid.Empty) throw new SaveInvalidException("R4: RngRoot is empty");
+            foreach (var name in RngStreams.All)
             {
-                new Simulation(db, s).Validate();
+                if (!s.Rng.TryGetValue(name, out var st) || st == null) throw new SaveInvalidException($"R4: rng stream '{name}' missing");
+                if (!RngStreams.TryParseSeed(st.Seed, out _)) throw new SaveInvalidException($"R4: rng stream '{name}' seed is not 16 hex chars");
+                if (st.Counter < 0) throw new SaveInvalidException($"R4: rng stream '{name}' counter is negative");
             }
-            catch (InvariantViolationException e) { throw new SaveInvalidException("invariant: " + e.Message, e); }
-            catch (Exception e) when (e is NullReferenceException || e is IndexOutOfRangeException || e is ArgumentException ||
-                                      e is KeyNotFoundException)
-            {
-                throw new SaveInvalidException("state is malformed: " + e.Message, e);
-            }
+            var k = db.Constants;
+            if (s.Training.Level == null || s.Training.Level.Length != 8) throw new SaveInvalidException("R5: Training.Level length != 8");
+            if (s.Fish.Cells == null || s.Fish.Cells.Length != k.FishBoardW * k.FishBoardH)
+                throw new SaveInvalidException("R5: Fish.Cells length != FISH_BOARD_W * FISH_BOARD_H");
+            if (s.Wallet.DungeonTicket == null || s.Wallet.DungeonTicket.Length != 3) throw new SaveInvalidException("R5: Wallet.DungeonTicket length != 3");
+            if (s.Wallet.SummonTicket == null || s.Wallet.SummonTicket.Length != 4) throw new SaveInvalidException("R5: Wallet.SummonTicket length != 4");
         }
 
-        /// <summary>specs/06 5.1. Every write stamps first; bots that skip files call this directly.</summary>
-        public static void Stamp(GameState state, SaveMeta meta, long nowServerSec, string contentVersion)
+        /// <summary>
+        /// SaveStamp (02 section 8.2): LastSavedServerTime = now; SaveSeq += 1; ContentVersion/ContentHash = db's;
+        /// DeviceId = this install. When <paramref name="ticking"/>, LastTickServerTime = now too (the window was ticked).
+        /// </summary>
+        public static void Stamp(GameState state, long nowServerSec, ContentDb db, Guid installId, bool ticking)
         {
-            meta.LastSavedAtServerSec = nowServerSec;
-            meta.SaveSequence += 1;
-            if (!string.IsNullOrEmpty(contentVersion)) state.ContentVersion = contentVersion;
+            state.Time.LastSavedServerTime = nowServerSec;
+            state.SaveSeq += 1;
+            state.ContentVersion = db.Version;
+            state.ContentHash = db.ContentHash;
+            if (installId != Guid.Empty) state.DeviceId = installId;
+            if (ticking && nowServerSec > state.Time.LastTickServerTime) state.Time.LastTickServerTime = nowServerSec;
         }
 
         /// <summary>Stamp, encode, write atomically. Throws <see cref="SaveWriteException"/>; the stamp has already happened.</summary>
-        public static void Write(ISaveStore store, GameState state, SaveMeta meta, long nowServerSec, string contentVersion)
+        public static void Write(ISaveStore store, GameState state, long nowServerSec, ContentDb db, Guid installId, bool ticking,
+                                 byte[] deviceKey = null)
         {
-            Stamp(state, meta, nowServerSec, contentVersion);
+            Stamp(state, nowServerSec, db, installId, ticking);
             byte[] bytes;
-            try { bytes = SaveSerializer.Encode(state, meta); }
+            try { bytes = SaveSerializer.Encode(state, deviceKey); }
             catch (Exception e) { throw new SaveWriteException("encode failed: " + e.Message, e); }
             store.Write(bytes);
+        }
+
+        sealed class AnalyticsMigrationLog : IMigrationLog
+        {
+            readonly IAnalytics _a;
+            public AnalyticsMigrationLog(IAnalytics a) { _a = a; }
+
+            public void Applied(int from, int to) =>
+                _a.Track("migration_applied", new Dictionary<string, object> { ["from"] = from, ["to"] = to });
         }
     }
 }

@@ -1,7 +1,7 @@
 using System;
 using System.Globalization;
 
-namespace HeroCat.Sim.Format
+namespace HeroCat.Client.Core
 {
     /// <summary>
     /// Short display form (specs/03 section 4): 3 significant digits plus a suffix.

@@ -8,8 +8,9 @@
     <InvariantGlobalization>true</InvariantGlobalization>
   </PropertyGroup>
   <ItemGroup>
-    <!-- specs/09 section 2 also lists HeroCat.Runtime (save round-trip); not referenced in the POC. -->
+    <!-- 01 section 1.2: the harness references Sim and Runtime (ContentLoader, ProfileFactory, FakeClock, save serializer). -->
     <ProjectReference Include="../HeroCat.Sim/HeroCat.Sim.csproj" />
+    <ProjectReference Include="../HeroCat.Runtime/HeroCat.Runtime.csproj" />
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Acceptance/acceptance-targets.json" LogicalName="acceptance-targets.json" />

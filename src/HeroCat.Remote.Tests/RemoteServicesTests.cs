@@ -5,7 +5,6 @@ using HeroCat.Remote.Services;
 using HeroCat.Remote.Transport;
 using HeroCat.Runtime.Save;
 using HeroCat.Runtime.Services;
-using HeroCat.Sim.Time;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 
@@ -51,13 +50,6 @@ namespace HeroCat.Remote.Tests
         }
 
         [Test]
-        public void RemoteGacha_is_Unsupported()
-        {
-            var e = Assert.Throws<ServiceException>(() => new RemoteGachaService().Pull(null, null, null, null, null, null, 1));
-            Assert.That(e.Kind, Is.EqualTo(ServiceErrorKind.Unsupported));
-        }
-
-        [Test]
         public void CloudSave_writes_locally_even_when_offline_and_keeps_upload_queued()
         {
             var local = new MemorySaveStore();
@@ -98,7 +90,6 @@ namespace HeroCat.Remote.Tests
             {
                 var s = RemoteGameServices.Create(dir, OfflineTransport.Instance);
                 Assert.That(s.Clock, Is.TypeOf<ServerClock>());
-                Assert.That(s.Gacha, Is.TypeOf<RemoteGachaService>());
                 Assert.That(s.SaveStore, Is.TypeOf<CloudSaveStore>());
                 Assert.That(s.Analytics, Is.SameAs(NullAnalytics.Instance));
 

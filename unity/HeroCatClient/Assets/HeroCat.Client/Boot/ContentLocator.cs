@@ -1,17 +1,25 @@
+using System.Collections.Generic;
 using System.IO;
+using HeroCat.Runtime.Content;
 using HeroCat.Sim.Content;
 using UnityEngine;
 
 namespace HeroCat.Client.Boot
 {
     /// <summary>
-    /// Finds content/*.json without copying it into the project (specs/05 section 10). Order:
+    /// Finds content/*.json and builds the ContentDb through Runtime's ContentLoader (09 section 2; the Sim never sees
+    /// JSON). Order:
     ///   1. Editor / desktop dev: walk up from Assets/ to the repository's content/ folder.
     ///   2. StreamingAssets/content (desktop players, if someone copies it there).
     ///   3. Resources/content TextAssets (device builds: Editor/ContentPreBuild.cs copies them in before each build).
+    /// TODO(#133): bundle content/ into StreamingAssets per 09 section 10.1; TODO(#212): the CDN cache.
+    /// Unity-only: not compiled in cloud sessions.
     /// </summary>
     public static class ContentLocator
     {
+        /// <summary>The tier this client is built for (09 section 5.32). TODO(#141): from the build profile.</summary>
+        public const Tier BuildTier = Tier.M0;
+
         public static string Describe { get; private set; } = "";
 
         public static ContentDb Load()
@@ -25,14 +33,14 @@ namespace HeroCat.Client.Boot
             if (dir != null)
             {
                 Describe = dir;
-                return ContentDb.LoadFromDirectory(dir);
+                return ContentLoader.LoadFromDirectory(dir, BuildTier, Application.version);
             }
             Describe = "Resources/content";
-            return ContentDb.Load(new ResourcesContentSource());
+            return ContentLoader.Load(new ResourcesContentSource(), BuildTier, Application.version);
         }
     }
 
-    /// <summary>specs/05 section 10.1: each table is a TextAsset under Assets/Resources/content/.</summary>
+    /// <summary>Each table is a TextAsset under Assets/Resources/content/ (09 section 10.1).</summary>
     public sealed class ResourcesContentSource : IContentSource
     {
         static TextAsset Get(string fileName) =>
@@ -40,6 +48,9 @@ namespace HeroCat.Client.Boot
 
         public bool Exists(string fileName) => Get(fileName) != null;
 
-        public string ReadText(string fileName) => Get(fileName).text;
+        public byte[] ReadBytes(string fileName) => Get(fileName).bytes;
+
+        /// <summary>Resources cannot list a folder; E902's "present but not listed" half is skipped.</summary>
+        public IReadOnlyList<string> ListJsonFiles() => null;
     }
 }

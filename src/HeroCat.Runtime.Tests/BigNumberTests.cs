@@ -1,7 +1,7 @@
-using HeroCat.Sim.Format;
+using HeroCat.Client.Core;
 using NUnit.Framework;
 
-namespace HeroCat.Sim.Tests
+namespace HeroCat.Runtime.Tests
 {
     public class BigNumberTests
     {

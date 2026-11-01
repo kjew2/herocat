@@ -1,0 +1,281 @@
+{
+  "SchemaVersion": 1,
+  "ContentVersion": "2026.11.01",
+  "ContentHash": "ec7f0c0e987e3a087442d9859c7a9359639235109b214c10f47328dd450aa8bf",
+  "PlayerId": "00000000-0000-0000-0000-000000000000",
+  "DeviceId": "b07b07b0-0000-4000-8000-000000000001",
+  "RngRoot": "00000007-0000-4000-8000-000000000001",
+  "SaveSeq": 1,
+  "Time": {
+    "Tick": 144000,
+    "LastSavedServerTime": 1767398400,
+    "LastTickServerTime": 1767398400,
+    "AnchorServerTime": 1767398400,
+    "AnchorTick": 144000,
+    "CreatedServerTime": 1767225600,
+    "DayKey": 20456,
+    "WeekKey": 2921,
+    "LoginDayKey": 20456
+  },
+  "Hero": {
+    "Level": 1,
+    "Exp": 0.0,
+    "AwakenRank": 0
+  },
+  "Training": {
+    "Level": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  "Wallet": {
+    "Gold": 0.0,
+    "Diamond": 1650,
+    "FishCoin": 0.0,
+    "RockCandy": 0,
+    "DungeonTicket": [
+      0,
+      0,
+      0
+    ],
+    "SummonTicket": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "GuildCoin": 0
+  },
+  "Weapons": {
+    "Items": {
+      "weapon_c_01": {
+        "Copies": 1,
+        "LimitBreaks": 0,
+        "FirstAcquiredServerTime": 1767225600
+      }
+    }
+  },
+  "Skills": {
+    "Items": {}
+  },
+  "Companions": {
+    "Items": {}
+  },
+  "Runes": {
+    "Items": {}
+  },
+  "Loadout": {
+    "Weapon": "weapon_c_01",
+    "Skills": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "Companions": [
+      null,
+      null,
+      null,
+      null
+    ],
+    "Runes": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "Fish": {
+    "Cells": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "TankCount": 0,
+    "TankRefillTick": 0,
+    "TankReleaseLevel": 1,
+    "DiscoveredLevels": [],
+    "HighestLevel": 0,
+    "TotalMerges": 0,
+    "AutoMergeEnabled": false
+  },
+  "Banners": {
+    "SKILL": {
+      "Pity": 0,
+      "Exp": 0,
+      "TotalPulls": 0
+    },
+    "WEAPON": {
+      "Pity": 0,
+      "Exp": 0,
+      "TotalPulls": 0
+    }
+  },
+  "Combat": {
+    "Mode": "Stage",
+    "Stage": 1,
+    "KillsInStage": 0,
+    "Boss": "None",
+    "BossFailsOnStage": 0,
+    "Selected": null,
+    "Mp": 0.0,
+    "SkillCooldowns": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "CompanionCooldowns": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "MissileQueue": [],
+    "DungeonRun": null
+  },
+  "Progress": {
+    "HighestCleared": 0,
+    "HighestFirstClearBoss": 0,
+    "StageCapReached": 0
+  },
+  "Quests": {
+    "Daily": {},
+    "Weekly": {},
+    "Achievement": {}
+  },
+  "Dungeons": {
+    "BestFloor": [
+      0,
+      0,
+      0
+    ],
+    "EntriesToday": [
+      0,
+      0,
+      0
+    ],
+    "SweepsToday": [
+      0,
+      0,
+      0
+    ],
+    "RecentRuns": []
+  },
+  "Shop": {
+    "DailyGiftClaimed": false,
+    "ExchangeCounts": {}
+  },
+  "Research": {
+    "Level": {}
+  },
+  "Inbox": {
+    "ClaimedIds": [],
+    "LastFetchedServerTime": 0
+  },
+  "Offline": {
+    "Pending": null,
+    "LifetimeOfflineSecCredited": 0
+  },
+  "Pending": {
+    "Summon": null,
+    "Dungeon": null,
+    "Receipts": []
+  },
+  "Tutorial": {
+    "Step": 0,
+    "Skipped": false,
+    "TutorialDiamondsGranted": true
+  },
+  "Rng": {
+    "combat": {
+      "Seed": "25e9905147ff2a5d",
+      "Counter": 0
+    },
+    "crit": {
+      "Seed": "10e431400760b15e",
+      "Counter": 0
+    },
+    "dungeon": {
+      "Seed": "0ff384dc670a7e71",
+      "Counter": 0
+    },
+    "fish_spawn": {
+      "Seed": "dba33b0039a13b5f",
+      "Counter": 0
+    },
+    "loot": {
+      "Seed": "e1b462ae37ccbc87",
+      "Counter": 0
+    },
+    "summon_companion": {
+      "Seed": "1352fdc4fc9a7f59",
+      "Counter": 0
+    },
+    "summon_skill": {
+      "Seed": "6ca1cdbe05278c1a",
+      "Counter": 0
+    },
+    "summon_weapon": {
+      "Seed": "f268608da8a59a7f",
+      "Counter": 0
+    }
+  },
+  "Stats": {
+    "Kills": 0,
+    "BossKills": 0,
+    "BossFails": 0,
+    "HeroHits": 0,
+    "Taps": 0,
+    "Pulls": 0,
+    "Merges": 0,
+    "FishReleased": 0,
+    "FishDiscards": 0,
+    "DungeonClears": 0,
+    "TrainingLevelsBought": 0,
+    "FirstWallStage": 0,
+    "ActiveSeconds": 14400,
+    "GoldEarned": 0.0,
+    "GoldSpent": 0.0,
+    "FishCoinEarned": 0.0,
+    "DiamondsEarned": 1650,
+    "DiamondsSpent": 0,
+    "DiamondsPurchased": 0,
+    "ClientDiamondsEarned": {
+      "LOGIN": 150,
+      "TUTORIAL": 1500
+    },
+    "ClientDiamondsSpent": {},
+    "ClientTicketsEarned": {}
+  },
+  "DebugTainted": false
+}

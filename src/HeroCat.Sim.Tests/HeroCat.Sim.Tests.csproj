@@ -13,5 +13,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../HeroCat.Sim/HeroCat.Sim.csproj" />
+    <!-- Content loading (JSON) lives in Runtime's ContentLoader; the Sim itself never sees JSON (00 contract 1). -->
+    <ProjectReference Include="../HeroCat.Runtime/HeroCat.Runtime.csproj" />
   </ItemGroup>
 </Project>

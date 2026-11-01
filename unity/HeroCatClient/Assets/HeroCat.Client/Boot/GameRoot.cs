@@ -118,8 +118,7 @@ namespace HeroCat.Client.Boot
                 return;
             }
             RunSaveSelfCheck();
-            // specs/08 section 1: the build-time BackendMode picks the service implementations. Gacha stays the
-            // sim's local roll in both modes until the server-rolled pull contract exists (RemoteGachaService).
+            // The build-time BackendMode picks the service implementations (01 section 1.2). TODO(#66).
             var services = Backend.Create(Application.persistentDataPath);
             Debug.Log("HeroCat: backend " + Backend.Mode);
             _save = new RuntimeSaveBridge(services.SaveStore);

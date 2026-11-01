@@ -1,20 +1,21 @@
 using HeroCat.Sim;
+using HeroCat.Sim.Commands;
 using HeroCat.Sim.Content;
-using HeroCat.Sim.Events;
 
 namespace HeroCat.Client.Core
 {
     /// <summary>
-    /// The game-loop bridge (specs/07 section 6) as plain C#: the Unity GameRoot forwards Update / pause / quit here.
-    /// Fixed-step accumulator at TICK_HZ on the main thread, wall-clock sync every 60 s, autosave every 30 s,
-    /// outbox drain and view-model refresh once per frame.
+    /// The game-loop bridge (07 section 17.3) as plain C#: the Unity GameRoot forwards Update / pause / quit here.
+    /// Fixed-step accumulator at TICK_HZ on the main thread; ApplyServerTime every WALL_CLOCK_SYNC_SEC; resume runs
+    /// ApplyServerTime and ComputeOfflineCatchup; autosave every 30 s; event drain and view-model refresh once per frame.
+    /// TODO(#65): Runtime's SessionRunner replaces this.
     /// </summary>
     public sealed class SimRunnerCore
     {
-        public const int MaxTicksPerFrame = 100;          // 10 s of sim per rendered frame; the rest is dropped (section 6.3)
+        public const int MaxTicksPerFrame = 100;          // MAX_TICKS_PER_FRAME
         public const double IgnoreFrameAboveS = 1.0;      // resume glitches / debugger pauses add nothing
-        public const double WallClockSyncS = 60.0;
-        public const double AutosaveS = 30.0;
+        public const double WallClockSyncS = 60.0;        // WALL_CLOCK_SYNC_SEC
+        public const double AutosaveS = 30.0;             // AUTOSAVE_INTERVAL_SEC
 
         readonly Simulation _sim;
         readonly OffsetClock _clock;
@@ -29,22 +30,22 @@ namespace HeroCat.Client.Core
             _clock = clock;
             _save = save;
             Vm = vm;
-            _tickHz = sim.Content.Constants.TickHz;
+            _tickHz = sim.Db.Constants.TickHz;
         }
 
         public GameViewModel Vm { get; }
         public Simulation Sim => _sim;
         public long TotalTicksRun { get; private set; }
 
-        /// <summary>Open a session: load or create the profile, credit offline time, build the view-model.</summary>
+        /// <summary>Open a session: load or create the profile, sync the clock, run the catch-up, build the view-model.</summary>
         public static SimRunnerCore Start(ContentDb content, ISaveBridge save, OffsetClock clock)
         {
-            // HitLanded stays masked out (section 8.1); EnemySpawned is opt-in and unused by this POC.
-            var outbox = new EventOutbox(EventKinds.Default);
-            var sim = save.Open(content, outbox, clock);
-            sim.SyncWallClock(clock);                     // offline gold before the first frame (section 4 step 8)
-            var vm = new GameViewModel(sim, outbox, clock, save.Description);
-            vm.DrainEvents();                             // shows the welcome-back popup if one was credited
+            var sim = save.Open(content, clock);
+            long now = clock.NowServerSeconds;
+            sim.Apply(new ApplyServerTime(now));
+            sim.Apply(new ComputeOfflineCatchup(now));
+            var vm = new GameViewModel(sim, clock, save.Description);
+            vm.DrainEvents();
             vm.Refresh();
             return new SimRunnerCore(sim, clock, save, vm);
         }
@@ -61,19 +62,23 @@ namespace HeroCat.Client.Core
             if (ticks > 0)
             {
                 _acc -= ticks / (double)_tickHz;
-                for (int i = 0; i < ticks; i++) _sim.Tick();
+                _sim.Advance(ticks);
                 TotalTicksRun += ticks;
             }
 
             _sinceSync += dt;
-            if (_sinceSync >= WallClockSyncS) { _sinceSync = 0; _sim.SyncWallClock(_clock); }
+            if (_sinceSync >= WallClockSyncS)
+            {
+                _sinceSync = 0;
+                _sim.Apply(new ApplyServerTime(_clock.NowServerSeconds));
+            }
 
             int n = Vm.DrainEvents();
             bool dirty = Vm.ConsumeDirty();
             if (ticks > 0 || n > 0 || dirty) Vm.Refresh();
 
             _sinceSave += dt;
-            if (_sinceSave >= AutosaveS || Vm.ConsumeSaveRequest()) { _sinceSave = 0; Save(); }
+            if (_sinceSave >= AutosaveS || Vm.ConsumeSaveRequest()) { _sinceSave = 0; Save(ticking: true); }
             return ticks;
         }
 
@@ -81,22 +86,24 @@ namespace HeroCat.Client.Core
         {
             if (_paused) return;
             _paused = true;
-            Save();
+            Save(ticking: true);
         }
 
         public void OnResume()
         {
             _acc = 0;
             _sinceSync = 0;
-            _sim.SyncWallClock(_clock);                   // catch-up; events are drained on the next Frame
+            long now = _clock.NowServerSeconds;
+            _sim.Apply(new ApplyServerTime(now));
+            _sim.Apply(new ComputeOfflineCatchup(now));
             _paused = false;
         }
 
-        public void OnQuit() => Save();
+        public void OnQuit() => Save(ticking: true);
 
-        public void Save()
+        public void Save(bool ticking)
         {
-            try { _save.Save(_sim); }
+            try { _save.Save(_sim, ticking); }
             catch (System.Exception e) { Vm.Toasts.Push("Save failed: " + e.Message, 3.0); }
         }
     }

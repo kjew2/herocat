@@ -3,11 +3,6 @@ using System.IO;
 using HeroCat.Remote.Transport;
 using HeroCat.Runtime.Save;
 using HeroCat.Runtime.Services;
-using HeroCat.Sim.Content;
-using HeroCat.Sim.Gacha;
-using HeroCat.Sim.Rng;
-using HeroCat.Sim.State;
-using HeroCat.Sim.Time;
 using Newtonsoft.Json.Linq;
 
 namespace HeroCat.Remote.Services
@@ -26,8 +21,8 @@ namespace HeroCat.Remote.Services
     public static class RemoteGameServices
     {
         /// <summary>
-        /// Server clock (falls back to the device clock until synced), local-first cloud save under {dataDir}/saves,
-        /// remote gacha stub. Pass <see cref="OfflineTransport.Instance"/> until a vendor transport exists.
+        /// Server clock (falls back to the device clock until synced), local-first cloud save under {dataDir}/saves.
+        /// TODO(#145): the server summon path (SummonClient). Pass <see cref="OfflineTransport.Instance"/> until a vendor transport exists.
         /// </summary>
         public static GameServices Create(string dataDir, IRemoteTransport transport, RemoteOptions options = null,
                                           IAnalytics analytics = null)
@@ -37,7 +32,6 @@ namespace HeroCat.Remote.Services
             return new GameServices
             {
                 Clock = new ServerClock(client, new SystemClock()),
-                Gacha = new RemoteGachaService(),
                 SaveStore = new CloudSaveStore(new FileSaveStore(Path.Combine(dataDir, "saves")), client),
                 Analytics = analytics ?? NullAnalytics.Instance,
             };
@@ -82,20 +76,6 @@ namespace HeroCat.Remote.Services
             try { Sync(); return true; }
             catch (ServiceException) { return false; }
         }
-    }
-
-    /// <summary>
-    /// Stub. The server-rolled pull (specs/08 section 4.3) needs a request/response contract that IGachaService's
-    /// local shape (rng stream and mutable state passed in) does not have yet, so every call is Unsupported.
-    /// Do not wire this into a Simulation yet: Simulation.Pull charges before calling the service, so a throw here
-    /// would cost the player the gems.
-    /// </summary>
-    public sealed class RemoteGachaService : IGachaService
-    {
-        public PullResult[] Pull(ContentDb content, BannerDef banner, BannerState bannerState, HeroState heroes,
-                                 Currencies currencies, IRandomSource rng, int count) =>
-            throw new ServiceException(ServiceErrorKind.Unsupported, "RemoteGachaNotImplemented",
-                "Server-rolled pulls (specs/08 section 4.3) are not implemented yet.");
     }
 
     /// <summary>

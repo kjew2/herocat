@@ -8,6 +8,7 @@ using HeroCat.Bots.Golden;
 using HeroCat.Bots.Measure;
 using HeroCat.Bots.Policies;
 using HeroCat.Bots.Report;
+using HeroCat.Runtime.Content;
 using HeroCat.Sim.Content;
 using NUnit.Framework;
 
@@ -19,7 +20,7 @@ namespace HeroCat.Bots.Tests
             FileContentSource.FindContentDirectory(TestContext.CurrentContext.TestDirectory)
             ?? throw new InvalidOperationException("content/manifest.json not found above the test directory"));
 
-        static readonly Lazy<ContentDb> _db = new Lazy<ContentDb>(() => ContentDb.LoadFromDirectory(_dir.Value));
+        static readonly Lazy<ContentDb> _db = new Lazy<ContentDb>(() => ContentLoader.LoadFromDirectory(_dir.Value, Tier.M0));
 
         public static string Dir => _dir.Value;
         public static ContentDb Db => _db.Value;
@@ -40,152 +41,113 @@ namespace HeroCat.Bots.Tests
         public void OneDay_Schedule()
         {
             var p = new CountingPolicy();
-            long ticks = 0; int credits = 0;
-            var runner = new BotRunner(Content.Db) { AfterDay = (d, ctx) => { ticks = ctx.State.Tick; credits = ctx.Stats.OfflineCredits; } };
-            var run = runner.Run(p, 7, 1);
+            long ticks = 0;
+            var run = new BotRunner(Content.Db) { AfterDay = (d, ctx) => ticks = ctx.Sim.Tick }.Run(p, 7, 1);
             int k = Content.Db.Constants.TickHz;
             Assert.That(p.Decisions, Is.EqualTo(HarnessConstants.ActiveMinutesPerDay * 60 / HarnessConstants.DecisionIntervalSeconds));
             Assert.That(p.DayStarts, Is.EqualTo(1));
             Assert.That(ticks, Is.EqualTo(HarnessConstants.ActiveMinutesPerDay * 60L * k));
-            Assert.That(credits, Is.EqualTo(1));
-            Assert.That(run.DayEndUtcMs[0], Is.EqualTo((HarnessConstants.Epoch + TimeSpan.FromDays(1)).ToUnixTimeMilliseconds()));
+            Assert.That(run.Rows.Single().Day, Is.EqualTo(1));
         }
 
         [Test]
-        public void ThreeDays_RowsAndNonDecreasingStage()
+        public void IdleDays_RollTheDay_AndPayOneLoginPerDay()
         {
-            var run = new BotRunner(Content.Db).Run(new GreedyF2PBot(), 7, 3);
+            var run = new BotRunner(Content.Db).Run(new IdleBot(), 7, 3);
+            var k = Content.Db.Constants;
             Assert.That(run.Rows.Select(r => r.Day), Is.EqualTo(new[] { 1, 2, 3 }));
-            for (int i = 1; i < 3; i++) Assert.That(run.Rows[i].Stage, Is.GreaterThanOrEqualTo(run.Rows[i - 1].Stage));
-            Assert.That(run.Rows[2].Stage, Is.GreaterThan(50));
+            // tutorial grant + day 1 login at the start, then one login per night sync
+            Assert.That(run.Rows.Select(r => r.Diamonds), Is.EqualTo(new[] { 1500L + 2 * k.LoginDiamonds, 1500L + 3 * k.LoginDiamonds, 1500L + 4 * k.LoginDiamonds }));
+            Assert.That(run.Rows.All(r => r.Stage == 1), Is.True, "TODO(#81): no combat yet");
         }
 
         [Test]
-        public void Whale_PullsHundredExtraOnDayOne()
+        public void SameSeed_IdenticalTable_DifferentSeed_DifferentHash()
         {
-            int pullsAfterDay1 = 0;
-            var runner = new BotRunner(Content.Db) { AfterDay = (d, ctx) => { if (d == 1) pullsAfterDay1 = (int)ctx.State.HeroBanner.TotalPulls; } };
-            runner.Run(new WhaleBot(), 7, 1);
-            var banner = Content.Db.HeroBanner;
-            Assert.That(pullsAfterDay1, Is.GreaterThanOrEqualTo(banner.FreePullsPerDay + WhaleBot.Day1ExtraPulls));
-        }
-    }
-
-    public class DeterminismTests
-    {
-        [Test]
-        public void SameSeed_IdenticalTable()
-        {
-            string a = TableWriter.Table(new BotRunner(Content.Db).Run(new GreedyF2PBot(), 7, 10), allDays: true);
-            string b = TableWriter.Table(new BotRunner(Content.Db).Run(new GreedyF2PBot(), 7, 10), allDays: true);
-            Assert.That(b, Is.EqualTo(a));
-            string c = TableWriter.Table(new BotRunner(Content.Db).Run(new GreedyF2PBot(), 8, 10), allDays: true);
-            Assert.That(c, Is.Not.EqualTo(a), "different seeds should differ");
+            string a = TableWriter.Table(new BotRunner(Content.Db).Run(new IdleBot(), 7, 2), allDays: true);
+            string b = TableWriter.Table(new BotRunner(Content.Db).Run(new IdleBot(), 7, 2), allDays: true);
+            Assert.That(a, Is.EqualTo(b));
+            var c = new BotRunner(Content.Db).Run(new IdleBot(), 8, 2);
+            Assert.That(c.Rows[1].StateHash, Is.Not.EqualTo(new BotRunner(Content.Db).Run(new IdleBot(), 7, 2).Rows[1].StateHash), "RngRoot differs");
         }
 
         [Test]
         public void Sweep_IndependentOfParallelism()
         {
-            string tag = TableWriter.ContentTag(Content.Db.Version, Content.Db.ContentHash);
-            string one = Sweep.Table(Sweep.Run(Content.Db, "greedy-f2p", "1-6", 5, 1), tag);
-            string many = Sweep.Table(Sweep.Run(Content.Db, "greedy-f2p", "1-6", 5, 8), tag);
+            var one = Sweep.Table(Sweep.Run(Content.Db, "idle", "1-4", 2, 1), "x");
+            var many = Sweep.Table(Sweep.Run(Content.Db, "idle", "1-4", 2, 4), "x");
             Assert.That(many, Is.EqualTo(one));
         }
-    }
-
-    public class ReportTests
-    {
-        static readonly DayRow Row = new DayRow(7, 371, 1.14e12, 300, 16.0, 6.18e8, 3.4, 3.375, 42, 0, 70, 3.1);
 
         [Test]
         public void Row_FormatsInvariant_EvenUnderGermanCulture()
         {
-            const string expected = "  7   371 1.14e+12     300    16.00   6.18e+08      3.40      3.38    42   0        70         3.10";
-            Assert.That(TableWriter.FormatRow(Row), Is.EqualTo(expected));
-            var old = Thread.CurrentThread.CurrentCulture;
+            var prev = Thread.CurrentThread.CurrentCulture;
             try
             {
-                Thread.CurrentThread.CurrentCulture = new CultureInfo("de-DE");
-                Assert.That(TableWriter.FormatRow(Row), Is.EqualTo(expected));
+                Thread.CurrentThread.CurrentCulture = CultureInfo.GetCultureInfo("de-DE");
+                var row = new DayRow(3, 120, 119, 40, 1234567.0, 1650, 0.5, 0, "abcdef0123456789");
+                Assert.That(TableWriter.FormatRow(row), Does.Contain("1.23e+06"));
             }
-            finally { Thread.CurrentThread.CurrentCulture = old; }
+            finally { Thread.CurrentThread.CurrentCulture = prev; }
         }
 
         [Test]
         public void Header_AlignsWithRow()
         {
-            Assert.That(TableWriter.Header().Length, Is.EqualTo(TableWriter.FormatRow(Row).Length));
-            Assert.That(TableWriter.Header().Split(' ', StringSplitOptions.RemoveEmptyEntries).Length, Is.EqualTo(12));
+            var row = new DayRow(30, 550, 549, 120, 1e12, 99999, 1e5, 300, "abcdef0123456789");
+            Assert.That(TableWriter.Header().Length, Is.EqualTo(TableWriter.FormatRow(row).Length));
         }
 
-        [Test]
-        public void Shares_SumToOne()
-        {
-            var row = Row with { Dps = 10 * 16.0 * 6.18e8 * 3.4 * 3.375 };   // consistent with the multipliers
-            var s = LayerShares.Of(row, 10);
-            Assert.That(s.Stat + s.Gear + s.Hero + s.Class + s.Base, Is.EqualTo(1.0).Within(1e-9));
-            Assert.That(s.Stat, Is.EqualTo(Math.Log(16.0) / Math.Log(row.Dps)).Within(1e-12));
-        }
-    }
-
-    public class SweepTests
-    {
         [Test]
         public void Percentile_NearestRank()
         {
-            var v = Enumerable.Range(1, 20).ToList();
-            Assert.That(Sweep.Percentile(v, 0.1), Is.EqualTo(2));
-            Assert.That(Sweep.Percentile(v, 0.5), Is.EqualTo(10));
-            Assert.That(Sweep.Percentile(v, 0.9), Is.EqualTo(18));
-            Assert.That(Sweep.Percentile(new[] { 42 }, 0.5), Is.EqualTo(42));
-            Assert.That(Sweep.Percentile(new[] { 1, 2, 3 }, 1.0), Is.EqualTo(3));
+            var xs = Enumerable.Range(1, 20).ToList();
+            Assert.That(Sweep.Percentile(xs, 0.5), Is.EqualTo(10));
+            Assert.That(Sweep.Percentile(xs, 0.1), Is.EqualTo(2));
+            Assert.That(Sweep.Percentile(xs, 0.9), Is.EqualTo(18));
         }
 
         [Test]
         public void SeedLists()
         {
-            Assert.That(Sweep.ParseSeeds("1-20"), Is.EqualTo(Enumerable.Range(1, 20).Select(i => (ulong)i).ToArray()));
-            Assert.That(Sweep.ParseSeeds("3,5,9"), Is.EqualTo(new ulong[] { 3, 5, 9 }));
-            Assert.That(Sweep.ParseSeeds("7"), Is.EqualTo(new ulong[] { 7 }));
-            Assert.Throws<FormatException>(() => Sweep.ParseSeeds("0-5"));
-            Assert.Throws<FormatException>(() => Sweep.ParseSeeds("5-1"));
+            Assert.That(Sweep.ParseSeeds("1-3,9"), Is.EqualTo(new ulong[] { 1, 2, 3, 9 }));
+            Assert.Throws<FormatException>(() => Sweep.ParseSeeds("3-1"));
+            Assert.Throws<FormatException>(() => Sweep.ParseSeeds("0"));
         }
     }
 
-    public class AcceptanceSmokeTests
+    public class AcceptanceTests
     {
         [Test]
-        public void ShortSweep_ProducesEveryCheck_AndStructuralChecksPass()
+        public void StageTargets_ComeFromProgressTargets()
         {
-            var targets = AcceptanceTargets.LoadDefault();
-            Assert.That(targets.StageTargets["30"], Is.EqualTo(550));
-            var sw = Sweep.Run(Content.Db, "greedy-f2p", "1-4", 7, Environment.ProcessorCount);
-            var results = AcceptanceChecker.Check(sw, targets, () => null);
-            TestContext.WriteLine(string.Join("\n", results.Select(r => (r.Pass ? "PASS " : "FAIL ") + r.Id + " " + r.Message)));
-            Assert.That(results.Select(r => r.Id).Distinct(), Is.EqualTo(new[] { "AC1", "AC2", "AC3", "AC4", "AC5", "AC6" }));
-            Assert.That(results.Count(r => r.Id == "AC1"), Is.EqualTo(2), "days 1 and 7 checked; 30 is beyond a 7-day run");
-            Assert.That(results.Single(r => r.Id == "AC5").Pass, Is.True);
-            Assert.That(results.Single(r => r.Id == "AC6").Pass, Is.True);
+            Assert.That(Content.Db.ProgressTargets.Select(t => (t.Day, t.Stage)),
+                        Is.EqualTo(new[] { (1, 240), (3, 330), (7, 430), (14, 480), (30, 550) }));
+            Assert.That(Content.Db.ProgressTargets.All(t => t.Tolerance == 0.2), Is.True);
         }
 
         [Test]
-        public void Checker_FlagsOutOfRangeStage()
+        public void Checker_ReportsAc1PerCheckDay_AndDeterminism()
         {
-            var targets = AcceptanceTargets.Parse(
-                "{\"stageTargets\":{\"1\":5000},\"stageTolerance\":0.2,\"stageCheckDays\":[1],\"shareCheckDays\":[],\"shareMin\":0," +
-                "\"shareMax\":1,\"firstWallMinStage\":0,\"firstWallMaxStage\":100000,\"maxWallHoursThroughDay\":1,\"maxWallHours\":1000," +
-                "\"statLevelSlope\":100,\"statLevelIntercept\":0}");
-            var sw = Sweep.Run(Content.Db, "greedy-f2p", "1-2", 1, 2);
-            var ac1 = AcceptanceChecker.Check(sw, targets, null).Single(r => r.Id == "AC1");
-            Assert.That(ac1.Pass, Is.False);
-            StringAssert.Contains("target 5000", ac1.Message);
+            var sw = Sweep.Run(Content.Db, "idle", "1-2", 7, 2);
+            var r = AcceptanceChecker.Check(sw, Content.Db, AcceptanceTargets.LoadDefault(), () => null);
+            Assert.That(r.Select(x => x.Id), Is.EqualTo(new[] { "AC1", "AC1", "AC6" }));
+            Assert.That(r[0].Pass, Is.False, "the idle skeleton stays on stage 1 (TODO(#136))");
+            Assert.That(r[2].Pass, Is.True);
+        }
+
+        [Test]
+        public void SaveFixture_IsDeterministic()
+        {
+            Assert.That(SaveFixture.Generate(Content.Db), Is.EqualTo(SaveFixture.Generate(Content.Db)));
         }
     }
 
     [Category("Golden")]
     public class GoldenTests
     {
-        [TestCaseSource(nameof(Files))]
+        [TestCaseSource(nameof(Names))]
         public void MatchesCommittedGolden(string fileName)
         {
             var e = GoldenFiles.All.Single(x => x.FileName == fileName);
@@ -193,6 +155,6 @@ namespace HeroCat.Bots.Tests
             Assert.That(diff, Is.Null, diff);
         }
 
-        static string[] Files() => GoldenFiles.All.Select(e => e.FileName).ToArray();
+        static string[] Names => GoldenFiles.All.Select(e => e.FileName).ToArray();
     }
 }
