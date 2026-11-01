@@ -2,6 +2,7 @@ using System;
 using System.Net.Http;
 using HeroCat.Remote;
 using HeroCat.Remote.Transport;
+using HeroCat.Runtime.Errors;
 using HeroCat.Runtime.Services;
 using NUnit.Framework;
 
@@ -21,9 +22,9 @@ namespace HeroCat.Remote.Tests
             Assert.That(t.Requests[0].Path, Is.EqualTo("/ping"));
         }
 
-        [TestCase(TransportFailure.Unreachable, ServiceErrorKind.Offline)]
-        [TestCase(TransportFailure.Timeout, ServiceErrorKind.Timeout)]
-        public void Transport_failures_map_to_kind(TransportFailure failure, ServiceErrorKind kind)
+        [TestCase(TransportFailure.Unreachable, ErrorClass.Offline)]
+        [TestCase(TransportFailure.Timeout, ErrorClass.Timeout)]
+        public void Transport_failures_map_to_kind(TransportFailure failure, ErrorClass kind)
         {
             var c = new RemoteClient(new FakeTransport { FailWith = failure });
             var e = Fails(() => c.Send("GET", "/ping"));
@@ -31,15 +32,15 @@ namespace HeroCat.Remote.Tests
             Assert.That(e.Retryable, Is.True);
         }
 
-        [TestCase(400, ServiceErrorKind.Rejected)]
-        [TestCase(403, ServiceErrorKind.Rejected)]
-        [TestCase(404, ServiceErrorKind.Rejected)]
-        [TestCase(408, ServiceErrorKind.Timeout)]
-        [TestCase(409, ServiceErrorKind.Conflict)]
-        [TestCase(500, ServiceErrorKind.Internal)]
-        [TestCase(503, ServiceErrorKind.Internal)]
-        [TestCase(302, ServiceErrorKind.Internal)]
-        public void Status_codes_map_to_kind(int status, ServiceErrorKind kind)
+        [TestCase(400, ErrorClass.Rejected)]
+        [TestCase(403, ErrorClass.Rejected)]
+        [TestCase(404, ErrorClass.Rejected)]
+        [TestCase(408, ErrorClass.Timeout)]
+        [TestCase(409, ErrorClass.Conflict)]
+        [TestCase(500, ErrorClass.ServerError)]
+        [TestCase(503, ErrorClass.ServerError)]
+        [TestCase(302, ErrorClass.ServerError)]
+        public void Status_codes_map_to_kind(int status, ErrorClass kind)
         {
             var c = new RemoteClient(new FakeTransport().On("POST", "/x", status));
             Assert.That(Fails(() => c.Send("POST", "/x")).Kind, Is.EqualTo(kind));
@@ -50,7 +51,7 @@ namespace HeroCat.Remote.Tests
         {
             var c = new RemoteClient(new FakeTransport().On("POST", "/pull", 400, "{\"code\":\"CannotAfford\"}"));
             var e = Fails(() => c.Send("POST", "/pull"));
-            Assert.That(e.Kind, Is.EqualTo(ServiceErrorKind.Rejected));
+            Assert.That(e.Kind, Is.EqualTo(ErrorClass.Rejected));
             Assert.That(e.Code, Is.EqualTo("CannotAfford"));
             Assert.That(e.Retryable, Is.False);
         }
@@ -66,17 +67,17 @@ namespace HeroCat.Remote.Tests
         public void Unrouted_call_is_rejected_with_NoRoute()
         {
             var e = Fails(() => new RemoteClient(new FakeTransport()).Send("GET", "/nope"));
-            Assert.That(e.Kind, Is.EqualTo(ServiceErrorKind.Rejected));
+            Assert.That(e.Kind, Is.EqualTo(ErrorClass.Rejected));
             Assert.That(e.Code, Is.EqualTo("NoRoute"));
         }
 
         [Test]
         public void Sdk_exceptions_are_mapped()
         {
-            Assert.That(RemoteErrors.FromException(new HttpRequestException("dns")).Kind, Is.EqualTo(ServiceErrorKind.Offline));
-            Assert.That(RemoteErrors.FromException(new System.Threading.Tasks.TaskCanceledException()).Kind, Is.EqualTo(ServiceErrorKind.Timeout));
-            Assert.That(RemoteErrors.FromException(new InvalidOperationException("sdk bug")).Kind, Is.EqualTo(ServiceErrorKind.Internal));
-            var original = new ServiceException(ServiceErrorKind.Conflict, "Stale");
+            Assert.That(RemoteErrors.FromException(new HttpRequestException("dns")).Kind, Is.EqualTo(ErrorClass.Offline));
+            Assert.That(RemoteErrors.FromException(new System.Threading.Tasks.TaskCanceledException()).Kind, Is.EqualTo(ErrorClass.Timeout));
+            Assert.That(RemoteErrors.FromException(new InvalidOperationException("sdk bug")).Kind, Is.EqualTo(ErrorClass.ServerError));
+            var original = new ServiceException(ErrorClass.Conflict, "Stale");
             Assert.That(RemoteErrors.FromException(original), Is.SameAs(original));
         }
 
@@ -84,7 +85,7 @@ namespace HeroCat.Remote.Tests
         public void Offline_transport_is_always_offline()
         {
             var e = Fails(() => new RemoteClient(OfflineTransport.Instance).Send("GET", "/time"));
-            Assert.That(e.Kind, Is.EqualTo(ServiceErrorKind.Offline));
+            Assert.That(e.Kind, Is.EqualTo(ErrorClass.Offline));
         }
 
         [Test]

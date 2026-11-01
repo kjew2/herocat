@@ -3,14 +3,12 @@ using HeroCat.Sim.State;
 
 namespace HeroCat.Runtime.Save
 {
-    /// <summary>Engineering constants (01 and 02 section 2). Not balance numbers, so they live in code, not ContentDb.</summary>
+    /// <summary>
+    /// Save engineering constants (02 section 2). Not balance numbers, so they live in code, not ContentDb. The session
+    /// constants (AUTOSAVE_INTERVAL_SEC, SAVE_FAIL_WARN_COUNT, ...) are 01's and live in <see cref="RuntimeConfig"/>.
+    /// </summary>
     public static class SaveConfig
     {
-        public const double AUTOSAVE_INTERVAL_SEC = 30;
-        public const int SAVE_FAIL_WARN_COUNT = 3;
-        public const int MAX_TICKS_PER_FRAME = 100;
-        public const double IN_APP_GAP_SEC = 30;
-        public const double WALL_CLOCK_SYNC_SEC = 60;
         public const int SAVE_KEEP_COUNT = 2;
         public const int SAVE_REPAIR_MAX = 20;
         public const int CORRUPT_KEEP_DAYS = 7;

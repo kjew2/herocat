@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using HeroCat.Remote.Transport;
 using HeroCat.Runtime.Save;
+using HeroCat.Runtime.Errors;
 using HeroCat.Runtime.Services;
 using Newtonsoft.Json.Linq;
 
@@ -15,25 +16,39 @@ namespace HeroCat.Remote.Services
     }
 
     /// <summary>
-    /// The P1 remote composition root (specs/08 section 1). GameServices lives in HeroCat.Runtime, which cannot
-    /// reference this assembly, so the specs' <c>Services.Remote(...)</c> is this static factory.
+    /// The remote half of the composition root (01 section 1.2), supplied to GameServices.Build through
+    /// ServicesOptions.Remote because HeroCat.Runtime cannot reference this assembly. A stub over the vendor-neutral
+    /// transport spike: server clock and local-first cloud save; the other seams keep their local implementations.
+    /// TODO(#143): rebuilt on the ApiClient (SummonClient #145, InboxClient, ReceiptClient #147, ConfigClient #144,
+    /// DungeonSeedClient #146).
     /// </summary>
     public static class RemoteGameServices
     {
-        /// <summary>
-        /// Server clock (falls back to the device clock until synced), local-first cloud save under {dataDir}/saves.
-        /// TODO(#145): the server summon path (SummonClient). Pass <see cref="OfflineTransport.Instance"/> until a vendor transport exists.
-        /// </summary>
+        /// <summary>Pass <see cref="OfflineTransport.Instance"/> until a vendor transport exists.</summary>
         public static GameServices Create(string dataDir, IRemoteTransport transport, RemoteOptions options = null,
                                           IAnalytics analytics = null)
         {
             if (dataDir == null) throw new ArgumentNullException(nameof(dataDir));
-            var client = new RemoteClient(transport, options);
-            return new GameServices
+            return GameServices.Build(BackendMode.Remote, new ServicesOptions
             {
-                Clock = new ServerClock(client, new SystemClock()),
-                SaveStore = new CloudSaveStore(new FileSaveStore(Path.Combine(dataDir, "saves")), client),
-                Analytics = analytics ?? NullAnalytics.Instance,
+                DataDir = dataDir,
+                Analytics = analytics,
+                Remote = o => Wire(o, transport, options),
+            });
+        }
+
+        /// <summary>A ServicesOptions.Remote factory over <paramref name="transport"/>.</summary>
+        public static GameServices Wire(ServicesOptions o, IRemoteTransport transport, RemoteOptions options = null)
+        {
+            var client = new RemoteClient(transport, options);
+            var local = GameServices.Build(BackendMode.Local, new ServicesOptions
+            {
+                DataDir = o.DataDir, Content = o.Content, State = o.State, Analytics = o.Analytics, Network = o.Network,
+            });
+            return local with
+            {
+                Clock = new ServerClock(client, o.Clock ?? new SystemClock()),
+                Saves = new CloudSaveStore(o.Saves ?? new FileSaveStore(Path.Combine(o.DataDir, "saves")), client),
             };
         }
     }
@@ -65,7 +80,7 @@ namespace HeroCat.Remote.Services
             try { server = JObject.Parse(body ?? "")["serverSeconds"].Value<long>(); }
             catch (Exception e) when (!(e is ServiceException))
             {
-                throw new ServiceException(ServiceErrorKind.Internal, "BadResponse", "time: " + e.Message);
+                throw new ServiceException(ErrorClass.ServerError, "BadResponse", "time: " + e.Message);
             }
             _offsetSeconds = server - _device.NowServerSeconds;
             IsAuthoritative = true;

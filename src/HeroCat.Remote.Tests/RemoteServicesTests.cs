@@ -4,9 +4,11 @@ using HeroCat.Remote;
 using HeroCat.Remote.Services;
 using HeroCat.Remote.Transport;
 using HeroCat.Runtime.Save;
+using HeroCat.Runtime.Errors;
 using HeroCat.Runtime.Services;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
+using ServerClock = HeroCat.Remote.Services.ServerClock;
 
 namespace HeroCat.Remote.Tests
 {
@@ -34,7 +36,7 @@ namespace HeroCat.Remote.Tests
         {
             var clock = new ServerClock(new RemoteClient(OfflineTransport.Instance), new FakeClock(1000));
             Assert.That(clock.TrySync(), Is.False);
-            Assert.That(Assert.Throws<ServiceException>(clock.Sync).Kind, Is.EqualTo(ServiceErrorKind.Offline));
+            Assert.That(Assert.Throws<ServiceException>(clock.Sync).Kind, Is.EqualTo(ErrorClass.Offline));
             Assert.That(clock.NowServerSeconds, Is.EqualTo(1000));
             Assert.That(clock.IsAuthoritative, Is.False);
         }
@@ -45,7 +47,7 @@ namespace HeroCat.Remote.Tests
             var t = new FakeTransport().On("GET", RemoteRoutes.Time, 200, "not json");
             var clock = new ServerClock(new RemoteClient(t), new FakeClock(0));
             var e = Assert.Throws<ServiceException>(clock.Sync);
-            Assert.That(e.Kind, Is.EqualTo(ServiceErrorKind.Internal));
+            Assert.That(e.Kind, Is.EqualTo(ErrorClass.ServerError));
             Assert.That(e.Code, Is.EqualTo("BadResponse"));
         }
 
@@ -77,7 +79,7 @@ namespace HeroCat.Remote.Tests
             var store = new CloudSaveStore(new MemorySaveStore(), new RemoteClient(t));
             store.Write(new byte[] { 9 });
             var e = Assert.Throws<ServiceException>(store.Upload);
-            Assert.That(e.Kind, Is.EqualTo(ServiceErrorKind.Conflict));
+            Assert.That(e.Kind, Is.EqualTo(ErrorClass.Conflict));
             Assert.That(e.Code, Is.EqualTo("CloudNewer"));
             Assert.That(store.PendingUpload, Is.Not.Null);
         }
@@ -90,11 +92,14 @@ namespace HeroCat.Remote.Tests
             {
                 var s = RemoteGameServices.Create(dir, OfflineTransport.Instance);
                 Assert.That(s.Clock, Is.TypeOf<ServerClock>());
-                Assert.That(s.SaveStore, Is.TypeOf<CloudSaveStore>());
+                Assert.That(s.Saves, Is.TypeOf<CloudSaveStore>());
                 Assert.That(s.Analytics, Is.SameAs(NullAnalytics.Instance));
+                Assert.That(s.Mode, Is.EqualTo(BackendMode.Remote));
+                Assert.That(s.Inbox, Is.Not.Null);
+                Assert.That(s.Dungeons, Is.Not.Null);
 
                 Assert.That(s.Clock.IsAuthoritative, Is.False);
-                s.SaveStore.Write(new byte[] { 7 });
+                s.Saves.Write(new byte[] { 7 });
                 Assert.That(File.Exists(Path.Combine(dir, "saves", "slot0.sav")), Is.True);
             }
             finally

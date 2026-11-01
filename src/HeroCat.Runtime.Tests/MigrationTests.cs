@@ -102,12 +102,9 @@ namespace HeroCat.Runtime.Tests
             var store = new FileSaveStore(Dir);
             File.WriteAllBytes(store.PrimaryPath, old);
             var analytics = new HeroCat.Runtime.Services.MemoryAnalytics();
-            var session = HeroCat.Runtime.Session.GameSession.Open(TestContent.Db, new HeroCat.Runtime.Services.GameServices
-            {
-                Clock = new HeroCat.Runtime.Services.FakeClock(TestContent.T0 + 100), SaveStore = store, Analytics = analytics,
-            });
-            Assert.That(session.LoadResult.Status, Is.EqualTo(LoadStatus.Corrupt));
-            Assert.That(session.IsNewProfile, Is.True);
+            var session = TestSession.Open(new HeroCat.Runtime.Services.FakeClock(TestContent.T0 + 100), store, analytics);
+            Assert.That(session.Boot.LoadStatus, Is.EqualTo(LoadStatus.Corrupt));
+            Assert.That(session.Boot.IsNewProfile, Is.True);
             Assert.That(store.QuarantinedFiles(), Has.Length.EqualTo(1));
             Assert.That(SaveSystem.Load(store, TestContent.Db, TestContent.T0 + 100).Status, Is.EqualTo(LoadStatus.Loaded));
         }

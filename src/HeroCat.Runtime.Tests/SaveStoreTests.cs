@@ -1,7 +1,6 @@
 using System.IO;
 using HeroCat.Runtime.Save;
 using HeroCat.Runtime.Services;
-using HeroCat.Runtime.Session;
 using HeroCat.Sim.State;
 using NUnit.Framework;
 
@@ -89,15 +88,16 @@ namespace HeroCat.Runtime.Tests
         public void SessionSaveFailures_AreCounted_NotThrown_ThenRecover()
         {
             var store = new MemorySaveStore();
-            var session = GameSession.Open(TestContent.Db, GameServices.InMemory(new FakeClock(Now), store));
-            long seqBefore = session.State.SaveSeq;
+            var session = TestSession.Open(new FakeClock(Now), store);
+            var state = session.Sim.State;
+            long seqBefore = state.SaveSeq;
             store.FailWrites = true;
-            for (int i = 0; i < SaveConfig.SAVE_FAIL_WARN_COUNT; i++) Assert.That(session.SaveNow(), Is.False);
-            Assert.That(session.ShouldWarnSaveFailure, Is.True);
-            Assert.That(session.State.SaveSeq, Is.EqualTo(seqBefore + SaveConfig.SAVE_FAIL_WARN_COUNT), "stamp runs before the write");
+            for (int i = 0; i < RuntimeConfig.SAVE_FAIL_WARN_COUNT; i++) Assert.That(session.Runner.SaveNow(SaveTrigger.Periodic), Is.False);
+            Assert.That(session.Runner.ConsecutiveSaveFailures, Is.EqualTo(RuntimeConfig.SAVE_FAIL_WARN_COUNT));
+            Assert.That(state.SaveSeq, Is.EqualTo(seqBefore + RuntimeConfig.SAVE_FAIL_WARN_COUNT), "stamp runs before the write");
             store.FailWrites = false;
-            Assert.That(session.SaveNow(), Is.True);
-            Assert.That(SaveSystem.Load(store, TestContent.Db, Now).State.SaveSeq, Is.EqualTo(session.State.SaveSeq));
+            Assert.That(session.Runner.SaveNow(SaveTrigger.Periodic), Is.True);
+            Assert.That(SaveSystem.Load(store, TestContent.Db, Now).State.SaveSeq, Is.EqualTo(state.SaveSeq));
         }
     }
 }
