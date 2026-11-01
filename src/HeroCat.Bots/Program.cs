@@ -53,8 +53,10 @@ namespace HeroCat.Bots
             "  acceptance   --seeds 1-20 --days N --time-budget-s 180 --targets path --verbose --content dir\n" +
             "  golden       --check|--update --golden-dir path --content dir\n" +
             "  save-fixture --check|--update --out path --content dir\n" +
-            "  summon-stream --check|--update --out path --content dir\n" +
-            "  bench        --ticks N --max-ms N\n";
+            "  summon-stream --check|--update --out path --content dir
+" +
+            "  bench        --ticks N [--stage N] --max-ms N
+";
 
         public static int Main(string[] argv)
         {
@@ -224,13 +226,17 @@ namespace HeroCat.Bots
         {
             var db = LoadContent(a);
             long ticks = a.Long("ticks", 1_000_000);
-            long maxMs = a.Long("max-ms", 1000);
-            var sim = new Simulation(BotRunner.Genesis(db, 1), db) { ForceCoalesce = true };
+            long maxMs = a.Long("max-ms", 2000);   // 03 criterion 19, 10 section 1.1
+            int stage = a.Int("stage", 1);
+            var genesis = BotRunner.Genesis(db, 1);
+            genesis.Combat.Stage = stage;
+            if (stage > 1) genesis.Progress.HighestCleared = stage - 1;
+            var sim = new Simulation(genesis, db) { ForceCoalesce = true };
             sim.Apply(new ApplyServerTime(HarnessConstants.Epoch.ToUnixTimeSeconds()));
             var sw = Stopwatch.StartNew();
             for (long done = 0; done < ticks; done += 1000) sim.Advance((int)Math.Min(1000, ticks - done));
             long ms = sw.ElapsedMilliseconds;
-            // TODO(#160): bench a full stage loop with skills and companions once combat lands (#81).
+            // TODO(#160): equip six skills and four companions (03 criterion 19) once companions land (MVP).
 #if DEBUG
             Console.Out.Write($"bench: {ticks} ticks in {ms} ms ({ticks * 1000.0 / Math.Max(1, ms):0} ticks/s); Debug build, no budget verdict\n");
             return 0;

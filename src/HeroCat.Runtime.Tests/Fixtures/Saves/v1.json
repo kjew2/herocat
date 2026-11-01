@@ -18,8 +18,8 @@
     "LoginDayKey": 20456
   },
   "Hero": {
-    "Level": 1,
-    "Exp": 0.0,
+    "Level": 46,
+    "Exp": 474.61645754901883,
     "AwakenRank": 0
   },
   "Training": {
@@ -35,8 +35,8 @@
     ]
   },
   "Wallet": {
-    "Gold": 0.0,
-    "Diamond": 1650,
+    "Gold": 18594.73216940006,
+    "Diamond": 1660,
     "FishCoin": 0.0,
     "RockCandy": 0,
     "DungeonTicket": [
@@ -140,10 +140,10 @@
   },
   "Combat": {
     "Mode": "Stage",
-    "Stage": 1,
-    "KillsInStage": 0,
-    "Boss": "None",
-    "BossFailsOnStage": 0,
+    "Stage": 20,
+    "KillsInStage": 9,
+    "Boss": "Walled",
+    "BossFailsOnStage": 1,
     "Selected": null,
     "Mp": 0.0,
     "SkillCooldowns": [
@@ -164,8 +164,8 @@
     "DungeonRun": null
   },
   "Progress": {
-    "HighestCleared": 0,
-    "HighestFirstClearBoss": 0,
+    "HighestCleared": 19,
+    "HighestFirstClearBoss": 10,
     "StageCapReached": 0
   },
   "Quests": {
@@ -223,7 +223,7 @@
     },
     "crit": {
       "Seed": "10e431400760b15e",
-      "Counter": 0
+      "Counter": 11802
     },
     "dungeon": {
       "Seed": "0ff384dc670a7e71",
@@ -235,7 +235,7 @@
     },
     "loot": {
       "Seed": "e1b462ae37ccbc87",
-      "Counter": 0
+      "Counter": 1
     },
     "summon_companion": {
       "Seed": "1352fdc4fc9a7f59",
@@ -251,10 +251,10 @@
     }
   },
   "Stats": {
-    "Kills": 0,
-    "BossKills": 0,
-    "BossFails": 0,
-    "HeroHits": 0,
+    "Kills": 5193,
+    "BossKills": 1,
+    "BossFails": 1,
+    "HeroHits": 11802,
     "Taps": 0,
     "Pulls": 0,
     "Merges": 0,
@@ -262,15 +262,16 @@
     "FishDiscards": 0,
     "DungeonClears": 0,
     "TrainingLevelsBought": 0,
-    "FirstWallStage": 0,
+    "FirstWallStage": 20,
     "ActiveSeconds": 14400,
-    "GoldEarned": 0.0,
+    "GoldEarned": 18594.73216940006,
     "GoldSpent": 0.0,
     "FishCoinEarned": 0.0,
-    "DiamondsEarned": 1650,
+    "DiamondsEarned": 1660,
     "DiamondsSpent": 0,
     "DiamondsPurchased": 0,
     "ClientDiamondsEarned": {
+      "FIRST_CLEAR": 10,
       "LOGIN": 150,
       "TUTORIAL": 1500
     },

@@ -509,11 +509,12 @@ namespace HeroCat.Sim.Tests
         public void SaveRoundTrip_KeepsTheBoard_AndResimulatesIdentically()
         {
             var sim = NewSim();
+            sim.Advance(45);   // first, so the combat loop (03 section 2.5) has not yet drained the queued missiles at save time
             sim.State.Fish.TankCount = 10;
             sim.Apply(new ReleaseMax());
             sim.Apply(new MergeAll());
-            sim.Advance(45);
             Assert.That(sim.State.Combat.MissileQueue, Is.Not.Empty);
+            sim.State.Combat.Fight = null;   // the fight is transient (02 section 3.3): drop it as a load does, so both restart alike
             var (loaded, _, _) = SaveSystem.DecodeFull(SaveSerializer.Encode(sim.State), Db);
             var f = loaded.Fish;
             Assert.That(f.Cells, Is.EqualTo(sim.State.Fish.Cells));
