@@ -48,6 +48,8 @@ namespace HeroCat.Runtime.Replay
             (typeof(SelectStage), "SelectStage"),
             // Collections (04 section 5.2; issue #162).
             (typeof(LimitBreak), "LimitBreak"),
+            // Awakening (03 section 5.3; issue #157).
+            (typeof(Awaken), "Awaken"),
         };
 
         static readonly object Lock = new object();

@@ -47,4 +47,7 @@ namespace HeroCat.Sim.Events
 
     /// <summary>Hero Level rose to <see cref="Level"/> (03 section 5.2); one per level.</summary>
     public sealed record LevelUp(int Level) : Event;
+
+    /// <summary>Hero.AwakenRank rose to <see cref="Rank"/> through Awaken (03 section 5.3; issue #157).</summary>
+    public sealed record Awakened(int Rank) : Event;
 }

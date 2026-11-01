@@ -89,6 +89,32 @@ namespace HeroCat.Sim.Power
         /// <summary>Bought level of the Research node with <paramref name="effect"/> (0 in M0 content).</summary>
         public int ResearchLevel(ResearchEffect effect) => PowerFormula.ResearchLevel(_db, _s, effect);
 
+        // ------------------------------------------------------------------------------------------- awakening (03 5.3)
+
+        /// <summary>Hero.AwakenRank, clamped to the content's ranks.</summary>
+        public int AwakenRank => AwakeningRules.Rank(_db, _s);
+
+        /// <summary>The next rank's AWAKEN_STAGES gate (Progress.HighestCleared must reach it); null at the last rank.</summary>
+        public int? NextAwakenStageGate => AwakeningRules.Next(_db, _s)?.StageGate;
+
+        /// <summary>Rock Candy the next Awaken charges (AWAKEN_COST_ROCK_CANDY); 0 at the last rank.</summary>
+        public long NextAwakenCost => AwakeningRules.Next(_db, _s)?.RockCandyCost ?? 0;
+
+        /// <summary>Awaken would be accepted now (next rank exists, gate reached, Rock Candy held).</summary>
+        public bool CanAwaken => AwakeningRules.CanAwaken(_db, _s);
+
+        /// <summary>Companion slots open now: 1 at rank 0, then awakening.companion_slots_after (00 decision 11).</summary>
+        public int CompanionSlotsUnlocked => AwakeningRules.CompanionSlots(_db, _s);
+
+        /// <summary>Rune slots open now (P1): awakening.rune_slots_after, 0 at rank 0.</summary>
+        public int RuneSlotsUnlocked => AwakeningRules.RuneSlots(_db, _s);
+
+        /// <summary>
+        /// The feature_unlocks gate for Research (09 section 5.34; seeded at Awakening rank 1, 00 decision 11). The Research
+        /// command (#158) rejects Locked/RESEARCH_LOCKED while this is false.
+        /// </summary>
+        public bool ResearchUnlocked => _db.IsUnlocked(AwakeningRules.ResearchFeature, _s);
+
         // ------------------------------------------------------------------------------------------- limit breaks (04 5.2)
 
         /// <summary>Rock Candy LimitBreak(<paramref name="itemId"/>) would charge now; 0 when unknown, unowned or maxed.</summary>

@@ -118,6 +118,28 @@ namespace HeroCat.Bots.Policies
             return Math.Log(q.RatedDpsAfterLimitBreak(id) / now) / cost;
         }
 
+        // ============================================================================================ step 3: Rock Candy -> Awakening
+
+        /// <summary>03 section 8.3 step 3: limit breaks only while the next Awakening gate is more than this many stages away.</summary>
+        public const int AwakenSaveWindowStages = 50;
+
+        /// <summary>
+        /// 03 section 8.3 step 3's first half: awaken as soon as the stage gate and the cost both pass (03 section 5.3).
+        /// True when a rank was bought. Not called from Decide yet: wiring step 3 changes the bot's runs, the golden files
+        /// and the acceptance sweep, and the Rock Candy cadence is decision #249 items 3 and 5. TODO(#214).
+        /// </summary>
+        public static bool TryAwaken(BotContext ctx) => ctx.Query.CanAwaken && ctx.Apply(new Awaken()).Ok;
+
+        /// <summary>
+        /// 03 section 8.3's <c>NextAwakenWithin(sim, 50)</c>: the next rank's gate is at most <paramref name="stages"/> above
+        /// Progress.HighestCleared, so Rock Candy is saved for it instead of limit breaks. False at the last rank.
+        /// </summary>
+        public static bool NextAwakenWithin(BotContext ctx, int stages)
+        {
+            int? gate = ctx.Query.NextAwakenStageGate;
+            return gate.HasValue && gate.Value - ctx.State.Progress.HighestCleared <= stages;
+        }
+
         // ============================================================================================ step 1: gold -> Training
 
         /// <summary>

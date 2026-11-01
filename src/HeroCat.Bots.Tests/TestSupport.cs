@@ -23,6 +23,11 @@ namespace HeroCat.Bots.Tests
 
         public static string Dir => _dir.Value;
         public static ContentDb Db => _db.Value;
+
+        static readonly Lazy<ContentDb> _mvp = new Lazy<ContentDb>(() => ContentLoader.LoadFromDirectory(_dir.Value, Tier.MVP));
+
+        /// <summary>The MVP build, for the MVP-only step helpers (Awakening, 03 section 8.3 step 3).</summary>
+        public static ContentDb Mvp => _mvp.Value;
     }
 
     /// <summary>

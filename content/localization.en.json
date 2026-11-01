@@ -1809,6 +1809,14 @@
     {
       "key": "weapon.r_08.name",
       "text": "Rare Weapon 8"
+    },
+    {
+      "key": "reject.awaken_max_rank",
+      "text": "Already at max Awakening"
+    },
+    {
+      "key": "reject.awaken_stage_not_reached",
+      "text": "Reach the stage gate first"
     }
   ]
 }
