@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using HeroCat.Runtime.Errors;
 using HeroCat.Runtime.Summons;
 using HeroCat.Sim;
 using HeroCat.Sim.Commands;
@@ -228,11 +229,11 @@ namespace HeroCat.Client.Core
         {
             string key = e switch
             {
-                SummonError.NotEnoughDiamonds => LocKeys.Reject(CollectionRejectReasons.NotEnough(Currency.DIAMOND)),
-                SummonError.NotEnoughTickets => LocKeys.Reject(CollectionRejectReasons.NotEnough(_c.Db.Banners[SelectedBanner.Value].TicketCurrency)),
-                SummonError.BannerClosed => LocKeys.Reject(CollectionRejectReasons.BANNER_CLOSED),
-                SummonError.RateLimited => LocKeys.ErrTitle("RATE_LIMITED"),
-                _ => LocKeys.ErrTitle("NET_OFFLINE"),
+                SummonError.NotEnoughDiamonds => ErrorClassifier.RejectReasonKey(CollectionRejectReasons.NotEnough(Currency.DIAMOND)),
+                SummonError.NotEnoughTickets => ErrorClassifier.RejectReasonKey(CollectionRejectReasons.NotEnough(_c.Db.Banners[SelectedBanner.Value].TicketCurrency)),
+                SummonError.BannerClosed => ErrorClassifier.RejectReasonKey(CollectionRejectReasons.BANNER_CLOSED),
+                SummonError.RateLimited => ErrorClassifier.ErrTitleKey("RATE_LIMITED"),
+                _ => ErrorClassifier.ErrTitleKey("NET_OFFLINE"),
             };
             _c.Toasts?.Push(_c.Loc.Text(key), ToastStyle.Reject, UiConstants.ToastSec, anchor);
             if (anchor != null) _c.Cues?.Push(CueKind.Shake, id: anchor);

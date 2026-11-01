@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using HeroCat.Sim.Commands;
 
 namespace HeroCat.Client.Core
 {
@@ -98,46 +97,6 @@ namespace HeroCat.Client.Core
                     int n = text[i + 1] - '0';
                     sb.Append(n < args.Length ? args[n] : "");
                     i += 2;
-                }
-                else sb.Append(c);
-            }
-            return sb.ToString();
-        }
-    }
-
-    /// <summary>
-    /// Key builders (07 sections 3 and 12). Issue #248 decided the casing: wire codes and reject reasons stay UPPER_SNAKE
-    /// in code and on the wire, and the client lowercases them when it builds the key, so every key matches 09's lowercase
-    /// key regex: errors are <c>err.&lt;code_lower&gt;.title</c> / <c>.body</c>, rejects <c>reject.&lt;reason_lower&gt;</c>.
-    /// </summary>
-    public static class LocKeys
-    {
-        public static string ErrTitle(string code) => "err." + Lower(code) + ".title";
-
-        public static string ErrBody(string code) => "err." + Lower(code) + ".body";
-
-        /// <summary>
-        /// <c>reject.&lt;reason_lower&gt;</c>; a reject without a reason uses its <see cref="RejectCode"/> in snake case
-        /// (<c>CannotAfford</c> -&gt; <c>reject.cannot_afford</c>).
-        /// </summary>
-        public static string Reject(ApplyResult r) =>
-            "reject." + (string.IsNullOrEmpty(r.Reason) ? Snake(r.Code.ToString()) : Lower(r.Reason));
-
-        public static string Reject(string reason) => "reject." + Lower(reason);
-
-        static string Lower(string s) => string.IsNullOrEmpty(s) ? "unknown" : s.ToLowerInvariant();
-
-        /// <summary>PascalCase to lower snake case.</summary>
-        public static string Snake(string pascal)
-        {
-            var sb = new StringBuilder(pascal.Length + 4);
-            for (int i = 0; i < pascal.Length; i++)
-            {
-                char c = pascal[i];
-                if (char.IsUpper(c))
-                {
-                    if (i > 0) sb.Append('_');
-                    sb.Append(char.ToLowerInvariant(c));
                 }
                 else sb.Append(c);
             }

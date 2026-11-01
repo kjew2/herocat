@@ -197,13 +197,14 @@ namespace HeroCat.Runtime.Tests
         }
 
         [Test]
-        public void LocKeys_AreLowercase_PerIssue248()
+        public void ErrorAndRejectKeys_AreLowercase_PerIssue248()
         {
-            Assert.That(LocKeys.ErrTitle("NET_OFFLINE"), Is.EqualTo("err.net_offline.title"));
-            Assert.That(LocKeys.ErrBody("CLIENT_TOO_OLD"), Is.EqualTo("err.client_too_old.body"));
-            Assert.That(LocKeys.Reject(HeroCat.Sim.Commands.ApplyResult.Reject(HeroCat.Sim.Commands.RejectCode.CannotAfford, "NOT_ENOUGH_GOLD")),
+            Assert.That(HeroCat.Runtime.Errors.ErrorClassifier.ErrTitleKey("NET_OFFLINE"), Is.EqualTo("err.net_offline.title"));
+            Assert.That(HeroCat.Runtime.Errors.ErrorClassifier.ErrBodyKey("CLIENT_TOO_OLD"), Is.EqualTo("err.client_too_old.body"));
+            Assert.That(HeroCat.Runtime.Errors.ErrorClassifier.RejectReasonKey("BANNER_CLOSED"), Is.EqualTo("reject.banner_closed"));
+            Assert.That(HeroCat.Runtime.Errors.ErrorClassifier.RejectKey(HeroCat.Sim.Commands.ApplyResult.Reject(HeroCat.Sim.Commands.RejectCode.CannotAfford, "NOT_ENOUGH_GOLD")),
                         Is.EqualTo("reject.not_enough_gold"));
-            Assert.That(LocKeys.Reject(HeroCat.Sim.Commands.ApplyResult.Reject(HeroCat.Sim.Commands.RejectCode.CannotAfford)),
+            Assert.That(HeroCat.Runtime.Errors.ErrorClassifier.RejectKey(HeroCat.Sim.Commands.ApplyResult.Reject(HeroCat.Sim.Commands.RejectCode.CannotAfford)),
                         Is.EqualTo("reject.cannot_afford"));
         }
 

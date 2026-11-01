@@ -12,10 +12,10 @@ namespace HeroCat.Runtime.Errors
         public string LocalizationKey => ErrorClassifier.ErrKey(Code);
 
         /// <summary><c>err.&lt;code_lower&gt;.title</c> (07 section 4.27).</summary>
-        public string TitleKey => LocalizationKey + ".title";
+        public string TitleKey => ErrorClassifier.ErrTitleKey(Code);
 
         /// <summary><c>err.&lt;code_lower&gt;.body</c> (07 section 4.27).</summary>
-        public string BodyKey => LocalizationKey + ".body";
+        public string BodyKey => ErrorClassifier.ErrBodyKey(Code);
 
         /// <summary>True when the row shows text to the player, so 01 AC 14 requires its key.</summary>
         public bool ShowsMessage => Presentation != Presentation.None;
@@ -141,12 +141,21 @@ namespace HeroCat.Runtime.Errors
         /// <summary>The key stem <c>err.&lt;code_lower&gt;</c>; the wire code itself stays UPPER_SNAKE.</summary>
         public static string ErrKey(string code) => "err." + Lower(code);
 
+        /// <summary><c>err.&lt;code_lower&gt;.title</c>, SCR_ERROR's title (07 section 4.27).</summary>
+        public static string ErrTitleKey(string code) => ErrKey(code) + ".title";
+
+        /// <summary><c>err.&lt;code_lower&gt;.body</c>, SCR_ERROR's body (07 section 4.27).</summary>
+        public static string ErrBodyKey(string code) => ErrKey(code) + ".body";
+
         /// <summary>
         /// Key for a sim reject: <c>reject.&lt;reason_lower&gt;</c>, else the snake-cased RejectCode
         /// (<c>CannotAfford</c> -> <c>reject.cannot_afford</c>) (01 section 2.1).
         /// </summary>
         public static string RejectKey(ApplyResult r) =>
-            string.IsNullOrEmpty(r.Reason) ? RejectCodeKey(r.Code) : "reject." + Lower(r.Reason);
+            string.IsNullOrEmpty(r.Reason) ? RejectCodeKey(r.Code) : RejectReasonKey(r.Reason);
+
+        /// <summary><c>reject.&lt;reason_lower&gt;</c> for a reject reason (e.g. one the client predicts before sending).</summary>
+        public static string RejectReasonKey(string reason) => "reject." + Lower(reason);
 
         /// <summary>The fallback key for a RejectCode with no reason, <c>reject.&lt;snake_case&gt;</c>.</summary>
         public static string RejectCodeKey(RejectCode c) => "reject." + Snake(c.ToString());

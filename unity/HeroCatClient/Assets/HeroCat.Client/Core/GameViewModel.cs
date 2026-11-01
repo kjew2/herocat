@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using HeroCat.Runtime.Errors;
 using HeroCat.Runtime.Session;
 using HeroCat.Runtime.Summons;
 using HeroCat.Sim;
@@ -270,7 +271,7 @@ namespace HeroCat.Client.Core
 
         void RejectFeedback(ApplyResult r, string anchorId)
         {
-            Toasts.Push(Localizer.Text(LocKeys.Reject(r)), ToastStyle.Reject, UiConstants.ToastSec, anchorId);
+            Toasts.Push(Localizer.Text(ErrorClassifier.RejectKey(r)), ToastStyle.Reject, UiConstants.ToastSec, anchorId);
             if (anchorId != null) Cues.Push(CueKind.Shake, id: anchorId);
             Cues.Feel(Haptic.Light, Sounds.UiDeny);
             Main.Board.OnRejected(r);

@@ -111,8 +111,8 @@ namespace HeroCat.Client.Core
                 Log?.Invoke(Error.Code);
             }
             Error = e;
-            Title.Set(LocKeys.ErrTitle(e.Code));
-            Body.Set(LocKeys.ErrBody(e.Code));
+            Title.Set(e.TitleKey);   // Runtime's ErrorClassifier owns the key casing (issue #248)
+            Body.Set(e.BodyKey);
             CodeLine.Set(UiKeys.ErrCodeLine, e.Code ?? "", e.SupportId ?? "");
             _actions.Clear();
             BuildActions(e, bootFailure);
