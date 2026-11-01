@@ -156,17 +156,19 @@ At the cap, taps add `6 * 0.5 = 3` hero hits per second on top of the hero's 1 t
 ### 2.6 Spawn, kill, loot, stage advance
 
 ```
+FoughtStage = Combat.Selected ?? Combat.Stage                 # side-stage farming (section 2.7, issue #35)
+
 Spawn():
-  isBoss = Combat.Boss == Pending
+  isBoss = Combat.Selected == null and Combat.Boss == Pending   # a selected stage never spawns a boss
   Combat.EnemyIsBoss = isBoss
-  Combat.EnemyMaxHp = Combat.EnemyHp = isBoss ? BOSS_HP_MULT * Hp(Combat.Stage) : Hp(Combat.Stage)
+  Combat.EnemyMaxHp = Combat.EnemyHp = isBoss ? BOSS_HP_MULT * Hp(Combat.Stage) : Hp(FoughtStage)
   Combat.AttackProgress = 0
   Combat.BossTicksLeft = isBoss ? BOSS_TIME_TICKS : 0
   Combat.Phase = Fighting
-  publish EnemySpawned(Combat.Stage, isBoss, Combat.EnemyMaxHp)
+  publish EnemySpawned(FoughtStage, isBoss, Combat.EnemyMaxHp)
 
 Kill():
-  s = Combat.Stage; isBoss = Combat.EnemyIsBoss
+  s = FoughtStage; isBoss = Combat.EnemyIsBoss
   gold = Gold(s) * GoldMult * (isBoss ? BOSS_GOLD_MULT : 1)
   exp  = Exp(s)  * ExpMult
   Wallet.Apply(+gold GOLD, isBoss ? BOSS : KILL)
@@ -182,6 +184,8 @@ Kill():
       Progress.HighestFirstClearBoss = s; Wallet.Apply(+FIRST_CLEAR_DIAMONDS DIAMOND, FIRST_CLEAR)   # value owned by 06
       publish StageFirstCleared(s, FIRST_CLEAR_DIAMONDS)
     AdvanceStage(viaBoss: true)
+  else if Combat.Selected != null:
+    pass                                                    # farming a selected stage: pays, never advances (issue #35)
   else if Combat.Boss == Walled:
     pass                                                    # farming a walled stage: no credit toward advance
   else:

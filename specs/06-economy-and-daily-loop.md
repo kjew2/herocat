@@ -71,11 +71,12 @@ Rules that hold for every row:
 1. Diamonds are the only currency money buys (00 decision 7). Packages in section 8 are diamonds on a schedule, nothing else.
 2. Tickets reset, they do not accumulate from the reset: at rollover `TICKET_*` dungeon balances are set to `max(current, DUNGEON_TICKETS_PER_DAY)`, so bought tickets survive but unused daily tickets do not stack. Summon tickets never expire.
 3. Nothing converts between currencies except the exchange offers in section 8.4, each with a daily limit.
-4. A debit that would go negative is rejected by `Wallet.Apply` before any state changes; commands check `CanAfford` first and return `Reject(CannotAfford, "NOT_ENOUGH_<CURRENCY>")` (section 1.3) so the UI can name the shortfall.
+4. A debit that would go negative is rejected by `Wallet.Apply` before any state changes; commands check `CanAfford` first and return `Reject(CannotAfford, "NOT_ENOUGH_<CURRENCY>")` (section 1.3) so the UI can name the shortfall. Tickets follow the same pattern, e.g. `NOT_ENOUGH_TICKET_FISH_COIN`, `NOT_ENOUGH_TICKET_SUMMON_WEAPON` (issue #244).
+5. **Sim-granted diamonds and tickets reach the server ledgers on upload** (issue #49). Login, quests, first clears, achievements, the tutorial grant, the daily gift and quest ticket grants are credited locally by the sim and work offline. Each `PUT /save` reports cumulative per-reason counters (`Stats.DiamondsEarned[reason]`, `Stats.TicketsEarned[kind][reason]`, plus the client-side spends such as `SHOP_EXCHANGE`; 02), and the server credits the delta since the last upload into `diamond_ledger` / `ticket_ledger` with `ref_type = save_reconcile`, clamped to the per-day allowance (08 section 3.1). A summon can only spend what has been uploaded, so the client uploads before a pull when it has unsynced earnings (01).
 
 ### 1.2 M0 subset
 
-M0 ships `GOLD`, `DIAMOND`, `FISH_COIN`, `HERO_EXP`; the tutorial grant; Offline Catch-up; `LOGIN_DIAMONDS`. Quests, Dungeons, Shop, Inbox and Awakening are MVP. The M0 bot therefore earns diamonds only from login and the tutorial grant, which is why the M0 exit criterion in 00 section 11 is two weeks, not thirty days.
+M0 ships `GOLD`, `DIAMOND`, `FISH_COIN`, `HERO_EXP`; the tutorial grant (`TUTORIAL_DIAMONDS` plus the starter weapon `TUTORIAL_WEAPON_ID`, 09 `tut_welcome`, issue #46); Offline Catch-up; `LOGIN_DIAMONDS`. Quests, Dungeons, Shop, Inbox and Awakening are MVP. The M0 bot therefore earns diamonds only from login and the tutorial grant, which is why the M0 exit criterion in 00 section 11 is two weeks, not thirty days.
 
 ### 1.3 Reject reasons
 
@@ -89,10 +90,11 @@ Every economy command rejects through 01's `ApplyResult.Reject(RejectCode, reaso
 | `QUEST_NOT_COMPLETED` | `NotAvailable` | `ClaimQuest` |
 | `QUEST_ALREADY_CLAIMED` | `AlreadyClaimed` | `ClaimQuest` |
 | `NOTHING_TO_CLAIM` | `NotAvailable` | `ClaimAllQuests` |
+| `QUESTS_LOCKED` | `Locked` | `ClaimQuest`, `ClaimAllQuests` before the `feature_unlocks` row `QUESTS` is met (section 5.1, issue #45) |
 | `DUNGEON_LOCKED` | `Locked` | `StartDungeon`, `SweepDungeon` |
 | `DUNGEON_FLOOR_NOT_UNLOCKED` | `Locked` | `StartDungeon` |
-| `NO_TICKETS` | `CannotAfford` | `StartDungeon`, `SweepDungeon` |
 | `DUNGEON_RUN_IN_PROGRESS` | `NotAvailable` | `StartDungeon`, `SweepDungeon` |
+| `BOSS_ATTEMPT_IN_PROGRESS` | `NotAvailable` | `StartDungeon`, `SweepDungeon` while a boss fight is active (issue #42) |
 | `NOTHING_TO_SWEEP` | `NotAvailable` | `SweepDungeon` |
 | `DAILY_GIFT_ALREADY_CLAIMED` | `AlreadyClaimed` | `ClaimDailyGift` |
 | `EXCHANGE_LIMIT_REACHED` | `Capped` | `ExchangeItem` |

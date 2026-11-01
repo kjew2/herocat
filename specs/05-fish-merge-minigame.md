@@ -61,7 +61,7 @@ One row per level in the `fish_levels` table (09). Values are the 00 formulas ev
 
 `FISH_MERGE_COINS[n]` is an unrounded `double` (00 contract 9: `FISH_COIN` is a `double`); 09 does not round it and the UI floors the display (issue #16).
 
-Columns the table also carries: `name_key`, `sprite`, `splash_vfx`, `rarity_colour` (presentation), `missile_vfx`. Levels 1-10 exist at Research 0 (`FISH_MAX_LVL0 = 10`); each `RES_FISH_CAP` level opens one more, up to 20. The table ships all 20 rows; the cap decides which are reachable.
+Columns the table also carries: `name_key`, `sprite`, `splash_vfx`, `rarity_colour` (presentation), `missile_vfx`. MVP art covers 12 levels: rows above 12 reuse a level-1..12 sprite with a tint/frame variant, the merge sound clamps at its top step, and 09's validator warns when content can reach a level above the sprite count (07 owns the art list; issue #48). Levels 1-10 exist at Research 0 (`FISH_MAX_LVL0 = 10`); each `RES_FISH_CAP` level opens one more, up to 20. The table ships all 20 rows; the cap decides which are reachable.
 
 Two reading aids. Missile damage grows x1.5 per level while the fish it takes to make one grows x2, so per level-1 fish the missile value of merging higher is `(0.75)^(n-1)`: merging is for the board DPS and the discovery payout, not for the missiles. Discovery coins double per level and the fish needed double too, so discovery pays a constant 10 coins per level-1 fish on the first climb to any level, which is why the first session feels rich and why `RES_FISH_CAP` opening level 11 is a 10,240-coin event.
 
@@ -94,10 +94,13 @@ P1: tank level upgrades (released fish start at level 2, then 3) would halve the
 
 ## 4. Commands
 
+Board lock (issue #40): the board is hidden and frozen while a dungeon run is active (`Combat.Mode == Dungeon`, 06 and 07). Every board command (`ReleaseFish`, `ReleaseMax`, `MergeFish`, `MergeAll`, `MoveFish`, `DiscardFish`) checks this first, before any other rejection, and returns `Rejected(Locked, "BOARD_LOCKED")`. P1 Auto Merge does not run during a run. The tank keeps refilling (`TickTank` runs every tick) and the passive `FISH_BOARD_DPS_PCT` still applies to the dungeon fight; no missiles are enqueued or fired (section 5.1).
+
 ### 4.1 `ReleaseFish`
 
 ```
 ReleaseFish():                                # one fish per command; ReleaseMax loops it (section 6.1)
+  if Combat.Mode == Dungeon:                             return Rejected(Locked, "BOARD_LOCKED")     # issue #40
   if Fish.TankCount == 0:                                return Rejected(TankEmpty, "TANK_EMPTY")
   empties = count of Cells == 0
   if empties == 0:                                       return Rejected(BoardFull, "BOARD_FULL")
@@ -121,6 +124,7 @@ Rejections consume no draw. The draw happens only on success so `fish_spawn.Coun
 
 ```
 MergeFish(source, target):                    # cell indices 0..19
+  if Combat.Mode == Dungeon:                             return Rejected(Locked, "BOARD_LOCKED")     # issue #40
   if source == target or either index out of range:      return Rejected(BadArgument, "BAD_CELL")   # client bug; Apply never throws (issue #11)
   a = Cells[source]; b = Cells[target]
   if a == 0 or b == 0:                                   return Rejected(InvalidTarget, "EMPTY_CELL")
@@ -143,18 +147,19 @@ Discover(n):
   Fish.DiscoveredLevels.Add(n); Fish.HighestLevel = max(Fish.HighestLevel, n); return true
 ```
 
-Rejections use 01's `RejectCode` (`TankEmpty`, `BoardFull`, `LevelMismatch`, `InvalidTarget`, `Capped`, `BadArgument`) plus a reason key from this spec's closed list in `ApplyResult.Reason`, localized as `reject.<reason>` (issue #11): `TANK_EMPTY`, `BOARD_FULL`, `LEVEL_MISMATCH`, `EMPTY_CELL`, `CELL_OCCUPIED`, `FISH_AT_LEVEL_CAP`, `BAD_CELL`. A rejection leaves `StateHash` unchanged and emits no events. Every `Wallet.Apply` of Fish Coins also adds to `Stats.FishCoinEarned`.
+Rejections use 01's `RejectCode` (`TankEmpty`, `BoardFull`, `LevelMismatch`, `InvalidTarget`, `Capped`, `BadArgument`, `Locked`) plus a reason key from this spec's closed list in `ApplyResult.Reason`, localized as `reject.<reason>` (issue #11): `TANK_EMPTY`, `BOARD_FULL`, `LEVEL_MISMATCH`, `EMPTY_CELL`, `CELL_OCCUPIED`, `FISH_AT_LEVEL_CAP`, `BAD_CELL`, `BOARD_LOCKED` (issue #40). A rejection leaves `StateHash` unchanged and emits no events. Every `Wallet.Apply` of Fish Coins also adds to `Stats.FishCoinEarned`.
 
 The merged fish lands in the **target** cell (where the finger let go), and the source empties. Adjacency is not required: any two equal fish on the board can be merged, which keeps the 20-cell board from jamming and keeps `Merge all` simple. A merge pays the full discovery value the first time a level is created and 2% of it on every repeat; both go through the Wallet with their own reason so analytics (06) can tell the one-off income from the recurring one.
 
 ### 4.3 At the level cap
 
-Two fish at `FishMaxLvl` cannot merge (`Capped`, `FISH_AT_LEVEL_CAP`). They stay on the board and contribute their full `0.5 * FISH_MISSILE_PCT[cap]` each. A board of 20 cap fish is the Fish Board's finished state at the current Research level: 1,920% passive at cap 10, x20.2 on the Fish Board layer. From there the player has three moves: buy `RES_FISH_CAP` (03 section 6) and start merging pairs of cap fish into the new level, discard fish to make room (4.4), or do nothing and keep the DPS. The UI marks the cap fish with a cap badge (styling is 07's) and shows the `Research` shortcut when `Merge all` finds nothing to merge and the tank is not empty (07).
+Two fish at `FishMaxLvl` cannot merge (`Capped`, `FISH_AT_LEVEL_CAP`). They stay on the board and contribute their full `0.5 * FISH_MISSILE_PCT[cap]` each. A board of 20 cap fish is the Fish Board's finished state at the current Research level: 1,920% passive at cap 10, x20.2 on the Fish Board layer. From there the player has three moves: buy `RES_FISH_CAP` (03 section 6) and start merging pairs of cap fish into the new level, discard fish to make room (4.4), or do nothing and keep the DPS. The UI marks the cap fish with a cap badge (styling is 07's) and shows the `Research` shortcut when `Merge all` finds nothing to merge and the tank is not empty (07); before Research unlocks (Awakening rank 1, 09's `feature_unlocks`; issue #45) the shortcut shows the locked state and the discard hint instead.
 
 ### 4.4 `DiscardFish` (M0)
 
 ```
 DiscardFish(cell):
+  if Combat.Mode == Dungeon:                             return Rejected(Locked, "BOARD_LOCKED")     # issue #40
   if cell out of range:                                  return Rejected(BadArgument, "BAD_CELL")
   if Cells[cell] == 0:                                   return Rejected(InvalidTarget, "EMPTY_CELL")
   n = Cells[cell]; Cells[cell] = 0; Stats.FishDiscards += 1
@@ -171,6 +176,7 @@ Discard is the escape hatch for a jammed board (section 11) and is reached by lo
 
 ```
 MoveFish(source, target):
+  if Combat.Mode == Dungeon:                             return Rejected(Locked, "BOARD_LOCKED")     # issue #40
   if source == target or either index out of range:      return Rejected(BadArgument, "BAD_CELL")
   if Cells[source] == 0:                                 return Rejected(InvalidTarget, "EMPTY_CELL")
   if Cells[target] != 0:                                 return Rejected(InvalidTarget, "CELL_OCCUPIED")   # equal level is a MergeFish, not a move
@@ -185,7 +191,7 @@ A cosmetic reposition (00 decision 22): it consumes no stream, pays nothing, cha
 
 ### 5.1 Missiles
 
-Every merge that creates a level-`n` fish enqueues one missile worth `FISH_MISSILE_PCT[n]` percent of one hero hit (section 4.2). 03 section 2.5 drains the queue on the next `Fighting` tick: no crit, no RNG, never lost, surplus discarded on a kill. `Combat.MissileQueue` is persisted in the save (02), so a save taken while `Spawning` with missiles queued resumes and re-simulates identically (issue #7). The client draws the missile from the merged fish's cell to the enemy when it sees `FishMerged`, timed so it arrives about when the sim applies it (07; the sim does not wait for the animation).
+Every merge that creates a level-`n` fish enqueues one missile worth `FISH_MISSILE_PCT[n]` percent of one hero hit (section 4.2). 03 section 2.5 drains the queue on the next `Fighting` tick: no crit, no RNG, never lost, surplus discarded on a kill. The queue belongs to the stage fight: it is not drained while `Combat.Mode == Dungeon`, so missiles queued before a run wait for the stage fight to resume (issue #40). `Combat.MissileQueue` is persisted in the save (02), so a save taken while `Spawning` with missiles queued resumes and re-simulates identically (issue #7). The client draws the missile from the merged fish's cell to the enemy when it sees `FishMerged`, timed so it arrives about when the sim applies it (07; the sim does not wait for the animation).
 
 `missileDpsPct` is rated-only (issue #15): it enters `Query.RatedDps` (`SCR_HERO`, layer shares, bots, the tools and 08's plausibility bound), never the tick loop's hero hit, because missiles already deal their damage as discrete hits. The sim does not keep a trailing average; if `SCR_HERO` needs a live number, the runtime/view-model keeps a 60 s rolling sum of `FishMissileHit`, outside the save and `StateHash`. Closed form for the bot and the tool, for a player merging at `f` level-1 fish per minute with every fish eventually merged up to level `cap`:
 
@@ -239,17 +245,19 @@ Gestures on the board, in priority order when they could overlap:
 
 Behaviour, commands, events and `UI_LONG_PRESS_MS` are this spec's contract; pure presentation (scales, shakes, badges, timings of animations) is 07's, and the UI constants live in 07's constants list (issue #18).
 
-Rules: touch targets are the full cell (minimum 64 px on a 360 px wide layout, 07); drag starts after `UI_DRAG_START_PX` of movement so a tap never becomes a drag; while a drag is in progress the combat viewport keeps running and other board input is ignored; a merge during a boss fight is allowed and its missile hits the boss; `Merge all` and `Release max` are disabled (greyed, not hidden) when they would do nothing, with the reason as the button subtitle ("Tank empty", "Nothing to merge", "Board full").
+Rules: touch targets are the full cell (minimum 64 px on a 360 px wide layout, 07); drag starts after `UI_DRAG_START_PX` of movement so a tap never becomes a drag; while a drag is in progress the combat viewport keeps running and other board input is ignored; a merge during a boss fight is allowed and its missile hits the boss; during a dungeon run the board is hidden (07) and sends nothing (issue #40); `Merge all` and `Release max` are disabled (greyed, not hidden) when they would do nothing, with the reason as the button subtitle ("Tank empty", "Nothing to merge", "Board full").
 
 ### 6.1 Bulk commands
 
 ```
 ReleaseMax():
+  if Combat.Mode == Dungeon:                             return Rejected(Locked, "BOARD_LOCKED")     # issue #40
   n = 0
   while ReleaseFish().Ok: n += 1                         # each release draws from fish_spawn as in 4.1
   return Ok(n)                                            # 0 is not a rejection; the client disables the button on 0
 
 MergeAll():
+  if Combat.Mode == Dungeon:                             return Rejected(Locked, "BOARD_LOCKED")     # issue #40
   merges = 0
   loop:
     found = false
@@ -267,7 +275,7 @@ MergeAll():
 
 ### 6.2 Auto Merge (P1)
 
-`AutoMergeEnabled` in `FishBoardState`, default false, unlocked by a one-time purchase or a P1 Research node (06 decides). While enabled and the app is in the foreground, the sim runs `MergeAll()` every `AUTO_MERGE_INTERVAL_S = 3` seconds of ticks and `ReleaseMax()` whenever `Fish.TankCount == TankCap`. It never discards. It does not run during offline catch-up (the tank fills; the board does not change), so the active player keeps an edge: a 2 h session with Auto Merge equals the attentive policy; a login-only player with Auto Merge gets one tank of fish merged per session. Events are emitted exactly as for manual commands so the HUD animates them.
+`AutoMergeEnabled` in `FishBoardState`, default false, unlocked by a one-time purchase or a P1 Research node (06 decides). While enabled and the app is in the foreground, the sim runs `MergeAll()` every `AUTO_MERGE_INTERVAL_S = 3` seconds of ticks and `ReleaseMax()` whenever `Fish.TankCount == TankCap`. It never discards. It does not run during a dungeon run (section 4) or during offline catch-up (the tank fills; the board does not change), so the active player keeps an edge: a 2 h session with Auto Merge equals the attentive policy; a login-only player with Auto Merge gets one tank of fish merged per session. Events are emitted exactly as for manual commands so the HUD animates them.
 
 ## 7. Persistence and offline
 
@@ -352,10 +360,10 @@ All of these except `FishMissileHit` (03's) are in 00 section 5.1's fish group; 
 | Save mid-`MergeAll` | Impossible: commands are atomic with respect to `Advance` and saves (01). |
 | Offline catch-up | Tank fills per `CatchUpTank` at claim (section 7); nothing else changes; `fish_spawn` draws nothing. |
 | `RES_FISH_CAP` bought with two cap fish on the board | They become mergeable immediately; `Merge all` picks them up on its next pass; no retroactive discovery. |
-| Content lowers `FISH_MAX_LVL0` or a research cap below a saved fish's level | The fish stays, keeps its board DPS, cannot merge; the content validator (09) warns when a cap decreases between versions. |
+| Content lowers `FISH_MAX_LVL0` or a research cap below a saved fish's level | The fish stays, keeps its board DPS, cannot merge (`Capped`; `MergeAll` skips it); the content validator (09) warns when a cap decreases between versions. Load and content reconcile (02, 09) clamp `Cells` only to `FISH_MAX_LVL_HARD` (the `fish_levels` row count, which 09 never shrinks), never to the reachable cap; nothing is refunded. `TankCount` is still clamped to `TankCap` (issue #41). |
 | `Cells` length differs from `FISH_BOARD_W * FISH_BOARD_H` after a content change | Board dimensions are not content-tunable after v1 without a migration (02); the validator rejects a change to `FISH_BOARD_W/H` unless the save schema version also changes. |
 | Stage select to a lower stage (MVP) | Missiles and passive apply to whatever enemy is live; nothing board-side depends on stage. |
-| Dungeon run (MVP) | The board stays interactive during a dungeon run; missiles hit the dungeon enemy; coins accrue normally. 06 may disable the board for Tower fights. |
+| Dungeon run (MVP) | The board is hidden and frozen while `Combat.Mode == Dungeon` (06, 07): every board command is rejected `Locked` (reason `BOARD_LOCKED`), no missiles fire, no board coins accrue, Auto Merge pauses. The tank keeps refilling and the passive `FISH_BOARD_DPS_PCT` applies to the dungeon boss, so 06's clearability preview is exact (issue #40). |
 
 ## 12. Determinism rules
 
@@ -407,6 +415,8 @@ Questions the dashboard should answer (10): share of sessions with at least one 
 13. `tools/fish_model.py --policy attentive` reports between 1,000 and 1,500 fish on day 1 at Research 0, a full cap-10 board between day 6 and day 12, `fishMult` at day 7 between x12 and x25; `--policy lazy` reports `fishMult` at day 7 between x1.5 and x3; the ratio is between x3 and x12.
 14. `tools/fish_model.py` and the C# `HeroCat.Bots` fish policy agree on day-7 `fishMult` within 5% for the attentive policy (10's cross-check).
 15. PlayMode (07): dragging a fish onto an equal fish sends exactly one `MergeFish(source, target)` with `target` the cell under the release point; dropping on a mismatched fish sends nothing and plays the spring-back; dropping on an empty cell sends one `MoveFish(source, target)`; a tap-tap on two equal fish sends one `MergeFish`; `Merge all` with nothing to merge is disabled and shows "Nothing to merge".
+16. With `Combat.Mode == Dungeon`, each of `ReleaseFish`, `ReleaseMax`, `MergeFish`, `MergeAll`, `MoveFish` and `DiscardFish` is rejected `Locked` (reason `BOARD_LOCKED`) even when its arguments are also invalid, leaves `StateHash` unchanged and emits no events; `TickTank` still advances the tank, `Query.FishBoardDpsPct` is unchanged, and a missile queued before the run is still queued when `Combat.Mode = Stage` resumes (issue #40).
+17. Loading a save with a level-12 fish under content whose `FishMaxLvl` is 10 keeps the fish at level 12 and its board DPS; `MergeFish` of two such fish is rejected `Capped` (reason `FISH_AT_LEVEL_CAP`) and `MergeAll` ignores them; a saved level above `FISH_MAX_LVL_HARD` is clamped to it (issue #41).
 
 ## 16. Constants introduced
 
@@ -418,7 +428,7 @@ Questions the dashboard should answer (10): share of sessions with at least one 
 | `Fish.TankReleaseLevel` | 1 (MVP; P1 upgrades) | S | 3 | State field (02) holding the upgrade level bought; what each level releases is content, base `tank.release_level` = 1 (issue #7). |
 | `FISH_DISCARD_COINS_PCT` | 0.10 | S | 4.4 | Of the level's discovery value. |
 | `BoardDpsPct[n]` | `FISH_BOARD_DPS_FACTOR (0.5) * FISH_MISSILE_PCT[n]` | S | 5.2 | Derived `fish_levels` column (09); the factor is 00's `FISH_BOARD_DPS_FACTOR` (issue #19). |
-| `FISH_MAX_LVL_HARD` | 20 | S | 2.2 | `fish_levels` ships 20 rows; `RES_FISH_CAP` max 10. |
+| `FISH_MAX_LVL_HARD` | 20 | S | 2.2 | `fish_levels` ships 20 rows; `RES_FISH_CAP` max 10. The only clamp applied to saved `Cells` (issue #41). |
 | `AUTO_MERGE_INTERVAL_S` (P1) | 3 | S | 6.2 | |
 | `UI_DRAG_START_PX`, `UI_LONG_PRESS_MS` | 8, 350 | - | 6 | Defined in 07's constants list (issue #18); `UI_LONG_PRESS_MS` is behaviour, so its value is this spec's. |
 | `UI_MERGE_ALL_ANIM_MS`, `UI_RELEASE_MAX_ANIM_MS` | 80, 60 | - | 6 | Defined in 07's constants list (issue #18). |
