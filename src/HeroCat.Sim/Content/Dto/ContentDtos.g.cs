@@ -494,4 +494,41 @@ namespace HeroCat.Sim.Content.Dto
         public int Day;
         public int Stage;
     }
+
+    /// <summary>The exporter's rule data ContentDb.Build re-checks (09 section 8.6 loader scope), so the lists cannot drift.</summary>
+    public static class ContentRules
+    {
+        /// <summary>SCHEMA order: errors are reported sorted by table in this order (09 acceptance 7).</summary>
+        public static readonly string[] TableOrder =
+        {
+            "constants", "curves", "stats", "training_curves", "chapters", "enemies", "bosses", "rarities", "weapons",
+            "skills", "companions", "runes", "banners", "banner_levels", "dupe_levels", "awakening", "hero_levels",
+            "research", "fish_levels", "tank", "quests_daily", "quests_weekly", "achievements", "dungeons", "dungeon_floors",
+            "shop_products", "shop_packages", "inbox_templates", "tutorial_steps", "localization", "progress_targets",
+            "feature_unlocks", "awakening_targets", "plausibility_stage_bound",
+        };
+
+        /// <summary>Constants that must be &gt; 0 (09 section 5.1).</summary>
+        public static readonly string[] Positive =
+        {
+            "TICK_HZ", "ATTACK_INTERVAL_TICKS", "BOSS_TIME_TICKS", "KILLS_PER_STAGE", "BOSS_EVERY", "CHAPTER_WIDTH",
+            "STAGE_CAP", "TAP_ZAP_MAX_PER_SEC", "DAY_SECONDS", "OFFLINE_MIN_S", "SKILL_SLOTS", "COMPANION_SLOTS",
+            "RUNE_SLOTS", "FISH_BOARD_W", "FISH_BOARD_H", "FISH_MAX_LVL0", "ATTACK_PROGRESS_UNIT", "LIMIT_BREAK_RANKS",
+            "BASE_ATK", "BASE_HP", "BOSS_HP_MULT", "BOSS_GOLD_MULT", "OFFLINE_CAP_H", "DUPE_LVL_BONUS", "MP_POOL0",
+            "MP_REGEN0",
+        };
+
+        /// <summary>Constants that must be &gt;= 0.</summary>
+        public static readonly string[] NonNegative =
+        {
+            "SPAWN_DELAY_TICKS", "REF_DAILIES_DONE", "REF_NEW_BOSSES", "CLOCK_BACKWARDS_TOLERANCE_S",
+        };
+
+        /// <summary>Constants that must be in [0, 1].</summary>
+        public static readonly string[] UnitInterval =
+        {
+            "TAP_ZAP_DMG_PCT", "OFFLINE_RATE", "FISH_MERGE_COINS_PCT", "FISH_BOARD_DPS_FACTOR", "BOSS_ROCK_CANDY_P",
+            "FISH_DISCARD_COINS_PCT",
+        };
+    }
 }

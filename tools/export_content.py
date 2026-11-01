@@ -1813,7 +1813,26 @@ def gen_dtos():
                 continue
             lines.append(f"        public {cs_type(typ, nullable)} {pascal(col)};")
         lines.append("    }")
-    lines += ["}", ""]
+
+    def cs_list(name, values, doc):
+        out = ["", f"        /// <summary>{doc}</summary>", f"        public static readonly string[] {name} =", "        {"]
+        row = []
+        for v in values:
+            row.append(f'"{v}",')
+            if len(" ".join(row)) > 100:
+                out.append("            " + " ".join(row))
+                row = []
+        if row:
+            out.append("            " + " ".join(row))
+        return out + ["        };"]
+
+    lines += ["", "    /// <summary>The exporter's rule data ContentDb.Build re-checks (09 section 8.6 loader scope), so the lists cannot drift.</summary>",
+              "    public static class ContentRules", "    {"]
+    lines += cs_list("TableOrder", TABLE_ORDER, "SCHEMA order: errors are reported sorted by table in this order (09 acceptance 7).")[1:]
+    lines += cs_list("Positive", POSITIVE, "Constants that must be &gt; 0 (09 section 5.1).")
+    lines += cs_list("NonNegative", NON_NEGATIVE, "Constants that must be &gt;= 0.")
+    lines += cs_list("UnitInterval", UNIT_INTERVAL, "Constants that must be in [0, 1].")
+    lines += ["    }", "}", ""]
     return "\n".join(lines).encode("utf-8")
 
 
