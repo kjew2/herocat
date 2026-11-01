@@ -41,6 +41,9 @@ namespace HeroCat.Runtime.Replay
             (typeof(AttemptBoss), "AttemptBoss"),
             (typeof(AutoEquipBestWeapon), "AutoEquipBestWeapon"),
             (typeof(AutoEquipBestSkills), "AutoEquipBestSkills"),
+            // The rest of the Fish Board commands (05 section 6; issue #103), pinned for the board vectors and the client log.
+            (typeof(ReleaseFish), "ReleaseFish"),
+            (typeof(MoveFish), "MoveFish"),
         };
 
         static readonly object Lock = new object();

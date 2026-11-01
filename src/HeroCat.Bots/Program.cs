@@ -61,6 +61,7 @@ namespace HeroCat.Bots
             "  golden       --check | --update [--allow-sim-change] | --replay   [--golden-dir path]\n" +
             "  save-fixture --check | --update [--out path]\n" +
             "  summon-stream --check | --update [--out path]\n" +
+            "  fish-vectors --check | --update [--out path]\n" +
             "  bench        --ticks 1000000 --stage 300 --max-ms 2000\n" +
             "  stage-bound  --check | --update [--seeds 1-20] [--days 60]   TODO(#60): needs the whale bot\n" +
             "common: --content dir (default: the repo's content/), --tier M0|MVP (default M0: the systems the M0 sim has)\n" +
@@ -82,6 +83,7 @@ namespace HeroCat.Bots
                     case "golden": return GoldenCmd(a);
                     case "save-fixture": return SaveFixtureCmd(a);
                     case "summon-stream": return SummonStreamCmd(a);
+                    case "fish-vectors": return FishVectorsCmd(a);
                     case "bench": return Bench(a);
                     case "help": case "--help": Console.Out.Write(Usage); return 0;
                     default: Console.Error.Write($"unknown verb '{a.Verb}'\n" + Usage); return 2;
@@ -301,6 +303,23 @@ namespace HeroCat.Bots
             }
             bool same = File.Exists(path) && File.ReadAllText(path).Replace("\r\n", "\n") == text;
             Console.Out.Write(same ? $"OK   {path}\n" : $"FAIL {path} differs (regenerate: {SummonStream.Regenerate})\n");
+            return same ? 0 : 1;
+        }
+
+        /// <summary>Fixtures/Fish/board-vectors.txt, the Fish Board golden vector (05 AC5, issue #103).</summary>
+        static int FishVectorsCmd(CliArgs a)
+        {
+            var db = LoadContent(a);
+            string path = a.Str("out", FishBoardVectors.DefaultPath(ContentDir(a)));
+            string text = FishBoardVectors.Generate(db);
+            if (a.Has("update"))
+            {
+                FishBoardVectors.Write(path, text);
+                Console.Out.Write($"wrote {path}\n");
+                return 0;
+            }
+            bool same = File.Exists(path) && File.ReadAllText(path).Replace("\r\n", "\n") == text;
+            Console.Out.Write(same ? $"OK   {path}\n" : $"FAIL {path} differs (regenerate: {FishBoardVectors.Regenerate})\n");
             return same ? 0 : 1;
         }
 

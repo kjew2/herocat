@@ -177,6 +177,9 @@ pr_dotnet() {
   step "Summons: Fixtures/Summon/stream.json matches what the bot CLI generates (the C# side of issue #14)"
   $BOTS summon-stream --check
 
+  step "Fish Board: Fixtures/Fish/board-vectors.txt matches what the bot CLI generates (05 AC5, issue #103)"
+  $BOTS fish-vectors --check
+
   if [ "$FAST" -eq 1 ]; then
     step ".NET: unit tests (no golden, no perf)"
     dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory!=Golden&TestCategory!=Perf"
@@ -232,6 +235,8 @@ nightly_dotnet() {
   build
   step "Bots: golden --replay, the seed-7 command log replays to its day hashes on this OS (specs/10 section 6.2)"
   to_file golden-replay.txt $BOTS golden --replay
+  step "Fish Board: the board vectors regenerate byte-identically on this OS (05 AC5, issue #103)"
+  $BOTS fish-vectors --check
   if [ "$REPLAY_ONLY" -eq 1 ]; then return 0; fi
 
   # TODO(#214, #215): sweep lazy-f2p, light-spender and whale too once those bots exist (specs/10 section 6.2).
