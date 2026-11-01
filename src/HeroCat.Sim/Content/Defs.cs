@@ -369,4 +369,25 @@ namespace HeroCat.Sim.Content
         public int Rank { get; }
         public int MaxDaysAfterGate { get; }
     }
+
+    /// <summary>A Research node (09 section 5.18, 03 section 6). MVP rows; an M0 build has none.</summary>
+    public sealed class ResearchDef
+    {
+        internal ResearchDef(string id, ResearchEffect effect, double effectPerLevel, double? effectFloor, int maxLevel,
+                             double cost0, double costG, int unlockAwakenRank, Tier tier)
+        {
+            Id = id; Effect = effect; EffectPerLevel = effectPerLevel; EffectFloor = effectFloor; MaxLevel = maxLevel;
+            Cost0 = cost0; CostG = costG; UnlockAwakenRank = unlockAwakenRank; Tier = tier;
+        }
+
+        public string Id { get; }
+        public ResearchEffect Effect { get; }
+        public double EffectPerLevel { get; }
+        public double? EffectFloor { get; }
+        public int MaxLevel { get; }
+        public double Cost0 { get; }
+        public double CostG { get; }
+        public int UnlockAwakenRank { get; }
+        public Tier Tier { get; }
+    }
 }

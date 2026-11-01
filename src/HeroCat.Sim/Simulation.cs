@@ -16,7 +16,7 @@ namespace HeroCat.Sim
     /// (ContentDb, genesis GameState, command log). Single-threaded; not thread-safe.
     ///
     /// Advance ticks time forward (virtual server clock, day rollover) and the stage combat loop (Simulation.Combat.cs).
-    /// Summons, fish board and offline catch-up are added by their own issues (TODO(#91), #99, #108).
+    /// Summons, the fish board and offline catch-up live in their own partial files (Simulation.Summons/Fish/Offline.cs).
     /// </summary>
     public sealed partial class Simulation : IEventEmitter
     {
@@ -150,6 +150,7 @@ namespace HeroCat.Sim
                 EnsureDay(VirtualNowServerSeconds);
                 RecomputeNextDayTick();
             }
+            StampLastTick();   // Simulation.Offline.cs: the catch-up anchor follows ticked time
             TickTank();     // 05 section 3: before combat, in every Combat.Mode
             TickCombat();   // 03 section 2.1 (Simulation.Combat.cs)
         }

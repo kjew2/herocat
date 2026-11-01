@@ -22,7 +22,7 @@ namespace HeroCat.Bots.Tests
                 AfterDay = (d, ctx) => dayEnds.Add((log.Count, ctx.Sim.Tick, ctx.Sim.StateHash())),
             };
             runner.Run(new IdleBot(), seed, days);
-            Assert.That(log.Count, Is.EqualTo(1 + 2 * days), "the start sync plus two system commands per night");
+            Assert.That(log.Count, Is.EqualTo(1 + 3 * days), "the start sync plus two system commands and the claim per night");
 
             var sim = new Simulation(BotRunner.Genesis(Content.Db, seed), Content.Db);
             var records = log.Records.ToArray();

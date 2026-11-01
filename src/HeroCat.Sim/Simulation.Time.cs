@@ -44,11 +44,7 @@ namespace HeroCat.Sim
         internal ApplyResult HandleComputeOfflineCatchup(ComputeOfflineCatchup c)
         {
             if (c.NowServerSeconds < 0) return ApplyResult.Reject(RejectCode.BadArgument, SimRejectReasons.BAD_SERVER_TIME);
-            // TODO(#108): Catchup.Compute, Offline.Pending (stored or summed), OfflineRewardComputed and the tank fill.
-            // The skeleton only moves the catch-up anchor forward (never backwards, 06 section 4.2 rule 3).
-            var t = State.Time;
-            if (c.NowServerSeconds > t.LastTickServerTime) t.LastTickServerTime = c.NowServerSeconds;
-            return ApplyResult.Accepted;
+            return HandleComputeOfflineCatchupCore(c);   // Simulation.Offline.cs (06 section 7.1, issue #108)
         }
 
         /// <summary>

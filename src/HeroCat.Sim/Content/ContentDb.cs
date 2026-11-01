@@ -63,6 +63,16 @@ namespace HeroCat.Sim.Content
         /// <summary>The PROFILE_CREATED step's grants (TUTORIAL_DIAMONDS and the starter weapon); empty if absent.</summary>
         public IReadOnlyList<Grant> ProfileCreatedGrants { get; private set; }
 
+        /// <summary>Research nodes by id (09 section 5.18). Empty when the table is absent or filtered out by tier (M0).</summary>
+        public IReadOnlyDictionary<string, ResearchDef> Research { get; private set; }
+
+        /// <summary>The node with <paramref name="effect"/> (one per effect, E046), or null.</summary>
+        public ResearchDef ResearchFor(ResearchEffect effect)
+        {
+            foreach (var r in Research.Values) if (r.Effect == effect) return r;
+            return null;
+        }
+
         // ------------------------------------------------------------------------------------------- accessors
 
         /// <summary>Gold for <paramref name="count"/> levels of <paramref name="s"/> from level <paramref name="fromLevel"/> (closed form).</summary>

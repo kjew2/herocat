@@ -129,6 +129,11 @@ namespace HeroCat.Sim.Tests
 
             Assert.That(b.State.Time.DayKey, Is.EqualTo(a.State.Time.DayKey));
             Assert.That(b.State.Wallet.Diamond, Is.EqualTo(a.State.Wallet.Diamond));
+            // The catch-up anchor is the virtual time ticked (Simulation.Offline.cs), which differs by construction: A's clock
+            // reached midnight + 10 s, B's lagged at midnight - 10 s. Everything else is identical.
+            Assert.That(a.State.Time.LastTickServerTime, Is.EqualTo(midnight + 10));
+            Assert.That(b.State.Time.LastTickServerTime, Is.EqualTo(midnight - 10));
+            b.State.Time.LastTickServerTime = a.State.Time.LastTickServerTime;
             Assert.That(b.StateHash(), Is.EqualTo(a.StateHash()));
         }
 

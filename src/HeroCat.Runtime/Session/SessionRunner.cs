@@ -111,10 +111,20 @@ namespace HeroCat.Runtime.Session
         public GameServices Services => _svc;
 
         /// <summary>
-        /// False while SCR_OFFLINE_REWARD is open (01 sections 8.1 step 6, 8.7 step 5): no ticks run and no time
-        /// accumulates; commands, clock syncs, events and saves continue.
+        /// A manual tick switch (debug and tests): false runs no ticks and accumulates no time; commands, clock syncs,
+        /// events and saves continue. The offline reward needs no toggle: see <see cref="TicksHeldForOfflineReward"/>.
         /// </summary>
         public bool TicksEnabled { get; set; } = true;
+
+        /// <summary>
+        /// True while Offline.Pending is set (00 contract 7, decision 53; 01 section 8.7 step 5): the runner holds ticks
+        /// exactly as with TicksEnabled false, from the ComputeOfflineCatchup that stored the reward until the
+        /// ClaimOfflineReward that SCR_OFFLINE_REWARD sends, so the numbers on the modal are exactly what is credited.
+        /// </summary>
+        public bool TicksHeldForOfflineReward => _sim.State.Offline.Pending != null;
+
+        /// <summary>True when the next frame may run ticks.</summary>
+        public bool TicksRunning => TicksEnabled && !TicksHeldForOfflineReward;
 
         /// <summary>
         /// Debug builds only (the client's x5/x20 cheat): multiplies frame time for the tick accumulator. The gap rule,
@@ -188,7 +198,7 @@ namespace HeroCat.Runtime.Session
             while (batch.Count > 0) Issue(batch.Dequeue());
 
             int n = 0;
-            if (TicksEnabled)
+            if (TicksRunning)
             {
                 double scale = DebugTimeScale > 0 ? DebugTimeScale : 1;
                 _accTicks = Math.Min(_accTicks + dt * scale * _tickHz, _opt.InAppGapSec * scale * _tickHz);

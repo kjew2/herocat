@@ -72,7 +72,7 @@ namespace HeroCat.Runtime.Boot
         public LoadStatus LoadStatus { get; internal set; }
         public bool IsNewProfile { get; internal set; }
 
-        /// <summary>Step 6: SCR_MAIN opens SCR_OFFLINE_REWARD first (the runner's ticks stay off until it closes).</summary>
+        /// <summary>Step 6: SCR_MAIN opens SCR_OFFLINE_REWARD first (the runner holds ticks until ClaimOfflineReward).</summary>
         public bool OpenOfflineReward { get; internal set; }
 
         /// <summary>Step 6: then the tutorial overlay when Tutorial.Step &lt; TUTORIAL_DONE (row count of tutorial_steps).</summary>
@@ -179,7 +179,7 @@ namespace HeroCat.Runtime.Boot
             progress?.Invoke(BootStep.Handoff);
             r.OpenOfflineReward = state.Offline.Pending != null;
             r.ShowTutorial = !state.Tutorial.Skipped && state.Tutorial.Step < r.Content.TutorialSteps.Count;
-            r.Runner.TicksEnabled = !r.OpenOfflineReward;
+            // The runner holds ticks while Offline.Pending is set (SessionRunner.TicksHeldForOfflineReward, decision 53).
             r.Outcome = BootOutcome.Ready;
             Done(BootStep.Handoff);
 

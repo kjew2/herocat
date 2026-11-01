@@ -18,8 +18,8 @@
     "LoginDayKey": 20456
   },
   "Hero": {
-    "Level": 46,
-    "Exp": 474.61645754901883,
+    "Level": 71,
+    "Exp": 8005.419309287474,
     "AwakenRank": 0
   },
   "Training": {
@@ -35,7 +35,7 @@
     ]
   },
   "Wallet": {
-    "Gold": 18594.73216940006,
+    "Gold": 133029.9399980542,
     "Diamond": 1660,
     "FishCoin": 0.0,
     "RockCandy": 0,
@@ -204,7 +204,7 @@
   },
   "Offline": {
     "Pending": null,
-    "LifetimeOfflineSecCredited": 0
+    "LifetimeOfflineSecCredited": 158400
   },
   "Pending": {
     "Summon": null,
@@ -264,7 +264,7 @@
     "TrainingLevelsBought": 0,
     "FirstWallStage": 20,
     "ActiveSeconds": 14400,
-    "GoldEarned": 18594.73216940006,
+    "GoldEarned": 133029.9399980542,
     "GoldSpent": 0.0,
     "FishCoinEarned": 0.0,
     "DiamondsEarned": 1660,

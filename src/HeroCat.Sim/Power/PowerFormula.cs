@@ -195,6 +195,51 @@ namespace HeroCat.Sim.Power
             return m;
         }
 
+        /// <summary>
+        /// The bought level of the content's node with <paramref name="effect"/>, clamped to 0..max_level; 0 when the content
+        /// has no such node (M0) or the node was never bought (03 section 6).
+        /// </summary>
+        public static int ResearchLevel(ContentDb db, GameState s, ResearchEffect effect)
+        {
+            var node = db.ResearchFor(effect);
+            if (node == null || !s.Research.Level.TryGetValue(node.Id, out int lv) || lv <= 0) return 0;
+            return lv > node.MaxLevel ? node.MaxLevel : lv;
+        }
+
+        /// <summary>The summed effect of that node: effect_per_level * ResearchLevel (0 without the node).</summary>
+        public static double ResearchEffectTotal(ContentDb db, GameState s, ResearchEffect effect)
+        {
+            int lv = ResearchLevel(db, s, effect);
+            return lv == 0 ? 0.0 : db.ResearchFor(effect).EffectPerLevel * lv;
+        }
+
+        // ================================================================================================ offline and kill time
+
+        /// <summary>
+        /// The effective offline cap in hours: OFFLINE_CAP_H plus res_offline_cap's hours per level (00 decision 12, 03
+        /// section 6; issue #21). 24 h to 36 h with the shipped rows.
+        /// </summary>
+        public static double OfflineCapH(ContentDb db, GameState s) =>
+            db.Constants.OfflineCapH + ResearchEffectTotal(db, s, ResearchEffect.OFFLINE_CAP);
+
+        /// <summary>
+        /// Rated time to kill one enemy of <paramref name="hp"/> (03 section 7.1, 06 section 7.1): whole attacks at the rated
+        /// per-attack damage, <c>ceil(hp / (RatedDps * attackSec)) * attackSec + SPAWN_DELAY_TICKS / TICK_HZ</c>, where
+        /// <c>attackSec = ATTACK_INTERVAL_TICKS / TICK_HZ / speedFactor</c>. Skills, companions and crits enter through the
+        /// rated DPS (their expected share per attack). Positive infinity when the rated DPS is not positive.
+        /// </summary>
+        public static double KillTimeSeconds(ContentDb db, in PowerBreakdown p, double hp)
+        {
+            var k = db.Constants;
+            double hz = k.TickHz;
+            double attackSec = k.AttackIntervalTicks / hz / (p.Speed > 0 ? p.Speed : 1.0);
+            double perAttack = p.RatedDps * attackSec;
+            if (!(perAttack > 0) || double.IsInfinity(perAttack)) return double.PositiveInfinity;
+            double hits = Math.Ceiling(hp / perAttack);
+            if (hits < 1) hits = 1;
+            return hits * attackSec + k.SpawnDelayTicks / hz;
+        }
+
         // ================================================================================================ the formula (03 7.1)
 
         /// <summary>Every factor and unit for this state. <paramref name="missileDpsPct"/> is rated-only (issue #15).</summary>
