@@ -39,6 +39,30 @@
       "text": "Weapon Summon"
     },
     {
+      "key": "boot.step.auth",
+      "text": "Signing in..."
+    },
+    {
+      "key": "boot.step.catchup",
+      "text": "Catching up..."
+    },
+    {
+      "key": "boot.step.config",
+      "text": "Checking for updates..."
+    },
+    {
+      "key": "boot.step.content",
+      "text": "Loading content..."
+    },
+    {
+      "key": "boot.step.save",
+      "text": "Loading your cat..."
+    },
+    {
+      "key": "boot.step.warmup",
+      "text": "Almost there..."
+    },
+    {
       "key": "chapter.01.name",
       "text": "Dreamland 1"
     },
@@ -605,6 +629,498 @@
     {
       "key": "reject.unknown_item",
       "text": "Unknown item"
+    },
+    {
+      "key": "scr.boot.caption",
+      "text": "v{0} · content {1} · build {2}"
+    },
+    {
+      "key": "scr.boot.title",
+      "text": "Whisker Hero"
+    },
+    {
+      "key": "scr.collection.chip_companions",
+      "text": "Companions"
+    },
+    {
+      "key": "scr.collection.chip_skills",
+      "text": "Skills"
+    },
+    {
+      "key": "scr.collection.chip_weapons",
+      "text": "Weapons"
+    },
+    {
+      "key": "scr.collection.equip",
+      "text": "Equip"
+    },
+    {
+      "key": "scr.collection.equipped",
+      "text": "Equipped"
+    },
+    {
+      "key": "scr.collection.filter_all",
+      "text": "All"
+    },
+    {
+      "key": "scr.collection.filter_owned",
+      "text": "Owned"
+    },
+    {
+      "key": "scr.collection.level_copies",
+      "text": "Lv {0} ({1}/{2})"
+    },
+    {
+      "key": "scr.collection.level_max",
+      "text": "Lv {0} (max)"
+    },
+    {
+      "key": "scr.collection.new_count",
+      "text": "({0} new)"
+    },
+    {
+      "key": "scr.collection.not_owned",
+      "text": "Not owned"
+    },
+    {
+      "key": "scr.collection.nothing_equipped",
+      "text": "Nothing equipped"
+    },
+    {
+      "key": "scr.collection.sort_level",
+      "text": "Sort: Level"
+    },
+    {
+      "key": "scr.collection.sort_newest",
+      "text": "Sort: Newest"
+    },
+    {
+      "key": "scr.collection.sort_owned",
+      "text": "Sort: Owned"
+    },
+    {
+      "key": "scr.collection.sort_rarity",
+      "text": "Sort: Rarity"
+    },
+    {
+      "key": "scr.common.back",
+      "text": "Back"
+    },
+    {
+      "key": "scr.common.close",
+      "text": "Close"
+    },
+    {
+      "key": "scr.common.coming_soon",
+      "text": "Coming soon"
+    },
+    {
+      "key": "scr.common.need_more",
+      "text": "Need {0} more"
+    },
+    {
+      "key": "scr.confirm.cancel",
+      "text": "Cancel"
+    },
+    {
+      "key": "scr.confirm.cost",
+      "text": "{0}: {1}, balance after {2}"
+    },
+    {
+      "key": "scr.confirm.exit_body",
+      "text": "Press back again to quit."
+    },
+    {
+      "key": "scr.confirm.exit_title",
+      "text": "Exit Whisker Hero?"
+    },
+    {
+      "key": "scr.confirm.ok",
+      "text": "Confirm"
+    },
+    {
+      "key": "scr.confirm.reset_body",
+      "text": "This deletes your progress on this device."
+    },
+    {
+      "key": "scr.confirm.reset_title",
+      "text": "Reset profile?"
+    },
+    {
+      "key": "scr.error.code_line",
+      "text": "{0} · support id {1}"
+    },
+    {
+      "key": "scr.error.contact_support",
+      "text": "Contact support"
+    },
+    {
+      "key": "scr.error.dismiss",
+      "text": "Later"
+    },
+    {
+      "key": "scr.error.reset_profile",
+      "text": "Reset profile"
+    },
+    {
+      "key": "scr.error.restore_cloud",
+      "text": "Restore from cloud"
+    },
+    {
+      "key": "scr.error.retry",
+      "text": "Retry"
+    },
+    {
+      "key": "scr.error.update_app",
+      "text": "Update"
+    },
+    {
+      "key": "scr.hero.buy_levels",
+      "text": "Buy {0} levels for {1}"
+    },
+    {
+      "key": "scr.hero.level",
+      "text": "Lv {0}"
+    },
+    {
+      "key": "scr.hero.loadout",
+      "text": "Loadout"
+    },
+    {
+      "key": "scr.hero.max",
+      "text": "MAX"
+    },
+    {
+      "key": "scr.hero.plus",
+      "text": "+"
+    },
+    {
+      "key": "scr.hero.step_max",
+      "text": "Max"
+    },
+    {
+      "key": "scr.hero.step_n",
+      "text": "x{0}"
+    },
+    {
+      "key": "scr.hero.title",
+      "text": "Hero"
+    },
+    {
+      "key": "scr.hero.training",
+      "text": "Training"
+    },
+    {
+      "key": "scr.item_detail.at_max",
+      "text": "Max level"
+    },
+    {
+      "key": "scr.item_detail.compare",
+      "text": "Equipped weapon: ATK {0}"
+    },
+    {
+      "key": "scr.item_detail.compare_button",
+      "text": "Compare"
+    },
+    {
+      "key": "scr.item_detail.kind_companion",
+      "text": "Companion"
+    },
+    {
+      "key": "scr.item_detail.kind_rune",
+      "text": "Rune"
+    },
+    {
+      "key": "scr.item_detail.kind_skill",
+      "text": "Skill"
+    },
+    {
+      "key": "scr.item_detail.kind_weapon",
+      "text": "Weapon"
+    },
+    {
+      "key": "scr.item_detail.level",
+      "text": "Level {0}   {1} / {2} copies"
+    },
+    {
+      "key": "scr.item_detail.new",
+      "text": "NEW"
+    },
+    {
+      "key": "scr.item_detail.next",
+      "text": "Next level: {0}"
+    },
+    {
+      "key": "scr.item_detail.passive",
+      "text": "Collection passive {0}"
+    },
+    {
+      "key": "scr.item_detail.source",
+      "text": "Source: {0} ({1} {2})"
+    },
+    {
+      "key": "scr.item_detail.weapon_atk",
+      "text": "Equipped ATK {0}"
+    },
+    {
+      "key": "scr.main.boss_clearable",
+      "text": "Boss: clearable"
+    },
+    {
+      "key": "scr.main.boss_need",
+      "text": "Boss: need ~{0}x"
+    },
+    {
+      "key": "scr.main.dps",
+      "text": "DPS {0}"
+    },
+    {
+      "key": "scr.main.fish_board_full",
+      "text": "Board full"
+    },
+    {
+      "key": "scr.main.fish_board_locked",
+      "text": "Board locked"
+    },
+    {
+      "key": "scr.main.fish_discard",
+      "text": "Release back to sea (+{0} coins)"
+    },
+    {
+      "key": "scr.main.fish_discovered",
+      "text": "New fish! Level {0} (+{1})"
+    },
+    {
+      "key": "scr.main.fish_info_body",
+      "text": "Missile {0} of a hit · board DPS {1}"
+    },
+    {
+      "key": "scr.main.fish_level",
+      "text": "Fish level {0}"
+    },
+    {
+      "key": "scr.main.fish_max_level",
+      "text": "Max level: raise the cap in Research"
+    },
+    {
+      "key": "scr.main.fish_merge_all",
+      "text": "Merge all"
+    },
+    {
+      "key": "scr.main.fish_nothing_to_merge",
+      "text": "Nothing to merge"
+    },
+    {
+      "key": "scr.main.fish_release",
+      "text": "Release"
+    },
+    {
+      "key": "scr.main.fish_release_max",
+      "text": "Release max"
+    },
+    {
+      "key": "scr.main.fish_tank",
+      "text": "Magic Tank"
+    },
+    {
+      "key": "scr.main.fish_tank_empty",
+      "text": "Tank empty"
+    },
+    {
+      "key": "scr.main.kills",
+      "text": "kills {0}/{1}"
+    },
+    {
+      "key": "scr.main.stage",
+      "text": "Stage {0} · Ch.{1}"
+    },
+    {
+      "key": "scr.main.stage_farming",
+      "text": "Farming {0} · frontier {1}"
+    },
+    {
+      "key": "scr.main.tab_collection",
+      "text": "Collection"
+    },
+    {
+      "key": "scr.main.tab_dungeons",
+      "text": "Dungeons"
+    },
+    {
+      "key": "scr.main.tab_hero",
+      "text": "Hero"
+    },
+    {
+      "key": "scr.main.tab_quests",
+      "text": "Quests"
+    },
+    {
+      "key": "scr.main.tab_shop",
+      "text": "Shop"
+    },
+    {
+      "key": "scr.main.tab_summon",
+      "text": "Summon"
+    },
+    {
+      "key": "scr.main.tap_hint",
+      "text": "Tap the monster!"
+    },
+    {
+      "key": "scr.main.toast_boss_failed",
+      "text": "Boss escaped: need ~{0}x DPS"
+    },
+    {
+      "key": "scr.main.toast_first_clear",
+      "text": "First clear: +{0} diamonds"
+    },
+    {
+      "key": "scr.main.toast_login",
+      "text": "+{0} diamonds: daily login"
+    },
+    {
+      "key": "scr.main.toast_new_day",
+      "text": "A new day!"
+    },
+    {
+      "key": "scr.main.toast_save_failed",
+      "text": "Could not save. We will try again."
+    },
+    {
+      "key": "scr.main.toast_stage_cap",
+      "text": "You reached the last stage!"
+    },
+    {
+      "key": "scr.main.wall",
+      "text": "WALL"
+    },
+    {
+      "key": "scr.offline_reward.away",
+      "text": "Away for {0}"
+    },
+    {
+      "key": "scr.offline_reward.claim",
+      "text": "Claim"
+    },
+    {
+      "key": "scr.offline_reward.rewards",
+      "text": "Rewards for {0}"
+    },
+    {
+      "key": "scr.offline_reward.rewards_capped",
+      "text": "Rewards for {0} (capped at {1})"
+    },
+    {
+      "key": "scr.offline_reward.stage",
+      "text": "Farmed stage {0} at {1}/s"
+    },
+    {
+      "key": "scr.offline_reward.tank",
+      "text": "Magic Tank refilled (+{0} fish)"
+    },
+    {
+      "key": "scr.offline_reward.title",
+      "text": "Welcome back!"
+    },
+    {
+      "key": "scr.skills.auto_equip",
+      "text": "Auto-equip"
+    },
+    {
+      "key": "scr.skills.cast_buff",
+      "text": "buff"
+    },
+    {
+      "key": "scr.skills.cast_dot",
+      "text": "damage over time"
+    },
+    {
+      "key": "scr.skills.cast_instant",
+      "text": "instant"
+    },
+    {
+      "key": "scr.skills.slots",
+      "text": "Slots (auto-cast in order)"
+    },
+    {
+      "key": "scr.skills.stats",
+      "text": "DPS {0} · CD {1} · {2}"
+    },
+    {
+      "key": "scr.skills.title",
+      "text": "Skills"
+    },
+    {
+      "key": "scr.summon.banner_level",
+      "text": "Banner Lv {0}"
+    },
+    {
+      "key": "scr.summon.guarantee",
+      "text": "{0}x: at least one {1} guaranteed"
+    },
+    {
+      "key": "scr.summon.pity",
+      "text": "Pity {0} / {1}"
+    },
+    {
+      "key": "scr.summon.pull",
+      "text": "Summon x{0}  {1}"
+    },
+    {
+      "key": "scr.summon.rates",
+      "text": "View rates"
+    },
+    {
+      "key": "scr.summon.soft_pity",
+      "text": "soft pity from pull {0}"
+    },
+    {
+      "key": "scr.summon.ticket",
+      "text": "Use ticket x1 ({0})"
+    },
+    {
+      "key": "scr.summon.title",
+      "text": "Summon"
+    },
+    {
+      "key": "scr.summon.toast_banner_level",
+      "text": "Banner level {0}: rates improved"
+    },
+    {
+      "key": "scr.summon_result.again",
+      "text": "Summon x{0} again  {1}"
+    },
+    {
+      "key": "scr.summon_result.copy",
+      "text": "+1 copy ({0}/{1})"
+    },
+    {
+      "key": "scr.summon_result.level_up",
+      "text": "Lv {0} -> {1}"
+    },
+    {
+      "key": "scr.summon_result.new",
+      "text": "NEW"
+    },
+    {
+      "key": "scr.summon_result.skip",
+      "text": "Skip"
+    },
+    {
+      "key": "scr.summon_result.summary",
+      "text": "{0} Epic+ · {1} Rare · {2} Common"
+    },
+    {
+      "key": "scr.weapons.passive",
+      "text": "Collection passive: {0} ATK ({1}/{2} owned)"
+    },
+    {
+      "key": "scr.weapons.stats",
+      "text": "ATK {0} · passive {1}"
+    },
+    {
+      "key": "scr.weapons.title",
+      "text": "Weapons"
     },
     {
       "key": "skill.c_01.desc",

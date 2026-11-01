@@ -4,6 +4,8 @@ using System.IO;
 using System.Reflection;
 using HeroCat.Client.Core;
 using HeroCat.Runtime.Boot;
+using HeroCat.Runtime.Errors;
+using HeroCat.Sim.Commands;
 using HeroCat.Sim.Content;
 using NUnit.Framework;
 
@@ -14,9 +16,7 @@ namespace HeroCat.Runtime.Tests
     {
         static Localizer English() => Localizer.FromJson(File.ReadAllText(Path.Combine(TestContent.Dir, "localization.en.json")));
 
-        // TODO(#187): the 129 English rows for these keys are ready (scr.*, boot.step.*) but adding them changes the content
-        // hash, which the summon fixtures pin; they land with the localization track's err/reject rows in one content change.
-        [Test, Ignore("TODO(#187): UI rows land with the localization track (content hash pinned by Fixtures/Summon)")]
+        [Test]
         public void EveryUiKey_HasAnEnglishRow()
         {
             var en = English();
@@ -34,6 +34,11 @@ namespace HeroCat.Runtime.Tests
             foreach (CollectionSort s in Enum.GetValues(typeof(CollectionSort))) Need(UiKeys.SortKey(s));
             foreach (CollectionFilter f in Enum.GetValues(typeof(CollectionFilter))) Need(UiKeys.FilterKey(f));
             foreach (Rarity r in Enum.GetValues(typeof(Rarity))) Need(UiKeys.RarityName(r));
+            // The error and reject keys the client builds itself (SummonVm's predicted rejects), through ErrorClassifier.
+            Need(ErrorClassifier.RejectCodeKey(RejectCode.RateLimited));
+            Need(ErrorClassifier.ErrTitleKey("NET_OFFLINE"));
+            Need(ErrorClassifier.RejectReasonKey(CollectionRejectReasons.BANNER_CLOSED));
+            Need(ErrorClassifier.RejectReasonKey(CollectionRejectReasons.NotEnough(Currency.DIAMOND)));
             Assert.That(missing, Is.Empty);
         }
 

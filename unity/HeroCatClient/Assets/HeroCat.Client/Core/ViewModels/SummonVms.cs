@@ -232,7 +232,7 @@ namespace HeroCat.Client.Core
                 SummonError.NotEnoughDiamonds => ErrorClassifier.RejectReasonKey(CollectionRejectReasons.NotEnough(Currency.DIAMOND)),
                 SummonError.NotEnoughTickets => ErrorClassifier.RejectReasonKey(CollectionRejectReasons.NotEnough(_c.Db.Banners[SelectedBanner.Value].TicketCurrency)),
                 SummonError.BannerClosed => ErrorClassifier.RejectReasonKey(CollectionRejectReasons.BANNER_CLOSED),
-                SummonError.RateLimited => ErrorClassifier.ErrTitleKey("RATE_LIMITED"),
+                SummonError.RateLimited => ErrorClassifier.RejectCodeKey(RejectCode.RateLimited),   // the reject toast; 429 shows nothing until retries are exhausted
                 _ => ErrorClassifier.ErrTitleKey("NET_OFFLINE"),
             };
             _c.Toasts?.Push(_c.Loc.Text(key), ToastStyle.Reject, UiConstants.ToastSec, anchor);

@@ -8,6 +8,12 @@ banner.companion.name,Companion Summon,,,,24,false,
 banner.rune.name,Rune Summon,,,,24,false,
 banner.skill.name,Skill Summon,,,,24,false,
 banner.weapon.name,Weapon Summon,,,,24,false,
+boot.step.auth,Signing in...,,,,28,false,07 M0 screens
+boot.step.catchup,Catching up...,,,,28,false,07 M0 screens
+boot.step.config,Checking for updates...,,,,28,false,07 M0 screens
+boot.step.content,Loading content...,,,,28,false,07 M0 screens
+boot.step.save,Loading your cat...,,,,28,false,07 M0 screens
+boot.step.warmup,Almost there...,,,,28,false,07 M0 screens
 chapter.01.name,Dreamland 1,,,,24,false,
 chapter.02.name,Dreamland 2,,,,24,false,
 chapter.03.name,Dreamland 3,,,,24,false,
@@ -150,6 +156,129 @@ reject.summon_bad_payment,Can't pay that way,,,,48,false,
 reject.summon_stream_mismatch,Summon failed,,,,48,false,
 reject.tank_empty,The tank is empty,,,,48,false,
 reject.unknown_item,Unknown item,,,,48,false,
+scr.boot.caption,v{0} · content {1} · build {2},,,,60,false,07 M0 screens
+scr.boot.title,Whisker Hero,,,,28,false,07 M0 screens
+scr.collection.chip_companions,Companions,,,,18,false,07 M0 screens
+scr.collection.chip_skills,Skills,,,,18,false,07 M0 screens
+scr.collection.chip_weapons,Weapons,,,,18,false,07 M0 screens
+scr.collection.equip,Equip,,,,18,false,07 M0 screens
+scr.collection.equipped,Equipped,,,,18,false,07 M0 screens
+scr.collection.filter_all,All,,,,18,false,07 M0 screens
+scr.collection.filter_owned,Owned,,,,18,false,07 M0 screens
+scr.collection.level_copies,Lv {0} ({1}/{2}),,,,28,false,07 M0 screens
+scr.collection.level_max,Lv {0} (max),,,,28,false,07 M0 screens
+scr.collection.new_count,({0} new),,,,18,false,07 M0 screens
+scr.collection.not_owned,Not owned,,,,18,false,07 M0 screens
+scr.collection.nothing_equipped,Nothing equipped,,,,28,false,07 M0 screens
+scr.collection.sort_level,Sort: Level,,,,18,false,07 M0 screens
+scr.collection.sort_newest,Sort: Newest,,,,18,false,07 M0 screens
+scr.collection.sort_owned,Sort: Owned,,,,18,false,07 M0 screens
+scr.collection.sort_rarity,Sort: Rarity,,,,18,false,07 M0 screens
+scr.common.back,Back,,,,18,false,07 M0 screens
+scr.common.close,Close,,,,18,false,07 M0 screens
+scr.common.coming_soon,Coming soon,,,,48,false,07 M0 screens
+scr.common.need_more,Need {0} more,,,,18,false,07 M0 screens
+scr.confirm.cancel,Cancel,,,,18,false,07 M0 screens
+scr.confirm.cost,"{0}: {1}, balance after {2}",,,,60,false,07 M0 screens
+scr.confirm.exit_body,Press back again to quit.,,,,160,false,07 M0 screens
+scr.confirm.exit_title,Exit Whisker Hero?,,,,28,false,07 M0 screens
+scr.confirm.ok,Confirm,,,,18,false,07 M0 screens
+scr.confirm.reset_body,This deletes your progress on this device.,,,,160,false,07 M0 screens
+scr.confirm.reset_title,Reset profile?,,,,28,false,07 M0 screens
+scr.error.code_line,{0} · support id {1},,,,80,false,07 M0 screens
+scr.error.contact_support,Contact support,,,,18,false,07 M0 screens
+scr.error.dismiss,Later,,,,18,false,07 M0 screens
+scr.error.reset_profile,Reset profile,,,,18,false,07 M0 screens
+scr.error.restore_cloud,Restore from cloud,,,,18,false,07 M0 screens
+scr.error.retry,Retry,,,,18,false,07 M0 screens
+scr.error.update_app,Update,,,,18,false,07 M0 screens
+scr.hero.buy_levels,Buy {0} levels for {1},,,,28,false,07 M0 screens
+scr.hero.level,Lv {0},,,,18,false,07 M0 screens
+scr.hero.loadout,Loadout,,,,28,false,07 M0 screens
+scr.hero.max,MAX,,,,18,false,07 M0 screens
+scr.hero.plus,+,,,,18,false,07 M0 screens
+scr.hero.step_max,Max,,,,18,false,07 M0 screens
+scr.hero.step_n,x{0},,,,18,false,07 M0 screens
+scr.hero.title,Hero,,,,28,false,07 M0 screens
+scr.hero.training,Training,,,,28,false,07 M0 screens
+scr.item_detail.at_max,Max level,,,,28,false,07 M0 screens
+scr.item_detail.compare,Equipped weapon: ATK {0},,,,60,false,07 M0 screens
+scr.item_detail.compare_button,Compare,,,,18,false,07 M0 screens
+scr.item_detail.kind_companion,Companion,,,,18,false,07 M0 screens
+scr.item_detail.kind_rune,Rune,,,,18,false,07 M0 screens
+scr.item_detail.kind_skill,Skill,,,,18,false,07 M0 screens
+scr.item_detail.kind_weapon,Weapon,,,,18,false,07 M0 screens
+scr.item_detail.level,Level {0}   {1} / {2} copies,,,,60,false,07 M0 screens
+scr.item_detail.new,NEW,,,,18,false,07 M0 screens
+scr.item_detail.next,Next level: {0},,,,60,false,07 M0 screens
+scr.item_detail.passive,Collection passive {0},,,,60,false,07 M0 screens
+scr.item_detail.source,Source: {0} ({1} {2}),,,,60,false,07 M0 screens
+scr.item_detail.weapon_atk,Equipped ATK {0},,,,60,false,07 M0 screens
+scr.main.boss_clearable,Boss: clearable,,,,18,false,07 M0 screens
+scr.main.boss_need,Boss: need ~{0}x,,,,18,false,07 M0 screens
+scr.main.dps,DPS {0},,,,18,false,07 M0 screens
+scr.main.fish_board_full,Board full,,,,18,false,07 M0 screens
+scr.main.fish_board_locked,Board locked,,,,18,false,07 M0 screens
+scr.main.fish_discard,Release back to sea (+{0} coins),,,,40,false,07 M0 screens
+scr.main.fish_discovered,New fish! Level {0} (+{1}),,,,48,false,07 M0 screens
+scr.main.fish_info_body,Missile {0} of a hit · board DPS {1},,,,160,false,07 M0 screens
+scr.main.fish_level,Fish level {0},,,,28,false,07 M0 screens
+scr.main.fish_max_level,Max level: raise the cap in Research,,,,48,false,07 M0 screens
+scr.main.fish_merge_all,Merge all,,,,18,false,07 M0 screens
+scr.main.fish_nothing_to_merge,Nothing to merge,,,,18,false,07 M0 screens
+scr.main.fish_release,Release,,,,18,false,07 M0 screens
+scr.main.fish_release_max,Release max,,,,18,false,07 M0 screens
+scr.main.fish_tank,Magic Tank,,,,18,false,07 M0 screens
+scr.main.fish_tank_empty,Tank empty,,,,18,false,07 M0 screens
+scr.main.kills,kills {0}/{1},,,,18,false,07 M0 screens
+scr.main.stage,Stage {0} · Ch.{1},,,,28,false,07 M0 screens
+scr.main.stage_farming,Farming {0} · frontier {1},,,,28,false,07 M0 screens
+scr.main.tab_collection,Collection,,,,10,false,07 M0 screens
+scr.main.tab_dungeons,Dungeons,,,,10,false,07 M0 screens
+scr.main.tab_hero,Hero,,,,10,false,07 M0 screens
+scr.main.tab_quests,Quests,,,,10,false,07 M0 screens
+scr.main.tab_shop,Shop,,,,10,false,07 M0 screens
+scr.main.tab_summon,Summon,,,,10,false,07 M0 screens
+scr.main.tap_hint,Tap the monster!,,,,48,false,07 M0 screens
+scr.main.toast_boss_failed,Boss escaped: need ~{0}x DPS,,,,48,false,07 M0 screens
+scr.main.toast_first_clear,First clear: +{0} diamonds,,,,48,false,07 M0 screens
+scr.main.toast_login,+{0} diamonds: daily login,,,,48,false,07 M0 screens
+scr.main.toast_new_day,A new day!,,,,48,false,07 M0 screens
+scr.main.toast_save_failed,Could not save. We will try again.,,,,48,false,07 M0 screens
+scr.main.toast_stage_cap,You reached the last stage!,,,,48,false,07 M0 screens
+scr.main.wall,WALL,,,,18,false,07 M0 screens
+scr.offline_reward.away,Away for {0},,,,28,false,07 M0 screens
+scr.offline_reward.claim,Claim,,,,18,false,07 M0 screens
+scr.offline_reward.rewards,Rewards for {0},,,,40,false,07 M0 screens
+scr.offline_reward.rewards_capped,Rewards for {0} (capped at {1}),,,,48,false,07 M0 screens
+scr.offline_reward.stage,Farmed stage {0} at {1}/s,,,,40,false,07 M0 screens
+scr.offline_reward.tank,Magic Tank refilled (+{0} fish),,,,40,false,07 M0 screens
+scr.offline_reward.title,Welcome back!,,,,28,false,07 M0 screens
+scr.skills.auto_equip,Auto-equip,,,,18,false,07 M0 screens
+scr.skills.cast_buff,buff,,,,10,false,07 M0 screens
+scr.skills.cast_dot,damage over time,,,,18,false,07 M0 screens
+scr.skills.cast_instant,instant,,,,10,false,07 M0 screens
+scr.skills.slots,Slots (auto-cast in order),,,,28,false,07 M0 screens
+scr.skills.stats,DPS {0} · CD {1} · {2},,,,48,false,07 M0 screens
+scr.skills.title,Skills,,,,28,false,07 M0 screens
+scr.summon.banner_level,Banner Lv {0},,,,18,false,07 M0 screens
+scr.summon.guarantee,{0}x: at least one {1} guaranteed,,,,60,false,07 M0 screens
+scr.summon.pity,Pity {0} / {1},,,,18,false,07 M0 screens
+scr.summon.pull,Summon x{0}  {1},,,,18,false,07 M0 screens
+scr.summon.rates,View rates,,,,18,false,07 M0 screens
+scr.summon.soft_pity,soft pity from pull {0},,,,28,false,07 M0 screens
+scr.summon.ticket,Use ticket x1 ({0}),,,,18,false,07 M0 screens
+scr.summon.title,Summon,,,,28,false,07 M0 screens
+scr.summon.toast_banner_level,Banner level {0}: rates improved,,,,48,false,07 M0 screens
+scr.summon_result.again,Summon x{0} again  {1},,,,28,false,07 M0 screens
+scr.summon_result.copy,+1 copy ({0}/{1}),,,,18,false,07 M0 screens
+scr.summon_result.level_up,Lv {0} -> {1},,,,18,false,07 M0 screens
+scr.summon_result.new,NEW,,,,18,false,07 M0 screens
+scr.summon_result.skip,Skip,,,,18,false,07 M0 screens
+scr.summon_result.summary,{0} Epic+ · {1} Rare · {2} Common,,,,48,false,07 M0 screens
+scr.weapons.passive,Collection passive: {0} ATK ({1}/{2} owned),,,,60,false,07 M0 screens
+scr.weapons.stats,ATK {0} · passive {1},,,,48,false,07 M0 screens
+scr.weapons.title,Weapons,,,,28,false,07 M0 screens
 skill.c_01.desc,A common instant skill.,,,,0,false,
 skill.c_01.name,Common Skill 1,,,,24,false,
 skill.c_02.desc,A common instant skill.,,,,0,false,
