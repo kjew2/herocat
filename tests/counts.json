@@ -4,6 +4,7 @@
     "HeroCat.Bots.Tests": 49,
     "HeroCat.Remote.Tests": 23,
     "HeroCat.Runtime.Tests": 357,
+    "HeroCat.Server.Tests": 33,
     "HeroCat.Sim.Tests": 215
   }
 }

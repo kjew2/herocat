@@ -2,8 +2,9 @@
 # step (build -warnaserror, tests, perf, bench, golden, fixtures, purity checks, the test-count guard). Add new checks
 # to check.sh, not here. Runs on every pull request and every push to main; a required check on main.
 #
-# Not here yet: the path-filtered `server` job (check.sh gains a `server` mode with src/HeroCat.Server) and the Unity
-# `unity-editmode` job (runner label waits on issue #23).
+# The `server` job runs `./check.sh --server` against Postgres 16 and Redis 7 service containers on PRs touching the
+# server, the Sim, the migration set, check.sh or this file (and every push to main); a `changes` job decides, as in
+# content.yml, so a skipped job still reports. Not here yet: the Unity `unity-editmode` job (runner label waits on #23).
 name: pr
 
 on:
@@ -14,6 +15,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read # the changes job lists the PR's files
 
 concurrency:
   group: pr-${{ github.ref }}
@@ -47,3 +49,51 @@ jobs:
             build/check/golden.txt
           if-no-files-found: ignore
           retention-days: 14
+
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      server: ${{ steps.filter.outputs.server }}
+    steps:
+      - id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "server=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          files=$(gh api "repos/${{ github.repository }}/pulls/$PR/files" --paginate --jq '.[].filename')
+          re='^(src/HeroCat\.(Server|Server\.Tests|Sim)/|server/|check\.sh$|\.github/workflows/pr\.yml$|\.github/actions/setup/)'
+          if printf '%s\n' "$files" | grep -Eq "$re"; then echo "server=true"; else echo "server=false"; fi | tee -a "$GITHUB_OUTPUT"
+
+  # specs/10 section 6.2: the server tests and the Postgres steps (migrations from empty). TODO(#219): Testcontainers.
+  server:
+    needs: changes
+    if: needs.changes.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis: # for the Redis-backed groups (#219); nothing reads it yet
+        image: redis:7
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # CI-only throwaway credentials for the service container above, not a secret.
+      HEROCAT_TEST_POSTGRES: Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+
+      - name: ./check.sh --server
+        run: ./check.sh --server
