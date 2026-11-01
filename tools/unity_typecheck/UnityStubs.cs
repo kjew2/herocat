@@ -265,6 +265,7 @@ namespace TMPro
     {
         public static TMP_FontAsset CreateFontAsset(UnityEngine.Font f) => null;
         public bool TryAddCharacters(string characters, out string missingCharacters) { missingCharacters = null; return true; }
+        public System.Collections.Generic.List<TMP_FontAsset> fallbackFontAssetTable { get; set; }
     }
     public static class TMP_Settings { public static TMP_FontAsset defaultFontAsset => null; }
     public class TMP_Text : UnityEngine.UI.Graphic
