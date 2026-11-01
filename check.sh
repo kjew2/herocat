@@ -31,6 +31,9 @@ step "Content: exporter tests, and content_src builds to content/ (and the Sim D
 python3 tools/test_export_content.py
 python3 tools/export_content.py check
 
+step "Summons: tools/gacha_model.py matches content/, Fixtures/Summon/stream.json and vectors.json (04, decision 46)"
+python3 tools/gacha_model.py --check
+
 step "Release: build-android.yml helpers (version.json, size gate)"
 python3 .github/scripts/test_android_release.py
 
@@ -51,6 +54,9 @@ BOTS="dotnet run -c Release --no-build --project src/HeroCat.Bots --"
 
 step "Saves: the v1 fixture matches what the bot CLI generates (until SaveSchema.V1Frozen)"
 $BOTS save-fixture --check
+
+step "Summons: Fixtures/Summon/stream.json matches what the bot CLI generates (the C# side of issue #14)"
+$BOTS summon-stream --check
 
 if [ "$FAST" -eq 1 ]; then
   step ".NET: unit tests (no golden)"

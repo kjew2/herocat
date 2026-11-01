@@ -163,18 +163,14 @@ namespace HeroCat.Sim
             return ApplyResult.Accepted;
         }
 
-        /// <summary>Switches to the best owned weapon only when it is strictly better than the equipped one (04 section 6.3).</summary>
+        /// <summary>Switches to the best owned weapon only when it is strictly better than the equipped one (04 section 6.3; ranking in CollectionRules.RankOwned).</summary>
         void AutoEquipWeapon(bool auto)
         {
             string best = CollectionRules.BestWeapon(Db, State);
             if (best == null || best == State.Loadout.Weapon) return;
             string cur = State.Loadout.Weapon;
-            if (cur != null && CollectionRules.Owns(State.Weapons, cur))
-            {
-                State.Weapons.Items.TryGetValue(best, out var bi);
-                State.Weapons.Items.TryGetValue(cur, out var ci);
-                if (!(CollectionRules.WeaponRating(Db, best, bi) > CollectionRules.WeaponRating(Db, cur, ci))) return;
-            }
+            if (cur != null && CollectionRules.Owns(State.Weapons, cur) && !CollectionRules.StrictlyBetter(Db, Banner.WEAPON, State.Weapons, best, cur))
+                return;
             SetWeapon(best, auto);
         }
 

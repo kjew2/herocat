@@ -11,8 +11,8 @@ namespace HeroCat.Sim.Summons
         bool Owned, int Copies, int Level, int LimitBreaks, int EffectiveLevel,
         int CopiesToNextLevel,                    // 0 at level 10
         int NextLimitBreakCost,                   // Rock Candy; 0 until limit breaks land (MVP), when maxed or unowned
-        double ValueNow, double ValueNextLevel,   // weapons: equipped pct; skills: dps_pct; after LevelMult
-        double PassiveNow,                        // weapons only
+        double ValueNow, double ValueNextLevel,   // weapons: equipped pct; skills: dps_pct; after LevelMult. NaN until merge #85
+        double PassiveNow,                        // weapons only; NaN until merge #85
         bool Equipped, int? Slot,
         bool IsNew);                              // from the client's NEW badge store (ClientPrefs), never sim state
 
@@ -21,7 +21,7 @@ namespace HeroCat.Sim.Summons
         Banner Banner, IReadOnlyList<CollectibleVm> Items,
         int OwnedCount, int PoolCount,
         double LayerMult,                         // weaponMult / skillMult; NaN until the Power layer's Query lands (TODO merge #85)
-        double PassiveTotal,                      // weapons: sum of PassiveNow
+        double PassiveTotal,                      // weapons: weaponPassivePct; NaN until merge #85
         int NewCount,
         int BannerLevel, int PullsToNextLevel);
 
@@ -119,17 +119,15 @@ namespace HeroCat.Sim.Summons
             var col = CollectionRules.For(s, b);
             var items = new List<CollectibleVm>();
             int owned = 0, newCount = 0;
-            double passive = 0;
             foreach (var id in PoolIds(db, b))
             {
                 var vm = Item(db, s, b, col, id, isNew != null && isNew(id));
                 items.Add(vm);
                 if (vm.Owned) owned++;
                 if (vm.IsNew) newCount++;
-                passive += vm.PassiveNow;
             }
             // TODO(merge #85): LayerMult and PassiveTotal from the Power layer's per-layer Query breakdown.
-            return new CollectionVm(b, items, owned, items.Count, double.NaN, b == Banner.WEAPON ? passive : 0.0, newCount,
+            return new CollectionVm(b, items, owned, items.Count, double.NaN, b == Banner.WEAPON ? double.NaN : 0.0, newCount,
                                     BannerLevel(db, s, b), PullsToNextLevel(db, s, b));
         }
 
@@ -146,27 +144,27 @@ namespace HeroCat.Sim.Summons
 
             string nameKey = "", icon = "";
             Rarity rarity = Rarity.COMMON;
-            double basePct = 0, basePassive = 0;
             bool equipped = false;
             int? slot = null;
             if (b == Banner.WEAPON && db.Weapons.TryGetValue(id, out var w))
             {
-                nameKey = w.NameKey; icon = w.Icon; rarity = w.Rarity; basePct = w.AtkPct; basePassive = w.PassivePct;
+                nameKey = w.NameKey; icon = w.Icon; rarity = w.Rarity;
                 if (s.Loadout.Weapon == id) { equipped = true; slot = 0; }
             }
             else if (b == Banner.SKILL && db.Skills.TryGetValue(id, out var k))
             {
-                nameKey = k.NameKey; icon = k.Icon; rarity = k.Rarity; basePct = k.DpsPct;
+                nameKey = k.NameKey; icon = k.Icon; rarity = k.Rarity;
                 var slots = s.Loadout.Skills;
                 if (slots != null)
                     for (int i = 0; i < slots.Length; i++)
                         if (slots[i] == id) { equipped = true; slot = i; break; }
             }
 
-            double now = owned ? basePct * db.LevelMult(eff) : 0.0;
-            int nextEff = owned ? (level < maxLevel ? eff + 1 : eff) : 1;
-            double next = basePct * db.LevelMult(nextEff);
-            double passiveNow = owned ? basePassive * db.LevelMult(eff) : 0.0;
+            // TODO(merge #85): ValueNow / ValueNextLevel / PassiveNow (equipped pct, dps_pct, passive after LevelMult) from the
+            // Power layer's per-item Query; the combat track owns that math. NaN until then (0 for an unowned item's now/passive).
+            double now = owned ? double.NaN : 0.0;
+            double next = double.NaN;
+            double passiveNow = owned && b == Banner.WEAPON ? double.NaN : 0.0;
             // TODO(#36): NextLimitBreakCost = LIMIT_BREAK_COST[r] * (LimitBreaks + 1) when the MVP LimitBreak command lands.
             return new CollectibleVm(id, rarity, nameKey, icon, owned, copies, level, lb, eff, toNext, 0, now, next, passiveNow,
                                      equipped, slot, isNew);

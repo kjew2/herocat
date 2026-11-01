@@ -8,7 +8,7 @@ namespace HeroCat.Sim.Commands
         internal override ApplyResult Execute(Simulation sim) => sim.HandleEquipWeapon(this);
     }
 
-    /// <summary>Equips the best owned weapon by equipped pct after LevelMult, if strictly better than the current one.</summary>
+    /// <summary>Equips the best owned weapon if strictly better than the current one (ranking: CollectionRules.RankOwned).</summary>
     public sealed record AutoEquipBestWeapon : Command
     {
         internal override ApplyResult Execute(Simulation sim) => sim.HandleAutoEquipBestWeapon(this);

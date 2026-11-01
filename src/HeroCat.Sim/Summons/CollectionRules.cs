@@ -38,21 +38,6 @@ namespace HeroCat.Sim.Summons
             return l <= 0 ? 0.0 : db.LevelMult(l);
         }
 
-        /// <summary>
-        /// The auto-equip key of a weapon: its equipped pct after LevelMult, WEAPON_ATK_PCT (the row's atk_pct) times
-        /// LevelMult (04 section 6.3). TODO(merge #85): read the Power layer's equippedWeaponPct once it lands so the rank
-        /// and the formula share one implementation.
-        /// </summary>
-        public static double WeaponRating(ContentDb db, string id, OwnedItem item) =>
-            db.Weapons.TryGetValue(id, out var w) ? w.AtkPct * LevelMult(db, item) : 0.0;
-
-        /// <summary>
-        /// The auto-equip key of a skill: dps_pct * LevelMult (04 section 7.2). TODO(merge #85): the Power layer's
-        /// per-skill skillDpsPct.
-        /// </summary>
-        public static double SkillRating(ContentDb db, string id, OwnedItem item) =>
-            db.Skills.TryGetValue(id, out var k) ? k.DpsPct * LevelMult(db, item) : 0.0;
-
         public static Rarity RarityOf(ContentDb db, Banner b, string id)
         {
             if (b == Banner.WEAPON && db.Weapons.TryGetValue(id, out var w)) return w.Rarity;
@@ -73,35 +58,46 @@ namespace HeroCat.Sim.Summons
         }
 
         /// <summary>
-        /// Owned items of <paramref name="b"/> ordered best first by <paramref name="rating"/>, ties by rarity (higher first)
-        /// then id ordinal (04 sections 6.3 and 7.2). Deterministic for any dictionary order.
+        /// Owned items of <paramref name="b"/> ordered best first: rarity (higher first), then EffectiveLevel (higher first),
+        /// then id ordinal. Deterministic for any dictionary order.
+        /// TODO(merge #85): rank by the Power layer's rated value (04 sections 6.3 and 7.2: WEAPON_ATK_PCT * LevelMult for
+        /// weapons, dps_pct * LevelMult for skills) once the combat track lands; the Power layer owns that math.
         /// </summary>
-        public static List<string> RankOwned(ContentDb db, GameState s, Banner b, Func<ContentDb, string, OwnedItem, double> rating)
+        public static List<string> RankOwned(ContentDb db, GameState s, Banner b)
         {
             var col = For(s, b);
             var ids = new List<string>();
             foreach (var kv in col.Items) if (kv.Value != null && kv.Value.Copies > 0 && IsKnown(db, b, kv.Key)) ids.Add(kv.Key);
-            ids.Sort((x, y) => Compare(db, b, col, rating, x, y));
+            ids.Sort((x, y) => Compare(db, b, col, x, y));
             return ids;
         }
 
-        /// <summary>Negative when <paramref name="x"/> ranks before (is better than) <paramref name="y"/>.</summary>
-        public static int Compare(ContentDb db, Banner b, CollectionState col, Func<ContentDb, string, OwnedItem, double> rating,
-                                  string x, string y)
+        /// <summary>Negative when <paramref name="x"/> ranks before (is better than) <paramref name="y"/>; see <see cref="RankOwned"/>.</summary>
+        public static int Compare(ContentDb db, Banner b, CollectionState col, string x, string y)
         {
+            int c = RarityOf(db, b, y).CompareTo(RarityOf(db, b, x));
+            if (c != 0) return c;
             col.Items.TryGetValue(x, out var ix);
             col.Items.TryGetValue(y, out var iy);
-            int c = rating(db, y, iy).CompareTo(rating(db, x, ix));
-            if (c != 0) return c;
-            c = RarityOf(db, b, y).CompareTo(RarityOf(db, b, x));
+            c = EffectiveLevel(db, iy).CompareTo(EffectiveLevel(db, ix));
             if (c != 0) return c;
             return string.CompareOrdinal(x, y);
+        }
+
+        /// <summary>True when <paramref name="x"/> ranks strictly above <paramref name="y"/> on rarity and level (ids aside).</summary>
+        public static bool StrictlyBetter(ContentDb db, Banner b, CollectionState col, string x, string y)
+        {
+            int c = RarityOf(db, b, x).CompareTo(RarityOf(db, b, y));
+            if (c != 0) return c > 0;
+            col.Items.TryGetValue(x, out var ix);
+            col.Items.TryGetValue(y, out var iy);
+            return EffectiveLevel(db, ix) > EffectiveLevel(db, iy);
         }
 
         /// <summary>The best owned weapon, or null when none is owned.</summary>
         public static string BestWeapon(ContentDb db, GameState s)
         {
-            var ranked = RankOwned(db, s, Banner.WEAPON, WeaponRating);
+            var ranked = RankOwned(db, s, Banner.WEAPON);
             return ranked.Count > 0 ? ranked[0] : null;
         }
 
@@ -111,7 +107,7 @@ namespace HeroCat.Sim.Summons
         /// </summary>
         public static string[] BestSkills(ContentDb db, GameState s)
         {
-            var ranked = RankOwned(db, s, Banner.SKILL, SkillRating);
+            var ranked = RankOwned(db, s, Banner.SKILL);
             var r = new string[db.Constants.SkillSlots];
             for (int i = 0; i < r.Length && i < ranked.Count; i++) r[i] = ranked[i];
             return r;
@@ -132,13 +128,13 @@ namespace HeroCat.Sim.Summons
                 string id = i < slots.Length ? slots[i] : null;
                 if (id == null || !Owns(s.Skills, id)) { empty = true; continue; }
                 equipped.Add(id);
-                if (worst == null || Compare(db, Banner.SKILL, s.Skills, SkillRating, id, worst) > 0) worst = id;
+                if (worst == null || Compare(db, Banner.SKILL, s.Skills, id, worst) > 0) worst = id;
             }
-            foreach (var id in RankOwned(db, s, Banner.SKILL, SkillRating))
+            foreach (var id in RankOwned(db, s, Banner.SKILL))
             {
                 if (equipped.Contains(id)) continue;
                 if (empty) return true;
-                return worst != null && Compare(db, Banner.SKILL, s.Skills, SkillRating, id, worst) < 0;   // best unequipped vs worst equipped
+                return worst != null && StrictlyBetter(db, Banner.SKILL, s.Skills, id, worst);   // best unequipped vs worst equipped
             }
             return false;
         }
