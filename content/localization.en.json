@@ -1921,6 +1921,82 @@
     {
       "key": "reject.awaken_stage_not_reached",
       "text": "Reach the stage gate first"
+    },
+    {
+      "key": "research.res_atk.name",
+      "text": "Sharp Claws"
+    },
+    {
+      "key": "research.res_atk.desc",
+      "text": "+5% damage per level."
+    },
+    {
+      "key": "research.res_gold_gain.name",
+      "text": "Lucky Paw"
+    },
+    {
+      "key": "research.res_gold_gain.desc",
+      "text": "+5% gold per level."
+    },
+    {
+      "key": "research.res_mp_pool.name",
+      "text": "Deep Mana"
+    },
+    {
+      "key": "research.res_mp_pool.desc",
+      "text": "+20 max MP per level."
+    },
+    {
+      "key": "research.res_mp_regen.name",
+      "text": "Mana Flow"
+    },
+    {
+      "key": "research.res_mp_regen.desc",
+      "text": "+0.5 MP per second per level."
+    },
+    {
+      "key": "research.res_tank_cap.name",
+      "text": "Bigger Tank"
+    },
+    {
+      "key": "research.res_tank_cap.desc",
+      "text": "+5 Magic Tank capacity per level."
+    },
+    {
+      "key": "research.res_tank_refill.name",
+      "text": "Quick Refill"
+    },
+    {
+      "key": "research.res_tank_refill.desc",
+      "text": "Magic Tank refills 0.4 s faster per level (2 s minimum)."
+    },
+    {
+      "key": "research.res_fish_cap.name",
+      "text": "Rare Waters"
+    },
+    {
+      "key": "research.res_fish_cap.desc",
+      "text": "+1 highest fish level per level."
+    },
+    {
+      "key": "research.res_offline_cap.name",
+      "text": "Long Nap"
+    },
+    {
+      "key": "research.res_offline_cap.desc",
+      "text": "+2 h offline reward cap per level."
+    },
+    {
+      "key": "reject.research_locked",
+      "text": "Unlocks at Awakening 1"
+    },
+    {
+      "key": "reject.research_maxed",
+      "text": "Research is at max level"
+    },
+    {
+      "key": "reject.unknown_research",
+      "text": "Unknown research"
     }
   ]
 }

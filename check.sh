@@ -132,10 +132,11 @@ content_python() {
   step "Summons: tools/gacha_model.py matches content/, Fixtures/Summon/stream.json and vectors.json (04, decision 46)"
   $PY tools/gacha_model.py --check
 
-  # Report-only: several of 03 section 8.6's S-constant bands miss under the current content (layer floors, walls,
-  # Awakening cadence, ...). Retuning is the user's balance call; make this a hard gate once the checks pass.
+  # Report-only: several of 03 section 8.6's S-constant bands and 06's economy checks (issue #178) miss under the
+  # current content (layer floors, walls, Awakening cadence, dungeon shares, ...). Retuning is the user's balance call
+  # (decision #249); make this a hard gate once the checks pass.
   if [ "$FAST" -eq 0 ]; then
-    step "Tools: power_curve_model.py --check, 20-seed sweep and S-constant checks (03 section 8.6; report-only)"
+    step "Tools: power_curve_model.py --check, 20-seed sweep, S-constant and economy checks (03 section 8.6, 06 sections 2/11; report-only)"
     if ! $PY tools/power_curve_model.py --check --quiet; then
       POWER_CURVE_FAILED=1
       printf '\nWARNING: report-only step failed (power_curve_model.py S-constant bands, balance call pending). Not a full pass.\n'

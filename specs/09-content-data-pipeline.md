@@ -916,7 +916,7 @@ Loader scope: `ContentDb.Build` implements every `E0xx`, `E03x`-`E06x` rule that
 Decided while implementing issues #122, #123 and #128; each is a default the design owner may veto.
 
 - **Order.** `validate` sorts its errors by table in `SCHEMA` order (acceptance 7). Within one table the rule order holds. `E020` comes first because the reader finds it before any rule runs.
-- **Tables not authored yet.** A rule whose table is optional and absent is skipped. That covers `E034` for a banner whose pool table is missing (`companions`, issue #161), `E039`/`E064` without `quests_daily`, `E065` without `achievements`, `E057` without `enemies`/`bosses`, and the research halves of `E038`, `E056` and `E063`.
+- **Tables not authored yet.** A rule whose table is optional and absent is skipped. That covers `E034` for a banner whose pool table is missing (`companions`, issue #161), `E039`/`E064` without `quests_daily`, `E065` without `achievements`, `E057` without `enemies`/`bosses`, and the research halves of `E038`, `E056` and `E063` (the shipped content has the `research` rows since issue #158; the table stays optional so minimal fixtures need not carry it).
 - **Bounds that name no code** report as `E043` with the rule text. That includes `awakening.companion_slots_after <= COMPANION_SLOTS` and banner level 1's `exp_required = 0`. `E048` is kept for the ordering rules.
 - **`E055` and `E022`.** When a `training_curves` row names a stat that does not exist, `E022` reports it and `E055` stays silent.
 - **`E059` on banners**: `ticket_currency` must be exactly `TICKET_SUMMON_<id>`.

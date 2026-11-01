@@ -374,7 +374,7 @@ Purpose: the Fish Coin sink (03 node list: MP pool, MP regen, tank capacity, tan
 | Row per node | `Rows[node]`: `Level`, `MaxLevel`, `CurrentText`, `NextText`, `Cost`, `CanAfford`, `AtMax`; `[Buy]` sends `cmd Research(nodeId)` |
 | Header | `Wallet.FishCoin` |
 
-Events: `ResearchLeveled(node, level)` (row flash, tank gauge on `SCR_MAIN` updates via snapshot), `CurrencyChanged(FISH_COIN)`. Locked before Awakening rank 1 (`feature_unlocks`, 00 decision 11, issue #45; the sim rejects with `RESEARCH_LOCKED`): greyed with "Unlocks at Awakening I". First-time coach mark on Tank capacity.
+Events: `ResearchLeveled(nodeId, newLevel, cost)` (row flash, tank gauge on `SCR_MAIN` updates via snapshot), `CurrencyChanged(FISH_COIN)`. Locked before Awakening rank 1 (`feature_unlocks`, 00 decision 11, issue #45; the sim rejects with `RESEARCH_LOCKED`): greyed with "Unlocks at Awakening I". First-time coach mark on Tank capacity.
 
 ### 4.10 `SCR_SUMMON` (Full, M0)
 

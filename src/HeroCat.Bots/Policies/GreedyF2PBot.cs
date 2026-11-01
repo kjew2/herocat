@@ -142,6 +142,16 @@ namespace HeroCat.Bots.Policies
             return gate.HasValue && gate.Value - ctx.State.Progress.HighestCleared <= stages;
         }
 
+        // ============================================================================================ step 4: Fish Coins -> Research
+
+        /// <summary>
+        /// 03 section 8.3 step 4's purchase: one level of <paramref name="nodeId"/> when Research accepts it (unlocked at
+        /// Awakening rank 1, below max_level, affordable; 03 section 6). True when a level was bought. Not called from
+        /// Decide yet, and the node ranking (MP-starved -> res_mp_regen, else best ln(DPS) per coin) is not written: wiring
+        /// step 4 changes the bot's runs, the golden files and the acceptance sweep, and waits on decision #249. TODO(#214).
+        /// </summary>
+        public static bool TryResearch(BotContext ctx, string nodeId) => ctx.Query.CanResearch(nodeId) && ctx.Apply(new Research(nodeId)).Ok;
+
         // ============================================================================================ step 1: gold -> Training
 
         /// <summary>

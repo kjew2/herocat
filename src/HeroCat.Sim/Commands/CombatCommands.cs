@@ -34,6 +34,18 @@ namespace HeroCat.Sim.Commands
 
         /// <summary>CannotAfford: Awaken without the next rank's AWAKEN_COST_ROCK_CANDY (the same key as 04's limit breaks).</summary>
         public const string NOT_ENOUGH_ROCK_CANDY = "NOT_ENOUGH_ROCK_CANDY";
+
+        /// <summary>InvalidTarget: Research with a node id the content tier does not define (03 section 6; issue #158).</summary>
+        public const string UNKNOWN_RESEARCH = "UNKNOWN_RESEARCH";
+
+        /// <summary>Locked: Research before feature_unlocks RESEARCH (Awakening rank 1) or the node's unlock_awaken_rank.</summary>
+        public const string RESEARCH_LOCKED = "RESEARCH_LOCKED";
+
+        /// <summary>Capped: Research on a node already at max_level.</summary>
+        public const string RESEARCH_MAXED = "RESEARCH_MAXED";
+
+        /// <summary>CannotAfford: Research without the next level's Fish Coins (NOT_ENOUGH_&lt;CURRENCY&gt;, 00 decision 95).</summary>
+        public const string NOT_ENOUGH_FISH_COIN = "NOT_ENOUGH_FISH_COIN";
     }
 
     /// <summary>
@@ -89,5 +101,16 @@ namespace HeroCat.Sim.Commands
     public sealed record Awaken : Command
     {
         internal override ApplyResult Execute(Simulation sim) => sim.HandleAwaken();
+    }
+
+    /// <summary>
+    /// Buys one level of Research node <paramref name="NodeId"/> (03 section 6; issue #158), a 09 research id (res_*).
+    /// Rejects, in this order: InvalidTarget/UNKNOWN_RESEARCH, Locked/RESEARCH_LOCKED (Research's feature_unlocks gate,
+    /// Awakening rank 1, or the node's unlock_awaken_rank), Capped/RESEARCH_MAXED, CannotAfford/NOT_ENOUGH_FISH_COIN.
+    /// Charges RES_COST0 * RES_COST_G^level Fish Coins with reason RESEARCH and publishes ResearchLeveled.
+    /// </summary>
+    public sealed record Research(string NodeId) : Command
+    {
+        internal override ApplyResult Execute(Simulation sim) => sim.HandleResearch(this);
     }
 }

@@ -111,9 +111,41 @@ namespace HeroCat.Sim.Power
 
         /// <summary>
         /// The feature_unlocks gate for Research (09 section 5.34; seeded at Awakening rank 1, 00 decision 11). The Research
-        /// command (#158) rejects Locked/RESEARCH_LOCKED while this is false.
+        /// command rejects Locked/RESEARCH_LOCKED while this is false.
         /// </summary>
         public bool ResearchUnlocked => _db.IsUnlocked(AwakeningRules.ResearchFeature, _s);
+
+        // ------------------------------------------------------------------------------------------- research (03 6)
+
+        /// <summary>Bought level of node <paramref name="nodeId"/> (09 res_* id), clamped to max_level; 0 when unknown.</summary>
+        public int ResearchLevelOf(string nodeId) => ResearchRules.Level(_db, _s, nodeId);
+
+        /// <summary>Fish Coins the next Research(<paramref name="nodeId"/>) charges; 0 when unknown or maxed.</summary>
+        public double NextResearchCost(string nodeId) => ResearchRules.NextCost(_db, _s, nodeId);
+
+        /// <summary>Research(<paramref name="nodeId"/>) would be accepted now (known, unlocked, below max, affordable).</summary>
+        public bool CanResearch(string nodeId) => ResearchRules.CanResearch(_db, _s, nodeId);
+
+        /// <summary>effect_per_level * level of the node with <paramref name="effect"/> (0 without the node).</summary>
+        public double ResearchEffectTotal(ResearchEffect effect) => ResearchRules.EffectTotal(_db, _s, effect);
+
+        /// <summary>MP_POOL0 + res_mp_pool (03 section 2.4).</summary>
+        public double MpPoolMax => ResearchRules.MpPoolMax(_db, _s);
+
+        /// <summary>(MP_REGEN0 + res_mp_regen) / TICK_HZ (03 section 2.4).</summary>
+        public double MpRegenPerTick => ResearchRules.MpRegenPerTick(_db, _s);
+
+        /// <summary>
+        /// TankCap with the res_tank_cap term (05 section 3). The board applies it from #167 on; until then the live tank
+        /// uses TANK_CAP0 (Simulation.FishTankCap).
+        /// </summary>
+        public int ResearchTankCap => ResearchRules.TankCap(_db, _s);
+
+        /// <summary>TankRefillTicks with the res_tank_refill term, floor 2.0 s (05 section 3). Applied to the board by #167.</summary>
+        public int ResearchTankRefillTicks => ResearchRules.TankRefillTicks(_db, _s);
+
+        /// <summary>FishMaxLvl with the res_fish_cap term (05 section 4.3). Applied to the board by #167.</summary>
+        public int ResearchFishMaxLvl => ResearchRules.FishMaxLvl(_db, _s);
 
         // ------------------------------------------------------------------------------------------- limit breaks (04 5.2)
 

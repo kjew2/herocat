@@ -50,4 +50,10 @@ namespace HeroCat.Sim.Events
 
     /// <summary>Hero.AwakenRank rose to <see cref="Rank"/> through Awaken (03 section 5.3; issue #157).</summary>
     public sealed record Awakened(int Rank) : Event;
+
+    /// <summary>
+    /// Research bought one level (03 section 6; analytics research_bought, 03 section 11). NewLevel is the level after;
+    /// Cost is the Fish Coins spent.
+    /// </summary>
+    public sealed record ResearchLeveled(string NodeId, int NewLevel, double Cost) : Event;
 }

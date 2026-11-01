@@ -210,7 +210,7 @@ SCHEMA = {
                                      c("effect_per_level", "double"), c("effect_floor", "double", True),
                                      c("max_level", "int"), c("cost0", "double"), c("cost_g", "double"),
                                      c("unlock_awaken_rank", "int"), c("layout_row", "int"), c("layout_col", "int"),
-                                     TIER, NAME, DESC, c("icon", "asset")], "id", required=False, todo=158),
+                                     TIER, NAME, DESC, c("icon", "asset")], "id", required=False),
     "fish_levels": T("FishLevelRowDto", [c("level", "int"), c("discovery_coins", "long"), c("missile_pct", "double"),
                                          c("sprite", "asset"), c("tint", "color", True), NAME], "level"),
     "tank": T("TankRowDto", [c("id", "id"), c("cap0", "int"), c("refill_s0", "double"), c("release_level", "int"),
@@ -1108,7 +1108,7 @@ def rule_e063_feature_gates(ctx):
     unlocks = {r["feature"]: r for r in ctx.rows("feature_unlocks")}
     gate = unlocks.get("RESEARCH")
     if gate is not None and gate["condition"] == "AWAKEN_RANK" and gate["threshold"] is not None:
-        for r in ctx.rows("research"):   # TODO(#158): research rows are not authored yet
+        for r in ctx.rows("research"):
             if r["unlock_awaken_rank"] < gate["threshold"]:
                 ctx.err("E063", f"{r['_loc']}.unlock_awaken_rank", f"research[{r['id']}] unlocks at "
                         f"{r['unlock_awaken_rank']}, before feature 'RESEARCH' ({gate['threshold']})")
