@@ -27,7 +27,7 @@ done
 
 step() { printf '\n== %s\n' "$1"; }
 
-step "Content: content_src builds to Content/ with no drift"
+step "Content: content_src builds to content/ with no drift"
 python3 tools/content_build.py --check
 
 if [ "$DOTNET" -eq 0 ]; then

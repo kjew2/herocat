@@ -10,13 +10,13 @@ using UnityEngine;
 namespace HeroCat.Client.Editor
 {
     /// <summary>
-    /// Before every player build, copies the repository's Content/*.json into Assets/Resources/Content so that
+    /// Before every player build, copies the repository's content/*.json into Assets/Resources/content so that
     /// ContentLocator's Resources fallback finds it on device (specs/05 section 10.1). The copy is git-ignored.
-    /// Fails the build if Content/manifest.json is missing or any table's sha256 does not match the manifest.
+    /// Fails the build if content/manifest.json is missing or any table's sha256 does not match the manifest.
     /// </summary>
     public sealed class ContentPreBuild : IPreprocessBuildWithReport
     {
-        public const string Destination = "Assets/Resources/Content";
+        public const string Destination = "Assets/Resources/content";
 
         public int callbackOrder => 0;
 
@@ -45,17 +45,17 @@ namespace HeroCat.Client.Editor
             }
         }
 
-        /// <summary>Validates Content/, mirrors its *.json into Assets/Resources/Content, then validates the copy.</summary>
+        /// <summary>Validates content/, mirrors its *.json into Assets/Resources/content, then validates the copy.</summary>
         public static void CopyContent()
         {
             string src = FileContentSource.FindContentDirectory(Application.dataPath);
             if (src == null)
                 throw new BuildFailedException(
-                    "HeroCat: Content/manifest.json not found above " + Application.dataPath +
+                    "HeroCat: content/manifest.json not found above " + Application.dataPath +
                     ". Run python3 tools/content_build.py.");
             Validate(src);
 
-            string dst = Path.GetFullPath(Path.Combine(Application.dataPath, "Resources", "Content"));
+            string dst = Path.GetFullPath(Path.Combine(Application.dataPath, "Resources", "content"));
             Directory.CreateDirectory(dst);
             string[] srcFiles = Directory.GetFiles(src, "*.json");
             var names = srcFiles.Select(f => Path.GetFileName(f)).ToList();

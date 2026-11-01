@@ -22,6 +22,6 @@ unity/**/[Tt]emp/
 unity/**/[Ll]ogs/
 unity/**/[Uu]ser[Ss]ettings/
 unity/**/[Bb]uilds/
-# copy of Content/ made by the pre-build step (Assets/HeroCat.Client/Editor/ContentPreBuild.cs)
-unity/HeroCatClient/Assets/Resources/Content/
-unity/HeroCatClient/Assets/Resources/Content.meta
+# copy of content/ made by the pre-build step (Assets/HeroCat.Client/Editor/ContentPreBuild.cs)
+unity/HeroCatClient/Assets/Resources/content/
+unity/HeroCatClient/Assets/Resources/content.meta

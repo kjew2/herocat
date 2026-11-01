@@ -84,7 +84,7 @@ namespace HeroCat.Bots
         public static string ContentDir(CliArgs a) =>
             a.Str("content", null) ?? FileContentSource.FindContentDirectory(AppContext.BaseDirectory)
             ?? FileContentSource.FindContentDirectory(Directory.GetCurrentDirectory())
-            ?? throw new ArgumentException("Content/manifest.json not found; pass --content <dir>");
+            ?? throw new ArgumentException("content/manifest.json not found; pass --content <dir>");
 
         static ContentDb LoadContent(CliArgs a)
         {

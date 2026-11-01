@@ -17,7 +17,7 @@ namespace HeroCat.Bots.Tests
     {
         static readonly Lazy<string> _dir = new Lazy<string>(() =>
             FileContentSource.FindContentDirectory(TestContext.CurrentContext.TestDirectory)
-            ?? throw new InvalidOperationException("Content/manifest.json not found above the test directory"));
+            ?? throw new InvalidOperationException("content/manifest.json not found above the test directory"));
 
         static readonly Lazy<ContentDb> _db = new Lazy<ContentDb>(() => ContentDb.LoadFromDirectory(_dir.Value));
 

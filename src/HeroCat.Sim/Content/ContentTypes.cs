@@ -232,7 +232,7 @@ namespace HeroCat.Sim.Content
         string ReadText(string fileName);
     }
 
-    /// <summary>Harness, tests, editor: reads Content/*.json from a directory.</summary>
+    /// <summary>Harness, tests, editor: reads content/*.json from a directory.</summary>
     public sealed class FileContentSource : IContentSource
     {
         readonly string _dir;
@@ -244,13 +244,13 @@ namespace HeroCat.Sim.Content
         public string ReadText(string fileName) =>
             System.IO.File.ReadAllText(System.IO.Path.Combine(_dir, fileName), new System.Text.UTF8Encoding(false));
 
-        /// <summary>Walks up from <paramref name="startDirectory"/> looking for Content/manifest.json. Null if none.</summary>
+        /// <summary>Walks up from <paramref name="startDirectory"/> looking for content/manifest.json. Null if none.</summary>
         public static string FindContentDirectory(string startDirectory)
         {
             var dir = new System.IO.DirectoryInfo(startDirectory);
             while (dir != null)
             {
-                string candidate = System.IO.Path.Combine(dir.FullName, "Content");
+                string candidate = System.IO.Path.Combine(dir.FullName, "content");
                 if (System.IO.File.Exists(System.IO.Path.Combine(candidate, "manifest.json"))) return candidate;
                 dir = dir.Parent;
             }

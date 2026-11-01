@@ -5,10 +5,10 @@ using UnityEngine;
 namespace HeroCat.Client.Boot
 {
     /// <summary>
-    /// Finds Content/*.json without copying it into the project (specs/05 section 10). Order:
-    ///   1. Editor / desktop dev: walk up from Assets/ to the repository's Content/ folder.
-    ///   2. StreamingAssets/Content (desktop players, if someone copies it there).
-    ///   3. Resources/Content TextAssets (device builds: Editor/ContentPreBuild.cs copies them in before each build).
+    /// Finds content/*.json without copying it into the project (specs/05 section 10). Order:
+    ///   1. Editor / desktop dev: walk up from Assets/ to the repository's content/ folder.
+    ///   2. StreamingAssets/content (desktop players, if someone copies it there).
+    ///   3. Resources/content TextAssets (device builds: Editor/ContentPreBuild.cs copies them in before each build).
     /// </summary>
     public static class ContentLocator
     {
@@ -19,7 +19,7 @@ namespace HeroCat.Client.Boot
             string dir = FileContentSource.FindContentDirectory(Application.dataPath);
             if (dir == null)
             {
-                string sa = Path.Combine(Application.streamingAssetsPath, "Content");
+                string sa = Path.Combine(Application.streamingAssetsPath, "content");
                 if (File.Exists(Path.Combine(sa, "manifest.json"))) dir = sa;
             }
             if (dir != null)
@@ -27,16 +27,16 @@ namespace HeroCat.Client.Boot
                 Describe = dir;
                 return ContentDb.LoadFromDirectory(dir);
             }
-            Describe = "Resources/Content";
+            Describe = "Resources/content";
             return ContentDb.Load(new ResourcesContentSource());
         }
     }
 
-    /// <summary>specs/05 section 10.1: each table is a TextAsset under Assets/Resources/Content/.</summary>
+    /// <summary>specs/05 section 10.1: each table is a TextAsset under Assets/Resources/content/.</summary>
     public sealed class ResourcesContentSource : IContentSource
     {
         static TextAsset Get(string fileName) =>
-            Resources.Load<TextAsset>("Content/" + Path.GetFileNameWithoutExtension(fileName));
+            Resources.Load<TextAsset>("content/" + Path.GetFileNameWithoutExtension(fileName));
 
         public bool Exists(string fileName) => Get(fileName) != null;
 

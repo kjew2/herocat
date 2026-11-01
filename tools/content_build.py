@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Content converter: content_src/<table>.csv -> Content/<table>.json + manifest.json (specs/05).
+"""Content converter: content_src/<table>.csv -> content/<table>.json + manifest.json (specs/05).
 
 Prototype scope: type checks, key uniqueness, enum values and the handful of cross-table rules the sim
 depends on. Version-bump rules (specs/05 section 6.3) and the full error-code catalogue are not built yet.
@@ -338,7 +338,7 @@ def build(src):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--src", default="content_src")
-    ap.add_argument("--out", default="Content")
+    ap.add_argument("--out", default="content")
     ap.add_argument("--check", action="store_true", help="exit 1 if --out differs from a fresh build")
     ap.add_argument("--copy-to", default=None)
     args = ap.parse_args(argv)
@@ -360,9 +360,9 @@ def main(argv=None):
             if not os.path.exists(p) or open(p, "rb").read() != data:
                 stale.append(fname)
         if stale:
-            print("Content/ is stale: " + ", ".join(sorted(stale)), file=sys.stderr)
+            print("content/ is stale: " + ", ".join(sorted(stale)), file=sys.stderr)
             return 1
-        print("Content/ is up to date")
+        print("content/ is up to date")
         return 0
 
     os.makedirs(args.out, exist_ok=True)
