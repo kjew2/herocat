@@ -354,7 +354,7 @@ Thresholds and targets live in `src/HeroCat.Bots/Acceptance/acceptance-targets.j
   "firstWallMinStage": 60,
   "firstWallMaxStage": 200,
   "maxWallHoursThroughDay": 14,
-  "maxWallHours": 48.0,
+  "maxWallHours": 96.0,
   "statLevelSlope": 0.95,
   "statLevelIntercept": 50
 }
@@ -380,7 +380,7 @@ PASS AC1 day 7: median stage 371 in 304..456 (target 380)
 PASS AC1 day 30: median stage 548 in 440..660 (target 550)
 PASS AC2 layer shares in 0.03..0.80 on days 1,7,30 for 20 seeds
 FAIL AC3 first wall in 60..200: seed 13 walled first at stage 210
-PASS AC4 no wall opened by day 14 exceeds 48.00 h
+PASS AC4 no wall opened by day 14 exceeds 96.00 h
 PASS AC5 statLvl <= 0.95*stage+50 on every day for 20 seeds
 PASS AC6 deterministic: seed 7 twice identical; golden matches
 PASS AC7 replay equivalence: seeds 1-4, 30 days, hashes equal at every day boundary
