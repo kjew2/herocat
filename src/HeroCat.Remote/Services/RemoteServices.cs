@@ -34,6 +34,7 @@ namespace HeroCat.Remote.Services
                 Clock = new ServerClock(client, new SystemClock()),
                 SaveStore = new CloudSaveStore(new FileSaveStore(Path.Combine(dataDir, "saves")), client),
                 Analytics = analytics ?? NullAnalytics.Instance,
+                InstallId = HeroCat.Runtime.Profile.InstallId.LoadOrCreate(dataDir),
             };
         }
     }
@@ -83,18 +84,18 @@ namespace HeroCat.Remote.Services
     /// goes to the local store; <see cref="Write"/> also queues the bytes, and <see cref="Upload"/> sends the
     /// latest queued copy. Cloud download and the conflict rule (section 5.2) are P1.
     /// </summary>
-    public sealed class CloudSaveStore : ISaveStore
+    public sealed class CloudSaveStore : ISaveSlotStore
     {
-        readonly ISaveStore _local;
+        readonly ISaveSlotStore _local;
         readonly RemoteClient _client;
 
-        public CloudSaveStore(ISaveStore local, RemoteClient client)
+        public CloudSaveStore(ISaveSlotStore local, RemoteClient client)
         {
             _local = local ?? throw new ArgumentNullException(nameof(local));
             _client = client ?? throw new ArgumentNullException(nameof(client));
         }
 
-        public ISaveStore Local => _local;
+        public ISaveSlotStore Local => _local;
 
         /// <summary>Newest bytes written locally and not yet accepted by the server; null when in sync.</summary>
         public byte[] PendingUpload { get; private set; }
@@ -108,6 +109,13 @@ namespace HeroCat.Remote.Services
         }
 
         public void Quarantine(SaveSlot slot, long nowServerSec) => _local.Quarantine(slot, nowServerSec);
+
+        public void ArchiveConflict(byte[] bytes, long nowServerSec) => _local.ArchiveConflict(bytes, nowServerSec);
+
+        public void DeleteStrayTemp() => _local.DeleteStrayTemp();
+
+        public void Purge(long nowServerSec, long corruptMaxAgeSec, long conflictMaxAgeSec) =>
+            _local.Purge(nowServerSec, corruptMaxAgeSec, conflictMaxAgeSec);
 
         public void DeleteAll()
         {

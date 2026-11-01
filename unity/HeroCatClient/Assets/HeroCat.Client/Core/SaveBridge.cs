@@ -9,7 +9,6 @@ using HeroCat.Sim.State;
 // ============================================================================================================
 // SaveBridge: the ONLY file in the client that knows how a profile is created, loaded, saved or deleted.
 // Everything else gets a ready Simulation from ISaveBridge.Open and calls Save on pause / quit / autosave.
-// TODO(#77): 02 section 8's LocalSaveStore and its recovery order replace RuntimeSaveBridge's direct use of SaveSystem.
 // ============================================================================================================
 
 namespace HeroCat.Client.Core
@@ -36,7 +35,7 @@ namespace HeroCat.Client.Core
     {
         /// <param name="dataDir">Application.persistentDataPath.</param>
         public static ISaveBridge Create(string dataDir) =>
-            new RuntimeSaveBridge(new FileSaveStore(System.IO.Path.Combine(dataDir, "saves")));
+            new RuntimeSaveBridge(new FileSaveStore(System.IO.Path.Combine(dataDir, "saves")), InstallId.LoadOrCreate(dataDir));
 
         /// <summary>
         /// In-memory save round trip (HeroCat.Runtime SaveSelfCheck). False means this build loses save data, most
@@ -50,18 +49,20 @@ namespace HeroCat.Client.Core
         }
     }
 
-    /// <summary>Persists through HeroCat.Runtime (02): CRC-checked save file, .prev backup, quarantine of bad files.</summary>
+    /// <summary>
+    /// Persists through HeroCat.Runtime's LocalSaveStore (02 section 8): CRC-checked save file, .prev backup, repairs,
+    /// quarantine of bad files, the recovery order of 8.3.
+    /// </summary>
     public sealed class RuntimeSaveBridge : ISaveBridge
     {
-        readonly ISaveStore _store;
+        readonly ISaveSlotStore _slots;
         readonly Guid _installId;
-        ContentDb _content;
-        IClock _clock;
+        LocalSaveStore _store;
 
-        /// <param name="installId">This install's DeviceId. TODO(#73): persisted install_id file (02 section 8.4).</param>
-        public RuntimeSaveBridge(ISaveStore store, Guid? installId = null)
+        /// <param name="installId">This install's DeviceId (the install_id file, 02 section 8.4). Null: a fresh one.</param>
+        public RuntimeSaveBridge(ISaveSlotStore slots, Guid? installId = null)
         {
-            _store = store;
+            _slots = slots;
             _installId = installId ?? Guid.NewGuid();
         }
 
@@ -69,29 +70,27 @@ namespace HeroCat.Client.Core
 
         public Simulation Open(ContentDb content, IClock clock)
         {
-            _content = content;
-            _clock = clock;
-            long now = clock.NowServerSeconds;
-            LoadResult load = SaveSystem.Load(_store, content, now);   // SaveTooNewException propagates: never overwrite a newer save
-            if (load.HasState)
+            _store = new LocalSaveStore(_slots, clock, _installId);
+            LoadResult load = _store.Load(clock.NowServerSeconds, content);
+            // Never overwrite a newer save: the store refuses writes after TooNew and the caller shows SAVE_TOO_NEW.
+            if (load.Status == LoadStatus.TooNew) throw new SaveTooNewException(load.TooNewVersion, SaveSchema.Current);
+            var sim = new Simulation(load.State, content);
+            if (load.IsNewProfile)
             {
-                Description = "runtime save (" + load.Status + ")";
-                return new Simulation(load.State, content);
+                Description = "runtime save (new profile)";
+                Save(sim, ticking: false);
             }
-            var state = ProfileFactory.Create(content, Guid.Empty, now, _installId);
-            Description = "runtime save (new profile, " + load.Status + ")";
-            var sim = new Simulation(state, content);
-            Save(sim, ticking: false);
+            else Description = "runtime save (" + load.Status + ")";
             return sim;
         }
 
         public void Save(Simulation sim, bool ticking)
         {
-            if (_content == null) return;
-            SaveSystem.Write(_store, sim.State, _clock.NowServerSeconds, _content, _installId, ticking);
+            if (_store == null) return;
+            _store.Save(sim.State, ticking ? SaveTrigger.Pause : SaveTrigger.Resume);
         }
 
-        public void DeleteProfile() => _store.DeleteAll();
+        public void DeleteProfile() => _slots.DeleteAll();
     }
 
     /// <summary>No persistence: every launch (and every "Reset profile") starts a new profile.</summary>
