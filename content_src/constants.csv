@@ -41,3 +41,4 @@ LOGIN_DIAMONDS,int,50,I,
 LIMIT_BREAK_RANKS,int,5,S,MVP
 REF_DAILIES_DONE,int,8,S,E039 only
 REF_NEW_BOSSES,int,4,S,E039 only
+CLOCK_BACKWARDS_TOLERANCE_S,int,5,S,a backwards server time within this many seconds is jitter (no ClockWentBackwards)

@@ -67,6 +67,19 @@ SCREEN_IDS = ["SCR_BOOT", "SCR_TITLE", "SCR_MAIN", "SCR_HERO", "SCR_WEAPONS", "S
               "SCR_SETTINGS", "SCR_PROFILE", "SCR_GUILD", "SCR_RANKING", "SCR_EVENTS", "SCR_TUTORIAL", "SCR_CONFIRM",
               "SCR_ERROR"]
 
+# 00 section 5.1's sim event vocabulary, the names `tutorial_steps.expect_event` may list (E021; issue #246 item 1).
+SIM_EVENT_NAMES = [
+    "EnemySpawned", "HitLanded", "EnemyKilled", "EnemyKilledBatch", "StageChanged", "StageCleared", "StageFirstCleared",
+    "BossCleared", "ChapterEntered", "BossFailed", "StageCapReached", "SkillCast", "CompanionAbilityUsed",
+    "FishMissileHit", "TapZapped", "StatTrained", "LevelUp", "Awakened", "ResearchLeveled",
+    "ItemAcquired", "ItemEquipped", "ItemLimitBroken", "BannerLeveledUp",
+    "FishReleased", "FishMerged", "FishMoved", "FishDiscarded", "FishDiscovered", "TankFishReady",
+    "CurrencyChanged", "QuestCompleted", "QuestClaimed", "QuestsBulkClaimed", "DayRolledOver", "WeekRolledOver",
+    "OfflineRewardComputed", "OfflineRewardClaimed", "DungeonStarted", "DungeonSwept", "DungeonCleared",
+    "DungeonFloorFirstCleared", "DungeonFailed", "DungeonAbandoned", "ClockWentBackwards",
+    "TutorialStepChanged",
+]
+
 # --------------------------------------------------------------------------------- required constants (5.1)
 # key -> (type, kind). Mirrors HeroCat.Sim.Content.Constants (one get-only property per key, 09 section 9.2).
 REQUIRED_CONSTANTS = {
@@ -85,6 +98,7 @@ REQUIRED_CONSTANTS = {
     "MP_REGEN0": ("double", "S"), "BOSS_ROCK_CANDY_P": ("double", "S"), "FIRST_CLEAR_DIAMONDS": ("int", "I"),
     "INBOX_EXPIRY_DAYS": ("int", "S"), "DAILY_GIFT_WEAPON_TICKETS": ("int", "S"), "LOGIN_DIAMONDS": ("int", "I"),
     "LIMIT_BREAK_RANKS": ("int", "S"), "REF_DAILIES_DONE": ("int", "S"), "REF_NEW_BOSSES": ("int", "S"),
+    "CLOCK_BACKWARDS_TOLERANCE_S": ("int", "S"),
 }
 
 POSITIVE = ["TICK_HZ", "ATTACK_INTERVAL_TICKS", "BOSS_TIME_TICKS", "KILLS_PER_STAGE", "BOSS_EVERY", "CHAPTER_WIDTH",
@@ -92,7 +106,7 @@ POSITIVE = ["TICK_HZ", "ATTACK_INTERVAL_TICKS", "BOSS_TIME_TICKS", "KILLS_PER_ST
             "RUNE_SLOTS", "FISH_BOARD_W", "FISH_BOARD_H", "FISH_MAX_LVL0", "ATTACK_PROGRESS_UNIT",
             "LIMIT_BREAK_RANKS", "BASE_ATK", "BASE_HP", "BOSS_HP_MULT", "BOSS_GOLD_MULT", "OFFLINE_CAP_H",
             "DUPE_LVL_BONUS", "MP_POOL0", "MP_REGEN0"]
-NON_NEGATIVE = ["SPAWN_DELAY_TICKS", "REF_DAILIES_DONE", "REF_NEW_BOSSES"]
+NON_NEGATIVE = ["SPAWN_DELAY_TICKS", "REF_DAILIES_DONE", "REF_NEW_BOSSES", "CLOCK_BACKWARDS_TOLERANCE_S"]
 UNIT_INTERVAL = ["TAP_ZAP_DMG_PCT", "OFFLINE_RATE", "FISH_MERGE_COINS_PCT", "FISH_BOARD_DPS_FACTOR",
                  "BOSS_ROCK_CANDY_P", "FISH_DISCARD_COINS_PCT"]
 
@@ -539,9 +553,21 @@ def resolve_refs(tables, errs):
                                 errs.add("E022", f"{r['_loc']}.{name}", f"'{g['id']}' does not exist in {target}")
 
 
+def check_tutorial_events(tables, errs):
+    """09 section 5.29: `expect_event` is a `|`-separated list of sim event names; any of them completes the step."""
+    for r in tables.get("tutorial_steps", []):
+        text = r.get("expect_event")
+        if text is None:
+            continue
+        for name in text.split("|"):
+            if name not in SIM_EVENT_NAMES:
+                errs.add("E021", f"{r['_loc']}.expect_event", f"'{name}' is not a valid Event (allowed: {', '.join(SIM_EVENT_NAMES)})")
+
+
 def validate(tables, errs):
     check_constants(tables, errs)
     resolve_refs(tables, errs)
+    check_tutorial_events(tables, errs)
     # TODO(#122): the table and cross-table rules of 09 section 8.4 and the warnings of 8.6.
 
 

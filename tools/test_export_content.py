@@ -140,5 +140,16 @@ class ErrorCodeTests(unittest.TestCase):
         self.assertEqual(sorted(self.codes()), ["E040", "E041", "E042", "E043", "E043"])
 
 
+    def test_expect_event_is_a_pipe_list_of_known_events(self):   # 09 section 5.29, issue #246 item 1
+        (_, tables, _), errs = build(self.src)
+        self.assertEqual(errs, [])
+        boss = [r for r in tables["tutorial_steps"] if r["id"] == "tut_boss"][0]
+        self.assertEqual(boss["expect_event"], "BossCleared|BossFailed")
+        self.edit("tutorial_steps", "BossCleared|BossFailed", "BossCleared|BossLost")
+        _, errs = build(self.src)
+        self.assertEqual(len(errs), 1)
+        self.assertTrue(errs[0].startswith("CONTENT E021 tutorial_steps[tut_boss].expect_event: 'BossLost' is not a valid Event"),
+                        errs[0])
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)

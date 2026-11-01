@@ -63,9 +63,10 @@ namespace HeroCat.Sim.Tests
         {
             var sim = NewSim();
             var f = sim.State.Fish;
-            Assert.That(f.TankCount, Is.EqualTo(0), "new profiles start with an empty tank (issue #246 pending)");
+            Assert.That(f.TankCount, Is.EqualTo(sim.FishTankCap), "new profiles start with a full tank (issue #246 item 2)");
             Assert.That(sim.FishTankRefillTicks, Is.EqualTo(60));
             Assert.That(sim.FishTankCap, Is.EqualTo(10));
+            f.TankCount = 0;
             sim.Advance(59);
             Assert.That(f.TankCount, Is.EqualTo(0));
             sim.Advance(1);
@@ -84,6 +85,7 @@ namespace HeroCat.Sim.Tests
         public void TickTank_TankFishReady_IsOptIn()
         {
             var sim = NewSim();
+            sim.State.Fish.TankCount = 0;
             sim.Advance(60);
             Assert.That(sim.DrainEvents().OfType<TankFishReady>(), Is.Empty);
             sim.EmitTankFishReady = true;
@@ -131,6 +133,7 @@ namespace HeroCat.Sim.Tests
         public void AC2_ReleaseFish_RejectsWithoutDrawing()
         {
             var sim = NewSim();
+            sim.State.Fish.TankCount = 0;
             AssertRejected(sim, new ReleaseFish(), RejectCode.TankEmpty, FishRejectReasons.TANK_EMPTY);
             sim.State.Fish.TankCount = 5;
             SetBoard(sim, Enumerable.Repeat(1, 20).ToArray());

@@ -323,7 +323,7 @@ namespace HeroCat.Runtime.Session
             long now = _svc.Clock.NowServerSeconds;
             // 02 section 11.3: a resume behind the catch-up anchor credits nothing (the sim never moves the anchor back).
             long behind = _sim.State.Time.LastTickServerTime - now;
-            if (behind > 0) ReportClockBackwards(behind);
+            if (behind > _sim.Db.Constants.ClockBackwardsToleranceS) ReportClockBackwards(behind);   // past the jitter tolerance (issue #246)
             Issue(new ApplyServerTime(now));          // re-anchor; day/week rollover first
             Issue(new ComputeOfflineCatchup(now));    // stores or sums into Offline.Pending and stamps LastTickServerTime (8.7)
             _bus.Publish(_sim.DrainEvents());

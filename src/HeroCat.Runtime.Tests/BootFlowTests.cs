@@ -58,7 +58,9 @@ namespace HeroCat.Runtime.Tests
             Assert.That(r.Outcome, Is.EqualTo(BootOutcome.Fatal));
             Assert.That(r.Error.Code, Is.EqualTo(ErrorClassifier.CONTENT_CORRUPT));
             Assert.That(r.Error.Class, Is.EqualTo(ErrorClass.Fatal));
-            Assert.That(r.Error.LocalizationKey, Is.EqualTo("err.CONTENT_CORRUPT"));
+            Assert.That(r.Error.LocalizationKey, Is.EqualTo("err.content_corrupt"));
+            Assert.That(r.Error.TitleKey, Is.EqualTo("err.content_corrupt.title"));
+            Assert.That(r.Error.BodyKey, Is.EqualTo("err.content_corrupt.body"));
             Assert.That(r.Error.SupportId, Is.Not.Empty);
             Assert.That(servicesBuilt, Is.False, "nothing after step 1 runs");
             Assert.That(r.Runner, Is.Null);
@@ -90,6 +92,37 @@ namespace HeroCat.Runtime.Tests
             Assert.That(r.ShowTutorial, Is.True);
             Assert.That(store.Primary, Is.Not.Null, "boot saves at once (step 5)");
             Assert.That(analytics.Events.Select(e => e.Name), Does.Contain("profile_created").And.Contain("session_start"));
+            var grant = analytics.Events.Where(e => e.Name == "currency_changed").ToList();
+            Assert.That(grant, Has.Count.EqualTo(1), "the welcome grant's currency_changed row (issue #246 item 4)");
+            Assert.That(grant[0].Props["reason"], Is.EqualTo("TUTORIAL"));
+            Assert.That(r.SaveResetNotice, Is.Null, "no save existed: nothing to tell the player");
+            Assert.That(analytics.Count("save_corrupt_all"), Is.EqualTo(0));
+        }
+
+        [Test]
+        public void NoReadableSaveCopy_IsANewProfile_WithAOneTimeNotice_NotFatal()   // 02 section 8.3, 00 decision 103 (issue #248)
+        {
+            var store = new MemorySaveStore { Primary = new byte[] { 1, 2, 3 }, Backup = new byte[] { 4, 5, 6 } };
+            var clock = new FakeClock(TestContent.T0);
+            var analytics = new MemoryAnalytics();
+            var o = Options(clock, store, analytics: analytics);
+            var r = BootFlow.Run(o);
+            Assert.That(r.Outcome, Is.EqualTo(BootOutcome.Ready));
+            Assert.That(r.Error, Is.Null);
+            Assert.That(r.IsNewProfile, Is.True);
+            Assert.That(r.SaveResetNotice, Is.Not.Null);
+            Assert.That(r.SaveResetNotice.Code, Is.EqualTo(ErrorClassifier.SAVE_CORRUPT_ALL));
+            Assert.That(r.SaveResetNotice.SupportId, Is.EqualTo(new SupportId(o.SessionId, TestContent.T0).Format()));
+            Assert.That(r.SaveResetNotice.TitleKey, Is.EqualTo("notice.save_corrupt_all.title"));
+            Assert.That(analytics.Count("save_corrupt"), Is.EqualTo(1), "the local quarantine");
+            Assert.That(analytics.Count("save_corrupt_all"), Is.EqualTo(1));
+            Assert.That(analytics.Events.Single(e => e.Name == "save_corrupt_all").Props["supportId"], Is.EqualTo(r.SaveResetNotice.SupportId));
+            Assert.That(store.Quarantined, Has.Count.EqualTo(2), "both copies kept for support");
+
+            r.Runner.OnPause();
+            var again = BootFlow.Run(Options(clock, store));
+            Assert.That(again.LoadStatus, Is.EqualTo(LoadStatus.Loaded));
+            Assert.That(again.SaveResetNotice, Is.Null, "shown once: the next boot loads the new save");
         }
 
         [Test]

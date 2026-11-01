@@ -65,6 +65,29 @@ namespace HeroCat.Runtime.Tests
             Assert.That(s.Wallet.Diamond, Is.EqualTo(1500));
         }
 
+        [Test]
+        public void NewProfile_TankStartsFull_MpStartsAtZero()   // 02 section 3.1, 05 section 3; issue #246 item 2
+        {
+            var s = TestContent.NewState();
+            Assert.That(s.Fish.TankCount, Is.EqualTo(HeroCat.Sim.Fish.FishBoard.TankCap(s, TestContent.Db)));
+            Assert.That(s.Fish.TankCount, Is.EqualTo(TestContent.Db.Tank.Cap0), "TANK_CAP0 at Research 0");
+            Assert.That(s.Fish.TankRefillTick, Is.EqualTo(0), "a full tank has no refill progress (02 P9b)");
+            Assert.That(s.Combat.Mp, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void WelcomeGrant_EmitsOneCurrencyChangedAnalyticsRow_WithReasonTutorial()   // 06 section 13; issue #246 item 4
+        {
+            var analytics = new HeroCat.Runtime.Services.MemoryAnalytics();
+            var s = ProfileFactory.Create(TestContent.Db, Guid.Empty, TestContent.T0, Guid.NewGuid(), TestContent.Root, analytics);
+            var rows = analytics.Events.Where(e => e.Name == "currency_changed").ToList();
+            Assert.That(rows, Has.Count.EqualTo(1), "one row per currency the grant credits");
+            Assert.That(rows[0].Props["reason"], Is.EqualTo("TUTORIAL"));
+            Assert.That(rows[0].Props["currency"], Is.EqualTo("DIAMOND"));
+            Assert.That(rows[0].Props["delta"], Is.EqualTo(1500.0));
+            Assert.That(rows[0].Props["balanceAfter"], Is.EqualTo((double)s.Wallet.Diamond));
+        }
+
         static readonly Guid KnownPlayer = new Guid("6b1f2c40-1234-4abc-8def-0123456789ab");
 
         // Frozen vectors (issue #73), computed independently in Python: sha256(uuid.bytes_le + name)[:8], little-endian.

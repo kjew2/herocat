@@ -4,7 +4,8 @@ namespace HeroCat.Runtime.Errors
 {
     /// <summary>
     /// The error classes of 01 sections 5.1 and 7 (issue #69). The class picks the presentation; the code picks the
-    /// localization key <c>err.&lt;CODE&gt;</c> (server and client codes) or <c>reject.&lt;reason&gt;</c> (sim rejects).
+    /// localization keys <c>err.&lt;code_lower&gt;.title</c> / <c>.body</c> (server and client codes) or <c>reject.&lt;reason_lower&gt;</c>
+    /// (sim rejects); wire codes stay UPPER_SNAKE (00 decision 102).
     /// <see cref="Reject"/> is a sim reject (01 section 7); <see cref="Rejected"/> is a server rejection.
     /// </summary>
     public enum ErrorClass

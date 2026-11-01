@@ -331,6 +331,20 @@ namespace HeroCat.Sim.Content
         public string TextKey { get; }
         public string ExpectEvent { get; }
         public int? ExpectCount { get; }
+
+        /// <summary>
+        /// The event names <see cref="ExpectEvent"/> lists, split on <c>|</c> (09 section 5.29; issue #246 item 1): any
+        /// of them counts toward <see cref="ExpectCount"/>. Empty for a tap-to-continue step.
+        /// </summary>
+        public IReadOnlyList<string> ExpectEvents => Names();
+
+        /// <summary>True when an event of this name counts toward the step.</summary>
+        public bool Expects(string eventName) => eventName != null && System.Array.IndexOf(Names(), eventName) >= 0;
+
+        string[] Names() =>
+            _expectEvents ??= string.IsNullOrEmpty(ExpectEvent) ? System.Array.Empty<string>() : ExpectEvent.Split('|');
+
+        string[] _expectEvents;
         public IReadOnlyList<Grant> Grants { get; }
         public bool Skippable { get; }
         public Tier Tier { get; }

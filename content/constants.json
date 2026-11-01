@@ -256,6 +256,12 @@
       "type": "int",
       "value": 4,
       "kind": "S"
+    },
+    {
+      "key": "CLOCK_BACKWARDS_TOLERANCE_S",
+      "type": "int",
+      "value": 5,
+      "kind": "S"
     }
   ]
 }
