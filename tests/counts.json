@@ -3,7 +3,7 @@
   "projects": {
     "HeroCat.Bots.Tests": 50,
     "HeroCat.Remote.Tests": 23,
-    "HeroCat.Runtime.Tests": 368,
+    "HeroCat.Runtime.Tests": 369,
     "HeroCat.Sim.Tests": 231
   }
 }
