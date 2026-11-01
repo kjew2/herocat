@@ -50,6 +50,7 @@ namespace HeroCat.Sim
             State.Stats.TrainingLevelsBought += count;
             MarkDpsDirty();
             Emit(new StatTrained(stat, level, level + count, cost));
+            QuestsProgress(QuestGoal.TRAIN_LEVELS, count);   // w_train: levels bought, any stat
             return ApplyResult.Accepted;
         }
 

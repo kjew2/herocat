@@ -73,6 +73,26 @@ namespace HeroCat.Sim.Content
             return null;
         }
 
+        /// <summary>quests_daily rows by SortOrder (09 section 5.21), bonus rows included. Empty in an M0 build (tier MVP rows).</summary>
+        public IReadOnlyList<QuestDef> QuestsDaily { get; private set; }
+
+        /// <summary>quests_weekly rows by SortOrder (09 section 5.22). Empty in an M0 build.</summary>
+        public IReadOnlyList<QuestDef> QuestsWeekly { get; private set; }
+
+        IReadOnlyDictionary<string, QuestDef> _dailyById, _weeklyById;
+
+        /// <summary>The rows of one kind by SortOrder. ACHIEVEMENT rows are issue #171's (empty until then).</summary>
+        public IReadOnlyList<QuestDef> QuestsOf(QuestKind kind) =>
+            kind == QuestKind.DAILY ? QuestsDaily : kind == QuestKind.WEEKLY ? QuestsWeekly : (IReadOnlyList<QuestDef>)Array.Empty<QuestDef>();
+
+        /// <summary>A daily row, else a weekly row, with this id; null if neither table (after the tier filter) has it.</summary>
+        public QuestDef Quest(string id)
+        {
+            if (id == null) return null;
+            if (_dailyById.TryGetValue(id, out var d)) return d;
+            return _weeklyById.TryGetValue(id, out var w) ? w : null;
+        }
+
         // ------------------------------------------------------------------------------------------- accessors
 
         /// <summary>Gold for <paramref name="count"/> levels of <paramref name="s"/> from level <paramref name="fromLevel"/> (closed form).</summary>

@@ -280,6 +280,7 @@ namespace HeroCat.Sim
             f.BossTicksLeft = isBoss ? k.BossTimeTicks : 0;
             f.Phase = FightPhase.Fighting;
             Emit(new EnemySpawned(fought, isBoss, hp));
+            if (isBoss) QuestsProgress(QuestGoal.ATTEMPT_BOSS, 1);   // one boss spawn = one attempt, the automatic one included (d_boss)
         }
 
         void Kill(FightState f)
@@ -299,7 +300,7 @@ namespace HeroCat.Sim
             if (isBoss) st.BossKills += 1;
             if (CoalescingKills) FoldKill(s, gold, exp);
             else Emit(new EnemyKilled(s, isBoss, gold, exp));
-            // TODO(#170): Quests.OnKill(s, isBoss) (06).
+            QuestsProgress(QuestGoal.KILL_ENEMIES, 1);   // 06 section 5.1: every kill, boss included
 
             if (isBoss)
             {
@@ -364,6 +365,7 @@ namespace HeroCat.Sim
             c.Boss = BossPhase.None;
             c.BossFailsOnStage = 0;
             Emit(new StageCleared(from, from + 1, viaBoss));
+            QuestsProgress(QuestGoal.CLEAR_STAGES, 1);
             if (from % k.ChapterWidth == 0) Emit(new ChapterEntered(k.ChapterOf(from + 1)));
         }
 

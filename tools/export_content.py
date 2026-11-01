@@ -54,7 +54,7 @@ ENUMS = {
     "QuestGoal": ["LOGIN", "LOGIN_DAYS", "KILL_ENEMIES", "ATTEMPT_BOSS", "CLEAR_STAGES", "SUMMON", "RELEASE_FISH",
                   "MERGE_FISH", "CLEAR_DUNGEON", "DAILIES_COMPLETED", "WEEKLIES_COMPLETED", "REACH_STAGE",
                   "REACH_HERO_LEVEL", "OWN_WEAPONS", "OWN_SKILLS", "OWN_COMPANIONS", "LIFETIME_MERGES", "FISH_LEVEL",
-                  "AWAKEN_RANK", "LIFETIME_SUMMONS", "WATCH_AD"],
+                  "AWAKEN_RANK", "LIFETIME_SUMMONS", "WATCH_AD", "TRAIN_LEVELS"],
     "Element": ["NONE", "FIRE", "WATER", "LEAF", "LIGHT", "DARK"],
     "PackageLimit": ["ONCE", "DAILY", "WEEKLY", "MONTHLY"],
     "InboxKind": ["IAP", "MAIL", "COMPENSATION", "COUPON", "SYSTEM"],
@@ -205,11 +205,11 @@ SCHEMA = {
     "quests_daily": T("QuestRowDto", [c("id", "id"), c("goal", "enum(QuestGoal)"), c("filter", "string", True),
                                       c("target", "long"), c("reward_currency", "enum(Currency)"),
                                       c("reward_amount", "long"), c("sort_order", "int"), TIER, NAME,
-                                      c("icon", "asset")], "id", required=False, todo=170),
+                                      c("icon", "asset")], "id"),
     "quests_weekly": T("QuestRowDto", [c("id", "id"), c("goal", "enum(QuestGoal)"), c("filter", "string", True),
                                        c("target", "long"), c("reward_currency", "enum(Currency)"),
                                        c("reward_amount", "long"), c("sort_order", "int"), TIER, NAME,
-                                       c("icon", "asset")], "id", required=False, todo=170),
+                                       c("icon", "asset")], "id"),
     "achievements": T("AchievementRowDto", [c("id", "id"), c("ladder", "id"), c("rung", "int"),
                                             c("goal", "enum(QuestGoal)"), c("target", "long"),
                                             c("reward_currency", "enum(Currency)"), c("reward_amount", "long"), TIER,
@@ -588,7 +588,7 @@ def check_tutorial_events(tables, errs):
 # (TABLE_ORDER, the SCHEMA order) so a set of independent defects reports in table order (09 acceptance 7); within a
 # table the rule order below holds. ContentDb.Build (src/HeroCat.Sim/Content/ContentDb.Rules.cs) runs the loader-scope
 # rules in the same order with byte-identical messages (09 section 7.2, acceptance 20).
-# Rules over a table that is not authored yet (optional and absent: companions, research, quests, achievements,
+# Rules over a table that is not authored yet (optional and absent: companions, research, achievements,
 # dungeons, enemies, bosses, shop) skip; each starts checking the day its table lands.
 
 TABLE_ORDER = list(SCHEMA)
@@ -974,8 +974,10 @@ def rule_e054_conditional_columns(ctx):
             cond(ctx, r, "effect_floor", True, "effect", r["effect"])
     for q in ("quests_daily", "quests_weekly"):
         for r in ctx.rows(q):
+            # SUMMON and CLEAR_DUNGEON take an optional filter (empty = any banner / dungeon, 09 section 5.21)
             enum = {"SUMMON": "Banner", "CLEAR_DUNGEON": "Dungeon"}.get(r["goal"])
-            cond(ctx, r, "filter", enum is not None, "goal", r["goal"])
+            if enum is None:
+                cond(ctx, r, "filter", False, "goal", r["goal"])
             if enum and r["filter"] is not None and r["filter"] not in ENUMS[enum]:
                 ctx.err("E021", f"{r['_loc']}.filter",
                         f"'{r['filter']}' is not a valid {enum} (allowed: {', '.join(ENUMS[enum])})")
@@ -1105,7 +1107,7 @@ def rule_e063_feature_gates(ctx):
 @rule
 def rule_e064_daily_bonus_rows(ctx):
     if not ctx.has("quests_daily"):
-        return   # TODO(#170): quest tables are not authored yet
+        return
     rows = [r for r in ctx.rows("quests_daily") if tier_le(r)]
     bonus = [r for r in rows if r["goal"] == "DAILIES_COMPLETED"]
     if not bonus:
@@ -1131,7 +1133,7 @@ def rule_e065_owned_counts_below_pool(ctx):
 def rule_e039_reference_day_diamonds(ctx):
     """06 section 2's reference day recomputed from the quest rows (09 section 5.22, issues #55, #244)."""
     if not ctx.has("quests_daily"):
-        return   # TODO(#170): quest tables are not authored yet; REF_DAILIES_DONE / REF_NEW_BOSSES wait for them
+        return
     k = ctx.k
     need = ("LOGIN_DIAMONDS", "REF_DAILIES_DONE", "REF_NEW_BOSSES", "FIRST_CLEAR_DIAMONDS", "DIAMONDS_PER_DAY_F2P")
     if not all(isinstance(k.get(x), int) for x in need):

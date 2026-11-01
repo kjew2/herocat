@@ -509,7 +509,7 @@ Same schema, two tabs, because 06 resets them on different keys and `SCR_QUESTS`
 |---|---|---|
 | `id` | id | Key. 06's `d_*` / `w_*` ids. |
 | `goal` | enum(QuestGoal) | |
-| `filter` | string? | Required for `SUMMON` (a `Banner` value) and `CLEAR_DUNGEON` (a `Dungeon` value); must parse as that enum (`E021`); empty otherwise (`E054`). |
+| `filter` | string? | For `SUMMON` a `Banner` value and for `CLEAR_DUNGEON` a `Dungeon` value; must parse as that enum (`E021`). Empty on those two goals means any banner or any dungeon (`w_summons`, `w_dungeons`, 06 section 5.3). Empty for every other goal (`E054`). |
 | `target` | long | `>= 1`. |
 | `reward_currency` | enum(Currency) | |
 | `reward_amount` | long | `>= 1`; `0` allowed only for goal `LOGIN` (`d_login` is a counting row that pays nothing, issue #20). |
@@ -909,7 +909,7 @@ CONTENT <code> <location>: <message>
 
 `W010` more than two `BUFF` skills in one rarity; `W011` a rarity `<= RARE` with no `MP_REGEN` companion; `W012` banners with different `banner_levels` counts; `W013` a reachable fish level reuses a lower sprite with no `tint` (issue #48); `W031` `FISH_MAX_LVL0` or the `res_fish_cap` max decreased against `--previous` (05, issue #41); `W020` missing non-ship-locale text; `W021` unused localization key; `W030` an `S` constant changed without a note in `meta.notes`.
 
-Loader scope: `ContentDb.Build` implements every `E0xx`, `E03x`-`E06x` rule that touches sim-read data, and `E9xx`. It does not implement `E07x` localization rules (strings are client-only) or `E09x` (no previous build). `check` in CI plus the hash check at load are what make a hand edit of `content/` visible. In code: the rules live in `ContentDb.Rules.cs`, mirror the exporter's `RULES` in order, and sort by table like it. Also left to the exporter: the warnings, `E039` (a budget check for the designer, not a sim guard) and the rules over tables the sim never reads (`enemies`/`bosses` `E057`, the shop tables, `inbox_templates`). The quest, achievement and dungeon rules join `Build` when those tables are built into `ContentDb` (issues #170, #171, #173).
+Loader scope: `ContentDb.Build` implements every `E0xx`, `E03x`-`E06x` rule that touches sim-read data, and `E9xx`. It does not implement `E07x` localization rules (strings are client-only) or `E09x` (no previous build). `check` in CI plus the hash check at load are what make a hand edit of `content/` visible. In code: the rules live in `ContentDb.Rules.cs`, mirror the exporter's `RULES` in order, and sort by table like it. Also left to the exporter: the warnings, `E039` (a budget check for the designer, not a sim guard) and the rules over tables the sim never reads (`enemies`/`bosses` `E057`, the shop tables, `inbox_templates`). The quest rules (`E043`, `E046`, `E054`, `E064` on `quests_daily` / `quests_weekly`) run in `Build` (issue #170); the achievement and dungeon rules join it when those tables are built into `ContentDb` (issues #171, #173).
 
 ### 8.7 How the rules read where the tables above leave it open
 

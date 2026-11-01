@@ -82,6 +82,7 @@ namespace HeroCat.Sim.Content
                 Required("fish_levels", d.FishLevels); Required("tank", d.Tank);
                 Required("tutorial_steps", d.TutorialSteps); Required("progress_targets", d.ProgressTargets);
                 Required("feature_unlocks", d.FeatureUnlocks);
+                Required("quests_daily", d.QuestsDaily); Required("quests_weekly", d.QuestsWeekly);
                 if (Errors.Count > 0) return null;
 
                 // Loader-scope validation (ContentDb.Rules.cs, issue #126): keys first, then constants, refs and the
@@ -264,7 +265,32 @@ namespace HeroCat.Sim.Content
                                                       r.EffectFloor, r.MaxLevel, r.Cost0, r.CostG, r.UnlockAwakenRank,
                                                       Enum<Tier>(r.Tier, $"research[{r.Id}].tier"));
                 db.Research = new ReadOnlyDictionary<string, ResearchDef>(nodes);
+
+                // daily and weekly quests (09 sections 5.21-5.22, issue #170): MVP rows, so an M0 build has none
+                db.QuestsDaily = BuildQuests("quests_daily", QuestKind.DAILY, d.QuestsDaily, out db._dailyById);
+                db.QuestsWeekly = BuildQuests("quests_weekly", QuestKind.WEEKLY, d.QuestsWeekly, out db._weeklyById);
                 return db;
+            }
+
+            IReadOnlyList<QuestDef> BuildQuests(string table, QuestKind kind, QuestRowDto[] rows, out IReadOnlyDictionary<string, QuestDef> byId)
+            {
+                var list = new List<QuestDef>();
+                foreach (var r in rows)
+                {
+                    if (!Keep(table, r.Id, r.Tier)) continue;
+                    string loc = table + "[" + r.Id + "]";
+                    var goal = Enum<QuestGoal>(r.Goal, loc + ".goal");
+                    int filter = -1;   // any (E054 allows an empty filter only on SUMMON and CLEAR_DUNGEON)
+                    if (r.Filter != null && goal == QuestGoal.SUMMON) filter = (int)Enum<Banner>(r.Filter, loc + ".filter");
+                    else if (r.Filter != null && goal == QuestGoal.CLEAR_DUNGEON) filter = (int)Enum<Dungeon>(r.Filter, loc + ".filter");
+                    list.Add(new QuestDef(r.Id, kind, goal, r.Filter, filter, r.Target, Enum<Currency>(r.RewardCurrency, loc + ".reward_currency"),
+                                          r.RewardAmount, r.SortOrder, Enum<Tier>(r.Tier, loc + ".tier"), r.NameKey, r.Icon));
+                }
+                list.Sort((a, b) => a.SortOrder.CompareTo(b.SortOrder));   // sort_order is unique per table (E046)
+                var map = new Dictionary<string, QuestDef>(StringComparer.Ordinal);
+                foreach (var q in list) map[q.Id] = q;
+                byId = new ReadOnlyDictionary<string, QuestDef>(map);
+                return list.AsReadOnly();
             }
 
             static bool HasStatRow(StatRowDto[] stats, string id)

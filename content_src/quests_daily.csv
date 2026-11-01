@@ -1,0 +1,15 @@
+id,goal,filter,target,reward_currency,reward_amount,sort_order,tier,name_key,icon
+d_login,LOGIN,,1,DIAMOND,0,1,MVP,quest.d_login.name,icon_quest_login
+d_kills,KILL_ENEMIES,,300,DIAMOND,20,2,MVP,quest.d_kills.name,icon_quest_kills
+d_boss,ATTEMPT_BOSS,,3,DIAMOND,20,3,MVP,quest.d_boss.name,icon_quest_boss
+d_summon_weapon,SUMMON,WEAPON,1,DIAMOND,20,4,MVP,quest.d_summon_weapon.name,icon_quest_summon_weapon
+d_summon_skill,SUMMON,SKILL,1,DIAMOND,20,5,MVP,quest.d_summon_skill.name,icon_quest_summon_skill
+d_summon_companion,SUMMON,COMPANION,1,DIAMOND,20,6,MVP,quest.d_summon_companion.name,icon_quest_summon_companion
+d_release,RELEASE_FISH,,30,DIAMOND,20,7,MVP,quest.d_release.name,icon_quest_release
+d_merge,MERGE_FISH,,15,DIAMOND,20,8,MVP,quest.d_merge.name,icon_quest_merge
+d_dungeon_fish,CLEAR_DUNGEON,FISH_COIN,1,DIAMOND,20,9,MVP,quest.d_dungeon_fish.name,icon_quest_dungeon_fish
+d_dungeon_candy,CLEAR_DUNGEON,ROCK_CANDY,1,DIAMOND,20,10,MVP,quest.d_dungeon_candy.name,icon_quest_dungeon_candy
+d_dungeon_exp,CLEAR_DUNGEON,EXP,1,DIAMOND,20,11,MVP,quest.d_dungeon_exp.name,icon_quest_dungeon_exp
+d_watch_ad,WATCH_AD,,1,DIAMOND,20,12,P1,quest.d_watch_ad.name,icon_quest_watch_ad
+d_bonus_5,DAILIES_COMPLETED,,5,DIAMOND,30,13,MVP,quest.d_bonus_5.name,icon_quest_bonus
+d_bonus_8,DAILIES_COMPLETED,,8,DIAMOND,70,14,MVP,quest.d_bonus_8.name,icon_quest_bonus

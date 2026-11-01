@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "quests_daily",
+      "d_kill,KILL_ENEMIES,,100,",
+      "d_kill,KILL_ENEMIES,WEAPON,100,"
+    ]
+  ],
+  "csharp": true
+}

@@ -34,6 +34,7 @@ namespace HeroCat.Sim.Content
         LOGIN, LOGIN_DAYS, KILL_ENEMIES, ATTEMPT_BOSS, CLEAR_STAGES, SUMMON, RELEASE_FISH, MERGE_FISH, CLEAR_DUNGEON,
         DAILIES_COMPLETED, WEEKLIES_COMPLETED, REACH_STAGE, REACH_HERO_LEVEL, OWN_WEAPONS, OWN_SKILLS, OWN_COMPANIONS,
         LIFETIME_MERGES, FISH_LEVEL, AWAKEN_RANK, LIFETIME_SUMMONS, WATCH_AD,
+        TRAIN_LEVELS,   // 06 section 5.1 (w_train); appended so earlier ordinals do not move (issue #256). Order is not load-bearing.
     }
 
     public enum Element { NONE, FIRE, WATER, LEAF, LIGHT, DARK }

@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "2026.11.01",
+  "content_version": "2026.11.01.1",
   "min_client_version": "0.1.0",
   "source_revision": "2026-11-01 m0 skeleton, spec 00 seed values (agent)",
   "hot_apply": false,
@@ -65,6 +65,16 @@
       "rows": 5,
       "sha256": "96c05f0a4376bcf4e6a035f9866bbcd197b3e2f97a1fdfa6fe0e5c92b451cd13"
     },
+    "quests_daily": {
+      "file": "quests_daily.json",
+      "rows": 14,
+      "sha256": "f7a8922fc481453dfe1561dddfc007697c93e548149264282b64797f128a8ecf"
+    },
+    "quests_weekly": {
+      "file": "quests_weekly.json",
+      "rows": 7,
+      "sha256": "670dbd3254d63e6512f2302e62e62cd85926d3848353f793428a954d5d26bd80"
+    },
     "rarities": {
       "file": "rarities.json",
       "rows": 5,
@@ -109,11 +119,11 @@
   "localization": {
     "en": {
       "file": "localization.en.json",
-      "rows": 448,
-      "sha256": "def6ffbef5427090ead335740f2955a409504fffbe02561fe0dafb02cb87c22e"
+      "rows": 474,
+      "sha256": "ac6fc1a7c1d4a4c3980e7fd4d11fd8962a5d90ffec3bced9249fc11c69a14c59"
     }
   },
-  "content_hash": "7afd1a567f6da4bb97b1030297d538546a951da1f6da0fdb32c931c93def9a0b",
+  "content_hash": "1d6a288f2b0faee02d6337da6b33cd5b88c6efae1ff598d3960514986f92c4c6",
   "s_constants": [
     "BASE_HP",
     "BOSS_ROCK_CANDY_P",

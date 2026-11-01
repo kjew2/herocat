@@ -1,0 +1,89 @@
+{
+  "table": "quests_weekly",
+  "rows": [
+    {
+      "id": "w_login",
+      "goal": "LOGIN_DAYS",
+      "filter": null,
+      "target": 5,
+      "reward_currency": "DIAMOND",
+      "reward_amount": 50,
+      "sort_order": 1,
+      "tier": "MVP",
+      "name_key": "quest.w_login.name",
+      "icon": "icon_quest_login"
+    },
+    {
+      "id": "w_kills",
+      "goal": "KILL_ENEMIES",
+      "filter": null,
+      "target": 3000,
+      "reward_currency": "DIAMOND",
+      "reward_amount": 50,
+      "sort_order": 2,
+      "tier": "MVP",
+      "name_key": "quest.w_kills.name",
+      "icon": "icon_quest_kills"
+    },
+    {
+      "id": "w_dailies",
+      "goal": "DAILIES_COMPLETED",
+      "filter": null,
+      "target": 40,
+      "reward_currency": "DIAMOND",
+      "reward_amount": 50,
+      "sort_order": 3,
+      "tier": "MVP",
+      "name_key": "quest.w_dailies.name",
+      "icon": "icon_quest_bonus"
+    },
+    {
+      "id": "w_summons",
+      "goal": "SUMMON",
+      "filter": null,
+      "target": 30,
+      "reward_currency": "DIAMOND",
+      "reward_amount": 50,
+      "sort_order": 4,
+      "tier": "MVP",
+      "name_key": "quest.w_summons.name",
+      "icon": "icon_quest_summon"
+    },
+    {
+      "id": "w_merges",
+      "goal": "MERGE_FISH",
+      "filter": null,
+      "target": 100,
+      "reward_currency": "DIAMOND",
+      "reward_amount": 50,
+      "sort_order": 5,
+      "tier": "MVP",
+      "name_key": "quest.w_merges.name",
+      "icon": "icon_quest_merge"
+    },
+    {
+      "id": "w_dungeons",
+      "goal": "CLEAR_DUNGEON",
+      "filter": null,
+      "target": 25,
+      "reward_currency": "DIAMOND",
+      "reward_amount": 50,
+      "sort_order": 6,
+      "tier": "MVP",
+      "name_key": "quest.w_dungeons.name",
+      "icon": "icon_quest_dungeon"
+    },
+    {
+      "id": "w_train",
+      "goal": "TRAIN_LEVELS",
+      "filter": null,
+      "target": 300,
+      "reward_currency": "DIAMOND",
+      "reward_amount": 50,
+      "sort_order": 7,
+      "tier": "MVP",
+      "name_key": "quest.w_train.name",
+      "icon": "icon_quest_train"
+    }
+  ]
+}
