@@ -2,43 +2,43 @@
   "SchemaVersion": 1,
   "ContentVersion": "2026.11.01",
   "ContentHash": "271e3ca3b41417b56dc1a43bc308d485827cec3232992d9ba765923d519b9d62",
-  "PlayerId": "00000000-0000-0000-0000-000000000000",
+  "PlayerId": "00000007-0000-4000-8000-000000000001",
   "DeviceId": "b07b07b0-0000-4000-8000-000000000001",
   "RngRoot": "00000007-0000-4000-8000-000000000001",
   "SaveSeq": 1,
   "Time": {
     "Tick": 144000,
-    "LastSavedServerTime": 1767398400,
-    "LastTickServerTime": 1767398400,
-    "AnchorServerTime": 1767398400,
-    "AnchorTick": 144000,
-    "CreatedServerTime": 1767225600,
-    "DayKey": 20456,
-    "WeekKey": 2921,
-    "LoginDayKey": 20456
+    "LastSavedServerTime": 1767776400,
+    "LastTickServerTime": 1767742200,
+    "AnchorServerTime": 1767742200,
+    "AnchorTick": 108000,
+    "CreatedServerTime": 1767603600,
+    "DayKey": 20460,
+    "WeekKey": 2922,
+    "LoginDayKey": 20460
   },
   "Hero": {
-    "Level": 46,
-    "Exp": 474.61645754901883,
+    "Level": 101,
+    "Exp": 54682.168880334626,
     "AwakenRank": 0
   },
   "Training": {
     "Level": [
+      101,
       0,
       0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0
+      99,
+      99,
+      100,
+      82,
+      90
     ]
   },
   "Wallet": {
-    "Gold": 18594.73216940006,
-    "Diamond": 1660,
-    "FishCoin": 0.0,
-    "RockCandy": 0,
+    "Gold": 1499.2650953667544,
+    "Diamond": 860,
+    "FishCoin": 14230.399999999436,
+    "RockCandy": 10,
     "DungeonTicket": [
       0,
       0,
@@ -57,7 +57,52 @@
       "weapon_c_01": {
         "Copies": 1,
         "LimitBreaks": 0,
-        "FirstAcquiredServerTime": 1767225600
+        "FirstAcquiredServerTime": 1767603600
+      },
+      "weapon_c_02": {
+        "Copies": 2,
+        "LimitBreaks": 0,
+        "FirstAcquiredServerTime": 1767603600
+      },
+      "weapon_c_06": {
+        "Copies": 1,
+        "LimitBreaks": 0,
+        "FirstAcquiredServerTime": 1767603600
+      },
+      "weapon_c_07": {
+        "Copies": 1,
+        "LimitBreaks": 0,
+        "FirstAcquiredServerTime": 1767603600
+      },
+      "weapon_c_10": {
+        "Copies": 1,
+        "LimitBreaks": 0,
+        "FirstAcquiredServerTime": 1767603600
+      },
+      "weapon_e_01": {
+        "Copies": 1,
+        "LimitBreaks": 0,
+        "FirstAcquiredServerTime": 1767603600
+      },
+      "weapon_r_01": {
+        "Copies": 1,
+        "LimitBreaks": 0,
+        "FirstAcquiredServerTime": 1767603600
+      },
+      "weapon_r_04": {
+        "Copies": 1,
+        "LimitBreaks": 0,
+        "FirstAcquiredServerTime": 1767603600
+      },
+      "weapon_r_06": {
+        "Copies": 1,
+        "LimitBreaks": 0,
+        "FirstAcquiredServerTime": 1767603600
+      },
+      "weapon_r_08": {
+        "Copies": 1,
+        "LimitBreaks": 0,
+        "FirstAcquiredServerTime": 1767603600
       }
     }
   },
@@ -71,7 +116,7 @@
     "Items": {}
   },
   "Loadout": {
-    "Weapon": "weapon_c_01",
+    "Weapon": "weapon_e_01",
     "Skills": [
       null,
       null,
@@ -110,20 +155,31 @@
       0,
       0,
       0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0,
-      0
+      6,
+      7,
+      9,
+      10,
+      10,
+      10,
+      10
     ],
-    "TankCount": 10,
+    "TankCount": 0,
     "TankRefillTick": 0,
     "TankReleaseLevel": 1,
-    "DiscoveredLevels": [],
-    "HighestLevel": 0,
-    "TotalMerges": 0,
+    "DiscoveredLevels": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "HighestLevel": 10,
+    "TotalMerges": 2393,
     "AutoMergeEnabled": false
   },
   "Banners": {
@@ -133,17 +189,17 @@
       "TotalPulls": 0
     },
     "WEAPON": {
-      "Pity": 0,
-      "Exp": 0,
-      "TotalPulls": 0
+      "Pity": 10,
+      "Exp": 10,
+      "TotalPulls": 10
     }
   },
   "Combat": {
     "Mode": "Stage",
-    "Stage": 20,
-    "KillsInStage": 9,
-    "Boss": "Walled",
-    "BossFailsOnStage": 1,
+    "Stage": 211,
+    "KillsInStage": 6,
+    "Boss": "None",
+    "BossFailsOnStage": 0,
     "Selected": null,
     "Mp": 0.0,
     "SkillCooldowns": [
@@ -160,12 +216,25 @@
       0,
       0
     ],
-    "MissileQueue": [],
+    "MissileQueue": [
+      0.075,
+      0.075,
+      0.075,
+      0.075,
+      0.075,
+      0.1125,
+      0.1125,
+      0.1125,
+      0.16875,
+      0.16875,
+      0.253125,
+      0.3796875
+    ],
     "DungeonRun": null
   },
   "Progress": {
-    "HighestCleared": 19,
-    "HighestFirstClearBoss": 10,
+    "HighestCleared": 210,
+    "HighestFirstClearBoss": 210,
     "StageCapReached": 0
   },
   "Quests": {
@@ -223,7 +292,7 @@
     },
     "crit": {
       "Seed": "10e431400760b15e",
-      "Counter": 11802
+      "Counter": 20460
     },
     "dungeon": {
       "Seed": "0ff384dc670a7e71",
@@ -231,11 +300,11 @@
     },
     "fish_spawn": {
       "Seed": "dba33b0039a13b5f",
-      "Counter": 0
+      "Counter": 2400
     },
     "loot": {
       "Seed": "e1b462ae37ccbc87",
-      "Counter": 1
+      "Counter": 21
     },
     "summon_companion": {
       "Seed": "1352fdc4fc9a7f59",
@@ -247,31 +316,31 @@
     },
     "summon_weapon": {
       "Seed": "f268608da8a59a7f",
-      "Counter": 0
+      "Counter": 30
     }
   },
   "Stats": {
-    "Kills": 5193,
-    "BossKills": 1,
-    "BossFails": 1,
-    "HeroHits": 11802,
+    "Kills": 3764,
+    "BossKills": 21,
+    "BossFails": 14,
+    "HeroHits": 20460,
     "Taps": 0,
-    "Pulls": 0,
-    "Merges": 0,
-    "FishReleased": 0,
+    "Pulls": 10,
+    "Merges": 2393,
+    "FishReleased": 2400,
     "FishDiscards": 0,
     "DungeonClears": 0,
-    "TrainingLevelsBought": 0,
-    "FirstWallStage": 20,
+    "TrainingLevelsBought": 571,
+    "FirstWallStage": 130,
     "ActiveSeconds": 14400,
-    "GoldEarned": 18594.73216940006,
-    "GoldSpent": 0.0,
-    "FishCoinEarned": 0.0,
-    "DiamondsEarned": 1660,
-    "DiamondsSpent": 0,
+    "GoldEarned": 2937143.120875445,
+    "GoldSpent": 2935643.8557800665,
+    "FishCoinEarned": 14230.399999999436,
+    "DiamondsEarned": 1860,
+    "DiamondsSpent": 1000,
     "DiamondsPurchased": 0,
     "ClientDiamondsEarned": {
-      "FIRST_CLEAR": 10,
+      "FIRST_CLEAR": 210,
       "LOGIN": 150,
       "TUTORIAL": 1500
     },

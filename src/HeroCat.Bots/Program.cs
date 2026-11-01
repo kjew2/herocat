@@ -10,6 +10,7 @@ using HeroCat.Bots.Golden;
 using HeroCat.Bots.Policies;
 using HeroCat.Bots.Report;
 using HeroCat.Runtime.Content;
+using HeroCat.Runtime.Replay;
 using HeroCat.Runtime.Save;
 using HeroCat.Sim;
 using HeroCat.Sim.Commands;
@@ -42,19 +43,28 @@ namespace HeroCat.Bots
         public string Str(string k, string def) => _opts.TryGetValue(k, out var v) && v != "" ? v : def;
         public int Int(string k, int def) => _opts.TryGetValue(k, out var v) && v != "" ? int.Parse(v, CultureInfo.InvariantCulture) : def;
         public long Long(string k, long def) => _opts.TryGetValue(k, out var v) && v != "" ? long.Parse(v, CultureInfo.InvariantCulture) : def;
+        public double Double(string k, double def) => _opts.TryGetValue(k, out var v) && v != "" ? double.Parse(v, CultureInfo.InvariantCulture) : def;
     }
 
+    /// <summary>The bot CLI (10 section 3.8). Writes results to stdout (or --out), diagnostics to stderr.</summary>
     public static class Program
     {
-        const string Usage =
-            "usage: HeroCat.Bots <run|sweep|acceptance|golden|save-fixture|summon-stream|bench> [options]\n" +
-            "  run          --bot idle --seed N --days N --all-days --format table|csv|json --out path --content dir --tier M0|MVP\n" +
-            "  sweep        --bot idle --seeds 1-20 --days N --format table|csv|json --out path --parallel N --content dir\n" +
-            "  acceptance   --seeds 1-20 --days N --time-budget-s 180 --targets path --verbose --content dir\n" +
-            "  golden       --check|--update --golden-dir path --content dir\n" +
-            "  save-fixture --check|--update --out path --content dir\n" +
-            "  summon-stream --check|--update --out path --content dir\n" +
-            "  bench        --ticks N [--stage N] --max-ms N\n";
+        public const string Usage =
+            "usage: HeroCat.Bots <verb> [options]   (10 section 3.8)\n" +
+            "  run          --bot greedy-f2p --seed 7 --days 30 [--all-days] [--record path] [--format table|csv|json]\n" +
+            "               [--diamonds content|flat] [--content dir] [--tier M0|MVP] [--out path]\n" +
+            "  sweep        --bot greedy-f2p --seeds 1-20 --days 30 [--parallel N] [--format table|csv|json] [--diamonds content|flat]\n" +
+            "  compare      --bots a,b,c --seeds 1-20 --days 30 [--parallel N]\n" +
+            "  acceptance   [--table] [--verbose] [--targets path] [--time-budget-s N] [--seeds 1-20] [--days 30] [--tier M0|MVP]\n" +
+            "               [--golden-dir path] [--parallel N]\n" +
+            "  report       --longest-walls | --layer-shares | --diamonds  [--bot greedy-f2p] --seeds 1-20 --days 30 [--parallel N]\n" +
+            "  golden       --check | --update [--allow-sim-change] | --replay   [--golden-dir path]\n" +
+            "  save-fixture --check | --update [--out path]\n" +
+            "  summon-stream --check | --update [--out path]\n" +
+            "  bench        --ticks 1000000 --stage 300 --max-ms 2000\n" +
+            "  stage-bound  --check | --update [--seeds 1-20] [--days 60]   TODO(#60): needs the whale bot\n" +
+            "common: --content dir (default: the repo's content/), --tier M0|MVP (default M0: the systems the M0 sim has)\n" +
+            "bots: " + "greedy-f2p (lazy-f2p, light-spender, whale: TODO(#214, #215))\n";
 
         public static int Main(string[] argv)
         {
@@ -66,7 +76,9 @@ namespace HeroCat.Bots
                 {
                     case "run": return Run(a);
                     case "sweep": return SweepCmd(a);
-                    case "acceptance": return AcceptanceCmd(a);
+                    case "compare": return CompareCmd(a);
+                    case "acceptance": return AcceptanceCmd(a, Console.Out);
+                    case "report": return ReportCmd(a);
                     case "golden": return GoldenCmd(a);
                     case "save-fixture": return SaveFixtureCmd(a);
                     case "summon-stream": return SummonStreamCmd(a);
@@ -80,6 +92,11 @@ namespace HeroCat.Bots
                 Console.Error.Write(e.Message + "\n" + Usage);
                 return 2;
             }
+            catch (NotSupportedException e)
+            {
+                Console.Error.Write("error: " + e.Message + "\n");
+                return 1;
+            }
         }
 
         public static string ContentDir(CliArgs a) =>
@@ -87,13 +104,24 @@ namespace HeroCat.Bots
             ?? FileContentSource.FindContentDirectory(Directory.GetCurrentDirectory())
             ?? throw new ArgumentException("content/manifest.json not found; pass --content <dir>");
 
-        /// <summary>The bots build at M0 by default: the M0 slice is what they exercise (TODO(#136): --tier per 10 section 3.8).</summary>
-        static ContentDb LoadContent(CliArgs a)
+        /// <summary>
+        /// --tier M0|MVP (09 section 5.32). The default is M0: the M0 sim has no Awakening, Research, companions, quests or
+        /// dungeons yet, so the bots exercise the M0 slice (TODO(#214): default MVP once those land).
+        /// </summary>
+        public static ContentDb LoadContent(CliArgs a)
         {
             var tier = (Tier)Enum.Parse(typeof(Tier), a.Str("tier", "M0"));
             var db = ContentLoader.LoadFromDirectory(ContentDir(a), tier);
             Console.Error.Write($"# content {db.Version} hash {db.ContentHash} tier {db.BuildTier} sim {typeof(Simulation).Assembly.GetName().Version}\n");
             return db;
+        }
+
+        static DiamondMode Diamonds(CliArgs a)
+        {
+            string d = a.Str("diamonds", "content");
+            if (d == "content") return DiamondMode.Content;
+            if (d == "flat") return DiamondMode.Flat;
+            throw new ArgumentException($"--diamonds {d}: expected content|flat");
         }
 
         static void Emit(CliArgs a, string text)
@@ -107,60 +135,115 @@ namespace HeroCat.Bots
         static int Run(CliArgs a)
         {
             var db = LoadContent(a);
-            var run = new BotRunner(db).Run(BotPolicies.Create(a.Str("bot", HarnessConstants.DefaultBot)),
-                                            (ulong)a.Long("seed", (long)HarnessConstants.DefaultSeed), a.Int("days", HarnessConstants.DefaultDays));
+            string record = a.Str("record", null);
+            var log = record != null ? new MemoryJsonlCommandLog() : null;
+            var run = new BotRunner(db) { Diamonds = Diamonds(a), CommandLog = log }
+                .Run(BotPolicies.Create(a.Str("bot", HarnessConstants.DefaultBot)), (ulong)a.Long("seed", (long)HarnessConstants.DefaultSeed),
+                     a.Int("days", HarnessConstants.DefaultDays));
+            if (record != null)
+            {
+                File.WriteAllText(record, log.Text, new UTF8Encoding(false));
+                Console.Error.Write($"# recorded {log.Lines.Count} commands to {record}\n");
+            }
             string fmt = a.Str("format", "table");
             bool all = a.Has("all-days");
             Emit(a, fmt == "csv" ? TableWriter.Csv(run, all) : fmt == "json" ? TableWriter.Json(run) : TableWriter.Table(run, all));
             return 0;
         }
 
+        static int Parallel(CliArgs a) => a.Int("parallel", Environment.ProcessorCount);
+
         static int SweepCmd(CliArgs a)
         {
             var db = LoadContent(a);
             var sw = Sweep.Run(db, a.Str("bot", HarnessConstants.DefaultBot), a.Str("seeds", HarnessConstants.DefaultSeeds),
-                               a.Int("days", HarnessConstants.DefaultDays), a.Int("parallel", Environment.ProcessorCount));
+                               a.Int("days", HarnessConstants.DefaultDays), Parallel(a), Diamonds(a));
             string fmt = a.Str("format", "table");
             Emit(a, fmt == "csv" ? Sweep.Csv(sw) : fmt == "json" ? TableWriter.Json(sw.Runs) : Sweep.Table(sw, TableWriter.ContentTag(db.Version, db.ContentHash)));
             return 0;
         }
 
-        /// <summary>Null if seed 7 twice is identical and (when the golden dir exists) the run golden matches.</summary>
-        public static string DeterminismCheck(ContentDb db, string goldenDirOrNull)
+        static int CompareCmd(CliArgs a)
         {
-            var e = GoldenFiles.All[0];
-            string x = e.Generate(db), y = e.Generate(db);
-            if (x != y) return "seed 7 twice differs";
-            if (goldenDirOrNull != null && Directory.Exists(goldenDirOrNull)) return GoldenFiles.Compare(goldenDirOrNull, e, x);
-            return null;
+            var db = LoadContent(a);
+            var bots = a.Str("bots", HarnessConstants.DefaultBot).Split(',').Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
+            string seeds = a.Str("seeds", HarnessConstants.DefaultSeeds);
+            int days = a.Int("days", HarnessConstants.DefaultDays);
+            var sweeps = bots.Select(b => Sweep.Run(db, b, seeds, days, Parallel(a), Diamonds(a))).ToList();
+            Emit(a, Reports.Compare(sweeps, TableWriter.ContentTag(db.Version, db.ContentHash)));
+            return 0;
         }
 
-        static int AcceptanceCmd(CliArgs a)
+        static int ReportCmd(CliArgs a)
+        {
+            var db = LoadContent(a);
+            var t = AcceptanceTargets.LoadDefault();
+            var sw = Sweep.Run(db, a.Str("bot", HarnessConstants.DefaultBot), a.Str("seeds", HarnessConstants.DefaultSeeds),
+                               a.Int("days", HarnessConstants.DefaultDays), Parallel(a), Diamonds(a));
+            string tag = TableWriter.ContentTag(db.Version, db.ContentHash);
+            if (a.Has("longest-walls")) Emit(a, Reports.LongestWalls(sw, tag));
+            else if (a.Has("layer-shares")) Emit(a, Reports.LayerSharesReport(sw, tag, t.ShareMax, t.ShareMin));
+            else if (a.Has("diamonds")) Emit(a, Reports.Diamonds(sw, tag));
+            else throw new ArgumentException("report needs --longest-walls, --layer-shares or --diamonds");
+            return 0;
+        }
+
+        /// <summary>
+        /// AC9: seed 7 twice in-process is byte-identical (run table and final hash), and the committed golden command log
+        /// replays to the committed day hashes. Null when both hold. The replay part is skipped (not failed) when the golden
+        /// files were made from other content (a scratch --content dir).
+        /// </summary>
+        public static string DeterminismCheck(ContentDb db, int days, string goldenDirOrNull)
+        {
+            string Once()
+            {
+                var r = new BotRunner(db).Run(BotPolicies.Create(GoldenFiles.Bot), GoldenFiles.Seed, days);
+                return TableWriter.Table(r, allDays: true) + string.Join("\n", r.DayHashes) + r.FinalHash;
+            }
+            if (Once() != Once()) return "seed 7 twice in-process differs";
+            if (goldenDirOrNull == null || !Directory.Exists(goldenDirOrNull)) return null;
+            string hashPath = Path.Combine(goldenDirOrNull, GoldenFiles.ContentHashFile);
+            if (File.Exists(hashPath) && GoldenFiles.Read(hashPath).Trim() != db.ContentHash) return null;
+            return GoldenFiles.CheckReplay(db, goldenDirOrNull);
+        }
+
+        /// <summary>
+        /// 10 section 3.6. Every line but AC10's (which carries the measured wall time) is a pure function of the content,
+        /// the targets and the options, so two runs in one process print the same lines (acceptance criterion 5).
+        /// </summary>
+        public static int AcceptanceCmd(CliArgs a, TextWriter output)
         {
             var sw0 = Stopwatch.StartNew();
             var db = LoadContent(a);
             var targets = AcceptanceTargets.Load(a.Str("targets", null));
-            string seeds = a.Str("seeds", HarnessConstants.DefaultSeeds);
-            int days = a.Int("days", HarnessConstants.DefaultDays);
-            string bot = HarnessConstants.DefaultBot;   // TODO(#135): greedy-f2p
-            var sw = Sweep.Run(db, bot, seeds, days, Environment.ProcessorCount);
+            string seeds = a.Str("seeds", targets.Seeds ?? HarnessConstants.DefaultSeeds);
+            int days = a.Int("days", targets.Days > 0 ? targets.Days : HarnessConstants.DefaultDays);
+            string bot = targets.SweepBot ?? HarnessConstants.DefaultBot;
+            var sw = Sweep.Run(db, bot, seeds, days, Parallel(a));
+            double sweepSecs = sw0.Elapsed.TotalSeconds;
             string goldenDir = a.Str("golden-dir", GoldenFiles.DefaultDir(ContentDir(a)));
-            var results = AcceptanceChecker.Check(sw, db, targets, () => DeterminismCheck(db, goldenDir));
+            var results = AcceptanceChecker.Check(sw, db, targets, () => DeterminismCheck(db, Math.Min(days, GoldenFiles.Days), goldenDir));
+            double budget = a.Double("time-budget-s", targets.TimeBudgetSeconds);
             double secs = sw0.Elapsed.TotalSeconds;
-            int budget = a.Int("time-budget-s", 180);
+            int ac11 = results.FindIndex(r => r.Id == "AC11");
+            results.Insert(ac11 < 0 ? results.Count : ac11, new CheckResult("AC10", secs <= budget ? CheckStatus.Pass : CheckStatus.Fail,
+                string.Format(CultureInfo.InvariantCulture, "acceptance wall time {0:0.0} s (sweep {1:0.0} s) {2} {3:0} s budget", secs, sweepSecs,
+                              secs <= budget ? "<=" : ">", budget), Array.Empty<string>()));
 
+            string tag = TableWriter.ContentTag(db.Version, db.ContentHash);
             var sb = new StringBuilder();
-            sb.Append("# herocat acceptance v2\n");
-            sb.Append($"# bot={bot} seeds={seeds} days={days} content={TableWriter.ContentTag(db.Version, db.ContentHash)}\n");
+            sb.Append("# herocat acceptance v3\n");
+            sb.Append($"# bot={bot} seeds={seeds} days={days} tier={db.BuildTier} content={tag}\n");
+            if (a.Has("table")) sb.Append(AcceptanceChecker.Table(sw, tag, db.ProgressTargets.Select(p => p.Day)));
             foreach (var r in results)
             {
-                sb.Append(r.Pass ? "PASS " : "FAIL ").Append(r.Id).Append(' ').Append(r.Message).Append('\n');
+                sb.Append(r.Line).Append('\n');
                 if (a.Has("verbose")) foreach (var d in r.Details) sb.Append("     ").Append(d).Append('\n');
             }
-            int failures = results.Count(r => !r.Pass);
-            if (secs > budget) { sb.Append(string.Format(CultureInfo.InvariantCulture, "FAIL time budget: {0:0.0} s > {1} s\n", secs, budget)); failures++; }
-            sb.Append(string.Format(CultureInfo.InvariantCulture, "RESULT {0} failure(s) in {1:0.0} s\n", failures, secs));
-            Console.Out.Write(sb.ToString());
+            int failures = results.Count(r => r.Status == CheckStatus.Fail);
+            int warns = results.Count(r => r.Status == CheckStatus.Warn);
+            sb.Append($"RESULT {failures} failure(s), {warns} warning(s)\n");
+            output.Write(sb.ToString());
             return failures == 0 ? 0 : 1;
         }
 
@@ -168,20 +251,42 @@ namespace HeroCat.Bots
         {
             var db = LoadContent(a);
             string dir = a.Str("golden-dir", GoldenFiles.DefaultDir(ContentDir(a)));
-            bool update = a.Has("update");
-            int bad = 0;
-            foreach (var e in GoldenFiles.All)
+            if (a.Has("replay"))
             {
-                string text = e.Generate(db);
-                if (update) { GoldenFiles.Write(dir, e, text); Console.Out.Write($"wrote {e.FileName}\n"); continue; }
-                string diff = GoldenFiles.Compare(dir, e, text);
-                if (diff == null) Console.Out.Write($"OK   {e.FileName}\n");
+                string hashPath = Path.Combine(dir, GoldenFiles.HashesFile), logPath = Path.Combine(dir, GoldenFiles.CommandsFile);
+                if (!File.Exists(hashPath) || !File.Exists(logPath)) { Console.Out.Write($"FAIL replay: golden files missing in {dir}\n"); return 1; }
+                string expected = GoldenFiles.Read(hashPath);
+                string actual = GoldenFiles.Replay(db, JsonlCommandLog.Parse(GoldenFiles.Read(logPath)), GoldenFiles.FinalTick(expected));
+                Console.Out.Write(actual);
+                bool same = actual == expected;
+                Console.Out.Write(same ? "OK   replay matches " + GoldenFiles.HashesFile + "\n" : "FAIL replay differs from " + GoldenFiles.HashesFile + "\n");
+                return same ? 0 : 1;
+            }
+            bool update = a.Has("update");
+            if (update)
+            {
+                string refusal = GoldenFiles.UpdateRefusal(db, dir, a.Has("allow-sim-change"));
+                if (refusal != null) { Console.Error.Write(refusal + "\n"); return 3; }
+            }
+            var files = GoldenFiles.Generate(db);
+            int bad = 0;
+            foreach (var name in GoldenFiles.FileNames)
+            {
+                string text = files[name];
+                if (update) { GoldenFiles.Write(dir, name, text); Console.Out.Write($"wrote {name}\n"); continue; }
+                string diff = GoldenFiles.Compare(dir, name, text);
+                if (diff == null) Console.Out.Write($"OK   {name}\n");
                 else { Console.Out.Write("FAIL " + diff + "\n"); bad++; }
+            }
+            if (!update)
+            {
+                string replay = GoldenFiles.CheckReplay(db, dir);
+                if (replay == null) Console.Out.Write("OK   replay of " + GoldenFiles.CommandsFile + "\n");
+                else { Console.Out.Write("FAIL " + replay + "\n"); bad++; }
             }
             return bad == 0 ? 0 : 1;
         }
 
-        /// <summary>The v1 save fixture: --update rewrites it (refused once V1 is frozen), otherwise checks it byte for byte.</summary>
         /// <summary>Fixtures/Summon/stream.json, the C# stream-sequence golden that gacha_model.py reproduces (issue #14).</summary>
         static int SummonStreamCmd(CliArgs a)
         {
@@ -199,6 +304,7 @@ namespace HeroCat.Bots
             return same ? 0 : 1;
         }
 
+        /// <summary>The v1 save fixture: --update rewrites it (refused once V1 is frozen), otherwise checks it byte for byte.</summary>
         static int SaveFixtureCmd(CliArgs a)
         {
             var db = LoadContent(a);

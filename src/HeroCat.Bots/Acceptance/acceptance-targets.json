@@ -1,3 +1,14 @@
 {
-  "stageCheckDays": [1, 7, 30]
+  "sweepBot": "greedy-f2p", "seeds": "1-20", "days": 30,
+  "stageCheckDays": [1, 7, 30],
+  "shareMaxCheckDays": [1, 7, 30], "shareMinCheckDays": [7, 30], "shareMax": 0.40, "shareMin": 0.05,
+  "shareFloorExcluded": ["Base", "Speed"],
+  "shareFloorExempt": { "M0": ["Research", "Companions"] },
+  "firstWallMinStage": 60, "firstWallMaxStage": 200,
+  "maxWallActiveMinutesThroughDay14": 240,
+  "lateWallMaxActiveMinutes": null,
+  "lazyFraction": { "day7": 0.55, "day30": 0.60 },
+  "whaleGapStagesDay7": [25, 60],
+  "diamondsPerDayTolerance": 0.15,
+  "timeBudgetSeconds": 240
 }
