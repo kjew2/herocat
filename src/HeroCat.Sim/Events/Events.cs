@@ -64,6 +64,9 @@ namespace HeroCat.Sim.Events
     /// <summary>A summon raised the banner level (04 section 10).</summary>
     public sealed record BannerLeveledUp(Banner Banner, int Level) : Event;
 
+    /// <summary>LimitBreak succeeded (04 section 5.2; analytics limit_break). Rank is LimitBreaks after; Cost is the Rock Candy spent.</summary>
+    public sealed record ItemLimitBroken(string ItemId, int Rank, long Cost) : Event;
+
     // ---------------------------------------------------------------------------------------- fish board (05 section 10)
 
     /// <summary>A tank fish landed in <see cref="Cell"/>; StockAfter is TankCount after the release.</summary>

@@ -182,6 +182,32 @@ namespace HeroCat.Sim
             Emit(new ItemEquipped(Banner.WEAPON, 0, id, prev, auto));
         }
 
+        // ================================================================================================ limit breaks (04 5.2)
+
+        /// <summary>
+        /// 04 section 5.2. An unknown id is rejected like the equip commands (InvalidTarget, UNKNOWN_ITEM) before the
+        /// spec's three checks; companion ids are unknown until #161 (TODO(#161)). No level-10 requirement.
+        /// </summary>
+        internal ApplyResult HandleLimitBreak(LimitBreak c)
+        {
+            if (!CollectionRules.TryKindOf(Db, c.ItemId, out var kind))
+                return ApplyResult.Reject(RejectCode.InvalidTarget, CollectionRejectReasons.UNKNOWN_ITEM);
+            var col = CollectionRules.For(State, kind);
+            if (!CollectionRules.Owns(col, c.ItemId))
+                return ApplyResult.Reject(RejectCode.NotOwned, CollectionRejectReasons.ITEM_NOT_OWNED);
+            var item = col.Items[c.ItemId];
+            if (item.LimitBreaks >= Db.Constants.LimitBreakRanks)
+                return ApplyResult.Reject(RejectCode.Capped, CollectionRejectReasons.LIMIT_BREAK_CAPPED);
+            long cost = CollectionRules.NextLimitBreakCost(Db, kind, col, c.ItemId);
+            if (!State.Wallet.CanAfford(Currency.ROCK_CANDY, cost) ||
+                !Ledger.Apply(State, new CurrencyDelta(Currency.ROCK_CANDY, -cost), CurrencyReason.LIMIT_BREAK, this))
+                return ApplyResult.Reject(RejectCode.CannotAfford, CollectionRejectReasons.NotEnough(Currency.ROCK_CANDY));
+            item.LimitBreaks += 1;
+            SummonsMarkDpsDirty();
+            Emit(new ItemLimitBroken(c.ItemId, item.LimitBreaks, cost));
+            return ApplyResult.Accepted;
+        }
+
         // ================================================================================================ skills (04 7.2)
 
         internal ApplyResult HandleEquipSkill(EquipSkill c)

@@ -231,9 +231,10 @@ AttemptBoss():                                              # command; always th
   return Ok
 
 SelectStage(stage?):                                        # command, MVP (SCR_STAGE_SELECT); issue #35
-  if stage != null and stage < 1:                             return Reject(BadArgument, "STAGE_OUT_OF_RANGE")
+  if stage != null and (stage < 1 or stage > STAGE_CAP):      return Reject(BadArgument, "STAGE_OUT_OF_RANGE")
   if stage != null and stage > max(Progress.HighestCleared, Combat.Stage):
                                                               return Reject(Locked, "STAGE_NOT_CLEARED")
+  if Combat.Mode == Dungeon:                                  return Reject(NotAvailable, "DUNGEON_RUN_IN_PROGRESS")   # stage fields frozen during a run (02 section 3.3); issue #159
   target = (stage == null or stage == Combat.Stage) ? null : stage   # null = the frontier
   if target == Combat.Selected: return Ok                     # no-op, no event
   Combat.Selected = target                                    # Combat.Stage, KillsInStage, Boss and BossFailsOnStage are untouched
@@ -652,7 +653,7 @@ This section owns these events' fields (issue #245); every event also carries 02
 19. Perf: `Advance(1_000_000)` with `NullEventSink` from a stage-300 profile with six skills and four companions equipped completes in under 2 s in Release; `Advance(100_000)` with the default event mask allocates under 128 bytes per kill.
 20. Rated vs realised (issue #10): for a fixture with two `INSTANT` skills, one `DOT` skill, two `DAMAGE` companions at full MP, a static board (no merges, so no missiles), `ATK_SPD` 50 and `CRIT_RATE` 120 / `CRIT_DMG` 80 with hero-attack damage counted at its expected crit value, total damage dealt over a 100,000-tick fight against an unkillable enemy, divided by the fight's seconds, equals `Query.RatedDps` within 1%.
 21. Awakening cadence (issue #43): in the 20-seed sweep, every Awakening rank the bot's stage reaches within 30 days is bought no more than `awakening_targets.max_days_after_gate` days after the day its `AWAKEN_STAGES` gate is first reached; the tool and the bot read the same `awakening_targets` rows.
-22. Stage select (issue #35): at frontier stage 57 with `KillsInStage == 4`, `SelectStage(56)` succeeds and `SelectStage(58)` is rejected with `Locked`/`STAGE_NOT_CLEARED`; kills on stage 56 pay `Gold(56) * GoldMult` and `Exp(56) * ExpMult`, spawn no boss and leave `Combat.Stage`, `KillsInStage`, `Combat.Boss` and `Progress.HighestCleared` unchanged; `SelectStage(null)` resumes stage 57 at 4 kills; on a walled boss stage the `Walled` phase survives a select and return, and `AttemptBoss` while a side stage is selected clears `Combat.Selected` and spawns the frontier boss.
+22. Stage select (issue #35): at frontier stage 57 with `KillsInStage == 4`, `SelectStage(56)` succeeds and `SelectStage(58)` is rejected with `Locked`/`STAGE_NOT_CLEARED`; `SelectStage(0)`, a negative stage and `SelectStage(STAGE_CAP + 1)` are rejected with `BadArgument`/`STAGE_OUT_OF_RANGE`, and any `SelectStage` while `Combat.Mode == Dungeon` with `NotAvailable`/`DUNGEON_RUN_IN_PROGRESS` (issue #159); kills on stage 56 pay `Gold(56) * GoldMult` and `Exp(56) * ExpMult`, spawn no boss and leave `Combat.Stage`, `KillsInStage`, `Combat.Boss` and `Progress.HighestCleared` unchanged; `SelectStage(null)` resumes stage 57 at 4 kills; on a walled boss stage the `Walled` phase survives a select and return, and `AttemptBoss` while a side stage is selected clears `Combat.Selected` and spawns the frontier boss.
 
 ## 14. Constants introduced
 

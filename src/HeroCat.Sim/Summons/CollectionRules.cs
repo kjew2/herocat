@@ -73,6 +73,32 @@ namespace HeroCat.Sim.Summons
             }
         }
 
+        /// <summary>The collectible kinds a limit break applies to, in lookup order (04 section 5.2). TODO(#161): COMPANION.</summary>
+        public static readonly Banner[] LimitBreakKinds = { Banner.WEAPON, Banner.SKILL };
+
+        /// <summary>
+        /// The kind of content id <paramref name="id"/> among <see cref="LimitBreakKinds"/>; false for an unknown id. Ids are
+        /// table-prefixed (weapon_*, skill_*, 09), so at most one kind matches; the first in lookup order wins.
+        /// </summary>
+        public static bool TryKindOf(ContentDb db, string id, out Banner kind)
+        {
+            foreach (var b in LimitBreakKinds)
+                if (IsKnown(db, b, id)) { kind = b; return true; }
+            kind = default;
+            return false;
+        }
+
+        /// <summary>
+        /// Rock Candy for the next limit-break rank: <c>LIMIT_BREAK_COST[rarity] * (LimitBreaks + 1)</c> (04 section 5.2);
+        /// 0 when unowned, unknown or at LIMIT_BREAK_RANKS.
+        /// </summary>
+        public static long NextLimitBreakCost(ContentDb db, Banner b, CollectionState col, string id)
+        {
+            if (!IsKnown(db, b, id) || !col.Items.TryGetValue(id, out var item) || item == null || item.Copies <= 0) return 0;
+            if (item.LimitBreaks >= db.Constants.LimitBreakRanks) return 0;
+            return db.Rarities[RarityOf(db, b, id)].LimitBreakCost * (item.LimitBreaks + 1);
+        }
+
         /// <summary>
         /// Owned items of <paramref name="b"/> ordered best first: <see cref="RatedValue"/> (higher first), ties by rarity
         /// (higher first) then id ordinal (04 sections 6.3 and 7.2). Deterministic for any dictionary order.

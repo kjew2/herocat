@@ -232,7 +232,7 @@ namespace HeroCat.Runtime.Tests
             BootFlow.Run(Options(clock, store)).Runner.OnPause();
 
             clock.Set(TestContent.T0);   // the device clock went back
-            var serverClock = new ServerClock(clock);
+            var serverClock = new ServerClock(device: clock);
             var o = Options(clock, store);
             var build = o.Services;
             o.Services = (db, st) => GameServices.Build(BackendMode.Local, new ServicesOptions

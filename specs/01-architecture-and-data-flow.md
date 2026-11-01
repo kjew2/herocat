@@ -80,7 +80,7 @@ public static GameServices Build(BackendMode mode, ServicesOptions o)   // o: da
     if (mode == BackendMode.Local)
         return new GameServices
         {
-            Clock    = new ServerClock(timeApi: null),               // serves device clock floored at last save; IsAuthoritative = false
+            Clock    = new ServerClock(api: null),                   // serves device clock floored at last save; IsAuthoritative = false
             Summon   = new LocalSummonService(sim, db),              // same algorithm as the server (04, 08); reads state, never writes it
             Saves    = new LocalSaveStore(Path.Combine(dataDir, "saves")),
             Inbox    = new LocalInboxService(),                      // empty inbox, grants from tutorial only
@@ -310,6 +310,8 @@ public sealed class SessionRunner
 
         if (dt > IN_APP_GAP_SEC) { ResumeFromGap(); acc = 0; return; }    // frozen without a pause callback (debugger, OS freeze)
 
+        if (svc.Clock is IClockResync c && c.ResyncDue) _ = c.SyncAsync();   // CLOCK_RESYNC_SEC without traffic (02 11.1)
+
         while (pending.Count > 0) Issue(pending.Dequeue());
 
         acc = Math.Min(acc + dt, IN_APP_GAP_SEC);
@@ -337,14 +339,14 @@ public sealed class SessionRunner
 
     void ResumeFromGap()
     {
-        _ = svc.Clock.SyncAsync();                                     // fire and forget; the result lands on a later frame
-        long now = svc.Clock.NowServerSeconds;
+        long now = svc.Clock.NowServerSeconds;                         // the extrapolated time (8.2 step 1)
         Issue(new ApplyServerTime(now));                               // re-anchor; day/week rollover first
         Issue(new ComputeOfflineCatchup(now));                         // 06 algorithm inside Apply; stores or sums into Offline.Pending
                                                                        // and stamps LastTickServerTime; does NOT credit yet (8.7)
         bus.Publish(sim.DrainEvents());
         SaveNow(SaveTrigger.Resume);
         lastMono = MonoClock.Ticks(); lastClockSyncMono = lastMono;
+        _ = svc.Clock.SyncAsync();                                     // fire and forget, never throws; the result lands on a later frame
     }
 
     void SaveNow(SaveTrigger t)
@@ -576,7 +578,7 @@ sequenceDiagram
 ```
 
 1. `ResumeFromGap` runs synchronously inside the callback using the extrapolated server time (monotonic offset from the last sync, 02 section 11). The sync request is fired but not awaited.
-2. If the sync later reports a server time that differs from the extrapolation by more than `CLOCK_JUMP_WARN_SEC = 300`, emit `clock_anomaly` and, if the real elapsed time was *longer*, credit the difference as a second catch-up window (`ApplyServerTime` then `ComputeOfflineCatchup` with the corrected now; it sums into the pending record and the effective cap applies to the sum, 8.7). If shorter, nothing is taken back (the discrepancy is bounded by the cap and logged). As built (issue #65): a clock that implements `IClockResync` (`ServerClock`, and the client's `OffsetClock` wrapper) raises `Resynced(extrapolated, synced)` after each observation, from any thread; `SessionRunner` handles it on its next frame in `OnClockSynced`, which tracks `clock_anomaly{kind: resync, seconds, negative}` and, when longer, issues the two commands and saves. Firing the sync itself is `ServerClock.SyncAsync` (issue #149).
+2. If the sync later reports a server time that differs from the extrapolation by more than `CLOCK_JUMP_WARN_SEC = 300`, emit `clock_anomaly` and, if the real elapsed time was *longer*, credit the difference as a second catch-up window (`ApplyServerTime` then `ComputeOfflineCatchup` with the corrected now; it sums into the pending record and the effective cap applies to the sum, 8.7). If shorter, nothing is taken back (the discrepancy is bounded by the cap and logged). As built (issue #65): a clock that implements `IClockResync` (`ServerClock`, and the client's `OffsetClock` wrapper) raises `Resynced(extrapolated, synced)` after each observation, from any thread; `SessionRunner` handles it on its next frame in `OnClockSynced`, which tracks `clock_anomaly{kind: resync, seconds, negative}` and, when longer, issues the two commands and saves. The sync itself is `IClockResync.SyncAsync` (02 section 11.1, issue #149), fired without awaiting at the end of `ResumeFromGap` (boot, resume, gap recovery) and on the frame `ResyncDue` turns true (`CLOCK_RESYNC_SEC` without an observation); it never throws, and a failure keeps the offset.
 3. Pending summon or IAP intents in `state.Pending` are resolved (8.5, 8.9) after the offline modal closes.
 4. Cloud save: `CloudSaveClient` fetches `GET /save/meta`; if the server's `saveSeq` is ahead of local and from another device -> conflict modal (02 section 9.4), otherwise nothing. This is the only time a conflict is detected mid-session.
 

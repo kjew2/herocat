@@ -471,6 +471,10 @@
       "text": "Not ready yet"
     },
     {
+      "key": "reject.dungeon_run_in_progress",
+      "text": "Finish the dungeon run first"
+    },
+    {
       "key": "reject.empty_cell",
       "text": "No fish there"
     },
@@ -497,6 +501,10 @@
     {
       "key": "reject.level_mismatch",
       "text": "Fish must be the same level"
+    },
+    {
+      "key": "reject.limit_break_capped",
+      "text": "Already at max limit break"
     },
     {
       "key": "reject.locked",
@@ -589,6 +597,14 @@
     {
       "key": "reject.slot_occupied",
       "text": "That slot is taken"
+    },
+    {
+      "key": "reject.stage_not_cleared",
+      "text": "Clear this stage first"
+    },
+    {
+      "key": "reject.stage_out_of_range",
+      "text": "No such stage"
     },
     {
       "key": "reject.stale_request",

@@ -25,12 +25,13 @@ namespace HeroCat.Runtime.Tests
         /// <summary>Boots (load or create, sync, catch-up, save). Asserts the boot is Ready unless <paramref name="expectReady"/> is false.</summary>
         public static TestSession Open(FakeClock clock = null, ISaveSlotStore store = null, MemoryAnalytics analytics = null,
                                        Action<SessionRunnerOptions> configure = null, bool expectReady = true,
-                                       INetTransport network = null, IClock clockOverride = null, Guid? installId = null)
+                                       INetTransport network = null, IClock clockOverride = null, Guid? installId = null,
+                                       FakeMonoClock mono = null)
         {
             var t = new TestSession
             {
                 Clock = clock ?? new FakeClock(TestContent.T0),
-                Mono = new FakeMonoClock(),
+                Mono = mono ?? new FakeMonoClock(),
                 Store = store ?? new MemorySaveStore(),
                 Analytics = analytics ?? new MemoryAnalytics(),
                 Log = new ListCommandLog(),

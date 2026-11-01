@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using HeroCat.Runtime.Services;
 
 namespace HeroCat.Client.Core
@@ -24,6 +26,12 @@ namespace HeroCat.Client.Core
             add { if (_inner is IClockResync r) r.Resynced += Shifted(value); }
             remove { if (_inner is IClockResync r) r.Resynced -= Shifted(value); }
         }
+
+        /// <summary>Forwards the wrapped clock's resync cadence and sync (02 section 11.1; issue #149).</summary>
+        public bool ResyncDue => _inner is IClockResync r && r.ResyncDue;
+
+        public Task<bool> SyncAsync(CancellationToken ct = default) =>
+            _inner is IClockResync r ? r.SyncAsync(ct) : Task.FromResult(false);
 
         readonly Dictionary<Action<long, long>, Action<long, long>> _shifted =
             new Dictionary<Action<long, long>, Action<long, long>>();

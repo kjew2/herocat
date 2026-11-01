@@ -257,6 +257,13 @@ Code must read every constant from content data (spec 09), never from a literal.
 | `OFFLINE_MIN_S` | 60 | S | Gaps shorter than this credit nothing and show no modal. |
 | `TUTORIAL_DIAMONDS` | 1500 | S | One-time grant at profile creation, together with one starter weapon `TUTORIAL_WEAPON_ID` so collection screens are never empty; both come only from 09's `tut_welcome` step grant, guarded by `Tutorial.TutorialDiamondsGranted` (02; issue #46). |
 | `LOGIN_DIAMONDS` | 50 | I | Once per day key, auto-granted by `EnsureDay` with reason `LOGIN`. A `constants` row; the `d_login` daily quest only counts toward the bonus thresholds and pays nothing (issue #20). |
+| `FIRST_CLEAR_DIAMONDS` | 10 | I | Per boss stage cleared for the first time, reason `FIRST_CLEAR`, keyed off `HighestFirstClearBoss`; paid from M0 (03, 06 section 1.2). |
+| `DUNGEON_TICKETS_PER_DAY` | 2 | S | Per dungeon; rollover tops each `TICKET_*` dungeon balance up to it, never down (06 section 4.2). |
+| `DUNGEON_FLOOR_STAGE_STEP` | 20 | S | Dungeon floor `f` is as hard as the stage-`20f` boss (06 section 6.1). |
+| `DUNGEON_FLOORS_MVP` | 40 | S | Floors per dungeon in MVP (06 section 6.4). |
+| `EXP_DUNGEON_KILLS` | 300 | S | EXP Dungeon floor `f` pays this many kills' EXP at stage `20f` (06 section 6.3). |
+| `DAILY_GIFT_WEAPON_TICKETS` | 1 | S | `TICKET_SUMMON_WEAPON` per day from `ClaimDailyGift`, reason `DAILY_GIFT` (06 section 8.3). |
+| `INBOX_EXPIRY_DAYS` | 30 | S | Default inbox item lifetime from `availableAt`; `IAP` items never expire (06 section 9). |
 
 ### 6.3 Summons
 
@@ -318,8 +325,6 @@ Assumed F2P player: 2 h active per day (the bot harness splits it into two 60-mi
 | 30 | 550 |
 
 Days 14 and 30 match the sibling's targets by construction; days 1-7 are higher because `HP_G` is flatter and there is no gear-tier layer to wait for. These numbers come from 03's scratch model and are provisional until `tools/power_curve_model.py` reproduces them. They are also a content table (`progress_targets`, 09) so the bots read them from `ContentDb`. Known open balance problem: the scratch model still shows a ~460-active-minute wall around day 20 when the summon layers saturate. The fix is chosen from 03 section 9's levers (candidates `RES_ATK` 0.08 per level, limit-break repricing) using `tools/power_curve_model.py` output, and is pending that tool; 03 AC18 gains a day-14-to-30 wall bound (issue #36).
-
-Worked numbers in 06 and 07 that were written against the earlier day-1 = stage 90 target are stale by roughly 2.5x on early-day stage references; the arithmetic in those sections is otherwise unaffected.
 
 ## 7. The power formula
 
@@ -447,11 +452,11 @@ These were open or contradictory across the writer-produced specs and are now se
 15. **Summon tickets are a server ledger from MVP** (authority table, section 4). 06's per-day ticket income (1 weapon ticket from the daily gift; about 0.15 skill and 0.15 companion tickets per day from weeklies and achievements) is the figure 04's banner-level model must use; 04's bot assumed W 2 / S 1 / C 1 and needs a re-sync.
 16. **Dungeon tickets are debited on clear only.** Failed and abandoned runs cost nothing; `SCR_DUNGEONS` previews clearability with the deterministic sim. 02's recovery rule P16 was patched to drop the refund.
 17. **Quests are three-state** (`IN_PROGRESS` / `COMPLETED` / `CLAIMED`) with an explicit claim; unclaimed daily rewards are forfeited at rollover. Quest progress is keyed by string quest id, never positionally (02, 06, 09).
-18. **Diamond budget.** `DIAMONDS_PER_DAY_F2P = 400` is met as a steady-state floor by counting 8 of 11 dailies plus weekly missions amortised at 50/day; late-game income tapers to about 384-414/day, which is inside tolerance. The daily free gift adds one weapon ticket (~100 diamonds of pull value) on top.
+18. **Diamond budget.** `DIAMONDS_PER_DAY_F2P = 400` is met as a steady-state floor by counting 8 of 11 dailies plus weekly missions amortised at 50/day; late-game income tapers to about 384-407/day, which is inside tolerance. The daily free gift adds one weapon ticket (~100 diamonds of pull value) on top.
 19. **Packages are diamonds on a delivery schedule only** (starter 600; weekly 300 + 100/day; monthly 1000 + 100/day). No ticket or collectible bundles, so decision 7 stays strict. Reopen only with soft-launch revenue data.
 20. **Reason enum completed** (contract 6). `TUTORIAL` replaces 01's and 06's earlier use of `ADMIN` for the tutorial grant; both were patched.
 21. **Week key** is `floor((dayKey - 4) / 7)`, Monday 00:00 UTC. 06 was patched from an off-by-one form.
-22. **`MoveFish` is accepted** (MVP): cosmetic reposition of a fish to an empty cell, consumes no stream, emits `FishMoved`. 05 should add the command and its rejection reasons.
+22. **`MoveFish` is accepted** (MVP): cosmetic reposition of a fish to an empty cell, consumes no stream, emits `FishMoved`. 05 section 4.5 owns the command and its rejection reasons (`BAD_CELL`, `EMPTY_CELL`, `CELL_OCCUPIED`, `BOARD_LOCKED`; issue #166).
 23. **Content versioning** is `YYYY.MM.DD[.N]`; hot-apply allowlist as in contract 3; `hero_levels` and `tank` are one-row rule tables; `progress_targets` is a content table (09).
 24. **Enemy skins hash `(stage, killIndex)`** rather than consuming a sixth stream (09 section 5.6).
 25. **Bot harness epoch** is a Monday 09:00 UTC with two 60-minute sessions per day, so both weekly keys and the UTC rollover are exercised in a 30-day run; gap lengths alternate so that on alternate days the evening session runs across 00:00 UTC and the in-session rollover is exercised too (amended by decision 61, issue #29); diamond income defaults to the sim's own quests, with a flat `DIAMONDS_PER_DAY_F2P` mode kept only for parity with `power_curve_model.py` (10).
@@ -460,7 +465,7 @@ These were open or contradictory across the writer-produced specs and are now se
 28. **`IDEMPOTENCY_TTL_H = 24`**; a pending summon older than that executes fresh rather than replaying (02, 08).
 29. **Soft-launch markets**: Philippines and Canada, with a New Zealand technical launch (10). Belgium paid-summon handling is deferred to soft launch (08 open question 5).
 
-Known stale spots left for the next pass rather than patched blind: early-day stage numbers in 06 and 07 worked examples (written against day 1 = stage 90); 05 lacks `MoveFish` (decision 22); the Fish Coin Dungeon reward `50 * f` may overshoot the 25-50% income share band and `tools/fish_model.py` must decide between it and `50 * f^0.7` (06 open question).
+Known stale spots left for the next pass rather than patched blind: the Fish Coin Dungeon reward `50 * f` falls under the 25-50% income share band on days 1 and 7 in `tools/fish_model.py`, and the curve (`50 * f` or `50 * f^0.7`) waits on #165 and #249 item 6 (06 open question).
 
 ### 12.2 Decisions made after the spec rewrite
 

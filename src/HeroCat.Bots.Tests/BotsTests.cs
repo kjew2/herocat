@@ -220,6 +220,31 @@ namespace HeroCat.Bots.Tests
         }
 
         [Test]
+        public void LimitBreak_PicksTheAffordableItemWithTheMostLnDpsPerCandy()   // 03 section 8.3 step 3 (#162)
+        {
+            var ctx = Started();
+            Assert.That(GreedyF2PBot.BestLimitBreak(ctx, out _), Is.Null, "no Rock Candy");
+            string mythic = ctx.Content.Pool(Banner.WEAPON, Rarity.MYTHIC)[0];
+            string unequippedSkill = ctx.Content.Pool(Banner.SKILL, Rarity.MYTHIC)[0];
+            ctx.State.Weapons.Items[mythic] = new OwnedItem { Copies = 1 };
+            ctx.State.Skills.Items[unequippedSkill] = new OwnedItem { Copies = 1 };
+            Assert.That(ctx.Apply(new EquipWeapon(mythic)).Ok, Is.True);
+            ctx.State.Wallet.RockCandy = 1_000_000;
+            ctx.Query.MarkDirty();
+
+            string best = GreedyF2PBot.BestLimitBreak(ctx, out double v);
+            Assert.That(best, Is.Not.Null);
+            Assert.That(v, Is.GreaterThan(0));
+            Assert.That(GreedyF2PBot.LimitBreakLnDpsPerCandy(ctx.Query, unequippedSkill), Is.EqualTo(0), "an unequipped skill adds no DPS");
+            foreach (var id in ctx.State.Weapons.Items.Keys.Concat(ctx.State.Skills.Items.Keys))
+                Assert.That(GreedyF2PBot.LimitBreakLnDpsPerCandy(ctx.Query, id), Is.LessThanOrEqualTo(v), id);
+
+            long cost = ctx.Query.NextLimitBreakCost(best);
+            ctx.State.Wallet.RockCandy = cost - 1;
+            Assert.That(GreedyF2PBot.BestLimitBreak(ctx, out _), Is.Not.EqualTo(best), "unaffordable items are skipped");
+        }
+
+        [Test]
         public void Diamonds_TenPullPreferredWhenAffordable()
         {
             var ctx = Started();

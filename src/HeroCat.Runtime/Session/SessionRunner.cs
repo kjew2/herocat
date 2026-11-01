@@ -90,6 +90,7 @@ namespace HeroCat.Runtime.Session
         long _lastMono, _lastSaveMono, _lastClockSyncMono;
         bool _dirty, _started, _clockAnomalyReported;
         SummonFlow _summons;
+        readonly IClockResync _resync;
         readonly object _syncLock = new object();
         readonly List<(long extrapolated, long synced)> _syncsLanded = new List<(long, long)>();
 
@@ -108,7 +109,8 @@ namespace HeroCat.Runtime.Session
             long now = _mono.Ticks;
             _lastMono = _lastSaveMono = _lastClockSyncMono = now;
             // 01 section 8.2 step 2: a clock sync may land on any thread; OnFrame handles it on the main thread.
-            if (services.Clock is IClockResync resync) resync.Resynced += PostClockSync;
+            _resync = services.Clock as IClockResync;
+            if (_resync != null) _resync.Resynced += PostClockSync;
         }
 
         public Simulation Sim => _sim;
@@ -191,6 +193,8 @@ namespace HeroCat.Runtime.Session
             if (!_started) Start();
             _opt.Dispatcher?.RunPending();
             HandleLandedClockSyncs();
+            // 02 section 11.1: CLOCK_RESYNC_SEC of foreground time without an observation fires a /time sync (issue #149).
+            if (_resync != null && _resync.ResyncDue) _ = _resync.SyncAsync();
 
             long mono = _mono.Ticks;
             double dt = (mono - _lastMono) / (double)_mono.Frequency;
@@ -342,7 +346,7 @@ namespace HeroCat.Runtime.Session
         {
             if (_bus.IsPublishing) throw new InvalidOperationException("OnClockSynced called from an EventBus handler");
             long jump = syncedServerSeconds - extrapolatedServerSeconds;
-            if (Math.Abs(jump) <= RuntimeConfig.CLOCK_JUMP_WARN_SEC) return;
+            if (Math.Abs(jump) <= RuntimeConfig.CLOCK_JUMP_WARN_SEC) return;   // TODO(#257): 02 section 11.3 says 5 s when behind
             _svc.Analytics?.Track("clock_anomaly", new Dictionary<string, object>
             {
                 ["kind"] = "resync", ["seconds"] = jump, ["negative"] = jump < 0,
@@ -383,8 +387,6 @@ namespace HeroCat.Runtime.Session
 
         void SyncAndCatchUp()
         {
-            // TODO(#149): fire ServerClock.SyncAsync here (not awaited). Its result lands through IClockResync.Resynced, and
-            // OnClockSynced credits a jump over CLOCK_JUMP_WARN_SEC as the second catch-up window (01 section 8.2 step 2).
             long now = _svc.Clock.NowServerSeconds;
             // 02 section 11.3: a resume behind the catch-up anchor credits nothing (the sim never moves the anchor back).
             long behind = _sim.State.Time.LastTickServerTime - now;
@@ -395,6 +397,10 @@ namespace HeroCat.Runtime.Session
             SaveNow(SaveTrigger.Resume);
             _lastMono = _mono.Ticks;
             _lastClockSyncMono = _lastMono;
+            // 01 section 8.2 step 1: the catch-up above used the extrapolated time; the sync is fired, not awaited (issue
+            // #149). Its result lands through IClockResync.Resynced on a later frame, where OnClockSynced credits a jump
+            // over CLOCK_JUMP_WARN_SEC as the second catch-up window (step 2). It never throws.
+            if (_resync != null) _ = _resync.SyncAsync();
         }
     }
 }
