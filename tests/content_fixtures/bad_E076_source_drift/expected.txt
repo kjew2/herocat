@@ -1,0 +1,1 @@
+CONTENT E076 localization[awakening.rank_1.name].ja: en text changed since this translation was exported ('Awakened 1' -> 'Awakened I')

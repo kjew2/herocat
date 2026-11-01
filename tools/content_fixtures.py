@@ -15,9 +15,14 @@ good_minimal only, not sixty fixtures:
                     "remove_tables": [table, ...],
                     "previous": {"edits": [...], "drop_column": [table, column]},   # E09x: a previous build
                     "args": ["--strict-warnings", "--ui-keys", "{ui_keys}"],          # {ui_keys} = ./ui_keys.txt
+                    "import": {"locale": "ja", "fill": {key: text}},   # E076: run import-translations, not build
                     "csharp": true}                         # ContentDb.Build must report the same first line
     <table>.csv    optional: adds or replaces that table wholesale
     expected.txt   the first stderr line(s) of `build`; three_defects holds three lines in table order
+
+`import` makes a translator round-trip fixture (09 section 13.2, issue #213): `translator-csv --locale <locale>` of the
+baseline, with `fill` written into the locale column, is what the translator returns; then the edits change the source
+under it and the fixture runs `import-translations` on the result instead of `build`.
 
 `csharp: true` marks the loader-scope fixtures (09 section 8.6): `emit` builds them with the exporter's fixture-only
 `--emit-invalid` (the defect survives into the JSON) and writes `<out>/<name>/expected.txt`; the C# test loads each
@@ -25,6 +30,7 @@ through ContentLoader and asserts ContentDb.Build's first error line equals it. 
 """
 import argparse
 import contextlib
+import csv
 import io
 import json
 import os
@@ -110,6 +116,18 @@ def materialize(name, tmp):
             with open(p, "w", encoding="utf-8") as f:
                 f.write(ex.dumps(doc))
         args += ["--previous", prev]
+    imp = s.get("import")
+    if imp:   # E076-style: export the baseline for a translator, fill it, then let the edits move the source under it
+        text, errs = ex.translator_csv(src, imp["locale"])
+        if errs:
+            raise RuntimeError(f"{name}: translator-csv failed: {list(errs)}")
+        rows = list(csv.reader(io.StringIO(text)))
+        for r in rows[1:]:
+            r[2] = imp.get("fill", {}).get(r[0], r[2])
+        path = os.path.join(tmp, "translator.csv")
+        with open(path, "w", encoding="utf-8", newline="") as f:
+            csv.writer(f, lineterminator="\n").writerows(rows)
+        args += ["--csv", path, "--locale", imp["locale"]]
     apply_edits(src, s, fdir)
     for a in s.get("args", []):
         args.append(a.replace("{ui_keys}", os.path.join(fdir, "ui_keys.txt")))
@@ -120,6 +138,8 @@ def run(name, out=None, emit_invalid=False):
     """Builds one fixture; returns (exit code, stderr lines)."""
     with tempfile.TemporaryDirectory() as tmp:
         src, args = materialize(name, tmp)
+        if spec(name).get("import"):
+            return run_main(["import-translations", "--src", src] + args)
         argv = ["build", "--src", src, "--out", out or os.path.join(tmp, "out"),
                 "--dto-out", os.path.join(tmp, "dto.cs")] + args
         if emit_invalid:
