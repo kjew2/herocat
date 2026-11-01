@@ -7,7 +7,7 @@ namespace HeroCat.Server.Infrastructure.Redis;
 /// <summary>
 /// The process's one Redis multiplexer (specs/08 section 9.1: a cache and lock service only; rate limits, summon locks,
 /// the maintenance flag). Connected on first use, so the api starts, and serves <c>/health</c>, without Redis.
-/// Key names and TTLs live in one constants file with the schema (#154).
+/// Key names and TTLs live in <see cref="RedisKeys"/> (#154).
 /// </summary>
 public interface IRedisConnection
 {
