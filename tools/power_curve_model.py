@@ -1171,7 +1171,7 @@ def print_cadence(p, bot):
               f"{days} days); level reached on day: " + ", ".join(f"L{k} d{v}" for k, v in sorted(lv.items()) if k > 1))
     w = bot.banner_level_day.get("WEAPON", {})
     print(f"  weapon banner level 4: {'day ' + str(w[4]) if 4 in w else 'not reached in ' + str(days) + ' days'} "
-          f"(target days 20-35, 00 decision 70; thresholds pending this output)")
+          f"(target days 20-35 on the 20-seed median, 00 decision 70; one seed, see --check)")
 
 
 def median_rows(runs, seeds):
@@ -1203,6 +1203,11 @@ def print_sweep(p, a, seeds, runs, rows):
         lv = [max(runs[s].banner_level_day[b]) for s in seeds]
         print(f"  {b} pulls/day: median {statistics.median(ppd):.2f} (range {ppd[0]:.2f}..{ppd[-1]:.2f}); "
               f"banner level at day {a.days}: median {statistics.median(lv):g}  <- cadence input for BANNER_LVL_EXP (issue #38)")
+        l4 = sorted(runs[s].banner_level_day[b].get(4, a.days + 1) for s in seeds)
+        missed = sum(1 for d in l4 if d > a.days)
+        print(f"    {b} level 4 day: median {statistics.median(l4):g} (range {l4[0]}..{l4[-1]}; {missed}/{len(seeds)} seeds "
+              f"not by day {a.days}, counted as day {a.days + 1})"
+              + ("  <- target days 20-35 (00 decision 70)" if b == "WEAPON" else ""))
     for rank in sorted({r for s in seeds for r in runs[s].gate_day}):
         lags = [runs[s].awaken_day[rank] - runs[s].gate_day[rank] for s in seeds
                 if rank in runs[s].gate_day and rank in runs[s].awaken_day]

@@ -268,7 +268,7 @@ Code must read every constant from content data (spec 09), never from a literal.
 | `PITY_HARD` | 80 | I | Forced L+. P99 is 62, so this is a published guarantee, not a design lever. |
 | `M_SHARE_OF_LPLUS` | 1/6 | I | |
 | 10-pull guarantee | at least one E+ | I | If slots 1-9 are all below Epic, slot 10 runs the normal L+ check first and is Epic if it fails; never a renormalised draw over E/L/M, so the published L+ rate is unchanged. 04 owns the one pull algorithm (banner level evaluated per pull) shared by the server, `LocalSummonService` and `gacha_model.py` (issue #24). |
-| `BANNER_EXP_PER_PULL` | 1 | S | Banner level thresholds (`BANNER_LVL_EXP`) in 04. Per-banner F2P pull cadence is computed by the tool from 06's income and 03's bot policy, never hand-entered; `BANNER_LVL_EXP` is retuned from that output so weapon banner level 4 lands in days 20-35. Threshold values are pending the tool (issue #38). |
+| `BANNER_EXP_PER_PULL` | 1 | S | Banner level thresholds (`BANNER_LVL_EXP`) in 04. Per-banner F2P pull cadence is computed by the tool from 06's income and 03's bot policy, never hand-entered; `BANNER_LVL_EXP` is tuned from that output so weapon banner level 4 lands in days 20-35: 0, 10, 25, 55, 90, 145, 215, 305, 415, 540 (20-seed median day 27 in `power_curve_model.py --check`; issue #38). |
 | `SKILL_SLOTS` | 6 | I | |
 | `COMPANION_SLOTS` | 4 | S | |
 | `RUNE_SLOTS` (P1) | 6 | S | |
@@ -460,7 +460,7 @@ These were open or contradictory across the writer-produced specs and are now se
 28. **`IDEMPOTENCY_TTL_H = 24`**; a pending summon older than that executes fresh rather than replaying (02, 08).
 29. **Soft-launch markets**: Philippines and Canada, with a New Zealand technical launch (10). Belgium paid-summon handling is deferred to soft launch (08 open question 5).
 
-Known stale spots left for the next pass rather than patched blind: early-day stage numbers in 06 and 07 worked examples (written against day 1 = stage 90); 04's banner-level thresholds, pending the tool-computed cadence (decision 70); 05 lacks `MoveFish` (decision 22); the Fish Coin Dungeon reward `50 * f` may overshoot the 25-50% income share band and `tools/fish_model.py` must decide between it and `50 * f^0.7` (06 open question).
+Known stale spots left for the next pass rather than patched blind: early-day stage numbers in 06 and 07 worked examples (written against day 1 = stage 90); 05 lacks `MoveFish` (decision 22); the Fish Coin Dungeon reward `50 * f` may overshoot the 25-50% income share band and `tools/fish_model.py` must decide between it and `50 * f^0.7` (06 open question).
 
 ### 12.2 Decisions made after the spec rewrite
 
@@ -504,7 +504,7 @@ Known stale spots left for the next pass rather than patched blind: early-day st
 67. **Stage select farms a side stage**: `Combat.Stage` stays the frontier, `SelectStage(s)` farms `s <= HighestCleared` (02's meaning: any stage completed) without advancing anything, `SelectStage(null)` returns, first clears key off `HighestFirstClearBoss`, and the list's boss challenge is the frontier boss only (section 5.1). Issue #35.
 68. **Day-20 wall and floor misses are fixed with the tool**: levers come from 03 section 9 using `tools/power_curve_model.py` output (pending; candidates `RES_ATK` 0.08, limit-break repricing), 03 AC18 gains a day-14-to-30 wall bound, and speed is permanently exempt from the 5% floor (sections 6.6, 7). Issue #36.
 69. **Limit-break names**: reason `LIMIT_BREAK`, constant `LIMIT_BREAK_RANKS` (in `REQUIRED_CONSTANTS`), per-rarity columns `rarities.limit_break_cost` and `rarities.dupe_overflow_rock_candy` (section 6.5). Issue #37.
-70. **Banner-level cadence comes from the tool**: per-banner F2P pulls are computed from 06's income and 03's bot policy, and `BANNER_LVL_EXP` is retuned so weapon banner level 4 lands in days 20-35; hand-entered pulls-per-day figures are removed and the values are pending the tool (section 6.3; supersedes decision 15's re-sync note). Issue #38.
+70. **Banner-level cadence comes from the tool**: per-banner F2P pulls are computed from 06's income and 03's bot policy, and `BANNER_LVL_EXP` is retuned so weapon banner level 4 lands in days 20-35; hand-entered pulls-per-day figures are removed. Applied: the placeholder thresholds scaled by 0.18 (rounded to 5) give 0, 10, 25, 55, 90, 145, 215, 305, 415, 540 and a 20-seed median weapon level-4 day of 27 (section 6.3; supersedes decision 15's re-sync note). Issue #38.
 71. **`mpSufficiency` counts `MP_REGEN` companions**: the net MP they restore counts as regen in the rated formula (03 adopts 04's form); 04 criterion 11 is corrected to about 15.6 +/- 1 casts per minute for the other three (section 7). Issue #39.
 72. **The Fish Board is hidden and frozen during dungeon runs**: passive board DPS only, the tank keeps refilling, board commands are rejected `Locked` / `BOARD_LOCKED` while `Combat.Mode == Dungeon` (section 5.1). Issue #40.
 73. **Fish above a lowered level cap are kept**: they keep their board DPS and cannot merge; loads clamp fish only to the `fish_levels` row count, and the tank stock clamp to `TankCap` stays (section 6.4). Issue #41.

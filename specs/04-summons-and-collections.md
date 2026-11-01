@@ -144,30 +144,30 @@ static double PityRate(BannerDef d, int n) =>
 | 13 | Monte Carlo 1,000,000 pulls, seed 7, level 1 | L+ frequency within 0.1 pp of 3.657%; M within 0.03 pp of 0.609%; C/R/E split within 0.3 pp of 0.60/0.28/0.09 of non-L+ |
 | 14 | Monte Carlo 1,000,000 pulls at banner level 10 | C/R/E split within 0.3 pp of 0.42/0.388/0.162 of non-L+; L+ unchanged |
 | 15 | Same seed and counter on two `BannerState`s | identical 1,000-pull sequences; after a save/load round-trip the next pull equals the un-restored copy's |
-| 16 | Banner level thresholds | `Exp` 0, `BANNER_LVL_EXP[2] - 1`, `BANNER_LVL_EXP[2]`, `BANNER_LVL_EXP[10] - 1`, `BANNER_LVL_EXP[10]` and a value above it give levels 1, 1, 2, 9, 10, 10 (values read from content; with today's placeholder thresholds: 0, 49, 50, 2999, 3000, 10000; issue #38) |
+| 16 | Banner level thresholds | `Exp` 0, `BANNER_LVL_EXP[2] - 1`, `BANNER_LVL_EXP[2]`, `BANNER_LVL_EXP[10] - 1`, `BANNER_LVL_EXP[10]` and a value above it give levels 1, 1, 2, 9, 10, 10 (values read from content; with today's thresholds: 0, 9, 10, 539, 540, 10000; issue #38) |
 
 ## 4. Banner level
 
 Each pull on a banner grants `BANNER_EXP_PER_PULL = 1` EXP to that banner, paid or ticket, single or 10-pull slot. Level is the count of thresholds reached:
 
-| Level | `BANNER_LVL_EXP` (cumulative pulls; placeholder, pending retune, issue #38) | C | R | E | L | M | P(E+) |
+| Level | `BANNER_LVL_EXP` (cumulative pulls; tuned from the tool's cadence, issue #38) | C | R | E | L | M | P(E+) |
 |---|---|---|---|---|---|---|---|
 | 1 | 0 | 0.600 | 0.280 | 0.090 | 0.025 | 0.005 | 0.120 |
-| 2 | 50 | 0.580 | 0.292 | 0.098 | 0.025 | 0.005 | 0.128 |
-| 3 | 150 | 0.560 | 0.304 | 0.106 | 0.025 | 0.005 | 0.136 |
-| 4 | 300 | 0.540 | 0.316 | 0.114 | 0.025 | 0.005 | 0.144 |
-| 5 | 500 | 0.520 | 0.328 | 0.122 | 0.025 | 0.005 | 0.152 |
-| 6 | 800 | 0.500 | 0.340 | 0.130 | 0.025 | 0.005 | 0.160 |
-| 7 | 1200 | 0.480 | 0.352 | 0.138 | 0.025 | 0.005 | 0.168 |
-| 8 | 1700 | 0.460 | 0.364 | 0.146 | 0.025 | 0.005 | 0.176 |
-| 9 | 2300 | 0.440 | 0.376 | 0.154 | 0.025 | 0.005 | 0.184 |
-| 10 | 3000 | 0.420 | 0.388 | 0.162 | 0.025 | 0.005 | 0.192 |
+| 2 | 10 | 0.580 | 0.292 | 0.098 | 0.025 | 0.005 | 0.128 |
+| 3 | 25 | 0.560 | 0.304 | 0.106 | 0.025 | 0.005 | 0.136 |
+| 4 | 55 | 0.540 | 0.316 | 0.114 | 0.025 | 0.005 | 0.144 |
+| 5 | 90 | 0.520 | 0.328 | 0.122 | 0.025 | 0.005 | 0.152 |
+| 6 | 145 | 0.500 | 0.340 | 0.130 | 0.025 | 0.005 | 0.160 |
+| 7 | 215 | 0.480 | 0.352 | 0.138 | 0.025 | 0.005 | 0.168 |
+| 8 | 305 | 0.460 | 0.364 | 0.146 | 0.025 | 0.005 | 0.176 |
+| 9 | 415 | 0.440 | 0.376 | 0.154 | 0.025 | 0.005 | 0.184 |
+| 10 | 540 | 0.420 | 0.388 | 0.162 | 0.025 | 0.005 | 0.192 |
 
 Rule: per level above 1, `C -= BANNER_LVL_C_SHIFT (0.020)`, `R += BANNER_LVL_R_SHIFT (0.012)`, `E += BANNER_LVL_E_SHIFT (0.008)`; L and M never change. Every row sums to 1.0 within 1e-9 and the content validator (09) rejects a `banner_levels` table that does not. The table is content, not code: the sim reads the row for the current level; the shift constants exist only so the sheet can regenerate the rows.
 
 What the player sees: `SCR_SUMMON` shows the current level's full rate table, the next threshold ("12 pulls to level 4"), and a note "Legendary and Mythic rates do not change with level".
 
-Threshold rule (issue #38): F2P pull cadence per banner is never hand-entered. `gacha_model.py` computes it from 06's diamond and ticket income and 03's bot spending policy (section 14), and `BANNER_LVL_EXP` is retuned from that output so the F2P bot reaches weapon banner level 4 between day 20 and day 35. The thresholds in the table above are placeholders until that run; the tool reports the days at which the skill and companion banners level. A whale buying 3,000 pulls reaches level 10 on one banner; its E+ rate is 1.6x the F2P player's, its L+ rate identical. That is the intended shape of the paid edge on summons: more dupes and more Epics, not more Mythics per pull.
+Threshold rule (issue #38): F2P pull cadence per banner is never hand-entered. `gacha_model.py` computes it from 06's diamond and ticket income and 03's bot spending policy (section 14), and `BANNER_LVL_EXP` is retuned from that output so the F2P bot reaches weapon banner level 4 between day 20 and day 35. The table above is that retune: the original placeholder column (0, 50, 150, ..., 3000) scaled by 0.18 and rounded to multiples of 5, which keeps the level count and the shape. At the computed cadence (`power_curve_model.py --check`, 20 seeds, 30 days: weapon 2.20 pulls/day, range 1.60..3.23; skill 1.30; companion 0.43) the weapon banner reaches level 2 on day 1, level 3 around day 9-10 and level 4 on a median day 27 (range 16..34 over a 45-day run; 14 of 20 seeds by day 30). The skill banner reaches level 2 around day 8 and level 3 around day 17-18 and does not reach level 4 inside 30 days; the companion banner reaches level 2 around day 22-23 (2 of 20 seeds after day 30) and level 3 after day 30. Skill and companion have no separate level target. A whale buying 540 pulls reaches level 10 on one banner; its E+ rate is 1.6x the F2P player's, its L+ rate identical. That is the intended shape of the paid edge on summons: more dupes and more Epics, not more Mythics per pull.
 
 Banner level is a per-banner integer derived from the cumulative `BannerState.Exp` at read time, never stored, and not reset by anything (issue #7). P1 rate-up banners (section 9) share the parent banner's level and pity.
 
@@ -184,7 +184,7 @@ LevelMult(item)      = 1 + DUPE_LVL_BONUS * (EffectiveLevel - 1) # DUPE_LVL_BONU
 
 `LevelMult` scales a weapon's equipped pct and passive pct, a skill's `dpsPct` and per-cast numbers, a companion's ability magnitude, a rune's stat value. Level is derived from copies at read time and never stored (02's `OwnedItem { Copies, LimitBreaks, FirstAcquiredServerTime }`, issue #7), so retuning `DUPE_LVL_CUM` reflows every save.
 
-Expected pace, per weapon pull at banner level 1: a specific Common weapon (10 in the pool, 0.60 rate) gains a copy about every 17 pulls, so level 5 (16 copies) takes about 270 weapon pulls and level 10 about 2,700. A specific Legendary weapon (4 in the pool, consolidated L rate about 3.05%) gains a copy about every 130 pulls: level 3 (6 copies) takes about 790. The pace in days comes from the per-banner cadence `gacha_model.py` computes (section 14, issue #38); no hand-entered pulls-per-day figure is used. L and M leveling is the long tail; C/R/E leveling is the daily visible progress. That is the same split the sibling tuned and it is why the pools are small.
+Expected pace, per weapon pull at banner level 1: a specific Common weapon (10 in the pool, 0.60 rate) gains a copy about every 17 pulls, so level 5 (16 copies) takes about 270 weapon pulls and level 10 about 2,700. A specific Legendary weapon (4 in the pool, consolidated L rate about 3.05%) gains a copy about every 130 pulls: level 3 (6 copies) takes about 790. The pace in days comes from the per-banner cadence the tools compute (section 14, issue #38); no hand-entered pulls-per-day figure is used. At the computed F2P weapon cadence (20-seed median 2.20 pulls/day, range 1.60..3.23) about 66 weapon pulls land in 30 days, so a specific Common reaches about level 2-3 (4-5 copies) by day 30 and level 5 after roughly 120 days; the weapon banner level 4 (55 pulls) lands on a median day 27. L and M leveling is the long tail; C/R/E leveling is the daily visible progress. That is the same split the sibling tuned and it is why the pools are small.
 
 ### 5.2 Limit breaks (MVP, Rock Candy sink)
 
@@ -256,7 +256,7 @@ A weapon's `weapons` table row (09): `id`, `rarity`, `name_key`, `icon`, `atk_pc
 
 ### 6.2 Why the passive exists and what it is worth
 
-The equipped pct is a step function of luck: the player's best weapon. The passive is a sum over everything they have ever pulled, so every weapon pull moves it. Worked numbers, by weapon pulls made (which day the F2P bot reaches each row comes from `gacha_model.py`'s computed cadence, issue #38):
+The equipped pct is a step function of luck: the player's best weapon. The passive is a sum over everything they have ever pulled, so every weapon pull moves it. Worked numbers, by weapon pulls made (which day the F2P bot reaches each row comes from the computed cadence, issue #38: at the 20-seed median of 2.20 weapon pulls/day, 36 pulls is roughly days 15-20 and 94 pulls is past day 30):
 
 | Collection state | equipped | passive | `weaponMult` |
 |---|---|---|---|
@@ -462,7 +462,7 @@ Changes:
 6. `--vectors` writes `Fixtures/Summon/vectors.json` (section 3.4: the 16 named cases plus 08's row and batch vectors), which the C# sim and server tests only read, so the tests and the tool cannot drift (issues #14, #24). It also checks that its SplitMix64 reproduces the C# stream-sequence fixture in `Fixtures/Summon/`.
 7. `--mc N --seed S` runs N pulls on the Python SplitMix64 reference (sibling 03 section 5.4) with the exact `Pull` logic and prints observed C/R/E/L/M frequencies, guarantee fire rate and the L+ gap histogram, for vectors 13 and 14.
 
-It must print, in this order: the pity block (section 3.1 numbers), the soft ramp table, the ten-row rate table with `P(E+)` and guarantee numbers per level, the collection fill curve, the cadence block. `S` constants it validates: `BANNER_EXP_PER_PULL` and `BANNER_LVL_EXP` (F2P reaches weapon level 4 between day 20 and day 35 at the computed cadence; retuned from this output, issue #38), the shift constants (level 10 `P(E+) <= 0.20` so the paid E+ edge stays under 1.7x), pool sizes (a specific Common reaches level 5 inside 30 days of F2P weapon pulls, pending the tool's numbers: at the current pool size this needs roughly 270 pulls and may be unreachable, open question 8 in section 15; a specific Legendary does not reach level 3 inside 60 days), `COMPANION_SLOTS` and the companion `dps_pct` defaults (together with `power_curve_model.py`, the companion layer passes 5% by day 7), `WEAPON_PASSIVE_PCT` (passive is between 10% and 40% of the weapon layer on days 7 and 30).
+It must print, in this order: the pity block (section 3.1 numbers), the soft ramp table, the ten-row rate table with `P(E+)` and guarantee numbers per level, the collection fill curve, the cadence block. `S` constants it validates: `BANNER_EXP_PER_PULL` and `BANNER_LVL_EXP` (the 20-seed median day the F2P bot reaches weapon level 4 is between day 20 and day 35 at the computed cadence; `power_curve_model.py --check` prints it per banner, today day 27; issue #38), the shift constants (level 10 `P(E+) <= 0.20` so the paid E+ edge stays under 1.7x), pool sizes (a specific Common reaches level 5 inside 30 days of F2P weapon pulls, pending the tool's numbers: at the current pool size this needs roughly 270 pulls and may be unreachable, open question 8 in section 15; a specific Legendary does not reach level 3 inside 60 days), `COMPANION_SLOTS` and the companion `dps_pct` defaults (together with `power_curve_model.py`, the companion layer passes 5% by day 7), `WEAPON_PASSIVE_PCT` (passive is between 10% and 40% of the weapon layer on days 7 and 30).
 
 ## 15. Open questions
 
@@ -498,7 +498,7 @@ It must print, in this order: the pity block (section 3.1 numbers), the soft ram
 
 | Name | Value | Kind | Section | Note |
 |---|---|---|---|---|
-| `BANNER_LVL_EXP` | 0, 50, 150, 300, 500, 800, 1200, 1700, 2300, 3000 (placeholder) | S | 4 | Cumulative pulls for levels 1..10. Retuned from `gacha_model.py`'s computed cadence so weapon level 4 lands in days 20-35 (issue #38). |
+| `BANNER_LVL_EXP` | 0, 10, 25, 55, 90, 145, 215, 305, 415, 540 | S | 4 | Cumulative pulls for levels 1..10. Tuned from the computed cadence: 20-seed median weapon level 4 on day 27, inside days 20-35 (issue #38). |
 | `BANNER_LVL_C_SHIFT`, `BANNER_LVL_R_SHIFT`, `BANNER_LVL_E_SHIFT` | 0.020, 0.012, 0.008 per level | S | 4 | Generate the `banner_levels` rows; L/M fixed. |
 | `LIMIT_BREAK_RANKS` | 5 | S | 5.2 | Per item; 00 section 6.5 name, 09 `constants` (issue #37). |
 | `LIMIT_BREAK_COST[r]` | C 10 / R 20 / E 40 / L 80 / M 150, times rank (placeholder) | S | 5.2 | Rock Candy; column `rarities.limit_break_cost` (issue #37). Validated by `power_curve_model.py`; repricing pending the tool (issue #36). |

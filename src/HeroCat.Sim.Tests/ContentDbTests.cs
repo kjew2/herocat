@@ -140,7 +140,8 @@ namespace HeroCat.Sim.Tests
             Assert.That(w.PityRate(80), Is.EqualTo(1.0));
             Assert.That(w.PityRate(51), Is.EqualTo(0.03 + 0.0325).Within(1e-12));
             Assert.That(w.LevelFor(0), Is.EqualTo(1));
-            Assert.That(w.LevelFor(300), Is.EqualTo(4));
+            Assert.That(w.LevelFor(54), Is.EqualTo(3));   // BANNER_LVL_EXP[4] = 55 (04 section 4, issue #38)
+            Assert.That(w.LevelFor(55), Is.EqualTo(4));
             Assert.That(w.LevelFor(1_000_000), Is.EqualTo(10));
             Assert.That(Rarities().Select(r => w.Pool[r].Count), Is.EqualTo(new[] { 10, 8, 6, 4, 2 }));
             Assert.That(Rarities().Select(r => Db.Banners[Banner.SKILL].Pool[r].Count), Is.EqualTo(new[] { 14, 11, 8, 5, 2 }));

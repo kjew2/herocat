@@ -18,7 +18,7 @@
     "banner_levels": {
       "file": "banner_levels.json",
       "rows": 30,
-      "sha256": "3362c66a82aa0492715fc47b23edcdd4711ce187b759d1162fd8d90c8ad5a337"
+      "sha256": "7b39d7af528f00aadfe5c2c49cd154b3f39c83549eee89f943ef9cd76af61ad4"
     },
     "banners": {
       "file": "banners.json",
@@ -113,7 +113,7 @@
       "sha256": "597ab8c47635deeb8007e11033aba4681cd80f06412fc1f36952d14eb5b8db5c"
     }
   },
-  "content_hash": "c76420cddc455823e9aa79e1f0c882452d747ca8ac8efb728e26c7ccbed3948d",
+  "content_hash": "c96451e67c15b7393b5e86c63152770b4f3b90874d66fffb3d573cbda157db87",
   "s_constants": [
     "BASE_HP",
     "BOSS_ROCK_CANDY_P",
