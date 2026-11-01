@@ -1,4 +1,4 @@
-# Runs the full ./check.sh (specs/09) on every pull request and every push to main.
+# Runs the full ./check.sh (specs/10 section 6.2) on every pull request and every push to main.
 name: check
 
 on:

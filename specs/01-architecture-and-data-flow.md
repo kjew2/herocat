@@ -87,6 +87,7 @@ public static Services Build(BackendMode mode, string dataDir, ContentDb db, Sim
             Receipts = new DisabledReceiptValidator(),
             Config   = new LocalConfigService(),                     // bundled content only
             Dungeons = new LocalDungeonSeedService(sim),             // peeks the next `dungeon` draw; StartDungeon consumes it (8.8)
+            Analytics = new NullAnalyticsSink(),                     // no backend: events are dropped, Flush is a no-op
         };
     var api = new ApiClient(opts.BaseUrl, tokenStore);
     return new Services
@@ -98,6 +99,7 @@ public static Services Build(BackendMode mode, string dataDir, ContentDb db, Sim
         Receipts = new ReceiptClient(api),
         Config   = new ConfigClient(api, cacheDir),
         Dungeons = new DungeonSeedClient(api),                       // POST /dungeon/seed
+        Analytics = new AnalyticsSinks(api),                         // Firebase + backend economy events (08); flushed in 3.1
     };
 }
 ```
@@ -107,7 +109,7 @@ public static Services Build(BackendMode mode, string dataDir, ContentDb db, Sim
 ### 2.1 Base types
 
 ```csharp
-namespace HeroCat.Sim;
+namespace HeroCat.Sim {
 
 public abstract record Command
 {
@@ -125,10 +127,14 @@ public enum RejectCode                           // category: picks the UI prese
     SlotOccupied, BoardFull, TankEmpty, LevelMismatch, NotAvailable, RateLimited, BadArgument, StaleRequest
 }
 
-public readonly record struct ApplyResult(bool Ok, RejectCode Code, string? Reason)
+public readonly struct ApplyResult              // C# 9: no record struct (CLAUDE.md lessons)
 {
+    public readonly bool Ok; public readonly RejectCode Code; public readonly string? Reason;
+    public ApplyResult(bool ok, RejectCode code, string? reason) { Ok = ok; Code = code; Reason = reason; }
     public static readonly ApplyResult Accepted = new(true, RejectCode.None, null);
     public static ApplyResult Reject(RejectCode c, string? reason = null) => new(false, c, reason);
+}
+
 }
 ```
 
@@ -141,9 +147,9 @@ Concrete commands (`VerbNoun`, 00 section 5.1) and the events they emit. Full fi
 | `TrainStat` | `Stat stat, int count` (1/10/100) | 03 | `StatTrained`, `CurrencyChanged(GOLD, TRAINING)` |
 | `TrainStatMax` | `Stat stat` | 03 | `StatTrained`, `CurrencyChanged(GOLD, TRAINING)` |
 | `EquipWeapon` | `string weaponId` | 04 | `ItemEquipped` |
-| `EquipSkill` | `string skillId, int slot` | 04 | `ItemEquipped` |
+| `EquipSkill` | `int slot, string skillId` | 04 | `ItemEquipped` |
 | `UnequipSkill` | `int slot` | 04 | `ItemEquipped` (slot cleared) |
-| `EquipCompanion` | `string companionId, int slot` | 04 | `ItemEquipped` |
+| `EquipCompanion` | `int slot, string companionId` | 04 | `ItemEquipped` |
 | `UnequipCompanion` | `int slot` | 04 | `ItemEquipped` (slot cleared) |
 | `AutoEquipBestWeapon`, `AutoEquipBestSkills`, `AutoEquipBestCompanions` | none | 04 | `ItemEquipped` per changed slot |
 | `LimitBreak` | `string itemId` | 04 | `ItemLimitBroken`, `CurrencyChanged(ROCK_CANDY, LIMIT_BREAK)` |
@@ -170,8 +176,9 @@ Concrete commands (`VerbNoun`, 00 section 5.1) and the events they emit. Full fi
 | `ApplyServerTime` | `long serverSeconds` | 02/06 | `DayRolledOver?`, `WeekRolledOver?` (re-anchors the sim's virtual server clock, 3.1) |
 | `ComputeOfflineCatchup` | `long nowServerSeconds` | 06 | `OfflineRewardComputed?` (stores or sums into `Offline.Pending`, stamps `LastTickServerTime`; 8.7) |
 | `SetTutorialStep` | `int step` | 07 | `TutorialStepChanged` |
+| `SetAutoMerge` (P1) | `bool on` | 05 | per 05 section 6 |
 
-The other commands in 00 section 5.1 (`MoveFish`, `DiscardFish`, `LimitBreak`, `AutoEquipBest*`, `ClaimDailyGift`, `ExchangeItem`) follow the same rules; their rows live in the owning spec. `RetreatFromBoss` is not in MVP (issue #11): a boss attempt ends by kill or timer.
+P1 commands not listed here (`CastSkill(slot)`, 04 section 7.2) follow the same rules; their rows live in the owning spec. `RetreatFromBoss` is not in MVP (issue #11): a boss attempt ends by kill or timer.
 
 System commands (`ApplySummonResult`, `ApplyInboxGrant`, `ApplyServerTime`, `ComputeOfflineCatchup`) are issued by `HeroCat.Runtime`, never by a screen. They exist so that a server result, a clock re-anchor or an offline catch-up enters the sim through the same validated door as a tap, which is what lets the re-simulator replay a command log that includes them. No Runtime code writes `GameState` directly (issue #6).
 
@@ -229,7 +236,8 @@ public readonly struct Snapshot
     public BossPhase BossPhase; public int BossTicksLeft;   // 02 `Combat.BossPhase` (None/Pending/Walled), issue #7
     public double EnemyHp, EnemyHpMax;
     public double HeroDps;                      // the 00 section 7 formula evaluated this tick
-    public double Gold, Diamonds, FishCoin, RockCandy, HeroExp, HeroExpToNext;
+    public double Gold, FishCoin, HeroExp, HeroExpToNext;
+    public long   Diamonds, RockCandy;          // counted currencies are long (00 contract 9)
     public int    HeroLevel, AwakenRank;
     public double Mp, MpMax;
     public int    TankFish, TankCap; public int TankRefillTicksLeft;

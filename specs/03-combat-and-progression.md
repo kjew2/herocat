@@ -1,6 +1,6 @@
 ## 03 - Combat and Progression
 
-This spec owns the per-tick combat loop in `HeroCat.Sim`, the stage and boss rules, the eight `Stat`s and their Training curves, Hero Level, Awakening, Research, and the power formula that ties every layer together. It also specifies `tools/power_curve_model.py`, the greedy F2P bot that validates every `S` constant below and produces the day-stage table in 00 section 6.6. Where this spec and `00-overview.md` disagree, 00 wins; section 10 lists the places where this spec proposes that 00 change.
+This spec owns the per-tick combat loop in `HeroCat.Sim`, the stage and boss rules, the eight `Stat`s and their Training curves, Hero Level, Awakening, Research, and the power formula that ties every layer together. It also specifies `tools/power_curve_model.py`, the greedy F2P bot that validates every `S` constant below and produces the day-stage table in 00 section 6.6. Where this spec and `00-overview.md` disagree, 00 wins.
 
 Tiers covered: M0 (combat, stages, Tap Zap, fish missiles in the tick loop, Training, Hero Level), MVP (Awakening, Research, companions in the tick loop), P1 (Runes term, auto boss retry, Tower survival fights).
 
@@ -11,7 +11,7 @@ Depends on: 00 (all constants and names), 02 (`GameState` fields this spec reads
 1. One `Tick()` function, one `GameState`. Everything observable is a pure function of `(ContentDb, GameState)` plus the applied commands and ticks (00 section 8 item 1 and 5).
 2. The hero never dies (section 4). Progress is monotone; the only "failure" is a boss timing out, which costs nothing but the timer.
 3. Every layer of the power formula is worth buying at every point in the first 30 days: no layer above 40% of log-power at day 30, none below 5% (00 section 7). Section 8 checks this with the bot and section 8.5 reports where the current constants miss.
-4. Fast enough for bots: `Advance(1_000_000)` under one second in Release; the client tick allocates nothing when no event is masked in.
+4. Fast enough for bots: `Advance(1_000_000)` under 2 s in Release (AC19, 10); the client tick allocates nothing when no event is masked in.
 
 ## 2. Tick loop
 
@@ -86,7 +86,7 @@ Skill data comes from 04: `dpsPct` (rated average DPS as % of hero DPS), `castTy
 
 ```
 AutoCastSkills():
-  for slot in 0 .. SKILL_SLOTS-1 in order:                  # slot order is the priority order (04 section 6)
+  for slot in 0 .. SKILL_SLOTS-1 in order:                  # slot order is the priority order (04 section 7.2)
     s = Skill(Loadout.Skills[slot]); if s == null: continue
     if Combat.SkillCooldowns[slot] > 0: continue
     Cast(s); Combat.SkillCooldowns[slot] = s.CooldownTicks
@@ -102,7 +102,7 @@ Casting requires a live enemy (`Phase == Fighting`). During `Spawning` cooldowns
 
 ### 2.4 Companions and the MP pool (MVP)
 
-Companions (04 section 7) have `abilityType` in `DAMAGE`, `BUFF_ATK`, `BUFF_GOLD`, `MP_REGEN`, an `mpCost`, a `cooldownTicks` and a magnitude. All four equipped companions draw from one pool:
+Companions (04 section 8) have `abilityType` in `DAMAGE`, `BUFF_ATK`, `BUFF_GOLD`, `MP_REGEN`, an `mpCost`, a `cooldownTicks` and a magnitude. All four equipped companions draw from one pool:
 
 ```
 CastCompanionAbilities():
@@ -345,13 +345,13 @@ CheckHeroLevel():                                # called by Wallet.Apply after 
     publish LevelUp(Hero.Level)
 ```
 
-Effect: this spec changes the Hero Level term from the linear `1 + HERO_LVL_ATK_PCT * heroLevel` in 00 section 7 to the compounding
+Effect: the Hero Level term in 00 section 7 is the compounding (adopted by 00 decision 9, replacing the linear `1 + HERO_LVL_ATK_PCT * heroLevel`)
 
 ```
 heroMult = HERO_LVL_MULT ^ heroLevel          # HERO_LVL_MULT = 1.02 (S), evaluated from a GeometricTable
 ```
 
-Reason (section 8.4 has the numbers): Whisker Hero has no gear-tier layer, and gear tiers were the only layer in the sibling project whose growth compounded with stage. Without one compounding stage-fed layer the frontier stalls for a week at a time from day 7 on, under any enemy curve. Hero Level is the right place for it: it is fed by EXP, which grows with stage (`EXP_G`), it is automatic (no decision, no cost), and `HERO_LVL_ATK_PCT` is an `S` constant that 00 expects this spec to set. With `EXP_G = 1.025` and threshold growth `1.08`, hero level grows `~0.32 s + offline EXP`, so `heroMult ~ 1.02^(0.32 s) = e^(0.0063 s)`, which is 16% of the per-stage HP growth `ln 1.04 = 0.0392`. Combined with Training's declining linear term and Awakening, the stage-fed layers return roughly 40% of each stage's cost, and the time-fed layers (summons, Fish Board, Research) must supply the other 60%. That split is what keeps the 40% cap in reach (section 8.5). If `HERO_LVL_MULT` is ever raised above 1.025 the Hero Level share passes 40% by day 7.
+Reason (section 8.4 has the numbers): Whisker Hero has no gear-tier layer, and gear tiers were the only layer in the sibling project whose growth compounded with stage. Without one compounding stage-fed layer the frontier stalls for a week at a time from day 7 on, under any enemy curve. Hero Level is the right place for it: it is fed by EXP, which grows with stage (`EXP_G`), it is automatic (no decision, no cost), and `HERO_LVL_MULT` is an `S` constant this spec sets. With `EXP_G = 1.025` and threshold growth `1.08`, hero level grows `~0.32 s + offline EXP`, so `heroMult ~ 1.02^(0.32 s) = e^(0.0063 s)`, which is 16% of the per-stage HP growth `ln 1.04 = 0.0392`. Combined with Training's declining linear term and Awakening, the stage-fed layers return roughly 40% of each stage's cost, and the time-fed layers (summons, Fish Board, Research) must supply the other 60%. That split is what keeps the 40% cap in reach (section 8.5). If `HERO_LVL_MULT` is ever raised above 1.025 the Hero Level share passes 40% by day 7.
 
 ### 5.3 Awakening (MVP)
 
@@ -397,7 +397,7 @@ Research effects are read by the sim through `Query` (`MpPoolMax`, `MpRegenPerTi
 
 `res_offline_cap` extends the 24 h base cap from 00 decision 3; it does not change the base. Catch-up (06) and 08's `OFFLINE_WINDOW_OVERLAP` check use the effective cap `OFFLINE_CAP_H + 2 h * res_offline_cap level` (issue #21).
 
-Fish Coin income that pays for this is roughly `0.2 * (FishMaxLvl - 1)` coins per level-1 fish fully merged (05 section 8), about 1,800 to 2,500 per 2 h active day at Research 0, plus the Fish Coin Dungeon (06; the bot assumes `FISH_COIN_PER_DAY_DUNGEON_ASSUMED = 1000`). Against that income the costs above mean: all MP nodes to level 4 by day 3, `res_fish_cap` level 1 around day 3, level 2 around day 7, level 3 around day 14, level 4 around day 28, `res_atk` to about level 15 by day 30. The doubling cost of `res_fish_cap` is what turns linear coin income into a log-in-time Fish Board layer, which is the intended shape: fast at first, never finished.
+Fish Coin income that pays for this is roughly `0.2 * (FishMaxLvl - 1)` coins per level-1 fish fully merged (05 section 8), about 1,800 to 2,500 per 2 h active day at Research 0, plus the Fish Coin Dungeon (06 section 6.3 reward table, which the bot reads from content). Against that income the costs above mean: all MP nodes to level 4 by day 3, `res_fish_cap` level 1 around day 3, level 2 around day 7, level 3 around day 14, level 4 around day 28, `res_atk` to about level 15 by day 30. The doubling cost of `res_fish_cap` is what turns linear coin income into a log-in-time Fish Board layer, which is the intended shape: fast at first, never finished.
 
 ## 7. The power formula
 
@@ -498,9 +498,9 @@ The bot is the reference player for every balance number. It plays `ACTIVE_MIN =
 4. **Fish Coins**: every active minute, if companions are MP-starved buy `res_mp_regen`; else buy the node with the best `ln(DPS)` per coin among `res_atk`, `res_gold_gain` (payback proxy as for gold), `res_tank_*` (valued at 0.08 nats per level, the measured board growth per 10% more fish) and `res_fish_cap` (valued at `0.5 * ln 1.5 * fraction of board already at the cap`).
 5. **Fish Board**: the attentive policy from 05 section 8 every active minute: release until the board is full or the tank is empty, merge every equal pair lowest level first, repeat; if the board is full with no merge and the tank is not empty, discard the lowest-level fish.
 6. **Boss**: the first attempt is automatic; when walled, retry at the start of every active minute (the real player presses the button; `AttemptBoss` is free).
-7. **Offline**: 22 h of catch-up at `OFFLINE_RATE` for gold and EXP at the current stage, capped by the effective `OfflineCapH` (`OFFLINE_CAP_H` plus `res_offline_cap`); the tank fills by 05's `CatchUpTank` over the credited ticks, which reaches capacity; nothing else moves (06, issue #21).
+7. **Offline**: two offline gaps a day totalling 22 h (10 section 3.3), each caught up at `OFFLINE_RATE` for gold and EXP at the current stage, capped by the effective `OfflineCapH` (`OFFLINE_CAP_H` plus `res_offline_cap`); the tank fills by 05's `CatchUpTank` over the credited ticks, which reaches capacity; nothing else moves (06, issue #21).
 
-Inputs the bot takes from other specs: `DIAMONDS_PER_DAY_F2P = 400` and `TUTORIAL_DIAMONDS = 1500` (00); summon ticket income per banner from 06's ticket sources and Rock Candy income from 06's Rock Candy Dungeon floors, both read from content, never hand-entered (issues #38, #43); `FISH_COIN_PER_DAY_DUNGEON_ASSUMED = 1000` from the dungeons (06; **assumption to confirm**). Per-banner pull cadence (pulls per day per banner) is an output of this policy applied to that income, not an input; 04 retunes `BANNER_LVL_EXP` from it so the weapon banner reaches level 4 between day 20 and day 35 (issue #38; threshold values pending the tool). If 06's content changes the bot reruns and this section is regenerated.
+Inputs the bot takes from other specs: `DIAMONDS_PER_DAY_F2P = 400` and `TUTORIAL_DIAMONDS = 1500` (00); summon ticket income per banner from 06's ticket sources and Rock Candy and Fish Coin income from 06 section 6.3's dungeon reward tables, all read from content, never hand-entered (issues #38, #43). Per-banner pull cadence (pulls per day per banner) is an output of this policy applied to that income, not an input; 04 retunes `BANNER_LVL_EXP` from it so the weapon banner reaches level 4 between day 20 and day 35 (issue #38; threshold values pending the tool). If 06's content changes the bot reruns and this section is regenerated.
 
 Pseudocode, as `HeroCat.Bots` will implement it on the real sim (10):
 
@@ -599,7 +599,7 @@ Never change `HP_G` to fix a local problem; it moves every stage at once and eve
 | `dungeon` | 1 per M0 run (06) | dungeon run seed, drawn by the M0 local `IDungeonSeedService` (00 contract 11, issue #25) | 06 owns | Dungeon seed service only. |
 | `dungeon_run` | per dungeon fight (06) | temporary, reseeded from the run seed at `StartDungeon`; the hero's crit draws while `Combat.Mode == Dungeon` (issue #42) | none; discarded when the run ends | Dungeon fights only; `crit` and `Stats.HeroHits` are untouched by dungeon hits. |
 
-Summons are not a client stream (00 section 8 item 2). Draws are consumed even when the outcome is predetermined so the invariants above hold and the server can audit a save (08). These invariants are the validator's and 08's (02 section 3.4, issue #8). Stream seeds are derived in Runtime, not the sim: the first 8 bytes of SHA-256(`RngRoot` ++ UTF-8 stream name), where `RngRoot` is the immutable Guid set at profile creation (00 contract 2, issue #9); 02 persists `(seed, counter)` per name.
+The summon streams are not combat's: they stay in the save in every mode and are drawn only by `LocalSummonService` (00 decision 14). Draws are consumed even when the outcome is predetermined so the invariants above hold and the server can audit a save (08). These invariants are the validator's and 08's (02 section 3.4, issue #8). Stream seeds are derived in Runtime, not the sim: the first 8 bytes of SHA-256(`RngRoot` ++ UTF-8 stream name), where `RngRoot` is the immutable Guid set at profile creation (00 contract 2, issue #9); 02 persists `(seed, counter)` per name.
 
 ## 11. Analytics events
 
@@ -618,14 +618,14 @@ This section owns these events' fields (issue #245); every event also carries 02
 
 ## 12. Open questions
 
-1. **Adopt the recommended curve?** `HP_G 1.04 / GOLD_G 1.03 / EXP_G 1.025 / HERO_LVL_MULT 1.02` and the new day table in section 8.4. Owner: 00. Default: yes; 03, 05, 06 and 10 write their worked numbers against it from now on, and 00 section 6.6 is replaced by the tool's `DAYTABLE` line once `tools/power_curve_model.py` exists.
+1. **Adopt the recommended curve?** Resolved: adopted (00 decision 9); 03, 05, 06 and 10 write their worked numbers against it, and 00 section 6.6 is replaced by the tool's `DAYTABLE` line once `tools/power_curve_model.py` exists.
 2. **Day-20 wall.** Resolved (issue #36): ship M0 as is; for MVP, run `tools/power_curve_model.py` first and pick the levers from section 9 that clear both the day-20 wall and the 5% floor misses (candidates: `res_atk` at 0.08 per level, limit breaks priced so the bot buys one every day from day 10, 04 section 5). The lever choice and values are pending the tool. Acceptance 18 bounds walls on days 14-30; speed is permanently exempt from the floor.
 3. **Day 1 at 240 stages.** Fine for the genre; wrong if 07's tutorial or 06's first-clear diamond budget assumed ~90. Owner: 00. Default: keep; if 06 needs fewer first clears on day 1, raise `HP0` rather than `HP_G`.
-4. **`HP`/`DEF` trainable only in P1.** Owner: 00 (section 5.1 says Training is per stat). Default: as section 4; the enum keeps all eight.
+4. **`HP`/`DEF` trainable only in P1.** Resolved: as section 4; the enum keeps all eight (00 decision 10).
 5. **`res_offline_cap` versus decision 3.** Resolved: the node extends the cap; catch-up uses the effective cap `OFFLINE_CAP_H + 2 h * level` (issue #21).
-6. **Companion slot unlocks tied to Awakening.** Owner: 04. Default: as section 5.3; if 04 wants all four slots open from the start, Companions reach the 5% floor on day 1 and the bot reruns.
+6. **Companion slot unlocks tied to Awakening.** Resolved: as section 5.3 (00 decision 11).
 7. **Auto boss retry** (`BOSS_AUTO_RETRY_S = 60`) is P1 here; 07 may want it in MVP for the idle-on-desk player. Default: P1.
-8. **Tap Zap and the server plausibility check.** A tapping player's stage-vs-time bound is up to 4x the idle bound during bosses (section 2.5). 08 must use the tapping bound, not the bot's. Default: 08 uses `DPS * (1 + TAP_ZAP_DMG_PCT * TAP_ZAP_MAX_PER_SEC)` as the upper bound.
+8. **Tap Zap and the server plausibility check.** Resolved: a tapping player's stage-vs-time bound is up to 4x the idle bound during bosses (section 2.5), so 08 uses `DPS * (1 + TAP_ZAP_DMG_PCT * TAP_ZAP_MAX_PER_SEC)` as the upper bound (00 decision 26).
 
 ## 13. Acceptance criteria
 
@@ -679,6 +679,5 @@ Every constant this spec adds or changes, for lifting into 00 section 6. Tag `S`
 | `BOSS_AUTO_RETRY_S` | 60 (P1) | S | 2.7 | |
 | `AWAKEN_UNLOCKS` | companion slots 2/3/4 at ranks 1/2/3, Rune slots at 4/5 | - | 5.3 | |
 | `research` table (`res_*` nodes) | section 6 (8 nodes: cost0, growth, max, effect) | S | 6 | `res_fish_cap` validated jointly with 05's tool. |
-| `FISH_COIN_PER_DAY_DUNGEON_ASSUMED` | 1000 | input from 06 | 8.3 | Bot input. |
 | `awakening_targets` table (`rank`, `max_days_after_gate`) | 2 for every rank | S | 5.3 | Awakening cadence target read by the tool, 06 and the bots (issue #43). Ticket and Rock Candy income are read from 06's content, not assumed (issues #38, #43). |
 | Day-stage targets | 240 / 330 / 430 / 480 / 550 | S | 8.4 | Replaces 00 section 6.6 once the tool confirms. |

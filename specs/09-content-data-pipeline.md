@@ -9,7 +9,7 @@ Depends on: 00 (sections 5, 6, 8), 01 (`ContentLoader`, boot flow 8.1, content h
 ## 1. Principles
 
 1. **One source of truth.** One Google Sheet workbook, one tab per table. CSV, JSON, `ContentDb` and the Python models are derived. Nobody edits `content/*.json` by hand; CI rejects a commit whose JSON does not match what the exporter produces from the committed CSVs.
-2. **No balance literal in code.** `HeroCat.Sim` receives a `ContentDb` and reads typed properties and rows. Acceptance criterion 1 is a grep: the only numeric literals in `HeroCat.Sim` are 0, 1, -1, array indices and the `ATTACK_PROGRESS_UNIT` fixed-point scale that 03 declares.
+2. **No balance literal in code.** `HeroCat.Sim` receives a `ContentDb` and reads typed properties and rows. Acceptance criterion 1 is a grep: the only numeric literals in `HeroCat.Sim` are 0, 1, -1, 2 (bit ops), array indices and the `ATTACK_PROGRESS_UNIT` fixed-point scale that 03 declares.
 3. **Fail at export time, never in a tick.** The exporter rejects bad content with coded errors (section 8). `ContentDb.Build` re-runs the subset of rules that protect the sim (ids resolve, rates sum, curves monotonic, counts match) so a stale or hand-edited bundle fails at boot with a readable list, not inside `Simulation.Advance`.
 4. **Deterministic bytes.** Same CSV input produces byte-identical JSON and the same `content_hash`. The save (02: `ContentVersion`, `ContentHash`) and every bot report (10) record `content_version` and `content_hash`, so a regression can be tied to the exact data it ran on.
 5. **Sim stays JSON-free.** JSON parsing lives in `HeroCat.Runtime` (`ContentLoader`). It fills plain DTO classes and hands them to `ContentDb.Build(ContentDtos)` in `HeroCat.Sim`. No `Newtonsoft`, no reflection, no file IO in Sim (00 section 8 item 1).
@@ -23,7 +23,7 @@ flowchart TD
     CSV -->|"export_content.py build<br/>parse + validate + emit"| JSON["content/*.json<br/>content/manifest.json<br/>committed"]
     JSON -->|"content.yml CI (./check.sh --content):<br/>check, bots acceptance"| PR["Pull request"]
     PR -->|"merge"| Main["main"]
-    Main -->|"publish --env stage|prod"| CDN["CDN /content/{version}/"]
+    Main -->|"deploy.yml (10 section 6.2)<br/>tag content-*"| CDN["CDN /content/{version}/"]
     JSON -->|"copied at Unity build"| SA["StreamingAssets/content/<br/>bundled fallback"]
     CDN -->|"ContentLoader download<br/>verify hashes"| Cache["persistentDataPath/content/{version}/"]
     SA --> Loader["HeroCat.Runtime.ContentLoader<br/>JSON -> ContentDtos"]
@@ -154,7 +154,7 @@ The exporter checks `constants` against this list (`E040` missing, `E042` unknow
 | `FISH_BOARD_DPS_PCT` factor 0.5 | `constants.FISH_BOARD_DPS_FACTOR` *(named here)* | double |
 | `AWAKEN_STAGES`, `AWAKEN_COST_ROCK_CANDY`, `AWAKEN_MULT` | `awakening.stage_gate`, `.rock_candy_cost`, `.mult` | int, long, double |
 | `HERO_LVL_EXP(l) = 100 * 1.08^l` | `hero_levels.exp0`, `.exp_g` | double |
-| `HERO_LVL_ATK_PCT` | `hero_levels.atk_pct_per_level` | double |
+| `HERO_LVL_MULT` | `hero_levels.mult_per_level` | double |
 | Section 6.6 day/stage targets | `progress_targets` | int, int |
 | Feature unlock gates (Research, Companions, Quests, Dungeons, Shop) | `feature_unlocks` (issue #45) | enum, int |
 | Awakening cadence target (03, 06) | `awakening_targets.max_days_after_gate` (issue #43) | int |
@@ -212,7 +212,7 @@ Geometric curves `base * growth^x` over an unbounded domain. Two parameters per 
 | `growth` | double | `> 1` (`E043`). |
 | `x_offset` | int | Evaluation index is `x + x_offset`. `0` for the three required curves. Exists so a future curve indexed from 1 can share the type. |
 
-Example: `{"id": "enemy_hp", "base": 20.0, "growth": 1.07, "x_offset": 0}`. 03 proposes `HP_G` 1.04 and `GOLD_G` 1.03; whatever 00 adopts is this row, and the bots (10) are the test.
+Example: `{"id": "enemy_hp", "base": 20.0, "growth": 1.04, "x_offset": 0}` (`HP0`, `HP_G`, 00 section 6.1); the bots (10) are the test.
 
 ### 5.3 `stats` (8 rows)
 
@@ -445,8 +445,8 @@ A one-row rule table rather than a per-level table: hero level is unbounded and 
 | `id` | id | Key. Exactly one row, `default` (`E045`). |
 | `exp0` | double | `HERO_LVL_EXP` base, `100`; `> 0`. |
 | `exp_g` | double | `1.08`; `> 1`. |
-| `atk_pct_per_level` | double? | `HERO_LVL_ATK_PCT` (00: `0.01`, linear term). |
-| `mult_per_level` | double? | 03's proposed compounding `HERO_LVL_MULT` (`1.02`). Exactly one of the two columns set (`E054`); whichever 00 adopts is the one populated. |
+| `atk_pct_per_level` | double? | Retired linear term `HERO_LVL_ATK_PCT`; empty (00 decision 9). |
+| `mult_per_level` | double? | Compounding `HERO_LVL_MULT` (`1.02`, 00 section 6.5, decision 9); populated. Exactly one of the two columns set (`E054`). |
 | `level_cap` | int | `>= 1`. Guard like `STAGE_CAP`; `9999`. |
 
 `ContentDb.HeroLvlExp` is a `CurveDef` built from `exp0`/`exp_g`.
@@ -792,7 +792,7 @@ python3 tools/export_content.py pull  --sheet <id> [--service-account creds.json
 python3 tools/export_content.py build [--src content_src] [--out content] [--previous content] [--ui-keys unity/HeroCatClient/Assets/HeroCat.Client/ui_keys.txt] [--strict-warnings]
 python3 tools/export_content.py check [--src content_src] [--out content]
 python3 tools/export_content.py diff  --a content --b <dir>          # human-readable row diff for a PR description
-python3 tools/export_content.py translator-csv --out $KIROCREW_SCRATCH/strings_ja.csv --locale ja [--missing-only]
+python3 tools/export_content.py translator-csv --out /tmp/strings_ja.csv --locale ja [--missing-only]
 python3 tools/export_content.py import-translations --csv strings_ja.csv --locale ja   # writes back into content_src/localization.csv
 python3 tools/export_content.py pseudo --locale xx --out content_pseudo              # pseudo-localized build (section 13)
 ```
@@ -1053,7 +1053,7 @@ public sealed class CurveDef
 }
 ```
 
-`Grow` is the only mutation inside `ContentDb` and it is idempotent and value-deterministic: two instances evaluated in any order hold identical `_pow[k]` for every `k`, so sharing one `ContentDb` across parallel bot seeds is safe (10 section 4). The cache is not thread-safe for concurrent growth; the bot harness pre-warms every curve to `STAGE_CAP` before forking seeds and the client runs the sim on one thread (01).
+`Grow` is the only mutation inside `ContentDb` and it is idempotent and value-deterministic: two instances evaluated in any order hold identical `_pow[k]` for every `k`, so sharing one `ContentDb` across parallel bot seeds is safe (10 section 3.8, `sweep --parallel`). The cache is not thread-safe for concurrent growth; the bot harness pre-warms every curve to `STAGE_CAP` before forking seeds and the client runs the sim on one thread (01).
 
 ### 9.3 Row types (abbreviated)
 
@@ -1204,7 +1204,7 @@ Server-side gate: `config.content.minContentVersion` is a map `clientVersion ran
 `tools/content.py` (stdlib only): `load(content_dir="content") -> Content`, which verifies `manifest.json` hashes first (same `E900` text as the loader), then exposes `constants` (dict key -> value), `curves` (dict id -> `(base, growth, x_offset)`), and every other table as a list of row dicts straight from `rows`. It imports `SCHEMA` from `export_content.py` for column names and folds.
 
 - `tools/power_curve_model.py` (03 section 8.6) builds its parameter block from `content.load()`: `HP0, HP_G = curves["enemy_hp"][:2]`, `STAT_PER_LVL = {r["id"]: r["per_lvl"] for r in stats if r["trainable"]}`, Research nodes from `research`, awakening from `awakening`, pity and pool sizes from `banners`, rate tables from `banner_levels`, `DUPE_LVL_CUM` from `dupe_levels`, progress targets from `progress_targets`, the Awakening cadence check from `awakening_targets` (issue #43). Its `pow` calls are fine: the model is an estimator, not the sim.
-- `tools/gacha_model.py` (04 section 11): banner row and `banner_levels` rows replace its module constants; `--banner WEAPON --level 4` selects the rate table; `GUARANTEE_N = guarantee_batch_size`.
+- `tools/gacha_model.py` (04 section 14): banner row and `banner_levels` rows replace its module constants; `--banner WEAPON --level 4` selects the rate table; `GUARANTEE_N = guarantee_batch_size`.
 - `tools/fish_model.py` (05): `fish_levels`, `tank`, `research[TANK_*|FISH_CAP]`, `FISH_BOARD_*`, `FISH_MERGE_COINS_PCT`, `FISH_BOARD_DPS_FACTOR`.
 
 All three gain `--content <dir>` (default `content`). Acceptance criterion 10: with the shipped content the tools print the same tables they printed from their module constants before the change, so the switch is a pure refactor.
@@ -1224,7 +1224,7 @@ sequenceDiagram
     D->>X: pull, build --previous content
     X-->>D: errors / content_hash / hot_apply / S-constant list
     D->>G: PR: content_src/*.csv + content/*.json + diff output in description
-    G->>CI: ./check.sh --content: check (stale JSON), build --strict-warnings, Sim+Runtime tests, bots acceptance (10 section 5)
+    G->>CI: ./check.sh --content: check (stale JSON), build --strict-warnings, Sim+Runtime tests, bots acceptance (10 section 3.6)
     CI-->>G: acceptance table, layer shares, golden diff
     R->>G: review day-30 median, longest wall, rates; approve
     G->>CDN: merge -> deploy.yml publishes to stage; QA on stage build
@@ -1306,7 +1306,7 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 1. **Who owns the sheet.** Default: design owns values and row additions; engineering owns structure (columns, enums) through `SCHEMA` and the C# DTOs. Owner guess: design lead.
 2. **Service-account vs CSV pull.** The service account needs a Google Cloud project and a non-stdlib dependency; the CSV export URL needs the sheet to be link-readable, which exposes live tuning data to anyone with the link. Default: service account, credentials in CI secrets only; designers use the manual File > Download path locally. Owner guess: engineering.
 3. **Limit-break constants.** Resolved: `constants.LIMIT_BREAK_RANKS` (00's name) in `REQUIRED_CONSTANTS`, per-rarity `rarities.limit_break_cost` and `rarities.dupe_overflow_rock_candy` (issue #37).
-4. **`hero_levels` linear vs compounding.** 00 section 6.5 has `HERO_LVL_ATK_PCT` 0.01 (linear); 03 proposes `HERO_LVL_MULT` 1.02 (compounding). The schema admits either (one of two nullable columns). Default: ship whatever 00 says after 03's tool runs; the exporter rejects both set or both empty. Owner: 03 and 00.
+4. **`hero_levels` linear vs compounding.** Resolved: compounding `HERO_LVL_MULT` 1.02 (00 decision 9); `mult_per_level` is populated and `atk_pct_per_level` empty; the exporter still rejects both set or both empty.
 5. **`E039` daily diamond sum tolerance.** Resolved: 10%, recomputed from the quest rows plus `REF_DAILIES_DONE` and `REF_NEW_BOSSES` (issue #55).
 6. **Enemy skin draw on the `combat` stream.** Resolved: skin picks use a hash of `(stage, killIndex)` and consume no stream, since `combat` is reserved with `Counter == 0` in MVP (issue #8). Section 5.6 says so.
 7. **Rollout bucket.** Resolved: bucketed server-side by `GET /config` from the JWT; no client hash (issue #31, section 10.3).
@@ -1330,7 +1330,7 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 15. **Hot-apply classification.** A build whose only diff against `--previous` is in `localization.ja.json`, `shop_products`, `shop_packages` or `inbox_templates` sets `hot_apply: true`; adding one changed `skills` row flips it to `false`. A Sim test proves no `HeroCat.Sim` code path reads `ShopProducts`, `ShopPackages` or `InboxTemplates` (issue #54).
 16. **Update flow.** `ContentLoader` given a manifest whose `min_client_version` is above the client's logs `E903`, keeps the bundled content, and the sim's `ContentDb` instance identity is unchanged (01 acceptance 11).
 17. **Build time.** `ContentDb.Build` of the shipped MVP set completes in under 30 ms warm on the CI runner and under 100 ms on the slowest reference device (10).
-18. **Culture invariance.** `Build` under `CultureInfo.CurrentCulture = de-DE` yields `EnemyHp.Growth == 1.07`.
+18. **Culture invariance.** `Build` under `CultureInfo.CurrentCulture = de-DE` yields `EnemyHp.Growth == 1.04`.
 19. **Reconcile.** Covered by 02's load-validator tests (P10-P14, issue #56): a save that references `weapon_e_99` (not in content) loses that entry and keeps everything else; a level-12 fish under content with a lower reachable cap stays level 12 (issue #41).
 20. **Exporter parity on messages.** For every fixture in criterion 6, the Python and C# messages are string-equal, including the `repr` of doubles.
 21. **New-table rules.** Fixtures prove `E063` (Research node below the Research gate; `SHOP` not `ALWAYS`), `E064` (no `DAILIES_COMPLETED` row), `E065` (`OWN_WEAPONS` target equal to the weapon row count), and that the shipped `E039` sum equals 06 section 2's 400 within 10%.
