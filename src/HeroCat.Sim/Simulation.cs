@@ -198,6 +198,7 @@ namespace HeroCat.Sim
             {
                 Tick = s.Time.Tick,
                 Stage = s.Combat.Stage,
+                SelectedStage = s.Combat.Selected,
                 KillsInStage = s.Combat.KillsInStage,
                 Chapter = k.ChapterOf(s.Combat.Stage < 1 ? 1 : s.Combat.Stage),
                 BossPhase = s.Combat.Boss,

@@ -206,7 +206,7 @@ Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them
 | Avatar | `Profile.AvatarId` | tap: push `SCR_PROFILE` |
 | Inbox icon | `Inbox.UnclaimedCount` badge | tap: push `SCR_INBOX` |
 | Settings gear | | tap: push `SCR_SETTINGS` |
-| Stage label | `Combat.Stage`, `Combat.Chapter`, `Combat.Selected` | tap: push `SCR_STAGE_SELECT` (MVP; M0 no-op); while farming a side stage it reads "Farming 95 · frontier 100" (issue #35) |
+| Stage label | snapshot `Stage`, `Chapter`, `SelectedStage` (02 `Combat.Selected`; issue #254) | tap: push `SCR_STAGE_SELECT` (MVP; M0 no-op); while farming a side stage it reads "Farming 95 · frontier 100" (issue #35) |
 | Kill counter | `Combat.KillsInStage / KILLS_PER_STAGE` | red when `IsWalled` |
 | WALL badge | `Combat.IsWalled` | |
 | Enemy sprite, HP bar | `Combat.EnemyId`, `EnemyIsBoss`, `EnemyHp`, `EnemyMaxHp` | HP bar text "1.2M / 1.7M" |
@@ -517,10 +517,10 @@ Purpose: farm a cleared side stage (an easier stage for `GOLD_GAIN`-tuned kill r
 |---|---|
 | Chapter dropdown | `Chapters[]` (`CHAPTER_WIDTH` groups up to `Progress.HighestCleared`) |
 | Stage chips | `Stages[]`: `Number`, `IsBoss`, `IsFrontier`, `IsSelected`, `Cleared`; tap: `cmd SelectStage(n)` for `n <= Progress.HighestCleared` (02's meaning: highest stage of any kind completed, issue #35); tapping the frontier chip equals Return |
-| Return to frontier | `cmd SelectStage(null)`; shown while `Combat.Selected != null` |
+| Return to frontier | `cmd SelectStage(null)`; shown while snapshot `SelectedStage != null` |
 | Challenge boss | `cmd AttemptBoss` for the frontier boss only (only when walled) |
 
-Rules the modal makes visible: offline gold and dungeon floor difficulty read `Progress.HighestCleared` and first-clear diamonds read `Progress.HighestFirstClearBoss`, never the selected stage (06, 03 and 02; issue #35), so a lower stage is never a loophole; the modal says "Rewards for offline time use your highest stage". Events: `StageChanged` (from `SelectStage`), `StageCleared`; the selected stage is read from the snapshot (`Combat.Selected`, null = frontier), there is no `StageSelected` event (issue #11).
+Rules the modal makes visible: offline gold and dungeon floor difficulty read `Progress.HighestCleared` and first-clear diamonds read `Progress.HighestFirstClearBoss`, never the selected stage (06, 03 and 02; issue #35), so a lower stage is never a loophole; the modal says "Rewards for offline time use your highest stage". Events: `StageChanged` (from `SelectStage`), `StageCleared`; the selected stage is read from the snapshot (`SelectedStage`, which mirrors 02 `Combat.Selected`; null = frontier; issue #254), there is no `StageSelected` event (issue #11).
 
 ### 4.15 `SCR_QUESTS` (Full, MVP)
 

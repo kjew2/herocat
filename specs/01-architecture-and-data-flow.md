@@ -232,7 +232,8 @@ Handlers run in subscription order on the main thread. A handler that wants to i
 public readonly struct Snapshot
 {
     public long   Tick;
-    public int    Stage, KillsInStage, Chapter;
+    public int    Stage, KillsInStage, Chapter;     // Stage is the frontier (02 `Combat.Stage`)
+    public int?   SelectedStage;                     // 02 `Combat.Selected`: the side stage being farmed, null = frontier (issue #254)
     public BossPhase BossPhase; public int BossTicksLeft;   // 02 `Combat.BossPhase` (None/Pending/Walled), issue #7
     public double EnemyHp, EnemyHpMax;
     public double HeroDps;                      // the 00 section 7 formula evaluated this tick
