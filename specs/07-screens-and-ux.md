@@ -1036,7 +1036,7 @@ Android:
 | Internet permission | off in M0 (no network code); on from MVP (08) | |
 | Optimized frame pacing | on | smoother frame pacing on GLES3 |
 
-CI build command: `Unity -batchmode -quit -projectPath unity/HeroCatClient -executeMethod HeroCat.Client.Editor.Builds.AndroidDev -logFile -`, where `Builds.cs` wraps `BuildPipeline.BuildPlayer` with the profile (runner per 10).
+Build commands for CI: `Unity -batchmode -quit -projectPath unity/HeroCatClient -executeMethod HeroCat.Client.Editor.Builds.AndroidDev -logFile -` (APK, debug keystore) and `...Builds.AndroidRelease` (signed AAB, used by `build-android.yml`, 10 section 6.2). `Editor/Builds.cs` wraps `BuildPipeline.BuildPlayer` with the `Android-Dev` / `Android-Release` profile when it exists, takes the version from `unity/HeroCatClient/version.json` and the versionCode from `-androidVersionCode`.
 
 iOS:
 

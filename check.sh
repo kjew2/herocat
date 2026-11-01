@@ -31,6 +31,9 @@ step "Content: exporter tests, and content_src builds to content/ (and the Sim D
 python3 tools/test_export_content.py
 python3 tools/export_content.py check
 
+step "Release: build-android.yml helpers (version.json, size gate)"
+python3 .github/scripts/test_android_release.py
+
 if [ "$DOTNET" -eq 0 ]; then
   printf '\nSkipped .NET checks (--no-dotnet). Not a full pass.\n'
   exit 0
