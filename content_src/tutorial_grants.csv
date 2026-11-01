@@ -1,3 +1,0 @@
-id,trigger,trigger_value,grant_type,amount,grant_ref,sort_order
-tutorial_gems,profile_created,,gems,1000,,0
-tutorial_pulls,profile_created,,free_pulls,10,,1

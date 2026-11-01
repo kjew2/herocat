@@ -1,0 +1,165 @@
+{
+  "table": "fish_levels",
+  "rows": [
+    {
+      "level": 1,
+      "discovery_coins": 10,
+      "missile_pct": 5.0,
+      "sprite": "spr_fish_01",
+      "tint": null,
+      "name_key": "fish.01.name"
+    },
+    {
+      "level": 2,
+      "discovery_coins": 20,
+      "missile_pct": 7.5,
+      "sprite": "spr_fish_02",
+      "tint": null,
+      "name_key": "fish.02.name"
+    },
+    {
+      "level": 3,
+      "discovery_coins": 40,
+      "missile_pct": 11.25,
+      "sprite": "spr_fish_03",
+      "tint": null,
+      "name_key": "fish.03.name"
+    },
+    {
+      "level": 4,
+      "discovery_coins": 80,
+      "missile_pct": 16.875,
+      "sprite": "spr_fish_04",
+      "tint": null,
+      "name_key": "fish.04.name"
+    },
+    {
+      "level": 5,
+      "discovery_coins": 160,
+      "missile_pct": 25.3125,
+      "sprite": "spr_fish_05",
+      "tint": null,
+      "name_key": "fish.05.name"
+    },
+    {
+      "level": 6,
+      "discovery_coins": 320,
+      "missile_pct": 37.96875,
+      "sprite": "spr_fish_06",
+      "tint": null,
+      "name_key": "fish.06.name"
+    },
+    {
+      "level": 7,
+      "discovery_coins": 640,
+      "missile_pct": 56.953125,
+      "sprite": "spr_fish_07",
+      "tint": null,
+      "name_key": "fish.07.name"
+    },
+    {
+      "level": 8,
+      "discovery_coins": 1280,
+      "missile_pct": 85.4296875,
+      "sprite": "spr_fish_08",
+      "tint": null,
+      "name_key": "fish.08.name"
+    },
+    {
+      "level": 9,
+      "discovery_coins": 2560,
+      "missile_pct": 128.14453125,
+      "sprite": "spr_fish_09",
+      "tint": null,
+      "name_key": "fish.09.name"
+    },
+    {
+      "level": 10,
+      "discovery_coins": 5120,
+      "missile_pct": 192.216796875,
+      "sprite": "spr_fish_10",
+      "tint": null,
+      "name_key": "fish.10.name"
+    },
+    {
+      "level": 11,
+      "discovery_coins": 10240,
+      "missile_pct": 288.3251953125,
+      "sprite": "spr_fish_11",
+      "tint": null,
+      "name_key": "fish.11.name"
+    },
+    {
+      "level": 12,
+      "discovery_coins": 20480,
+      "missile_pct": 432.48779296875,
+      "sprite": "spr_fish_12",
+      "tint": null,
+      "name_key": "fish.12.name"
+    },
+    {
+      "level": 13,
+      "discovery_coins": 40960,
+      "missile_pct": 648.731689453125,
+      "sprite": "spr_fish_01",
+      "tint": "#FFD54F",
+      "name_key": "fish.13.name"
+    },
+    {
+      "level": 14,
+      "discovery_coins": 81920,
+      "missile_pct": 973.0975341796875,
+      "sprite": "spr_fish_02",
+      "tint": "#4DD0E1",
+      "name_key": "fish.14.name"
+    },
+    {
+      "level": 15,
+      "discovery_coins": 163840,
+      "missile_pct": 1459.6463012695312,
+      "sprite": "spr_fish_03",
+      "tint": "#F06292",
+      "name_key": "fish.15.name"
+    },
+    {
+      "level": 16,
+      "discovery_coins": 327680,
+      "missile_pct": 2189.469451904297,
+      "sprite": "spr_fish_04",
+      "tint": "#66BB6A",
+      "name_key": "fish.16.name"
+    },
+    {
+      "level": 17,
+      "discovery_coins": 655360,
+      "missile_pct": 3284.2041778564453,
+      "sprite": "spr_fish_05",
+      "tint": "#AB47BC",
+      "name_key": "fish.17.name"
+    },
+    {
+      "level": 18,
+      "discovery_coins": 1310720,
+      "missile_pct": 4926.306266784668,
+      "sprite": "spr_fish_06",
+      "tint": "#FFA726",
+      "name_key": "fish.18.name"
+    },
+    {
+      "level": 19,
+      "discovery_coins": 2621440,
+      "missile_pct": 7389.459400177002,
+      "sprite": "spr_fish_07",
+      "tint": "#42A5F5",
+      "name_key": "fish.19.name"
+    },
+    {
+      "level": 20,
+      "discovery_coins": 5242880,
+      "missile_pct": 11084.189100265503,
+      "sprite": "spr_fish_08",
+      "tint": "#EF5350",
+      "name_key": "fish.20.name"
+    }
+  ]
+}

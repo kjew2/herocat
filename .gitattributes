@@ -2,3 +2,5 @@
 content/*.json text eol=lf
 content_src/*.csv text eol=lf
 golden/** text eol=lf
+src/HeroCat.Runtime.Tests/Fixtures/Saves/*.sav binary
+src/HeroCat.Runtime.Tests/Fixtures/Saves/*.json text eol=lf

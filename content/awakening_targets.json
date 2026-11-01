@@ -1,0 +1,25 @@
+{
+  "table": "awakening_targets",
+  "rows": [
+    {
+      "rank": 1,
+      "max_days_after_gate": 2
+    },
+    {
+      "rank": 2,
+      "max_days_after_gate": 2
+    },
+    {
+      "rank": 3,
+      "max_days_after_gate": 2
+    },
+    {
+      "rank": 4,
+      "max_days_after_gate": 2
+    },
+    {
+      "rank": 5,
+      "max_days_after_gate": 2
+    }
+  ]
+}

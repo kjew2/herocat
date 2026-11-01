@@ -1,0 +1,35 @@
+{
+  "table": "training_curves",
+  "rows": [
+    {
+      "stat": "ATK",
+      "cost0": 50.0,
+      "cost_g": 1.07
+    },
+    {
+      "stat": "CRIT_RATE",
+      "cost0": 50.0,
+      "cost_g": 1.07
+    },
+    {
+      "stat": "CRIT_DMG",
+      "cost0": 50.0,
+      "cost_g": 1.07
+    },
+    {
+      "stat": "ATK_SPD",
+      "cost0": 50.0,
+      "cost_g": 1.07
+    },
+    {
+      "stat": "GOLD_GAIN",
+      "cost0": 50.0,
+      "cost_g": 1.07
+    },
+    {
+      "stat": "EXP_GAIN",
+      "cost0": 50.0,
+      "cost_g": 1.07
+    }
+  ]
+}

@@ -1,0 +1,113 @@
+{
+  "table": "chapters",
+  "rows": [
+    {
+      "id": "ch_01",
+      "index": 1,
+      "from_stage": 1,
+      "name_key": "chapter.01.name",
+      "background": "bg_ch_01",
+      "music": "bgm_ch_01",
+      "tier": "M0"
+    },
+    {
+      "id": "ch_02",
+      "index": 2,
+      "from_stage": 51,
+      "name_key": "chapter.02.name",
+      "background": "bg_ch_02",
+      "music": "bgm_ch_02",
+      "tier": "M0"
+    },
+    {
+      "id": "ch_03",
+      "index": 3,
+      "from_stage": 101,
+      "name_key": "chapter.03.name",
+      "background": "bg_ch_03",
+      "music": "bgm_ch_03",
+      "tier": "M0"
+    },
+    {
+      "id": "ch_04",
+      "index": 4,
+      "from_stage": 151,
+      "name_key": "chapter.04.name",
+      "background": "bg_ch_04",
+      "music": "bgm_ch_04",
+      "tier": "M0"
+    },
+    {
+      "id": "ch_05",
+      "index": 5,
+      "from_stage": 201,
+      "name_key": "chapter.05.name",
+      "background": "bg_ch_05",
+      "music": "bgm_ch_05",
+      "tier": "M0"
+    },
+    {
+      "id": "ch_06",
+      "index": 6,
+      "from_stage": 251,
+      "name_key": "chapter.06.name",
+      "background": "bg_ch_06",
+      "music": "bgm_ch_06",
+      "tier": "M0"
+    },
+    {
+      "id": "ch_07",
+      "index": 7,
+      "from_stage": 301,
+      "name_key": "chapter.07.name",
+      "background": "bg_ch_07",
+      "music": "bgm_ch_07",
+      "tier": "M0"
+    },
+    {
+      "id": "ch_08",
+      "index": 8,
+      "from_stage": 351,
+      "name_key": "chapter.08.name",
+      "background": "bg_ch_08",
+      "music": "bgm_ch_08",
+      "tier": "M0"
+    },
+    {
+      "id": "ch_09",
+      "index": 9,
+      "from_stage": 401,
+      "name_key": "chapter.09.name",
+      "background": "bg_ch_09",
+      "music": "bgm_ch_09",
+      "tier": "M0"
+    },
+    {
+      "id": "ch_10",
+      "index": 10,
+      "from_stage": 451,
+      "name_key": "chapter.10.name",
+      "background": "bg_ch_10",
+      "music": "bgm_ch_10",
+      "tier": "M0"
+    },
+    {
+      "id": "ch_11",
+      "index": 11,
+      "from_stage": 501,
+      "name_key": "chapter.11.name",
+      "background": "bg_ch_11",
+      "music": "bgm_ch_11",
+      "tier": "M0"
+    },
+    {
+      "id": "ch_12",
+      "index": 12,
+      "from_stage": 551,
+      "name_key": "chapter.12.name",
+      "background": "bg_ch_12",
+      "music": "bgm_ch_12",
+      "tier": "M0"
+    }
+  ]
+}

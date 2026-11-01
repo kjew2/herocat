@@ -3,23 +3,28 @@
   "rows": [
     {
       "day": 1,
-      "stage": 90
+      "stage": 240,
+      "tolerance": 0.2
     },
     {
       "day": 3,
-      "stage": 240
+      "stage": 330,
+      "tolerance": 0.2
     },
     {
       "day": 7,
-      "stage": 380
+      "stage": 430,
+      "tolerance": 0.2
     },
     {
       "day": 14,
-      "stage": 480
+      "stage": 480,
+      "tolerance": 0.2
     },
     {
       "day": 30,
-      "stage": 550
+      "stage": 550,
+      "tolerance": 0.2
     }
   ]
 }

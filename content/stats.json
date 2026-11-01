@@ -1,0 +1,93 @@
+{
+  "table": "stats",
+  "rows": [
+    {
+      "id": "ATK",
+      "trainable": true,
+      "per_lvl": 0.05,
+      "cap": null,
+      "base": 10.0,
+      "tier": "M0",
+      "name_key": "stat.atk.name",
+      "desc_key": "stat.atk.desc",
+      "icon": "icon_stat_atk"
+    },
+    {
+      "id": "HP",
+      "trainable": false,
+      "per_lvl": null,
+      "cap": null,
+      "base": 100.0,
+      "tier": "M0",
+      "name_key": "stat.hp.name",
+      "desc_key": "stat.hp.desc",
+      "icon": "icon_stat_hp"
+    },
+    {
+      "id": "DEF",
+      "trainable": false,
+      "per_lvl": null,
+      "cap": null,
+      "base": null,
+      "tier": "M0",
+      "name_key": "stat.def.name",
+      "desc_key": "stat.def.desc",
+      "icon": "icon_stat_def"
+    },
+    {
+      "id": "CRIT_RATE",
+      "trainable": true,
+      "per_lvl": 0.0025,
+      "cap": 300,
+      "base": null,
+      "tier": "M0",
+      "name_key": "stat.crit_rate.name",
+      "desc_key": "stat.crit_rate.desc",
+      "icon": "icon_stat_crit_rate"
+    },
+    {
+      "id": "CRIT_DMG",
+      "trainable": true,
+      "per_lvl": 0.01,
+      "cap": null,
+      "base": 1.5,
+      "tier": "M0",
+      "name_key": "stat.crit_dmg.name",
+      "desc_key": "stat.crit_dmg.desc",
+      "icon": "icon_stat_crit_dmg"
+    },
+    {
+      "id": "ATK_SPD",
+      "trainable": true,
+      "per_lvl": 0.01,
+      "cap": 100,
+      "base": null,
+      "tier": "M0",
+      "name_key": "stat.atk_spd.name",
+      "desc_key": "stat.atk_spd.desc",
+      "icon": "icon_stat_atk_spd"
+    },
+    {
+      "id": "GOLD_GAIN",
+      "trainable": true,
+      "per_lvl": 0.02,
+      "cap": null,
+      "base": null,
+      "tier": "M0",
+      "name_key": "stat.gold_gain.name",
+      "desc_key": "stat.gold_gain.desc",
+      "icon": "icon_stat_gold_gain"
+    },
+    {
+      "id": "EXP_GAIN",
+      "trainable": true,
+      "per_lvl": 0.02,
+      "cap": null,
+      "base": null,
+      "tier": "M0",
+      "name_key": "stat.exp_gain.name",
+      "desc_key": "stat.exp_gain.desc",
+      "icon": "icon_stat_exp_gain"
+    }
+  ]
+}

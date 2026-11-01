@@ -1,0 +1,183 @@
+{
+  "table": "tutorial_steps",
+  "rows": [
+    {
+      "id": "tut_welcome",
+      "order": 1,
+      "trigger": "PROFILE_CREATED",
+      "trigger_value": null,
+      "screen": "SCR_MAIN",
+      "highlight": "combat_viewport",
+      "text_key": "tut.1.tap",
+      "expect_event": "TapZapped",
+      "expect_count": 3,
+      "grants": [
+        {
+          "currency": "DIAMOND",
+          "amount": 1500
+        },
+        {
+          "kind": "WEAPON",
+          "id": "weapon_c_01",
+          "amount": 1
+        }
+      ],
+      "skippable": false,
+      "tier": "M0"
+    },
+    {
+      "id": "tut_gold",
+      "order": 2,
+      "trigger": "PREVIOUS_DONE",
+      "trigger_value": null,
+      "screen": "SCR_MAIN",
+      "highlight": "gold_chip",
+      "text_key": "tut.2.gold",
+      "expect_event": "EnemyKilled",
+      "expect_count": 3,
+      "grants": null,
+      "skippable": false,
+      "tier": "MVP"
+    },
+    {
+      "id": "tut_hero_tab",
+      "order": 3,
+      "trigger": "PREVIOUS_DONE",
+      "trigger_value": null,
+      "screen": "SCR_MAIN",
+      "highlight": "tab_hero",
+      "text_key": "tut.3.hero",
+      "expect_event": null,
+      "expect_count": null,
+      "grants": null,
+      "skippable": true,
+      "tier": "MVP"
+    },
+    {
+      "id": "tut_train",
+      "order": 4,
+      "trigger": "PREVIOUS_DONE",
+      "trigger_value": null,
+      "screen": "SCR_HERO",
+      "highlight": "train_atk",
+      "text_key": "tut.4.train",
+      "expect_event": "StatTrained",
+      "expect_count": 1,
+      "grants": null,
+      "skippable": true,
+      "tier": "MVP"
+    },
+    {
+      "id": "tut_back",
+      "order": 5,
+      "trigger": "PREVIOUS_DONE",
+      "trigger_value": null,
+      "screen": "SCR_HERO",
+      "highlight": "back",
+      "text_key": "tut.5.back",
+      "expect_event": null,
+      "expect_count": null,
+      "grants": null,
+      "skippable": true,
+      "tier": "MVP"
+    },
+    {
+      "id": "tut_release",
+      "order": 6,
+      "trigger": "PREVIOUS_DONE",
+      "trigger_value": null,
+      "screen": "SCR_MAIN",
+      "highlight": "release_button",
+      "text_key": "tut.6.release",
+      "expect_event": "FishReleased",
+      "expect_count": 2,
+      "grants": null,
+      "skippable": true,
+      "tier": "MVP"
+    },
+    {
+      "id": "tut_merge",
+      "order": 7,
+      "trigger": "PREVIOUS_DONE",
+      "trigger_value": null,
+      "screen": "SCR_MAIN",
+      "highlight": "fish_board",
+      "text_key": "tut.7.merge",
+      "expect_event": "FishMerged",
+      "expect_count": 1,
+      "grants": null,
+      "skippable": true,
+      "tier": "MVP"
+    },
+    {
+      "id": "tut_summon_tab",
+      "order": 8,
+      "trigger": "PREVIOUS_DONE",
+      "trigger_value": null,
+      "screen": "SCR_MAIN",
+      "highlight": "tab_summon",
+      "text_key": "tut.8.summon",
+      "expect_event": null,
+      "expect_count": null,
+      "grants": null,
+      "skippable": true,
+      "tier": "MVP"
+    },
+    {
+      "id": "tut_pull",
+      "order": 9,
+      "trigger": "PREVIOUS_DONE",
+      "trigger_value": null,
+      "screen": "SCR_SUMMON",
+      "highlight": "pull10_weapon",
+      "text_key": "tut.9.pull",
+      "expect_event": "ItemAcquired",
+      "expect_count": 10,
+      "grants": null,
+      "skippable": true,
+      "tier": "MVP"
+    },
+    {
+      "id": "tut_skip_reveal",
+      "order": 10,
+      "trigger": "PREVIOUS_DONE",
+      "trigger_value": null,
+      "screen": "SCR_SUMMON_RESULT",
+      "highlight": "skip",
+      "text_key": "tut.10.skip",
+      "expect_event": null,
+      "expect_count": null,
+      "grants": null,
+      "skippable": true,
+      "tier": "MVP"
+    },
+    {
+      "id": "tut_equip",
+      "order": 11,
+      "trigger": "PREVIOUS_DONE",
+      "trigger_value": null,
+      "screen": "SCR_WEAPONS",
+      "highlight": "equip",
+      "text_key": "tut.11.equip",
+      "expect_event": "ItemEquipped",
+      "expect_count": 1,
+      "grants": null,
+      "skippable": true,
+      "tier": "MVP"
+    },
+    {
+      "id": "tut_boss",
+      "order": 12,
+      "trigger": "PREVIOUS_DONE",
+      "trigger_value": null,
+      "screen": "SCR_MAIN",
+      "highlight": "boss_button",
+      "text_key": "tut.12.boss",
+      "expect_event": null,
+      "expect_count": null,
+      "grants": null,
+      "skippable": true,
+      "tier": "MVP"
+    }
+  ]
+}

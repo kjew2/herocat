@@ -1,0 +1,9 @@
+id,trainable,per_lvl,cap,base,tier,name_key,desc_key,icon,#notes
+ATK,true,0.05,,10,M0,stat.atk.name,stat.atk.desc,icon_stat_atk,
+HP,false,,,100,M0,stat.hp.name,stat.hp.desc,icon_stat_hp,not trainable in MVP (03 section 4); tier M0 so the enum-indexed table stays complete
+DEF,false,,,,M0,stat.def.name,stat.def.desc,icon_stat_def,not trainable in MVP (03 section 4); tier M0 so the enum-indexed table stays complete
+CRIT_RATE,true,0.0025,300,,M0,stat.crit_rate.name,stat.crit_rate.desc,icon_stat_crit_rate,
+CRIT_DMG,true,0.01,,1.5,M0,stat.crit_dmg.name,stat.crit_dmg.desc,icon_stat_crit_dmg,
+ATK_SPD,true,0.01,100,,M0,stat.atk_spd.name,stat.atk_spd.desc,icon_stat_atk_spd,
+GOLD_GAIN,true,0.02,,,M0,stat.gold_gain.name,stat.gold_gain.desc,icon_stat_gold_gain,
+EXP_GAIN,true,0.02,,,M0,stat.exp_gain.name,stat.exp_gain.desc,icon_stat_exp_gain,

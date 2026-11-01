@@ -1,0 +1,13 @@
+{
+  "table": "hero_levels",
+  "rows": [
+    {
+      "id": "default",
+      "exp0": 100.0,
+      "exp_g": 1.08,
+      "atk_pct_per_level": null,
+      "mult_per_level": 1.02,
+      "level_cap": 9999
+    }
+  ]
+}

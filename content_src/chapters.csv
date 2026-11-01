@@ -1,0 +1,13 @@
+id,index,from_stage,name_key,background,music,tier
+ch_01,1,1,chapter.01.name,bg_ch_01,bgm_ch_01,M0
+ch_02,2,51,chapter.02.name,bg_ch_02,bgm_ch_02,M0
+ch_03,3,101,chapter.03.name,bg_ch_03,bgm_ch_03,M0
+ch_04,4,151,chapter.04.name,bg_ch_04,bgm_ch_04,M0
+ch_05,5,201,chapter.05.name,bg_ch_05,bgm_ch_05,M0
+ch_06,6,251,chapter.06.name,bg_ch_06,bgm_ch_06,M0
+ch_07,7,301,chapter.07.name,bg_ch_07,bgm_ch_07,M0
+ch_08,8,351,chapter.08.name,bg_ch_08,bgm_ch_08,M0
+ch_09,9,401,chapter.09.name,bg_ch_09,bgm_ch_09,M0
+ch_10,10,451,chapter.10.name,bg_ch_10,bgm_ch_10,M0
+ch_11,11,501,chapter.11.name,bg_ch_11,bgm_ch_11,M0
+ch_12,12,551,chapter.12.name,bg_ch_12,bgm_ch_12,M0

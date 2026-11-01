@@ -1,0 +1,45 @@
+{
+  "table": "feature_unlocks",
+  "rows": [
+    {
+      "feature": "RESEARCH",
+      "condition": "AWAKEN_RANK",
+      "threshold": 1,
+      "screen": "SCR_RESEARCH",
+      "locked_text_key": "feature.research.locked",
+      "tier": "MVP"
+    },
+    {
+      "feature": "COMPANIONS",
+      "condition": "ALWAYS",
+      "threshold": null,
+      "screen": "SCR_COMPANIONS",
+      "locked_text_key": null,
+      "tier": "MVP"
+    },
+    {
+      "feature": "QUESTS",
+      "condition": "STAGE_HIGHEST",
+      "threshold": 10,
+      "screen": "SCR_QUESTS",
+      "locked_text_key": "feature.quests.locked",
+      "tier": "MVP"
+    },
+    {
+      "feature": "DUNGEONS",
+      "condition": "STAGE_HIGHEST",
+      "threshold": 30,
+      "screen": "SCR_DUNGEONS",
+      "locked_text_key": "feature.dungeons.locked",
+      "tier": "MVP"
+    },
+    {
+      "feature": "SHOP",
+      "condition": "ALWAYS",
+      "threshold": null,
+      "screen": "SCR_SHOP",
+      "locked_text_key": null,
+      "tier": "MVP"
+    }
+  ]
+}

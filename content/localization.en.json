@@ -1,0 +1,874 @@
+{
+  "table": "localization",
+  "locale": "en",
+  "rows": [
+    {
+      "key": "awakening.rank_1.name",
+      "text": "Awakened 1"
+    },
+    {
+      "key": "awakening.rank_2.name",
+      "text": "Awakened 2"
+    },
+    {
+      "key": "awakening.rank_3.name",
+      "text": "Awakened 3"
+    },
+    {
+      "key": "awakening.rank_4.name",
+      "text": "Awakened 4"
+    },
+    {
+      "key": "awakening.rank_5.name",
+      "text": "Awakened 5"
+    },
+    {
+      "key": "banner.companion.name",
+      "text": "Companion Summon"
+    },
+    {
+      "key": "banner.rune.name",
+      "text": "Rune Summon"
+    },
+    {
+      "key": "banner.skill.name",
+      "text": "Skill Summon"
+    },
+    {
+      "key": "banner.weapon.name",
+      "text": "Weapon Summon"
+    },
+    {
+      "key": "chapter.01.name",
+      "text": "Dreamland 1"
+    },
+    {
+      "key": "chapter.02.name",
+      "text": "Dreamland 2"
+    },
+    {
+      "key": "chapter.03.name",
+      "text": "Dreamland 3"
+    },
+    {
+      "key": "chapter.04.name",
+      "text": "Dreamland 4"
+    },
+    {
+      "key": "chapter.05.name",
+      "text": "Dreamland 5"
+    },
+    {
+      "key": "chapter.06.name",
+      "text": "Dreamland 6"
+    },
+    {
+      "key": "chapter.07.name",
+      "text": "Dreamland 7"
+    },
+    {
+      "key": "chapter.08.name",
+      "text": "Dreamland 8"
+    },
+    {
+      "key": "chapter.09.name",
+      "text": "Dreamland 9"
+    },
+    {
+      "key": "chapter.10.name",
+      "text": "Dreamland 10"
+    },
+    {
+      "key": "chapter.11.name",
+      "text": "Dreamland 11"
+    },
+    {
+      "key": "chapter.12.name",
+      "text": "Dreamland 12"
+    },
+    {
+      "key": "feature.dungeons.locked",
+      "text": "Unlocks at stage 30"
+    },
+    {
+      "key": "feature.quests.locked",
+      "text": "Unlocks at stage 10"
+    },
+    {
+      "key": "feature.research.locked",
+      "text": "Unlocks at Awakening 1"
+    },
+    {
+      "key": "fish.01.name",
+      "text": "Fish 1"
+    },
+    {
+      "key": "fish.02.name",
+      "text": "Fish 2"
+    },
+    {
+      "key": "fish.03.name",
+      "text": "Fish 3"
+    },
+    {
+      "key": "fish.04.name",
+      "text": "Fish 4"
+    },
+    {
+      "key": "fish.05.name",
+      "text": "Fish 5"
+    },
+    {
+      "key": "fish.06.name",
+      "text": "Fish 6"
+    },
+    {
+      "key": "fish.07.name",
+      "text": "Fish 7"
+    },
+    {
+      "key": "fish.08.name",
+      "text": "Fish 8"
+    },
+    {
+      "key": "fish.09.name",
+      "text": "Fish 9"
+    },
+    {
+      "key": "fish.10.name",
+      "text": "Fish 10"
+    },
+    {
+      "key": "fish.11.name",
+      "text": "Fish 11"
+    },
+    {
+      "key": "fish.12.name",
+      "text": "Fish 12"
+    },
+    {
+      "key": "fish.13.name",
+      "text": "Fish 13"
+    },
+    {
+      "key": "fish.14.name",
+      "text": "Fish 14"
+    },
+    {
+      "key": "fish.15.name",
+      "text": "Fish 15"
+    },
+    {
+      "key": "fish.16.name",
+      "text": "Fish 16"
+    },
+    {
+      "key": "fish.17.name",
+      "text": "Fish 17"
+    },
+    {
+      "key": "fish.18.name",
+      "text": "Fish 18"
+    },
+    {
+      "key": "fish.19.name",
+      "text": "Fish 19"
+    },
+    {
+      "key": "fish.20.name",
+      "text": "Fish 20"
+    },
+    {
+      "key": "rarity.common.name",
+      "text": "Common"
+    },
+    {
+      "key": "rarity.epic.name",
+      "text": "Epic"
+    },
+    {
+      "key": "rarity.legendary.name",
+      "text": "Legendary"
+    },
+    {
+      "key": "rarity.mythic.name",
+      "text": "Mythic"
+    },
+    {
+      "key": "rarity.rare.name",
+      "text": "Rare"
+    },
+    {
+      "key": "skill.c_01.desc",
+      "text": "A common instant skill."
+    },
+    {
+      "key": "skill.c_01.name",
+      "text": "Common Skill 1"
+    },
+    {
+      "key": "skill.c_02.desc",
+      "text": "A common instant skill."
+    },
+    {
+      "key": "skill.c_02.name",
+      "text": "Common Skill 2"
+    },
+    {
+      "key": "skill.c_03.desc",
+      "text": "A common instant skill."
+    },
+    {
+      "key": "skill.c_03.name",
+      "text": "Common Skill 3"
+    },
+    {
+      "key": "skill.c_04.desc",
+      "text": "A common instant skill."
+    },
+    {
+      "key": "skill.c_04.name",
+      "text": "Common Skill 4"
+    },
+    {
+      "key": "skill.c_05.desc",
+      "text": "A common instant skill."
+    },
+    {
+      "key": "skill.c_05.name",
+      "text": "Common Skill 5"
+    },
+    {
+      "key": "skill.c_06.desc",
+      "text": "A common instant skill."
+    },
+    {
+      "key": "skill.c_06.name",
+      "text": "Common Skill 6"
+    },
+    {
+      "key": "skill.c_07.desc",
+      "text": "A common instant skill."
+    },
+    {
+      "key": "skill.c_07.name",
+      "text": "Common Skill 7"
+    },
+    {
+      "key": "skill.c_08.desc",
+      "text": "A common instant skill."
+    },
+    {
+      "key": "skill.c_08.name",
+      "text": "Common Skill 8"
+    },
+    {
+      "key": "skill.c_09.desc",
+      "text": "A common dot skill."
+    },
+    {
+      "key": "skill.c_09.name",
+      "text": "Common Skill 9"
+    },
+    {
+      "key": "skill.c_10.desc",
+      "text": "A common dot skill."
+    },
+    {
+      "key": "skill.c_10.name",
+      "text": "Common Skill 10"
+    },
+    {
+      "key": "skill.c_11.desc",
+      "text": "A common dot skill."
+    },
+    {
+      "key": "skill.c_11.name",
+      "text": "Common Skill 11"
+    },
+    {
+      "key": "skill.c_12.desc",
+      "text": "A common dot skill."
+    },
+    {
+      "key": "skill.c_12.name",
+      "text": "Common Skill 12"
+    },
+    {
+      "key": "skill.c_13.desc",
+      "text": "A common buff skill."
+    },
+    {
+      "key": "skill.c_13.name",
+      "text": "Common Skill 13"
+    },
+    {
+      "key": "skill.c_14.desc",
+      "text": "A common buff skill."
+    },
+    {
+      "key": "skill.c_14.name",
+      "text": "Common Skill 14"
+    },
+    {
+      "key": "skill.e_01.desc",
+      "text": "A epic instant skill."
+    },
+    {
+      "key": "skill.e_01.name",
+      "text": "Epic Skill 1"
+    },
+    {
+      "key": "skill.e_02.desc",
+      "text": "A epic instant skill."
+    },
+    {
+      "key": "skill.e_02.name",
+      "text": "Epic Skill 2"
+    },
+    {
+      "key": "skill.e_03.desc",
+      "text": "A epic instant skill."
+    },
+    {
+      "key": "skill.e_03.name",
+      "text": "Epic Skill 3"
+    },
+    {
+      "key": "skill.e_04.desc",
+      "text": "A epic instant skill."
+    },
+    {
+      "key": "skill.e_04.name",
+      "text": "Epic Skill 4"
+    },
+    {
+      "key": "skill.e_05.desc",
+      "text": "A epic instant skill."
+    },
+    {
+      "key": "skill.e_05.name",
+      "text": "Epic Skill 5"
+    },
+    {
+      "key": "skill.e_06.desc",
+      "text": "A epic dot skill."
+    },
+    {
+      "key": "skill.e_06.name",
+      "text": "Epic Skill 6"
+    },
+    {
+      "key": "skill.e_07.desc",
+      "text": "A epic dot skill."
+    },
+    {
+      "key": "skill.e_07.name",
+      "text": "Epic Skill 7"
+    },
+    {
+      "key": "skill.e_08.desc",
+      "text": "A epic buff skill."
+    },
+    {
+      "key": "skill.e_08.name",
+      "text": "Epic Skill 8"
+    },
+    {
+      "key": "skill.l_01.desc",
+      "text": "A legendary instant skill."
+    },
+    {
+      "key": "skill.l_01.name",
+      "text": "Legendary Skill 1"
+    },
+    {
+      "key": "skill.l_02.desc",
+      "text": "A legendary instant skill."
+    },
+    {
+      "key": "skill.l_02.name",
+      "text": "Legendary Skill 2"
+    },
+    {
+      "key": "skill.l_03.desc",
+      "text": "A legendary instant skill."
+    },
+    {
+      "key": "skill.l_03.name",
+      "text": "Legendary Skill 3"
+    },
+    {
+      "key": "skill.l_04.desc",
+      "text": "A legendary dot skill."
+    },
+    {
+      "key": "skill.l_04.name",
+      "text": "Legendary Skill 4"
+    },
+    {
+      "key": "skill.l_05.desc",
+      "text": "A legendary buff skill."
+    },
+    {
+      "key": "skill.l_05.name",
+      "text": "Legendary Skill 5"
+    },
+    {
+      "key": "skill.m_01.desc",
+      "text": "A mythic instant skill."
+    },
+    {
+      "key": "skill.m_01.name",
+      "text": "Mythic Skill 1"
+    },
+    {
+      "key": "skill.m_02.desc",
+      "text": "A mythic buff skill."
+    },
+    {
+      "key": "skill.m_02.name",
+      "text": "Mythic Skill 2"
+    },
+    {
+      "key": "skill.r_01.desc",
+      "text": "A rare instant skill."
+    },
+    {
+      "key": "skill.r_01.name",
+      "text": "Rare Skill 1"
+    },
+    {
+      "key": "skill.r_02.desc",
+      "text": "A rare instant skill."
+    },
+    {
+      "key": "skill.r_02.name",
+      "text": "Rare Skill 2"
+    },
+    {
+      "key": "skill.r_03.desc",
+      "text": "A rare instant skill."
+    },
+    {
+      "key": "skill.r_03.name",
+      "text": "Rare Skill 3"
+    },
+    {
+      "key": "skill.r_04.desc",
+      "text": "A rare instant skill."
+    },
+    {
+      "key": "skill.r_04.name",
+      "text": "Rare Skill 4"
+    },
+    {
+      "key": "skill.r_05.desc",
+      "text": "A rare instant skill."
+    },
+    {
+      "key": "skill.r_05.name",
+      "text": "Rare Skill 5"
+    },
+    {
+      "key": "skill.r_06.desc",
+      "text": "A rare instant skill."
+    },
+    {
+      "key": "skill.r_06.name",
+      "text": "Rare Skill 6"
+    },
+    {
+      "key": "skill.r_07.desc",
+      "text": "A rare instant skill."
+    },
+    {
+      "key": "skill.r_07.name",
+      "text": "Rare Skill 7"
+    },
+    {
+      "key": "skill.r_08.desc",
+      "text": "A rare dot skill."
+    },
+    {
+      "key": "skill.r_08.name",
+      "text": "Rare Skill 8"
+    },
+    {
+      "key": "skill.r_09.desc",
+      "text": "A rare dot skill."
+    },
+    {
+      "key": "skill.r_09.name",
+      "text": "Rare Skill 9"
+    },
+    {
+      "key": "skill.r_10.desc",
+      "text": "A rare dot skill."
+    },
+    {
+      "key": "skill.r_10.name",
+      "text": "Rare Skill 10"
+    },
+    {
+      "key": "skill.r_11.desc",
+      "text": "A rare buff skill."
+    },
+    {
+      "key": "skill.r_11.name",
+      "text": "Rare Skill 11"
+    },
+    {
+      "key": "stat.atk.desc",
+      "text": "Raises Attack."
+    },
+    {
+      "key": "stat.atk.name",
+      "text": "Attack"
+    },
+    {
+      "key": "stat.atk_spd.desc",
+      "text": "Raises Attack Speed."
+    },
+    {
+      "key": "stat.atk_spd.name",
+      "text": "Attack Speed"
+    },
+    {
+      "key": "stat.crit_dmg.desc",
+      "text": "Raises Crit Damage."
+    },
+    {
+      "key": "stat.crit_dmg.name",
+      "text": "Crit Damage"
+    },
+    {
+      "key": "stat.crit_rate.desc",
+      "text": "Raises Crit Rate."
+    },
+    {
+      "key": "stat.crit_rate.name",
+      "text": "Crit Rate"
+    },
+    {
+      "key": "stat.def.desc",
+      "text": "Raises Defense."
+    },
+    {
+      "key": "stat.def.name",
+      "text": "Defense"
+    },
+    {
+      "key": "stat.exp_gain.desc",
+      "text": "Raises EXP Gain."
+    },
+    {
+      "key": "stat.exp_gain.name",
+      "text": "EXP Gain"
+    },
+    {
+      "key": "stat.gold_gain.desc",
+      "text": "Raises Gold Gain."
+    },
+    {
+      "key": "stat.gold_gain.name",
+      "text": "Gold Gain"
+    },
+    {
+      "key": "stat.hp.desc",
+      "text": "Raises Health."
+    },
+    {
+      "key": "stat.hp.name",
+      "text": "Health"
+    },
+    {
+      "key": "tut.1.tap",
+      "text": "Tap the monster!"
+    },
+    {
+      "key": "tut.10.skip",
+      "text": "Tap to skip."
+    },
+    {
+      "key": "tut.11.equip",
+      "text": "Equip your best weapon."
+    },
+    {
+      "key": "tut.12.boss",
+      "text": "A boss! Merge fish to fire missiles"
+    },
+    {
+      "key": "tut.2.gold",
+      "text": "Monsters drop gold."
+    },
+    {
+      "key": "tut.3.hero",
+      "text": "Make your cat stronger"
+    },
+    {
+      "key": "tut.4.train",
+      "text": "Train Attack."
+    },
+    {
+      "key": "tut.5.back",
+      "text": "Back to the fight."
+    },
+    {
+      "key": "tut.6.release",
+      "text": "Release a fish"
+    },
+    {
+      "key": "tut.7.merge",
+      "text": "Drag one onto the other"
+    },
+    {
+      "key": "tut.8.summon",
+      "text": "Summon weapons here."
+    },
+    {
+      "key": "tut.9.pull",
+      "text": "Summon 10 weapons"
+    },
+    {
+      "key": "weapon.c_01.desc",
+      "text": "A common weapon."
+    },
+    {
+      "key": "weapon.c_01.name",
+      "text": "Common Weapon 1"
+    },
+    {
+      "key": "weapon.c_02.desc",
+      "text": "A common weapon."
+    },
+    {
+      "key": "weapon.c_02.name",
+      "text": "Common Weapon 2"
+    },
+    {
+      "key": "weapon.c_03.desc",
+      "text": "A common weapon."
+    },
+    {
+      "key": "weapon.c_03.name",
+      "text": "Common Weapon 3"
+    },
+    {
+      "key": "weapon.c_04.desc",
+      "text": "A common weapon."
+    },
+    {
+      "key": "weapon.c_04.name",
+      "text": "Common Weapon 4"
+    },
+    {
+      "key": "weapon.c_05.desc",
+      "text": "A common weapon."
+    },
+    {
+      "key": "weapon.c_05.name",
+      "text": "Common Weapon 5"
+    },
+    {
+      "key": "weapon.c_06.desc",
+      "text": "A common weapon."
+    },
+    {
+      "key": "weapon.c_06.name",
+      "text": "Common Weapon 6"
+    },
+    {
+      "key": "weapon.c_07.desc",
+      "text": "A common weapon."
+    },
+    {
+      "key": "weapon.c_07.name",
+      "text": "Common Weapon 7"
+    },
+    {
+      "key": "weapon.c_08.desc",
+      "text": "A common weapon."
+    },
+    {
+      "key": "weapon.c_08.name",
+      "text": "Common Weapon 8"
+    },
+    {
+      "key": "weapon.c_09.desc",
+      "text": "A common weapon."
+    },
+    {
+      "key": "weapon.c_09.name",
+      "text": "Common Weapon 9"
+    },
+    {
+      "key": "weapon.c_10.desc",
+      "text": "A common weapon."
+    },
+    {
+      "key": "weapon.c_10.name",
+      "text": "Common Weapon 10"
+    },
+    {
+      "key": "weapon.e_01.desc",
+      "text": "A epic weapon."
+    },
+    {
+      "key": "weapon.e_01.name",
+      "text": "Epic Weapon 1"
+    },
+    {
+      "key": "weapon.e_02.desc",
+      "text": "A epic weapon."
+    },
+    {
+      "key": "weapon.e_02.name",
+      "text": "Epic Weapon 2"
+    },
+    {
+      "key": "weapon.e_03.desc",
+      "text": "A epic weapon."
+    },
+    {
+      "key": "weapon.e_03.name",
+      "text": "Epic Weapon 3"
+    },
+    {
+      "key": "weapon.e_04.desc",
+      "text": "A epic weapon."
+    },
+    {
+      "key": "weapon.e_04.name",
+      "text": "Epic Weapon 4"
+    },
+    {
+      "key": "weapon.e_05.desc",
+      "text": "A epic weapon."
+    },
+    {
+      "key": "weapon.e_05.name",
+      "text": "Epic Weapon 5"
+    },
+    {
+      "key": "weapon.e_06.desc",
+      "text": "A epic weapon."
+    },
+    {
+      "key": "weapon.e_06.name",
+      "text": "Epic Weapon 6"
+    },
+    {
+      "key": "weapon.l_01.desc",
+      "text": "A legendary weapon."
+    },
+    {
+      "key": "weapon.l_01.name",
+      "text": "Legendary Weapon 1"
+    },
+    {
+      "key": "weapon.l_02.desc",
+      "text": "A legendary weapon."
+    },
+    {
+      "key": "weapon.l_02.name",
+      "text": "Legendary Weapon 2"
+    },
+    {
+      "key": "weapon.l_03.desc",
+      "text": "A legendary weapon."
+    },
+    {
+      "key": "weapon.l_03.name",
+      "text": "Legendary Weapon 3"
+    },
+    {
+      "key": "weapon.l_04.desc",
+      "text": "A legendary weapon."
+    },
+    {
+      "key": "weapon.l_04.name",
+      "text": "Legendary Weapon 4"
+    },
+    {
+      "key": "weapon.m_01.desc",
+      "text": "A mythic weapon."
+    },
+    {
+      "key": "weapon.m_01.name",
+      "text": "Mythic Weapon 1"
+    },
+    {
+      "key": "weapon.m_02.desc",
+      "text": "A mythic weapon."
+    },
+    {
+      "key": "weapon.m_02.name",
+      "text": "Mythic Weapon 2"
+    },
+    {
+      "key": "weapon.r_01.desc",
+      "text": "A rare weapon."
+    },
+    {
+      "key": "weapon.r_01.name",
+      "text": "Rare Weapon 1"
+    },
+    {
+      "key": "weapon.r_02.desc",
+      "text": "A rare weapon."
+    },
+    {
+      "key": "weapon.r_02.name",
+      "text": "Rare Weapon 2"
+    },
+    {
+      "key": "weapon.r_03.desc",
+      "text": "A rare weapon."
+    },
+    {
+      "key": "weapon.r_03.name",
+      "text": "Rare Weapon 3"
+    },
+    {
+      "key": "weapon.r_04.desc",
+      "text": "A rare weapon."
+    },
+    {
+      "key": "weapon.r_04.name",
+      "text": "Rare Weapon 4"
+    },
+    {
+      "key": "weapon.r_05.desc",
+      "text": "A rare weapon."
+    },
+    {
+      "key": "weapon.r_05.name",
+      "text": "Rare Weapon 5"
+    },
+    {
+      "key": "weapon.r_06.desc",
+      "text": "A rare weapon."
+    },
+    {
+      "key": "weapon.r_06.name",
+      "text": "Rare Weapon 6"
+    },
+    {
+      "key": "weapon.r_07.desc",
+      "text": "A rare weapon."
+    },
+    {
+      "key": "weapon.r_07.name",
+      "text": "Rare Weapon 7"
+    },
+    {
+      "key": "weapon.r_08.desc",
+      "text": "A rare weapon."
+    },
+    {
+      "key": "weapon.r_08.name",
+      "text": "Rare Weapon 8"
+    }
+  ]
+}

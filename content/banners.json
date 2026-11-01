@@ -2,27 +2,104 @@
   "table": "banners",
   "rows": [
     {
-      "id": "hero_standard",
-      "kind": "hero",
-      "name_key": "banner.hero_standard.name",
-      "pool_id": "hero_standard",
-      "rates": {
-        "C": 0.6,
-        "R": 0.28,
-        "E": 0.09,
-        "L": 0.025,
-        "M": 0.005
+      "id": "WEAPON",
+      "enabled": true,
+      "tier": "M0",
+      "pull_cost_diamonds": 100,
+      "ticket_currency": "TICKET_SUMMON_WEAPON",
+      "pool_size": {
+        "COMMON": 10,
+        "RARE": 8,
+        "EPIC": 6,
+        "LEGENDARY": 4,
+        "MYTHIC": 2
       },
       "pity_soft_start": 50,
       "pity_soft_step": 0.0325,
       "pity_hard": 80,
-      "mythic_share_of_lplus": 0.16666666666666666,
+      "m_share_of_lplus": 0.16666666666666666,
       "guarantee_batch_size": 10,
-      "guarantee_min_tier": "E",
-      "pull_cost_gems": 100,
-      "free_pulls_per_day": 3,
-      "rng_stream": "gacha_hero",
-      "enabled": true
+      "guarantee_min_rarity": "EPIC",
+      "exp_per_pull": 1,
+      "sort_order": 0,
+      "name_key": "banner.weapon.name",
+      "icon": "icon_banner_weapon",
+      "banner_art": "art_banner_weapon"
+    },
+    {
+      "id": "SKILL",
+      "enabled": true,
+      "tier": "M0",
+      "pull_cost_diamonds": 200,
+      "ticket_currency": "TICKET_SUMMON_SKILL",
+      "pool_size": {
+        "COMMON": 14,
+        "RARE": 11,
+        "EPIC": 8,
+        "LEGENDARY": 5,
+        "MYTHIC": 2
+      },
+      "pity_soft_start": 50,
+      "pity_soft_step": 0.0325,
+      "pity_hard": 80,
+      "m_share_of_lplus": 0.16666666666666666,
+      "guarantee_batch_size": 10,
+      "guarantee_min_rarity": "EPIC",
+      "exp_per_pull": 1,
+      "sort_order": 1,
+      "name_key": "banner.skill.name",
+      "icon": "icon_banner_skill",
+      "banner_art": "art_banner_skill"
+    },
+    {
+      "id": "COMPANION",
+      "enabled": true,
+      "tier": "MVP",
+      "pull_cost_diamonds": 300,
+      "ticket_currency": "TICKET_SUMMON_COMPANION",
+      "pool_size": {
+        "COMMON": 18,
+        "RARE": 14,
+        "EPIC": 10,
+        "LEGENDARY": 6,
+        "MYTHIC": 2
+      },
+      "pity_soft_start": 50,
+      "pity_soft_step": 0.0325,
+      "pity_hard": 80,
+      "m_share_of_lplus": 0.16666666666666666,
+      "guarantee_batch_size": 10,
+      "guarantee_min_rarity": "EPIC",
+      "exp_per_pull": 1,
+      "sort_order": 2,
+      "name_key": "banner.companion.name",
+      "icon": "icon_banner_companion",
+      "banner_art": "art_banner_companion"
+    },
+    {
+      "id": "RUNE",
+      "enabled": false,
+      "tier": "P1",
+      "pull_cost_diamonds": 300,
+      "ticket_currency": "TICKET_SUMMON_RUNE",
+      "pool_size": {
+        "COMMON": 12,
+        "RARE": 10,
+        "EPIC": 8,
+        "LEGENDARY": 4,
+        "MYTHIC": 2
+      },
+      "pity_soft_start": 50,
+      "pity_soft_step": 0.0325,
+      "pity_hard": 80,
+      "m_share_of_lplus": 0.16666666666666666,
+      "guarantee_batch_size": 10,
+      "guarantee_min_rarity": "EPIC",
+      "exp_per_pull": 1,
+      "sort_order": 3,
+      "name_key": "banner.rune.name",
+      "icon": "icon_banner_rune",
+      "banner_art": "art_banner_rune"
     }
   ]
 }

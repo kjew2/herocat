@@ -1,0 +1,12 @@
+{
+  "table": "tank",
+  "rows": [
+    {
+      "id": "default",
+      "cap0": 10,
+      "refill_s0": 6.0,
+      "release_level": 1,
+      "refill_floor_s": 2.0
+    }
+  ]
+}
