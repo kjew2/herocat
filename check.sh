@@ -34,6 +34,21 @@ python3 tools/test_content.py
 python3 tools/test_power_curve_model.py
 python3 tools/export_content.py check
 
+# 09 section 6.3 (issue #123): a branch that changes content must bump content_version and must not delete ids, shift
+# pool indices or shrink the B5 tables. Compared against the merge base's content/ (CONTENT_BASE_REF, default
+# origin/main); skipped when that ref is unknown or its content/ predates the manifest format.
+step "Content: version rules against the merge base's content/ (E090-E093)"
+CONTENT_BASE_REF="${CONTENT_BASE_REF:-origin/main}"
+if CONTENT_BASE=$(git merge-base HEAD "$CONTENT_BASE_REF" 2>/dev/null) && git cat-file -e "$CONTENT_BASE:content/manifest.json" 2>/dev/null; then
+  PREV_DIR=$(mktemp -d)
+  git archive "$CONTENT_BASE" content | tar -x -C "$PREV_DIR"
+  python3 tools/export_content.py build --previous "$PREV_DIR/content" --out "$PREV_DIR/new" --dto-out "$PREV_DIR/dto.cs" >/dev/null
+  rm -rf "$PREV_DIR"
+  echo "content/ follows the version rules against $CONTENT_BASE_REF ($CONTENT_BASE)"
+else
+  echo "skipped: no content/manifest.json at the merge base with $CONTENT_BASE_REF"
+fi
+
 step "Tools: fish_model.py S-constant checks (05 section 9)"
 python3 tools/fish_model.py --quiet
 
