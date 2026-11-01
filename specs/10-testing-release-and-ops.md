@@ -200,7 +200,7 @@ public RunResult Run(IBotPolicy policy, ulong seed, int days)
 }
 ```
 
-Facts a developer can rely on: ticks per day `ActiveMinutesPerDay * 60 * TICK_HZ` = 72,000; a 30-day run is 2.16 M ticks; 20 seeds are 43.2 M ticks, which at 1 µs/tick is 43 s single-threaded and 15-25 s across 2-4 cores. Catch-up runs twice a day with 8.5-13.5 h gaps, never hitting `OFFLINE_CAP_H`; on even days the evening session runs across 00:00 UTC, so the in-session rollover path feeds the acceptance numbers half the time (a `--lapsed` option in P1 inserts skipped days). Diamonds come from the sim's own quests, first clears and login (`--diamonds content`, default); `--diamonds flat` grants `DIAMONDS_PER_DAY_F2P` at day start for parity with `power_curve_model.py`.
+Facts a developer can rely on: ticks per day `ActiveMinutesPerDay * 60 * TICK_HZ` = 72,000; a 30-day run is 2.16 M ticks; 20 seeds are 43.2 M ticks, which at 1 µs/tick is 43 s single-threaded and 15-25 s across 2-4 cores. Catch-up runs twice a day with 8.5-13.5 h gaps, never hitting `OFFLINE_CAP_H`; on even days the evening session runs across 00:00 UTC, so the in-session rollover path feeds the acceptance numbers half the time (a `--lapsed` option in P1 inserts skipped days). Diamonds come from the sim's own quests, first clears and login (`--diamonds content`, default); `--diamonds flat` grants `DIAMONDS_PER_DAY_F2P` at day start for parity with `power_curve_model.py --diamonds flat` (the tool defaults to 06's sources too, issue #178).
 
 ### 3.4 Policies
 
