@@ -13,7 +13,7 @@
       "Bash(git merge *)",
       "Bash(git push *)",
       "Bash(./check.sh *)",
-      "Bash(python3 tools/content_build.py *)",
+      "Bash(python3 tools/export_content.py *)",
       "Bash(dotnet build *)",
       "Bash(dotnet test *)",
       "Bash(dotnet run *)",
