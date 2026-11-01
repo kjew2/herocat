@@ -118,7 +118,7 @@
       0,
       0
     ],
-    "TankCount": 0,
+    "TankCount": 10,
     "TankRefillTick": 0,
     "TankReleaseLevel": 1,
     "DiscoveredLevels": [],
