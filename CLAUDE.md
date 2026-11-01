@@ -41,4 +41,5 @@ This file is how lessons reach the next agent. When the user corrects you on som
 - Unity cannot run in cloud sessions. Only the client's engine-free `unity/HeroCatClient/Assets/HeroCat.Client/Core/` is compiled (inside `HeroCat.Runtime.Tests`); say so when you change the Unity-only screens.
 - Cloud sessions install the .NET 8 SDK through `.claude/hooks/session-start.sh`. If `dotnet` is missing, run that script with `CLAUDE_CODE_REMOTE=true`, then the full `./check.sh`.
 - During the M0 rewrite `check.sh` runs the acceptance sweep and golden check report-only (`REWRITE_REPORT_ONLY=1`, agreed with the user). Report their result honestly; do not regenerate goldens or targets to hide a regression in code that is already rewritten. #136/#138 turn them back into hard gates.
+- When a task is blocked on a user decision, ask (or file the decision issue) and keep going with other unblocked work; do not sit idle waiting for the answer.
 - Generated test data is large and not for reading. Never open, grep through or hand-edit `golden/` files: regenerate them through the bot CLI, never edit by hand.
