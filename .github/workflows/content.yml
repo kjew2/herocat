@@ -1,0 +1,82 @@
+# Content CI (specs/10 section 6.2, specs/09 section 12, specs/00 decision 59): a thin wrapper around
+# `./check.sh --content` (exporter rebuild + diff, fish/gacha/power-curve oracles, the bot acceptance sweep, layer
+# shares, golden check), then the artifacts and the acceptance-table PR comment (tools/ci/pr_comment.py).
+#
+# Path filter: the workflow starts on every PR so its check always reports (a workflow skipped by `on.paths` leaves a
+# required check pending forever); the `changes` job decides, and a skipped `content` job counts as passed. It runs on
+# PRs touching content/, content_src/, tools/, the Sim, Runtime or Bots, golden/, Fixtures/, check.sh or this file, and
+# on every push to main. Required on main (specs/10 section 6.1).
+name: content
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write # the acceptance-table comment
+
+concurrency:
+  group: content-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+  CHECK_OUT_DIR: ${{ github.workspace }}/build/check
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      content: ${{ steps.filter.outputs.content }}
+    steps:
+      - id: filter
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "content=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          files=$(gh api "repos/${{ github.repository }}/pulls/$PR/files" --paginate --jq '.[].filename')
+          printf '%s\n' "$files"
+          re='^(content/|content_src/|tools/|src/HeroCat\.(Sim|Runtime|Bots)/|golden/|Fixtures/|check\.sh$|\.github/workflows/content\.yml$|\.github/actions/setup/)'
+          if printf '%s\n' "$files" | grep -Eq "$re"; then echo "content=true"; else echo "content=false"; fi | tee -a "$GITHUB_OUTPUT"
+
+  content:
+    needs: changes
+    if: needs.changes.outputs.content == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+
+      - name: ./check.sh --content
+        run: ./check.sh --content
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: content-check
+          path: |
+            build/check/acceptance.txt
+            build/check/acceptance-m0-14d.txt
+            build/check/shares.txt
+            build/check/golden.txt
+            build/check/exporter.diff
+          if-no-files-found: ignore
+          retention-days: 30
+
+      # Also writes the table to the job summary. Informational: this job's status is what blocks merge.
+      - name: Acceptance table comment
+        if: always() && github.event_name == 'pull_request'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 tools/ci/pr_comment.py --acceptance build/check/acceptance.txt --shares build/check/shares.txt

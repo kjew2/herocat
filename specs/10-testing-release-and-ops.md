@@ -274,7 +274,7 @@ Targets are read from `ContentDb.ProgressTargets` (09 section 5.31) and `Content
 | AC10 | Wall time of the whole sweep under `timeBudgetSeconds` | section 3.3 |
 | AC11 | For each seed: every Awakening rank whose `AWAKEN_STAGES` gate is reached by the last day is bought within `awakening_targets.max_days_after_gate` days of the day the gate is first reached (issue #43) | 03, 06 AC18, `awakening_targets` (09) |
 
-The CLI prints one `PASS`/`FAIL` line per check with the measured numbers and exits 1 on any failure. `content.yml` runs it (through `./check.sh --content`) on every PR that touches `content/`, `content_src/`, `tools/`, `src/HeroCat.Sim` or `src/HeroCat.Bots`; a failing AC blocks merge. The example output format is the sibling's (`PASS AC1 day 7: median stage 427 in 344..516 (target 430)`), which reviewers already read.
+The CLI prints one `PASS`/`FAIL` line per check with the measured numbers and exits 1 on any failure. `content.yml` runs it (through `./check.sh --content`) on every PR that touches `content/`, `content_src/`, `tools/`, `src/HeroCat.Sim`, `src/HeroCat.Runtime` or `src/HeroCat.Bots` (full list in section 6.2); a failing AC blocks merge (report-only during the M0 rewrite, issue #136). The example output format is the sibling's (`PASS AC1 day 7: median stage 427 in 344..516 (target 430)`), which reviewers already read.
 
 Acceptance table (printed by `acceptance --table`; the columns the brief asks for), illustrative shape only:
 
@@ -353,21 +353,21 @@ Trunk-based. `main` is always releasable; every change is a PR with required che
 
 ### 6.2 Workflows
 
-`./check.sh` is the single source of truth for what CI runs (issue #27). It has one mode per workflow; each workflow is a thin wrapper that checks out, sets up .NET 8 and Python, and calls its mode, and path filters decide which workflows run on a PR. Plain `./check.sh` runs `--pr` and `--content` in sequence (what a PR touching everything gets), so a green local run means green CI; `--fast` and `--no-dotnet` stay as local inner-loop options. A new kind of check is added to a mode in `check.sh`, never inline in a workflow. The only steps outside `check.sh` are those that need a Unity runner, secrets or a deploy target.
+`./check.sh` is the single source of truth for what CI runs (issue #27). It has one mode per workflow; each workflow is a thin wrapper that checks out, runs the shared setup action `.github/actions/setup` (Python 3.12, the .NET 8 SDK alone on PATH, the NuGet cache) and calls its mode, and path filters decide which workflows run on a PR. Plain `./check.sh` runs `--pr` and `--content` in sequence (what a PR touching everything gets; a step both modes share, the golden check, runs once), so a green local run means green CI; `--fast` (skips golden, perf, bench, power-curve, acceptance and the count guard) and `--no-dotnet` (only the Python steps of the chosen modes) stay as local inner-loop options and combine with a mode. A new kind of check is added to a mode in `check.sh`, never inline in a workflow; `tools/ci/check_workflows.py` (run by `--pr`) fails when a workflow calls a `check.sh` option that does not exist or a wrapper stops calling its mode, and runs `actionlint` when it is installed. The only steps outside `check.sh` are those that need a Unity runner, secrets, a deploy target or the GitHub API (artifact upload, the PR comment). Outputs (acceptance table, shares, golden output, exporter diff, TRX, sweep CSV) land in `$CHECK_OUT_DIR` (default `build/check/`), which the workflows upload. `.github/workflows/check.yml` (one job running the full `./check.sh`) is replaced by `pr.yml` and `content.yml`; branch protection on `main` requires `pr / checks` and `content / content` (a `content` job skipped by its path filter counts as passed).
 
-`.github/workflows/pr.yml` (every PR, ~6 min):
+`.github/workflows/pr.yml` (every PR and every push to `main`, ~6 min):
 
 ```yaml
-on: pull_request
+on: [pull_request, push to main, workflow_dispatch]
 jobs:
   checks:
     runs-on: ubuntu-latest
-    steps: [checkout, setup-dotnet 8.0.x, setup-python, run: ./check.sh --pr]
-  server:
+    steps: [checkout, ./.github/actions/setup, run: ./check.sh --pr, upload TRX + golden output]
+  server:                                                                         # not yet: lands with src/HeroCat.Server
     if: changed paths include src/HeroCat.Server or src/HeroCat.Sim
     services: { postgres: { image: postgres:16 }, redis: { image: redis:7 } }
     steps: [checkout, setup-dotnet 8.0.x, run: ./check.sh --server]
-  unity-editmode:
+  unity-editmode:                                                                 # not yet: runner label waits on issue #23
     if: changed paths include unity/
     runs-on: [self-hosted, unity-6000.6.7f1]
     steps: [checkout, game-ci/unity-test-runner@v4 with testMode EditMode]      # layout/prefab checks only (section 1)
@@ -376,43 +376,51 @@ jobs:
 `./check.sh --pr` runs, in order:
 
 ```sh
+python3 tools/test_export_content.py; python3 tools/test_content.py; python3 tools/test_power_curve_model.py   # exporter + tool unit tests
+python3 tools/export_content.py check                                             # committed JSON matches CSVs
+python3 tools/check_clock_apis.py [--self-test]                                   # 02 AC 18
+python3 tools/check_sim_purity.py [--self-test]                                   # 01 AC 1 banned APIs and assembly refs (issue #63)
+python3 tools/check_sim_literals.py [--self-test]                                 # 09 acceptance 1 (issue #131)
+python3 .github/scripts/test_android_release.py                                   # build-android.yml helpers
+python3 tools/ci/test_counts.py --self-test; python3 tools/ci/pr_comment.py --self-test; python3 tools/ci/check_workflows.py
 dotnet restore HeroCat.sln
 dotnet build HeroCat.sln -c Release --no-restore -warnaserror
-dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory!=Perf&TestCategory!=Acceptance" --logger trx   # includes the engine-free client Core/
-dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory=Perf"        # separate so a perf flake reads as one
-dotnet run -c Release --no-build --project src/HeroCat.Bots -- bench --ticks 1000000 --max-ms 2000
-dotnet run -c Release --no-build --project src/HeroCat.Bots -- golden --check --replay
-python3 tools/export_content.py check                                             # committed JSON matches CSVs
-python3 -m pytest tools/tests -q                                                  # exporter fixtures
-python3 tools/ci/test_counts.py --min-ratio 0.9                                   # section 1 count guard
-python3 tools/check_sim_literals.py                                               # 09 acceptance 1 (issue #131)
-python3 tools/check_sim_purity.py                                                 # 01 AC 1 banned APIs and assembly refs (issue #63)
-python3 tools/check_clock_apis.py                                                 # 02 AC 18
+dotnet run -c Release --no-build --project src/HeroCat.Bots -- save-fixture --check    # 02 v1 save fixture
+dotnet run -c Release --no-build --project src/HeroCat.Bots -- summon-stream --check   # C# side of issue #14
+dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory!=Perf" --logger trx   # includes golden tests and the engine-free client Core/
+dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory=Perf" --logger trx    # separate so a perf flake reads as one
+python3 tools/ci/test_counts.py --trx-dir build/check/trx                         # section 1 count guard, TEST_COUNT_MIN_RATIO
+dotnet run -c Release --no-build --project src/HeroCat.Bots -- bench --ticks 1000000 --stage 300 --max-ms 2000
+dotnet run -c Release --no-build --project src/HeroCat.Bots -- golden --check     # goldens, plus the seed-7 command log replay
 ```
 
-`./check.sh --server` applies the plain versioned SQL migration set (02 section 12; no EF Core migrations, issue #33) to an empty Postgres container and runs 02 AC16 on it, then runs `dotnet test src/HeroCat.Server.Tests -c Release` against the Postgres and Redis containers. Plain `./check.sh` includes the migration step behind a "Postgres available" guard: without Docker or Postgres (cloud sessions) it prints `SKIP db-migrations: no Postgres`, and the run must be reported as a partial check.
+Test-count guard: `tests/counts.json` records the executed tests per test project (from the TRX files of the two `dotnet test` runs; `[Ignore]`d tests do not count). `tools/ci/test_counts.py` fails when a project runs fewer than `TEST_COUNT_MIN_RATIO` x its recorded count, when a recorded project does not run, or when a project runs that the file does not list. A PR that adds tests updates the file with `python3 tools/ci/test_counts.py --update --trx-dir build/check/trx` (the guard prints a note when counts grew); a PR that removes tests on purpose does the same, so the drop shows in the diff. `pytest` fixtures for the exporter (`tools/tests`) are not used: the exporter tests are plain `unittest` scripts.
 
-`.github/workflows/content.yml` (PRs touching `content/`, `content_src/`, `tools/`, `src/HeroCat.Sim`, `src/HeroCat.Bots`; ~8 min) calls `./check.sh --content`, then uploads the artifacts (acceptance table, shares, golden diff, exporter diff, vectors diff) and runs `python3 tools/ci/pr_comment.py` (posts the acceptance table and the day-30 median into the PR). `--content` runs:
+`./check.sh --server` (not yet; lands with `src/HeroCat.Server`) applies the plain versioned SQL migration set (02 section 12; no EF Core migrations, issue #33) to an empty Postgres container and runs 02 AC16 on it, then runs `dotnet test src/HeroCat.Server.Tests -c Release` against the Postgres and Redis containers. Plain `./check.sh` will include the migration step behind a "Postgres available" guard: without Docker or Postgres (cloud sessions) it prints `SKIP db-migrations: no Postgres`, and the run must be reported as a partial check.
+
+`.github/workflows/content.yml` (~8 min) starts on every PR and every push to `main`; a `changes` job reads the PR's files through the GitHub API and the `content` job runs only when they touch `content/`, `content_src/`, `tools/`, `src/HeroCat.Sim`, `src/HeroCat.Runtime`, `src/HeroCat.Bots`, `golden/`, `Fixtures/`, `check.sh`, the workflow or the setup action (a workflow-level `paths:` filter would leave the required check pending). The job calls `./check.sh --content`, then uploads the artifacts (acceptance tables, shares, golden output, exporter diff) and runs `python3 tools/ci/pr_comment.py`, which creates or edits one PR comment with the acceptance table, the day-30 median stage and the check lines, and writes the same to the job summary. The comment is informational (a fork PR's read-only token only warns); the job's status is what blocks merge. `--content` runs:
 
 ```sh
-python3 tools/export_content.py build --src content_src --out $SCRATCH/content --previous content --strict-warnings --ui-keys unity/HeroCatClient/Assets/HeroCat.Client/ui_keys.txt
-diff -r $SCRATCH/content content                                                  # same as check, with a readable diff
-python3 tools/gacha_model.py --content content --vectors > $SCRATCH/vectors.json  # the oracle (issues #14, #24)
-diff $SCRATCH/vectors.json Fixtures/Summon/vectors.json
-python3 tools/gacha_model.py --check-streams Fixtures/Summon/                     # Python SplitMix64 reproduces the C# stream-sequence golden
-timeout 400 dotnet run -c Release --project src/HeroCat.Bots -- acceptance --table --verbose --time-budget-s 240
-dotnet run -c Release --project src/HeroCat.Bots -- report --layer-shares --seeds 1-20 --days 30 > $SCRATCH/shares.txt
-dotnet run -c Release --project src/HeroCat.Bots -- golden --check
-dotnet run -c Release --project src/HeroCat.Bots -- stage-bound --check            # plausibility_stage_bound matches the content (issue #60)
+python3 tools/export_content.py build --out $CHECK_OUT_DIR/content --dto-out $CHECK_OUT_DIR/ContentDtos.g.cs
+diff -r $CHECK_OUT_DIR/content content                                            # same as check, with a readable diff (exporter.diff)
+python3 tools/fish_model.py --quiet                                               # 05 section 9 S-constants
+python3 tools/gacha_model.py --check                                              # oracle: content/, vectors.json and the C# stream golden (issues #14, #24)
+python3 tools/power_curve_model.py --check --quiet                                # 03 section 8.6; report-only until the balance call
+timeout 400 dotnet run -c Release --no-build --project src/HeroCat.Bots -- acceptance --tier M0 --seeds 1-20 --days 30 --time-budget-s 240 --table --verbose
+dotnet run -c Release --no-build --project src/HeroCat.Bots -- acceptance --tier M0 --days 14 --time-budget-s 240   # M0 exit criterion
+dotnet run -c Release --no-build --project src/HeroCat.Bots -- report --layer-shares --seeds 1-20 --days 30 > $CHECK_OUT_DIR/shares.txt
+dotnet run -c Release --no-build --project src/HeroCat.Bots -- golden --check
 ```
 
-`.github/workflows/nightly-bots.yml` (02:00 UTC) calls `./check.sh --nightly` on `ubuntu-latest`, `windows-latest` and `macos-14` (ARM64); the Linux leg runs everything below, the other two run only `golden --replay`:
+During the M0 rewrite both `acceptance` runs are report-only (`REWRITE_REPORT_ONLY=1` in `check.sh`, until the balance decision #249 and issue #136), and so is `power_curve_model.py --check`; the PR comment says so. Not yet in `--content`: the exporter's `--previous`, `--strict-warnings` and `--ui-keys` (09 issues #122, #123, #128) and `stage-bound --check` (issue #60, needs the whale bot).
 
-- `sweep` for all four bots, 30 days, seeds 1-20 and the rotating `21-40` block (Open question 2), uploaded as CSV to the metrics bucket for the balance dashboard.
+`.github/workflows/nightly-bots.yml` (02:00 UTC and manual dispatch) calls `./check.sh --nightly` on `ubuntu-latest`, and `./check.sh --nightly --replay-only` on `windows-latest` and `macos-14` (ARM64, under bash) for the cross-platform determinism check; each leg uploads `$CHECK_OUT_DIR` as an artifact:
+
 - `golden --replay` (all three legs).
+- `sweep --format csv` for greedy-f2p, 30 days, seeds 1-40 (1-20 and the rotating `21-40` block, Open question 2); the other three bots join when they exist (issues #214, #215). The upload to the metrics bucket for the balance dashboard needs a deploy target and is not automated yet; the CSV is a run artifact meanwhile.
+- `report --longest-walls`; the diff against the previous night, posted to the team channel when a wall moved by more than 2 h, is not automated yet.
 
 Outside `check.sh`, because it needs the Unity runner: a pseudo-localized client build (`export_content.py pseudo`) + PlayMode test 2 + per-screen screenshots.
-- `report --longest-walls` diff against the previous night, posted to the team channel when a wall moved by more than 2 h.
 
 `.github/workflows/build-android.yml` and `build-ios.yml` (on `release/*` push and manual dispatch):
 

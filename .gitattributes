@@ -4,3 +4,5 @@ content_src/*.csv text eol=lf
 golden/** text eol=lf
 src/HeroCat.Runtime.Tests/Fixtures/Saves/*.sav binary
 src/HeroCat.Runtime.Tests/Fixtures/Saves/*.json text eol=lf
+# check.sh and the CI helper scripts run under bash on every OS (the Windows nightly leg checks out with CRLF otherwise).
+*.sh text eol=lf

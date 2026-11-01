@@ -1,0 +1,49 @@
+# PR-time CI (specs/10 section 6.2, specs/00 decision 59): a thin wrapper around `./check.sh --pr`, which holds every
+# step (build -warnaserror, tests, perf, bench, golden, fixtures, purity checks, the test-count guard). Add new checks
+# to check.sh, not here. Runs on every pull request and every push to main; a required check on main.
+#
+# Not here yet: the path-filtered `server` job (check.sh gains a `server` mode with src/HeroCat.Server) and the Unity
+# `unity-editmode` job (runner label waits on issue #23).
+name: pr
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+  CHECK_OUT_DIR: ${{ github.workspace }}/build/check
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup
+
+      - name: ./check.sh --pr
+        run: ./check.sh --pr
+
+      # The TRX files behind the test-count guard; on a failure they show which project lost tests.
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr-test-results
+          path: |
+            build/check/trx/
+            build/check/golden.txt
+          if-no-files-found: ignore
+          retention-days: 14
