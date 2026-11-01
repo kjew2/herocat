@@ -29,3 +29,6 @@ unity/HeroCatClient/Assets/Resources/content.meta
 *.keystore
 *.jks
 /build/
+
+# Claude Code agent worktrees
+.claude/worktrees/
