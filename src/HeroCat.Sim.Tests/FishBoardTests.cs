@@ -285,6 +285,27 @@ namespace HeroCat.Sim.Tests
             Assert.That(full.DrainEvents(), Is.Empty);
         }
 
+        [Test]
+        public void GreedyPlay_HoldsAtMostCellsMinusCapPlusOneCapFish()
+        {
+            // Making a cap fish needs `cap` cells at its peak (cap-1, ..., 2, 1, 1), so with ReleaseMax + MergeAll a
+            // 20-cell board stops at 11 cap-10 fish plus one each of levels 1-9 (the 05 section 11 jam), never 20.
+            // Pins the behaviour behind the open gap reported with tools/fish_model.py's full-board band.
+            var sim = NewSim();
+            int cap = sim.FishMaxLvl, cells = sim.State.Fish.Cells.Length;
+            for (int i = 0; i < 2000; i++)
+            {
+                sim.State.Fish.TankCount = sim.FishTankCap;
+                sim.Apply(new ReleaseMax());
+                sim.Apply(new MergeAll());
+                sim.State.Combat.MissileQueue.Clear();
+            }
+            Assert.That(sim.State.Fish.Cells.Count(c => c == cap), Is.EqualTo(cells - cap + 1));
+            Assert.That(sim.State.Fish.Cells.Where(c => c < cap).OrderBy(c => c), Is.EqualTo(Enumerable.Range(1, cap - 1)));
+            Assert.That(sim.FishCanRelease, Is.False);
+            Assert.That(sim.FishMergeablePairs, Is.EqualTo(0));
+        }
+
         // ------------------------------------------------------------------------------------- bulk release, discard, move
 
         [Test]
