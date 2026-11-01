@@ -11,7 +11,7 @@ Ugly-UI Unity client for HeroCat (`specs/07`). It is a thin shell over the pure 
 3. On first open Unity imports packages and generates `ProjectSettings/*` and the `.meta` files, including some in
    `src/HeroCat.Sim/`. Commit them. If Unity asks to enable the new Input System backends, answer **Yes**. Either
    setting works: the code picks the matching UI input module.
-4. Open any scene (the default `SampleScene`, or an empty new scene) and press **Play**. No scene, prefab or UXML
+4. Open `Assets/Main.unity` (an empty scene, already in the build list) and press **Play**. No scene, prefab or UXML
    setup is needed. `GameRoot` bootstraps itself through `[RuntimeInitializeOnLoadMethod]` and builds the whole UI
    from code.
 
