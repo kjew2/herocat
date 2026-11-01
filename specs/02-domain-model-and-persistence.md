@@ -163,7 +163,7 @@ public sealed class LoadoutState
 public sealed class FishBoardState
 {
     public int[]  Cells          { get; set; } = new int[20];     // FISH_BOARD_W * FISH_BOARD_H, row-major; 0 = empty, n >= 1 = fish level
-    public int    TankCount      { get; set; }                   // fish in the Magic Tank, 0..TankCap
+    public int    TankCount      { get; set; }                   // fish in the Magic Tank, 0..TankCap; a new profile starts full (= TankCap via 05's query, TANK_CAP0 at Research 0; issue #246)
     public int    TankRefillTick { get; set; }                   // ticks accumulated toward the next tank fish; 0..refillTicks-1
     public int    TankReleaseLevel { get; set; } = 1;            // P1 upgrade level bought; content says what each level releases (05, 09 tank.release_level is the base)
     public HashSet<int> DiscoveredLevels { get; init; } = new(); // levels ever created; drives FISH_DISCOVERY_COINS
@@ -191,7 +191,7 @@ public sealed class CombatState
     public BossPhase Boss           { get; set; }          // None/Pending/Walled, so a wall survives a reload (issue #7)
     public int    BossFailsOnStage  { get; set; }          // reset on advance (03)
     public int?   Selected          { get; set; }          // MVP SCR_STAGE_SELECT side-stage farm target <= HighestCleared; null = frontier. Stage, KillsInStage and Boss keep the frontier meanwhile (03; issue #35)
-    public double Mp                { get; set; }          // shared MP pool (04); regen per tick from Research
+    public double Mp                { get; set; }          // shared MP pool (04); regen per tick from Research; 0 on a new profile (companions are MVP; issue #246)
     public int[]  SkillCooldowns    { get; set; } = new int[6];   // ticks left per skill slot
     public int[]  CompanionCooldowns { get; set; } = new int[4];  // ticks left per companion slot (03 section 2.4)
     public List<double> MissileQueue { get; init; } = new();      // queued fish-missile hit fractions, FIFO; persisted so a save mid-queue loses nothing (03, 05; issue #7)
@@ -742,8 +742,10 @@ LoadAsync(now, db):
           return Loaded / LoadedFromPrev
       catch SaveCorruptException | SaveInvalidException | JsonException: analytics save_reject{file, reason}; continue
   if either file existed: rename each to slot0.corrupt-{now}.sav; analytics save_corrupt
-  return NewProfile(ProfileFactory.Create(playerId, now, db))
+  return NewProfile(ProfileFactory.Create(playerId, now, db))                     // flagged ReplacedUnreadableSave when a file existed
 ```
+
+No readable copy anywhere (both local files bad and, in MVP, no usable cloud copy) is not fatal (issue #248; 01 section 7 has no `SAVE_CORRUPT_ALL` class): the files are quarantined as above, the new profile starts, Runtime's boot sends `save_corrupt_all{supportId}` and `SCR_MAIN` shows a one-time acknowledge-only notice ("your save could not be read; a new game was started; contact support with id X", keys `notice.save_corrupt_all.title` / `.body`, 07 section 4.27). The next boot loads the new profile's save, so the notice is shown once. `save_corrupt` stays the local-quarantine signal 10's alarm watches; in M0, with no cloud, both events fire together.
 
 Recovery order, from best to worst outcome: (1) `slot0.sav`, (2) `slot0.prev.sav` (at most one autosave interval older), (3) cloud copy if `CloudSaveClient` is active (9.2 covers the merge), (4) new profile with the corrupt files quarantined for `CORRUPT_KEEP_DAYS` so support can recover them. A bug in the loader therefore never destroys a player's data; it quarantines it.
 
@@ -932,12 +934,12 @@ M0 (issue #78): Local mode is `SystemClock` in `ServerClock.cs`: device time flo
 
 | Situation | Behaviour |
 |---|---|
-| `now < Time.LastTickServerTime` at resume | `ComputeOfflineCatchup` credits `ElapsedSec = 0`; nothing credited; `clock_anomaly{backwards}` once per session. |
+| `now < Time.LastTickServerTime` at resume | `ComputeOfflineCatchup` credits `ElapsedSec = 0`; nothing credited; `clock_anomaly{backwards}` once per session when the gap exceeds `CLOCK_BACKWARDS_TOLERANCE_S` (5 s, 01 section 3.2; issue #246), nothing for smaller jitter. |
 | `dayKey(now) < Time.DayKey` | `ApplyServerTime` does nothing (`if newKey <= DayKey return`). Dailies are not reset; login diamonds not re-granted. |
 | `now < Offline.Pending.ComputedServerTime` at load | P18 clears the pending reward (it was never credited). |
 | `now < Pending.Summon.RequestedServerTime` | Irrelevant; the server's idempotency store decides. |
 | Resync shows the server is *ahead* of the extrapolation by more than `CLOCK_JUMP_WARN_SEC` | Extra elapsed time is credited as a second catch-up window (01 section 8.2 step 2), capped by the 24 h sum. |
-| Resync shows the server is *behind* | Nothing is taken back; `clock_anomaly{resync, negative}`; the save's `LastTickServerTime` keeps its larger value, which simply shortens the next window. |
+| Resync shows the server is *behind* by more than `CLOCK_BACKWARDS_TOLERANCE_S` | Nothing is taken back; `clock_anomaly{resync, negative}`; the save's `LastTickServerTime` keeps its larger value, which simply shortens the next window. |
 | Device clock set years ahead, then back (offline) | At most one `OFFLINE_CAP_H` window and one daily reset were gained while unauthoritative; the next authoritative upload carries `CLOCK_AHEAD` and the server's ledger reconciliation (08) corrects diamonds. |
 
 ## 12. Server-side relational schema (PostgreSQL 16)
@@ -1295,7 +1297,7 @@ The sink enqueues on the main thread and flushes on the thread pool (01 threadin
 | `session_end` | `durationSec`, `stageStart`, `stageEnd`, `kills`, `ticks`, `trigger` (pause/quit/gap) | Runtime on pause/quit | |
 | `cloud_save_uploaded` | `saveSeq`, `sizeBytes`, `trigger`, `latencyMs`, `flags[]` | Runtime | |
 | `cloud_conflict` / `cloud_autoresolved` | 9.4 | Runtime | |
-| `save_fallback`, `save_corrupt`, `save_repaired{rule}`, `save_reject{file, reason}`, `save_write_failed{consecutive}`, `migration_applied{from, to}` | | Runtime | Save health. |
+| `save_fallback`, `save_corrupt`, `save_corrupt_all{supportId}`, `save_repaired{rule}`, `save_reject{file, reason}`, `save_write_failed{consecutive}`, `migration_applied{from, to}` | | Runtime | Save health. `save_corrupt_all` is a new profile replacing an unreadable save (8.3; issue #248). |
 | `clock_anomaly` | `kind` (backwards/gap/resync), `seconds` | Runtime | Section 11 and 01; also emitted with `kind = backwards` when 06's offline compute sees `ClockWentBackwards`. |
 | `player_deleted` | `playerIdHash` | Server | 13.2 step 5. |
 
@@ -1330,7 +1332,7 @@ The sink enqueues on the main thread and flushes on the thread pool (01 threadin
 3. Byte stability: two encodes of value-equal states are byte-identical (sorted sets, round-trip doubles).
 4. Header: wrong CRC, `len` off by one in either direction, missing newline, truncated body each raise `SaveCorruptException`; an HMAC mismatch does **not** (loads with `HmacValid = false`).
 5. Rotation: after two writes, `slot0.tmp` absent, `slot0.sav` is write 2, `slot0.prev.sav` is write 1, `SaveSeq == 2`.
-6. Fallback: a flipped body byte in `slot0.sav` loads `prev` and emits `save_fallback`; both corrupt yields a new profile with two quarantined files; quarantined files older than `CORRUPT_KEEP_DAYS` are deleted on the next load.
+6. Fallback: a flipped body byte in `slot0.sav` loads `prev` and emits `save_fallback`; both corrupt yields a new profile with two quarantined files, `save_corrupt_all` and the one-time notice, and the next boot shows no notice (issue #248); quarantined files older than `CORRUPT_KEEP_DAYS` are deleted on the next load.
 7. Fault injection between the two renames: `slot0.sav` absent, `prev` present, load succeeds from `prev`.
 8. `SaveTooNewException` on `SchemaVersion = Current + 1`; no file renamed; `prev` not consulted.
 9. Every repair rule P1-P21 and reject rule R2-R5 has a table-driven test asserting the repaired value or the exception and the emitted rule id; `SAVE_REPAIR_MAX + 1` distinct rule hits is a reject.
@@ -1372,4 +1374,4 @@ The sink enqueues on the main thread and flushes on the thread pool (01 threadin
 
 All are engineering constants (code-resident). None needs the tuning tool; 10's fault-injection, conflict-table and perf tests are the check.
 
-Used from 00 by name: `TICK_HZ`, `KILLS_PER_STAGE`, `BOSS_EVERY`, `BOSS_TIME_TICKS`, `STAGE_CAP`, `TAP_ZAP_MAX_PER_SEC`, `DAY_SECONDS`, `OFFLINE_RATE`, `OFFLINE_CAP_H`, `OFFLINE_MIN_S`, `LOGIN_DIAMONDS`, `TUTORIAL_DIAMONDS`, `DIAMONDS_PER_DAY_F2P`, `PULL_COST[*]`, `PITY_HARD`, `SKILL_SLOTS`, `COMPANION_SLOTS`, `RUNE_SLOTS`, `DUPE_LVL_CUM`, `LIMIT_BREAK_RANKS`, `BANNER_LVL_EXP`, `SPAWN_DELAY_TICKS`, `FISH_BOARD_W`, `FISH_BOARD_H`, `FISH_MAX_LVL0`, `TANK_CAP0`, `TANK_REFILL_S0`, `AWAKEN_STAGES`. From 01: `AUTOSAVE_INTERVAL_SEC`, `CMDLOG_MAX_BYTES`, `WEEK_EPOCH_OFFSET`, `WALL_CLOCK_SYNC_SEC`. From 03 (declared there): `TRAIN_CAP[stat]`. From 04: `TUTORIAL_WEAPON_ID`. From 05: `FISH_MAX_LVL_HARD`. From 09: `TUTORIAL_DONE` (row count of `tutorial_steps`).
+Used from 00 by name: `TICK_HZ`, `KILLS_PER_STAGE`, `BOSS_EVERY`, `BOSS_TIME_TICKS`, `STAGE_CAP`, `TAP_ZAP_MAX_PER_SEC`, `DAY_SECONDS`, `OFFLINE_RATE`, `OFFLINE_CAP_H`, `OFFLINE_MIN_S`, `LOGIN_DIAMONDS`, `TUTORIAL_DIAMONDS`, `DIAMONDS_PER_DAY_F2P`, `PULL_COST[*]`, `PITY_HARD`, `SKILL_SLOTS`, `COMPANION_SLOTS`, `RUNE_SLOTS`, `DUPE_LVL_CUM`, `LIMIT_BREAK_RANKS`, `BANNER_LVL_EXP`, `SPAWN_DELAY_TICKS`, `FISH_BOARD_W`, `FISH_BOARD_H`, `FISH_MAX_LVL0`, `TANK_CAP0`, `TANK_REFILL_S0`, `AWAKEN_STAGES`. From 01: `AUTOSAVE_INTERVAL_SEC`, `CMDLOG_MAX_BYTES`, `WEEK_EPOCH_OFFSET`, `WALL_CLOCK_SYNC_SEC`, `CLOCK_BACKWARDS_TOLERANCE_S`. From 03 (declared there): `TRAIN_CAP[stat]`. From 04: `TUTORIAL_WEAPON_ID`. From 05: `FISH_MAX_LVL_HARD`. From 09: `TUTORIAL_DONE` (row count of `tutorial_steps`).

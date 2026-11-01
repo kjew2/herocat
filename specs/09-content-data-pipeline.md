@@ -160,8 +160,9 @@ The exporter checks `constants` against this list (`E040` missing, `E042` unknow
 | Awakening cadence target (03, 06) | `awakening_targets.max_days_after_gate` (issue #43) | int |
 | 08's `STAGE_VS_TIME` whale curve | `plausibility_stage_bound` (generated, issue #60) | int, int |
 | 06 section 2 reference-day parameters | `constants.REF_DAILIES_DONE`, `.REF_NEW_BOSSES` *(named here, issue #55)* | int |
+| 01's `CLOCK_BACKWARDS_TOLERANCE_S` (backwards-clock jitter, issue #246) | `constants.CLOCK_BACKWARDS_TOLERANCE_S` | int |
 
-Constants other specs declare and this spec hosts (their owners' Constants introduced sections are the source): 03's `ATTACK_PROGRESS_UNIT`, `CRIT_DMG_BASE`, `MP_POOL0`, `MP_REGEN0`, `BOSS_ROCK_CANDY_P`, `TRAIN_CAP[*]` (in `stats.cap`), `RES_*` (in `research`); 05's `FISH_DISCARD_COINS_PCT` (05 section 16; a `constants` row); 04's `WEAPON_ATK_PCT[r]`, `SKILL_DPS_PCT[r]`, `COMPANION_DPS_PCT[r]`, `LIMIT_BREAK_COST[r]`, `DUPE_OVERFLOW_ROCK_CANDY[r]` (in `rarities`), `BANNER_LVL_EXP` (in `banner_levels.exp_required`), `TUTORIAL_WEAPON_ID` (in `tutorial_steps`); 06's `FIRST_CLEAR_DIAMONDS`, `DUNGEON_*`, `INBOX_EXPIRY_DAYS`, shop rows. Quest diamond amounts live only in the quest rows' `reward_amount` (no `QUEST_*` reward constants, issues #55 and #244). `REQUIRED_CONSTANTS` in the exporter is the union; acceptance criterion 4 pins the C# `Constants` class to it.
+Constants other specs declare and this spec hosts (their owners' Constants introduced sections are the source): 03's `ATTACK_PROGRESS_UNIT`, `CRIT_DMG_BASE`, `MP_POOL0`, `MP_REGEN0`, `BOSS_ROCK_CANDY_P`, `TRAIN_CAP[*]` (in `stats.cap`), `RES_*` (in `research`); 05's `FISH_DISCARD_COINS_PCT` (05 section 16; a `constants` row); 04's `WEAPON_ATK_PCT[r]`, `SKILL_DPS_PCT[r]`, `COMPANION_DPS_PCT[r]`, `LIMIT_BREAK_COST[r]`, `DUPE_OVERFLOW_ROCK_CANDY[r]` (in `rarities`), `BANNER_LVL_EXP` (in `banner_levels.exp_required`), `TUTORIAL_WEAPON_ID` (in `tutorial_steps`); 06's `FIRST_CLEAR_DIAMONDS`, `DUNGEON_*`, `INBOX_EXPIRY_DAYS`, shop rows; 01's `CLOCK_BACKWARDS_TOLERANCE_S` (the sim reads it, issue #246). Quest diamond amounts live only in the quest rows' `reward_amount` (no `QUEST_*` reward constants, issues #55 and #244). `REQUIRED_CONSTANTS` in the exporter is the union; acceptance criterion 4 pins the C# `Constants` class to it.
 
 ## 5. Table schemas
 
@@ -193,12 +194,12 @@ ATTACK_PROGRESS_UNIT int I    CRIT_DMG_BASE double S       MP_POOL0 double S
 MP_REGEN0 double S            BOSS_ROCK_CANDY_P double S   FIRST_CLEAR_DIAMONDS int I
 INBOX_EXPIRY_DAYS int S       DAILY_GIFT_WEAPON_TICKETS int S  LOGIN_DIAMONDS int I
 LIMIT_BREAK_RANKS int S       REF_DAILIES_DONE int S       REF_NEW_BOSSES int S
-FISH_DISCARD_COINS_PCT double S
+FISH_DISCARD_COINS_PCT double S CLOCK_BACKWARDS_TOLERANCE_S int S
 ```
 
 `REF_DAILIES_DONE` (8) and `REF_NEW_BOSSES` (4) are 06 section 2's reference-day assumptions (paying daily missions completed, new boss stages first-cleared); only `E039` and the bots read them (issue #55). There are no `QUEST_DAILY_DIAMONDS`, `QUEST_DAILY_BONUS_5`, `QUEST_DAILY_BONUS_8` or `QUEST_WEEKLY_DIAMONDS` constants: the quest rows are the single source (issues #55, #244).
 
-Range rules: every `*_TICKS`, `TICK_HZ`, `KILLS_PER_STAGE`, `BOSS_EVERY`, `CHAPTER_WIDTH`, `STAGE_CAP`, `TAP_ZAP_MAX_PER_SEC`, `DAY_SECONDS`, `OFFLINE_MIN_S`, `*_SLOTS`, `FISH_BOARD_*`, `FISH_MAX_LVL0`, `ATTACK_PROGRESS_UNIT`, `LIMIT_BREAK_RANKS` are `> 0`; `SPAWN_DELAY_TICKS`, `REF_DAILIES_DONE`, `REF_NEW_BOSSES` are `>= 0`; `BASE_ATK`, `BASE_HP`, `BOSS_HP_MULT`, `BOSS_GOLD_MULT`, `OFFLINE_CAP_H`, `DUPE_LVL_BONUS`, `MP_POOL0`, `MP_REGEN0` are `> 0`; `TAP_ZAP_DMG_PCT`, `OFFLINE_RATE`, `FISH_MERGE_COINS_PCT`, `FISH_BOARD_DPS_FACTOR`, `FISH_DISCARD_COINS_PCT`, `BOSS_ROCK_CANDY_P` are `in [0, 1]`; `CRIT_DMG_BASE >= 1`; `TRAIN_BULK_STEPS` strictly increasing with first element 1; `FISH_BOARD_W * FISH_BOARD_H <= 64` (02 stores the board as a fixed array).
+Range rules: every `*_TICKS`, `TICK_HZ`, `KILLS_PER_STAGE`, `BOSS_EVERY`, `CHAPTER_WIDTH`, `STAGE_CAP`, `TAP_ZAP_MAX_PER_SEC`, `DAY_SECONDS`, `OFFLINE_MIN_S`, `*_SLOTS`, `FISH_BOARD_*`, `FISH_MAX_LVL0`, `ATTACK_PROGRESS_UNIT`, `LIMIT_BREAK_RANKS` are `> 0`; `SPAWN_DELAY_TICKS`, `REF_DAILIES_DONE`, `REF_NEW_BOSSES`, `CLOCK_BACKWARDS_TOLERANCE_S` are `>= 0`; `BASE_ATK`, `BASE_HP`, `BOSS_HP_MULT`, `BOSS_GOLD_MULT`, `OFFLINE_CAP_H`, `DUPE_LVL_BONUS`, `MP_POOL0`, `MP_REGEN0` are `> 0`; `TAP_ZAP_DMG_PCT`, `OFFLINE_RATE`, `FISH_MERGE_COINS_PCT`, `FISH_BOARD_DPS_FACTOR`, `FISH_DISCARD_COINS_PCT`, `BOSS_ROCK_CANDY_P` are `in [0, 1]`; `CRIT_DMG_BASE >= 1`; `TRAIN_BULK_STEPS` strictly increasing with first element 1; `FISH_BOARD_W * FISH_BOARD_H <= 64` (02 stores the board as a fixed array).
 
 Example row: `{"key": "BOSS_TIME_TICKS", "type": "int", "value": 300, "kind": "S"}`. What the tuning tool checks for the `S` rows is stated by the owning spec (03 section 8.6, 05's `fish_model.py`, 06 section 2); this spec only guarantees the value reaches them unchanged.
 
@@ -630,8 +631,8 @@ Derived at build: `TotalAmount = base_amount + floor(base_amount * bonus_pct)`. 
 | `screen` | string | `SCR_*` id from 00 section 5.3 (`E021` against the screen list the exporter holds). |
 | `highlight` | string? | Element id in the screen prefab (07). |
 | `text_key` | key | |
-| `expect_event` | string? | Sim event name (00/01 event vocabulary, e.g. `FishMerged`, `EnemyKilled`) the overlay waits for; empty = tap to continue (issue #46). |
-| `expect_count` | int? | How many `expect_event` occurrences complete the step; required with `expect_event`, empty otherwise (`E054`); `>= 1`. |
+| `expect_event` | string? | Sim event name (00 section 5.1 event vocabulary, e.g. `FishMerged`, `EnemyKilled`) the overlay waits for, or a `\|`-separated list of them (`BossCleared\|BossFailed`), where an occurrence of any listed event counts; every name must be in the vocabulary (`E021` against the exporter's `SIM_EVENT_NAMES`); empty = tap to continue (issues #46, #246). |
+| `expect_count` | int? | How many `expect_event` occurrences (of any listed event, summed) complete the step; required with `expect_event`, empty otherwise (`E054`); `>= 1`. |
 | `grants` | grantlist? | `tut_welcome` carries `DIAMOND:1500` (`TUTORIAL_DIAMONDS`) and the starter weapon `WEAPON:weapon_c_01:1` (`TUTORIAL_WEAPON_ID`), so collection screens are never empty (issue #46). |
 | `skippable` | bool | |
 | `tier` | enum(Tier) | |
@@ -1021,6 +1022,7 @@ public sealed class Constants
     public int    RefDailiesDone { get; }         // REF_DAILIES_DONE (06 reference day; validator and bots only)
     public int    RefNewBosses { get; }           // REF_NEW_BOSSES (06 reference day; validator and bots only)
     public double FishDiscardCoinsPct { get; }    // FISH_DISCARD_COINS_PCT (05)
+    public int    ClockBackwardsToleranceS { get; } // CLOCK_BACKWARDS_TOLERANCE_S (01 section 3.2)
 
     public bool IsBossStage(int s) => s % BossEvery == 0;
     public int  ChapterOf(int s)   => (s - 1) / ChapterWidth + 1;
@@ -1241,7 +1243,7 @@ Rules:
 
 ### 13.1 Extraction
 
-Keys are declared where they are used: table rows carry `name_key`/`desc_key`, and the Unity client declares its `ui.*` keys in `unity/HeroCatClient/Assets/HeroCat.Client/ui_keys.txt` (one per line, generated by an editor script that scans `TextKeyLabel` components, 07 section 12). `export_content.py build --ui-keys <file>` checks both directions: every key referenced exists (`E072`), every row is referenced (`W021`). Keys are never built by string concatenation at runtime; the single exception is the per-locale suffix ladder which 07 keeps in code.
+Keys are declared where they are used: table rows carry `name_key`/`desc_key`, and the Unity client declares its `ui.*` keys in `unity/HeroCatClient/Assets/HeroCat.Client/ui_keys.txt` (one per line, generated by an editor script that scans `TextKeyLabel` components, 07 section 12). `export_content.py build --ui-keys <file>` checks both directions: every key referenced exists (`E072`), every row is referenced (`W021`). Keys are never built by string concatenation at runtime; the exceptions are the per-locale suffix ladder which 07 keeps in code, and 01's error, reject and notice keys, which the client builds from a wire code or reason by lowercasing it (`err.<code_lower>.title` / `.body`, `reject.<reason_lower>`, `notice.<code_lower>.title` / `.body`; issue #248). Their rows are checked by 01 AC 14's test against `ErrorClassifier.Table` and the sim's reason lists, not by `--ui-keys`.
 
 ### 13.2 Translator round trip
 
@@ -1343,6 +1345,7 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 | `PSEUDO_LOC_PAD_PCT` | 0.40 | I (07) | 13.3 | none |
 | `REF_DAILIES_DONE` | 8 | S (named here; 06 section 2 reference day, issue #55) | 5.1, 5.21 | `E039` |
 | `REF_NEW_BOSSES` | 4 | S (named here; 06 section 2 reference day, issues #55, #244) | 5.1, 5.21 | `E039` |
+| `CLOCK_BACKWARDS_TOLERANCE_S` | 5 | S (01 section 3.2; issue #246) | 4, 5.1 | none; a re-anchor behind the virtual clock by at most this emits no `ClockWentBackwards` |
 | `awakening_targets.max_days_after_gate` | 2 per rank | S (03, 06; issue #43) | 5.35 | `power_curve_model.py`, bot sweep |
 | `content_version` format | `YYYY.MM.DD[.N]` | - | 6.3 | matches 02 and 08 examples (`2026.11.03`) |
 | Table set | 34 tables (adds `feature_unlocks`, `awakening_targets`, generated `plausibility_stage_bound`) + `localization.<locale>` + `meta` | - | 5 | - |

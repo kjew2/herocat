@@ -74,7 +74,7 @@ namespace HeroCat.Runtime.Boot
 
         /// <summary>
         /// Set on the boot that replaced an unreadable save with a new profile: SCR_MAIN shows it once, acknowledge-only,
-        /// with the support id (02 section 8.3, 07 section 19; 00 decision 103). Null otherwise. The next boot loads the new
+        /// with the support id (02 section 8.3, 07 section 4.27; 00 decision 103). Null otherwise. The next boot loads the new
         /// save, so the notice is never shown twice.
         /// </summary>
         public Notice SaveResetNotice { get; internal set; }

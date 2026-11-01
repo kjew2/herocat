@@ -11,10 +11,10 @@ namespace HeroCat.Runtime.Errors
         /// <summary>The key stem <c>err.&lt;code_lower&gt;</c>: the wire code lowercased (01 section 7, 00 decision 102).</summary>
         public string LocalizationKey => ErrorClassifier.ErrKey(Code);
 
-        /// <summary><c>err.&lt;code_lower&gt;.title</c> (07 section 19).</summary>
+        /// <summary><c>err.&lt;code_lower&gt;.title</c> (07 section 4.27).</summary>
         public string TitleKey => LocalizationKey + ".title";
 
-        /// <summary><c>err.&lt;code_lower&gt;.body</c> (07 section 19).</summary>
+        /// <summary><c>err.&lt;code_lower&gt;.body</c> (07 section 4.27).</summary>
         public string BodyKey => LocalizationKey + ".body";
 
         /// <summary>True when the row shows text to the player, so 01 AC 14 requires its key.</summary>

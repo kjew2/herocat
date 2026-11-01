@@ -81,7 +81,7 @@ M0 ships `GOLD`, `DIAMOND`, `FISH_COIN`, `HERO_EXP`; the tutorial grant (`TUTORI
 
 ### 1.3 Reject reasons
 
-Every economy command rejects through 01's `ApplyResult.Reject(RejectCode, reason)`: the `RejectCode` is 01's generic category (UI styling), and `ApplyResult.Reason` is an UPPER_SNAKE reason key from the closed list below, which the UI localizes as `reject.<reason>` (issue #11). A rejection changes no state and emits no event. Tests assert both the code and the reason. This spec owns this list; a new reason is added here first.
+Every economy command rejects through 01's `ApplyResult.Reject(RejectCode, reason)`: the `RejectCode` is 01's generic category (UI styling), and `ApplyResult.Reason` is an UPPER_SNAKE reason key from the closed list below, which the UI localizes as `reject.<reason_lower>` (issue #11; the key lowercases the reason, `reject.not_enough_gold`, issue #248). A rejection changes no state and emits no event. Tests assert both the code and the reason. This spec owns this list; a new reason is added here first.
 
 | Reason (`ApplyResult.Reason`) | `RejectCode` | Raised by |
 |---|---|---|
@@ -214,7 +214,7 @@ Rules:
 
 1. **Lazy, single reset.** A player away three days gets one reset on return. Missed days' quests are gone; nothing stacks. Tickets are topped up, not added.
 2. **App open at rollover.** The tick whose virtual time crosses `DAY_SECONDS` runs `EnsureDay` and emits `DayRolledOver`. The client (07) toasts "New day: missions and dungeon tickets reset" and refreshes `SCR_QUESTS` and `SCR_DUNGEONS` if they are open. A dungeon run in progress is not interrupted; if it clears, the ticket is debited from the new day's allotment and the reward is granted normally.
-3. **Backwards clock.** An `ApplyServerTime` can carry a smaller value than `LastTickServerTime` after a failed re-sync or a server-side correction. `EnsureDay` is a no-op because `day <= DayKey`. Offline Catch-up clamps elapsed to 0 (section 7). `LastTickServerTime` is never moved backwards; the sim emits `ClockWentBackwards(deltaSeconds)` once per occurrence for analytics and the client shows nothing in release builds.
+3. **Backwards clock.** An `ApplyServerTime` can carry a smaller value than `LastTickServerTime` after a failed re-sync or a server-side correction. `EnsureDay` is a no-op because `day <= DayKey`. Offline Catch-up clamps elapsed to 0 (section 7). `LastTickServerTime` is never moved backwards; when the gap exceeds `CLOCK_BACKWARDS_TOLERANCE_S` (5 s, 01 section 3.2) the sim emits `ClockWentBackwards(deltaSeconds)` once per occurrence for analytics, a smaller gap is resync jitter and emits nothing (issue #246), and the client shows nothing in release builds.
 4. **New profile.** `DayKey = -1`, `WeekKey = -1`, `LoginDayKey = -1`, so the first `EnsureDay` grants the first login and seeds tickets. The tutorial grant (`TUTORIAL_DIAMONDS`, `CurrencyReason.TUTORIAL`) is separate and guarded by `Tutorial.TutorialDiamondsGranted` (02).
 5. **Per-region rollover** is 00 decision 8 territory and is not reopened here. The only hook needed later is an offset added to `now` before the division; the server would supply it (08).
 
@@ -434,7 +434,11 @@ public sealed record CatchupResult(long ElapsedSec, long CreditedSec, bool Cappe
 public static CatchupResult? Compute(GameState s, ContentDb db, long serverNow)
 {
     long gap = serverNow - s.Time.LastTickServerTime;
-    if (gap < 0) { s.Sink.Emit(new ClockWentBackwards(-gap)); return null; }    // grants nothing; LastTick unchanged
+    if (gap < 0)                                                         // grants nothing; LastTick unchanged
+    {
+        if (-gap > db.CLOCK_BACKWARDS_TOLERANCE_S) s.Sink.Emit(new ClockWentBackwards(-gap));   // smaller is jitter (issue #246)
+        return null;
+    }
     if (gap < db.OFFLINE_MIN_S)                                          // no modal, no gold or EXP
     {
         var (added, refillAfter) = FishBoard.CatchUpTank(s, db, gap * TICK_HZ);   // 05 section 3: short gaps still refill the tank,
@@ -631,7 +635,7 @@ This section owns these events' fields (issue #245); every event also carries 02
 
 | Event | Fields | Emitted on |
 |---|---|---|
-| `currency_changed` | `currency` (code from 00 section 5.2), `delta` (double), `balanceAfter`, `reason` (`CurrencyReason`, 00 section 8 item 6), `refId` (item, quest, offer or banner id when applicable) | every `Wallet.Apply`; `KILL` and `BOSS` deltas are summed per currency over `CURRENCY_AGG_SEC` and emitted once (`balanceAfter` at emission), every other reason once per apply |
+| `currency_changed` | `currency` (code from 00 section 5.2), `delta` (double), `balanceAfter`, `reason` (`CurrencyReason`, 00 section 8 item 6), `refId` (item, quest, offer or banner id when applicable) | every `Wallet.Apply`, including the profile-created `TUTORIAL` grant, whose rows Runtime's `ProfileFactory` sends itself because no `Simulation` exists yet (issue #246); `KILL` and `BOSS` deltas are summed per currency over `CURRENCY_AGG_SEC` and emitted once (`balanceAfter` at emission), every other reason once per apply |
 | `quest_completed` | `questId`, `kind` | `QuestCompleted` |
 | `quest_claimed` | `questId`, `kind`, `rewardCurrency`, `rewardAmount`, `bulk` | `QuestClaimed` |
 | `achievement_unlocked` | `questId`, `rung` | achievement `QuestCompleted` |
@@ -671,7 +675,7 @@ This section owns these events' fields (issue #245); every event also carries 02
 8. 100 `MergeFish` events advance `d_merge` to 100 (past target 15), `w_merges` to 100, `LIFETIME_MERGES` rung 50 to `COMPLETED`, and `d_merge` rewards exactly once on claim.
 9. Offline (Research 0): elapsed 45 s grants no gold or EXP, leaves `Offline.Pending` null and refills the tank by 05's `CatchUpTank` over 450 ticks; elapsed 7,200 s at a state with `KillTimeSeconds` = 3.5 and `GoldPerKill` = 161.5 yields `Gold` = 166,114 within 1e-6 relative; elapsed 30 h yields `CreditedSec` = 86,400 and `Capped` = true.
 10. Offline compute followed by a crash (state saved) and reload shows the same pending reward; claiming grants it once; a second compute with a 2 h gap while pending sums into the record.
-11. `Compute` with `serverNow < LastTickServerTime` emits `ClockWentBackwards`, grants nothing and leaves `LastTickServerTime` unchanged.
+11. `Compute` with `serverNow < LastTickServerTime` grants nothing and leaves `LastTickServerTime` unchanged; it emits `ClockWentBackwards` only when the gap exceeds `CLOCK_BACKWARDS_TOLERANCE_S` (issue #246).
 12. Offline catch-up advances no RNG stream counter, no quest progress, no `Combat.Stage`, no `Progress.HighestCleared`, no `Dungeons.BestFloor[*]`.
 13. `StartDungeon` debits nothing and sets `Combat.Mode = Dungeon`; a run that ticks to `Failed` leaves the ticket balance unchanged, emits `DungeonFailed` and returns to `Mode = Stage`; a run that ends `Cleared` debits exactly one ticket and grants `RewardOf(d, floor)`. A save with a run in progress, reloaded, abandons it (`DungeonAbandoned`) with the ticket balance unchanged.
 14. `StartDungeon(d, bestFloor + 2)` is rejected `(Locked, DUNGEON_FLOOR_NOT_UNLOCKED)`; `StartDungeon` at `Progress.HighestCleared` = 29 is rejected `(Locked, DUNGEON_LOCKED)`; with 0 tickets it is rejected `(CannotAfford, NOT_ENOUGH_TICKET_FISH_COIN)` for the Fish Coin dungeon; during a boss fight it is rejected `(NotAvailable, BOSS_ATTEMPT_IN_PROGRESS)`; while a run is active `StartDungeon` and `SweepDungeon` are rejected `(NotAvailable, DUNGEON_RUN_IN_PROGRESS)`; board commands during a run are rejected `(Locked, BOARD_LOCKED)` (05).

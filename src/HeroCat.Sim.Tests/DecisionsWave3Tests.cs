@@ -6,13 +6,13 @@ using NUnit.Framework;
 
 namespace HeroCat.Sim.Tests
 {
-    /// <summary>Sim-side rules agreed on issue #246 (00 decisions 98-102): multi-event tutorial steps and the backwards-clock tolerance.</summary>
+    /// <summary>Sim-side rules agreed on issue #246 (00 decisions 98 and 101): multi-event tutorial steps and the backwards-clock tolerance.</summary>
     public class DecisionsWave3Tests
     {
         static readonly long T0 = TestContent.T0;
 
         [Test]
-        public void TutorialBossStep_CompletesOnBossClearedOrBossFailed()   // 07 section 20 step 12, 09 section 5.29
+        public void TutorialBossStep_CompletesOnBossClearedOrBossFailed()   // 07 section 14 step 12, 09 section 5.29
         {
             var boss = TestContent.Mvp.TutorialSteps.Single(s => s.Id == "tut_boss");
             Assert.That(boss.ExpectEvents, Is.EqualTo(new[] { "BossCleared", "BossFailed" }));
