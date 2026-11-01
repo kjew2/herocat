@@ -4,6 +4,7 @@
     python3 tools/content_fixtures.py list
     python3 tools/content_fixtures.py run <name>          # print the exporter's stderr for one fixture
     python3 tools/content_fixtures.py emit --out <dir>    # JSON for the C# parity test (ContentDbFixtureTests)
+    python3 tools/content_fixtures.py record-pull         # rewrite tests/content_fixtures/pull_batchget.json
 
 Layout: `tests/content_fixtures/good_minimal/` is a small valid `content_src/` (two chapters, one collectible per
 rarity, two banner levels, `ship_locales = en,ja` with every locale filled). Every other directory is a fixture that
@@ -38,6 +39,36 @@ import export_content as ex  # noqa: E402
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIXTURES = os.path.join(REPO, "tests", "content_fixtures")
 BASE = os.path.join(FIXTURES, "good_minimal")
+PULL_FIXTURE = os.path.join(FIXTURES, "pull_batchget.json")
+PULL_SHEET_ID = "fixture-sheet-id"
+PULL_EXTRA_TABS = ["README"]   # a notes tab pull must skip
+
+
+def record_pull():
+    """The Sheets API v4 responses `pull --service-account` reads for a workbook holding good_minimal (one tab per
+    CSV, in file-name order, plus a README tab): spreadsheets.get's tab titles and the values.batchGet answer in the
+    API's shape (ROWS, FORMATTED_VALUE strings, trailing empty cells and rows omitted). No workbook exists yet
+    (issue #132), so this is synthesized from good_minimal rather than captured; tools/test_export_content.py checks
+    that pulling it reproduces good_minimal byte for byte."""
+    import csv
+    tabs = sorted(f[:-4] for f in os.listdir(BASE) if f.endswith(".csv"))
+    ranges = []
+    for t in tabs:
+        with open(os.path.join(BASE, t + ".csv"), newline="", encoding="utf-8") as f:
+            rows = list(csv.reader(f))
+        values = []
+        for r in rows:
+            while r and r[-1] == "":
+                r = r[:-1]
+            values.append(r)
+        width = max(len(r) for r in rows)
+        col = chr(ord("A") + width - 1) if width <= 26 else "A" + chr(ord("A") + width - 27)
+        ranges.append({"range": f"{t}!A1:{col}{len(rows)}", "majorDimension": "ROWS", "values": values})
+    doc = {"get": {"sheets": [{"properties": {"title": t}} for t in PULL_EXTRA_TABS + tabs]},
+           "batchGet": {"spreadsheetId": PULL_SHEET_ID, "valueRanges": ranges}}
+    with open(PULL_FIXTURE, "w", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps(doc, indent=1, ensure_ascii=False) + "\n")
+    return PULL_FIXTURE
 
 
 def names():
@@ -156,13 +187,16 @@ def emit(out_dir):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("verb", choices=["list", "run", "emit"])
+    ap.add_argument("verb", choices=["list", "run", "emit", "record-pull"])
     ap.add_argument("name", nargs="?")
     ap.add_argument("--out")
     args = ap.parse_args(argv)
     if args.verb == "list":
         for n in names():
             print(n + ("  [csharp]" if spec(n).get("csharp") else ""))
+        return 0
+    if args.verb == "record-pull":
+        print(f"wrote {record_pull()}")
         return 0
     if args.verb == "run":
         rc, lines = run(args.name)

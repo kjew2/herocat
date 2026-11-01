@@ -102,9 +102,9 @@ Enums are defined once in C# (`HeroCat.Sim.Content.Enums`) and mirrored in `tool
 
 ### 3.4 Ids and keys
 
-- Ids never change and are never reused after shipping in a `content_version`; saves reference them (02). To retire a row, set `enabled = false` where the table has it, or set `tier` to `P2`; never delete.
+- Ids never change and are never reused after shipping in a `content_version`; saves reference them (02). To retire a row, set `enabled = false` where the table has it, or set `tier` to `P2`; never delete. Pool tables (`weapons`, `skills`, `companions`, `runes`) are the exception: they have no `enabled` column, and raising a row's `tier` past a shippable tier removes it from that tier's pool, so it is allowed only when the row is last in its `(banner, rarity)` pool for every shippable tier it leaves (rule B4). A pool row that is not last cannot be retired yet (TODO(#253): a retire mechanism that keeps indices).
 - Collectible ids follow `weapon_<r>_<nn>`, `skill_<r>_<nn>`, `comp_<r>_<nn>`, `rune_<r>_<nn>` with `<r>` in `c r e l m` and `<nn>` two digits (`skill_e_03`). The exporter enforces only the `id` regex and uniqueness; the pattern is a convention 04 relies on for readability.
-- Pool index (04, 08): within one `(banner, rarity)` the pool list is the ids sorted by ordinal string comparison; `Pool(banner, rarity)[poolIndex]` is what the server's audit row stores. Inserting an id that sorts before an existing one shifts indices and is a breaking change (section 6.3 rule B4).
+- Pool index (04, 08): within one `(banner, rarity)` the pool list is the ids of the rows a client loads (`tier <= buildTier`, section 5.32) sorted by ordinal string comparison; `Pool(banner, rarity)[poolIndex]` is what the server's audit row stores. Inserting an id that sorts before an existing one, or retiring one (by tier) that sorts before another, shifts indices and is a breaking change (section 6.3 rule B4).
 - Localization keys follow `<table singular>.<id without table prefix>.<field>` (`skill.e_03.name`, `quest.d_merge.name`, `research.res_atk.desc`) and `ui.<screen>.<element>` for screen text (`ui.scr_main.offline_claim`). Section 13.
 
 ## 4. Where every 00 section 6 entry lives
@@ -771,7 +771,7 @@ Change classes the exporter detects against `--previous`:
 | B1 value change | a rate, a cost, a string | new `content_version` | `E091` if bytes differ and the version is unchanged |
 | B2 additive | new row, new nullable column, new enum value, new table | new `content_version` | `E091` |
 | B3 removed id in a keyed table | deleting `skill_c_07` | forbidden; set `enabled=false` / `tier=P2` instead | `E090` |
-| B4 pool index shift | inserting `skill_c_00` before `skill_c_01` | forbidden on a shipped banner | `E090` (detected as an index change in the derived pool list) |
+| B4 pool index shift | inserting `skill_c_00` before `skill_c_01`; setting `skill_c_01` to `tier=P2` while `skill_c_02` ships | forbidden on a shipped banner; new ids must sort after every shipped one, and a pool row is retired by tier only when it is last in its pool | `E090` (detected as an index change in the tier-filtered pool list of each shippable tier, `M0` and `MVP`) |
 | B5 fewer rows in `dupe_levels`, `awakening`, `banner_levels`, `fish_levels`, `stats`, `tutorial_steps`; a reordered `tutorial_steps` | | forbidden (new tutorial steps are appended, issue #46) | `E090` |
 | B6 schema change needing new client code | new required column, removed enum value | bump `min_client_version` and `schema_version` together with the client release | `E092` if the schema changed and `min_client_version` did not increase |
 | B7 version went backwards | | | `E093` |
@@ -788,7 +788,7 @@ Python 3.9+, stdlib only for `build`, `check`, `diff` and `translator-csv`; `pul
 - `validate(tables, ui_keys) -> list[Error]`: every rule in section 8, one small function per rule appended to a rule list.
 - `emit(tables, meta, out_dir)`: deterministic JSON per 6.1, then the manifest.
 - `version_rules(current, previous)`: 6.3.
-- `pull(sheet_id, mode)`: fetch tabs to `content_src/`.
+- `pull(sheet_id, src, mode)`: fetch tabs to `content_src/` (7.1).
 
 ### 7.1 Command line
 
@@ -805,7 +805,7 @@ python3 tools/export_content.py pseudo --locale xx --out content_pseudo         
 
 | Verb | Does | Exit codes |
 |---|---|---|
-| `pull` | `--service-account`: Sheets API v4 `spreadsheets.values.batchGet` for every tab, written as CSV. `--csv-export`: the `gviz/tq?tqx=out:csv&sheet=<tab>` URL per tab, which works for link-readable sheets without OAuth. Either way the result is the committed `content_src/`. | 0, 2 (network/auth) |
+| `pull` | `--service-account`: Sheets API v4 `spreadsheets.get` for the tab titles, then one `spreadsheets.values.batchGet` (`ROWS`, `FORMATTED_VALUE`) for every tab, written as CSV. `--csv-export`: the `gviz/tq?tqx=out:csv&headers=1&sheet=<tab>` URL per table name, which works for link-readable sheets without OAuth; gviz answers a missing tab with the first tab, so a response that repeats another tab's bytes, or an optional table whose header has none of its columns, counts as absent. One of the two flags is required. Either way the result is the committed `content_src/`: every tab named as a section 5 table or `meta` is written as `<tab>.csv` (other tabs are skipped and listed), the CSV of a known table the workbook no longer has is removed, other files are left alone. Cells are read as displayed text, so tabs are formatted as Plain text in the en-US workbook (gviz blanks cells whose type differs from the column's majority). The CSV form is fixed (minimal quoting, LF, UTF-8 without BOM, rows padded to the header width, trailing blank rows dropped) and a file is rewritten only when its bytes change, so pulling an unchanged sheet changes nothing in git. The optional Google client is imported only by `pull --service-account`; without it `pull` prints the install hint and exits 2. `--help` prints the section 12 workflow. | 0, 2 (usage, network, auth, missing dependency) |
 | `build` | Parse, validate, emit. Lists every error, not the first. Prints `content_version`, `content_hash`, row count per table, pool sizes per rarity, the `S` constant list, and `hot_apply`. | 0, 1 (validation), 2 (usage/IO) |
 | `check` | Build to memory; exit 1 if the result differs byte-for-byte from `--out`, or the generated DTO file differs from `--dto-out`. CI's stale-JSON guard. Writes nothing. | 0, 1 |
 | `gen-dtos` | Writes the `HeroCat.Sim.Content.Dto` classes (section 9.1) from `SCHEMA`; `build` does it too. Field names are the PascalCase of the columns, so the Runtime loader maps them back with Newtonsoft's snake-case naming. | 0 |
@@ -895,7 +895,7 @@ CONTENT <code> <location>: <message>
 
 | Code | Where | Message |
 |---|---|---|
-| `E090` | exporter | `{table}: '{id}' existed in previous build {prev_version} and is missing or reordered; retire rows with enabled=false or tier=P2 instead` |
+| `E090` | exporter | B3/B5: `{table}: '{id}' existed in previous build {prev_version} and is missing or reordered; retire rows with enabled=false or tier=P2 instead`. B4: `{table}: '{id}' in Pool({banner}, {rarity}) of previous build {prev_version} moved ({tier} pool index {old} -> {new}[; ...]); add ids that sort after every shipped one, and retire a pool row by tier only when it is last in its pool` |
 | `E091` | exporter | `content differs from previous build but content_version is still {version}` |
 | `E092` | exporter | `schema changed (new required column / removed enum value) but min_client_version {v} did not increase` |
 | `E093` | exporter | `content_version {version} is lower than previous {prev}` |
@@ -925,7 +925,7 @@ Decided while implementing issues #122, #123 and #128; each is a default the des
 - **`W020`**: a non-ship locale with no text at all warns once (`ja has no text; all N keys fall back to en`), not once per key.
 - **`W021`**: rows whose keys start `err.`, `reject.` or `notice.` are exempt, because section 13.1 checks them elsewhere. Client UI rows (`ui.*`, `scr.*`, `boot.*`, the prefixes the client Core view-models use) are judged only when `--ui-keys` is given.
 - **`W030`**: a "note" means the constant's key appears somewhere in `meta.notes`.
-- **Version rules.** B3 (`E090`) applies to every table keyed by an `id`, enum or `ref`, plus the B5 tables. B4 compares each banner that was enabled in the previous build, using pool lists over all of its rows. B6 (`E092`) is detected two ways: a non-nullable column the previous rows lack, or an enum value the previous rows use that no longer exists. `E091` compares data files only. A `source_revision` or `notes` change on its own rewrites only the manifest.
+- **Version rules.** B3 (`E090`) applies to every table keyed by an `id`, enum or `ref`, plus the B5 tables. B4 compares, for each shippable tier (`M0`, `MVP`), the pools a client built for that tier derives: banners with `enabled = true` and `tier <= T`, pool rows with `tier <= T`, exactly as `ContentDb.Build` filters them (section 5.32, issue #250). It reports the first id per `(banner, rarity)` that is still in the pool at a different index, once, listing every tier where it moved. An id that left the pool is not itself an error (B3 covers deletion); an id after it that moves is. B6 (`E092`) is detected two ways: a non-nullable column the previous rows lack, or an enum value the previous rows use that no longer exists. `E091` compares data files only. A `source_revision` or `notes` change on its own rewrites only the manifest.
 - **`hot_apply` without a diff.** A build identical to `--previous` keeps the previous `hot_apply`. `check` without `--previous` keeps the committed manifest's value rather than recomputing it. `./check.sh` runs `build --previous` against the merge base's `content/`.
 - **Fixtures** (acceptance 6). Each `tests/content_fixtures/<name>/` describes its defect in a `fixture.json` as edits on `good_minimal/`, not as a full copy. `good_minimal` is a small valid set with `ship_locales = en,ja`. `warn_*` fixtures pin warnings under `--strict-warnings`. Fixtures marked `"csharp": true` are built with the exporter's fixture-only `--emit-invalid`, so their defect reaches `ContentDb.Build` (`ContentDbFixtureTests`). `tools/content_fixtures.py` documents the format.
 

@@ -1,0 +1,35 @@
+{
+  "edits": [
+    [
+      "meta",
+      "content_version,2026.11.01",
+      "content_version,2026.11.02"
+    ],
+    [
+      "skills",
+      "skill_c_01,COMMON,10.0,INSTANT,80,,,M0,",
+      "skill_c_01,COMMON,10.0,INSTANT,80,,,P2,"
+    ]
+  ],
+  "append": [
+    [
+      "skills",
+      "skill_c_02,COMMON,10.0,INSTANT,80,,,M0,skill.c_01.name,skill.c_01.desc,icon_skill_c_02,vfx_skill_c_02"
+    ]
+  ],
+  "previous": {
+    "edits": [
+      [
+        "banners",
+        "TICKET_SUMMON_SKILL,1,1,1,1,1",
+        "TICKET_SUMMON_SKILL,2,1,1,1,1"
+      ]
+    ],
+    "append": [
+      [
+        "skills",
+        "skill_c_02,COMMON,10.0,INSTANT,80,,,M0,skill.c_01.name,skill.c_01.desc,icon_skill_c_02,vfx_skill_c_02"
+      ]
+    ]
+  }
+}

@@ -1,0 +1,2328 @@
+{
+ "get": {
+  "sheets": [
+   {
+    "properties": {
+     "title": "README"
+    }
+   },
+   {
+    "properties": {
+     "title": "awakening"
+    }
+   },
+   {
+    "properties": {
+     "title": "awakening_targets"
+    }
+   },
+   {
+    "properties": {
+     "title": "banner_levels"
+    }
+   },
+   {
+    "properties": {
+     "title": "banners"
+    }
+   },
+   {
+    "properties": {
+     "title": "chapters"
+    }
+   },
+   {
+    "properties": {
+     "title": "constants"
+    }
+   },
+   {
+    "properties": {
+     "title": "curves"
+    }
+   },
+   {
+    "properties": {
+     "title": "dupe_levels"
+    }
+   },
+   {
+    "properties": {
+     "title": "feature_unlocks"
+    }
+   },
+   {
+    "properties": {
+     "title": "fish_levels"
+    }
+   },
+   {
+    "properties": {
+     "title": "hero_levels"
+    }
+   },
+   {
+    "properties": {
+     "title": "localization"
+    }
+   },
+   {
+    "properties": {
+     "title": "meta"
+    }
+   },
+   {
+    "properties": {
+     "title": "progress_targets"
+    }
+   },
+   {
+    "properties": {
+     "title": "rarities"
+    }
+   },
+   {
+    "properties": {
+     "title": "skills"
+    }
+   },
+   {
+    "properties": {
+     "title": "stats"
+    }
+   },
+   {
+    "properties": {
+     "title": "tank"
+    }
+   },
+   {
+    "properties": {
+     "title": "training_curves"
+    }
+   },
+   {
+    "properties": {
+     "title": "tutorial_steps"
+    }
+   },
+   {
+    "properties": {
+     "title": "weapons"
+    }
+   }
+  ]
+ },
+ "batchGet": {
+  "spreadsheetId": "fixture-sheet-id",
+  "valueRanges": [
+   {
+    "range": "awakening!A1:I6",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "rank",
+      "stage_gate",
+      "rock_candy_cost",
+      "mult",
+      "companion_slots_after",
+      "rune_slots_after",
+      "tier",
+      "name_key",
+      "icon"
+     ],
+     [
+      "1",
+      "50",
+      "100",
+      "1.5",
+      "2",
+      "0",
+      "MVP",
+      "awakening.rank_1.name",
+      "icon_awaken_1"
+     ],
+     [
+      "2",
+      "150",
+      "300",
+      "1.5",
+      "3",
+      "0",
+      "MVP",
+      "awakening.rank_2.name",
+      "icon_awaken_2"
+     ],
+     [
+      "3",
+      "300",
+      "800",
+      "1.5",
+      "4",
+      "0",
+      "MVP",
+      "awakening.rank_3.name",
+      "icon_awaken_3"
+     ],
+     [
+      "4",
+      "500",
+      "2000",
+      "1.5",
+      "4",
+      "3",
+      "MVP",
+      "awakening.rank_4.name",
+      "icon_awaken_4"
+     ],
+     [
+      "5",
+      "800",
+      "5000",
+      "1.5",
+      "4",
+      "6",
+      "MVP",
+      "awakening.rank_5.name",
+      "icon_awaken_5"
+     ]
+    ]
+   },
+   {
+    "range": "awakening_targets!A1:B6",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "rank",
+      "max_days_after_gate"
+     ],
+     [
+      "1",
+      "2"
+     ],
+     [
+      "2",
+      "2"
+     ],
+     [
+      "3",
+      "2"
+     ],
+     [
+      "4",
+      "2"
+     ],
+     [
+      "5",
+      "2"
+     ]
+    ]
+   },
+   {
+    "range": "banner_levels!A1:H7",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "banner",
+      "level",
+      "exp_required",
+      "rate_c",
+      "rate_r",
+      "rate_e",
+      "rate_l",
+      "rate_m"
+     ],
+     [
+      "WEAPON",
+      "1",
+      "0",
+      "0.6",
+      "0.28",
+      "0.09",
+      "0.025",
+      "0.005"
+     ],
+     [
+      "WEAPON",
+      "2",
+      "10",
+      "0.58",
+      "0.292",
+      "0.098",
+      "0.025",
+      "0.005"
+     ],
+     [
+      "SKILL",
+      "1",
+      "0",
+      "0.6",
+      "0.28",
+      "0.09",
+      "0.025",
+      "0.005"
+     ],
+     [
+      "SKILL",
+      "2",
+      "10",
+      "0.58",
+      "0.292",
+      "0.098",
+      "0.025",
+      "0.005"
+     ],
+     [
+      "COMPANION",
+      "1",
+      "0",
+      "0.6",
+      "0.28",
+      "0.09",
+      "0.025",
+      "0.005"
+     ],
+     [
+      "COMPANION",
+      "2",
+      "10",
+      "0.58",
+      "0.292",
+      "0.098",
+      "0.025",
+      "0.005"
+     ]
+    ]
+   },
+   {
+    "range": "banners!A1:U5",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "id",
+      "enabled",
+      "tier",
+      "pull_cost_diamonds",
+      "ticket_currency",
+      "pool_c",
+      "pool_r",
+      "pool_e",
+      "pool_l",
+      "pool_m",
+      "pity_soft_start",
+      "pity_soft_step",
+      "pity_hard",
+      "m_share_of_lplus",
+      "guarantee_batch_size",
+      "guarantee_min_rarity",
+      "exp_per_pull",
+      "sort_order",
+      "name_key",
+      "icon",
+      "banner_art"
+     ],
+     [
+      "WEAPON",
+      "true",
+      "M0",
+      "100",
+      "TICKET_SUMMON_WEAPON",
+      "1",
+      "1",
+      "1",
+      "1",
+      "1",
+      "50",
+      "0.0325",
+      "80",
+      "0.16666666666666666",
+      "10",
+      "EPIC",
+      "1",
+      "0",
+      "banner.weapon.name",
+      "icon_banner_weapon",
+      "art_banner_weapon"
+     ],
+     [
+      "SKILL",
+      "true",
+      "M0",
+      "200",
+      "TICKET_SUMMON_SKILL",
+      "1",
+      "1",
+      "1",
+      "1",
+      "1",
+      "50",
+      "0.0325",
+      "80",
+      "0.16666666666666666",
+      "10",
+      "EPIC",
+      "1",
+      "1",
+      "banner.skill.name",
+      "icon_banner_skill",
+      "art_banner_skill"
+     ],
+     [
+      "COMPANION",
+      "true",
+      "MVP",
+      "300",
+      "TICKET_SUMMON_COMPANION",
+      "18",
+      "14",
+      "10",
+      "6",
+      "2",
+      "50",
+      "0.0325",
+      "80",
+      "0.16666666666666666",
+      "10",
+      "EPIC",
+      "1",
+      "2",
+      "banner.companion.name",
+      "icon_banner_companion",
+      "art_banner_companion"
+     ],
+     [
+      "RUNE",
+      "false",
+      "P1",
+      "300",
+      "TICKET_SUMMON_RUNE",
+      "12",
+      "10",
+      "8",
+      "4",
+      "2",
+      "50",
+      "0.0325",
+      "80",
+      "0.16666666666666666",
+      "10",
+      "EPIC",
+      "1",
+      "3",
+      "banner.rune.name",
+      "icon_banner_rune",
+      "art_banner_rune"
+     ]
+    ]
+   },
+   {
+    "range": "chapters!A1:G3",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "id",
+      "index",
+      "from_stage",
+      "name_key",
+      "background",
+      "music",
+      "tier"
+     ],
+     [
+      "ch_01",
+      "1",
+      "1",
+      "chapter.01.name",
+      "bg_ch_01",
+      "bgm_ch_01",
+      "M0"
+     ],
+     [
+      "ch_02",
+      "2",
+      "51",
+      "chapter.02.name",
+      "bg_ch_02",
+      "bgm_ch_02",
+      "M0"
+     ]
+    ]
+   },
+   {
+    "range": "constants!A1:D44",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "key",
+      "type",
+      "value",
+      "kind"
+     ],
+     [
+      "TICK_HZ",
+      "int",
+      "10",
+      "I"
+     ],
+     [
+      "BASE_ATK",
+      "double",
+      "10",
+      "I"
+     ],
+     [
+      "BASE_HP",
+      "double",
+      "100",
+      "S"
+     ],
+     [
+      "ATTACK_INTERVAL_TICKS",
+      "int",
+      "10",
+      "I"
+     ],
+     [
+      "KILLS_PER_STAGE",
+      "int",
+      "10",
+      "I"
+     ],
+     [
+      "SPAWN_DELAY_TICKS",
+      "int",
+      "5",
+      "I"
+     ],
+     [
+      "BOSS_EVERY",
+      "int",
+      "10",
+      "I"
+     ],
+     [
+      "BOSS_HP_MULT",
+      "double",
+      "10",
+      "I"
+     ],
+     [
+      "BOSS_TIME_TICKS",
+      "int",
+      "300",
+      "S"
+     ],
+     [
+      "BOSS_GOLD_MULT",
+      "double",
+      "3",
+      "I"
+     ],
+     [
+      "CHAPTER_WIDTH",
+      "int",
+      "50",
+      "S"
+     ],
+     [
+      "STAGE_CAP",
+      "int",
+      "9000",
+      "I"
+     ],
+     [
+      "TAP_ZAP_DMG_PCT",
+      "double",
+      "0.5",
+      "S"
+     ],
+     [
+      "TAP_ZAP_MAX_PER_SEC",
+      "int",
+      "6",
+      "S"
+     ],
+     [
+      "TRAIN_BULK_STEPS",
+      "intlist",
+      "1|10|100",
+      "I"
+     ],
+     [
+      "DIAMONDS_PER_DAY_F2P",
+      "int",
+      "400",
+      "S"
+     ],
+     [
+      "DAY_SECONDS",
+      "int",
+      "86400",
+      "I"
+     ],
+     [
+      "OFFLINE_RATE",
+      "double",
+      "0.5",
+      "I"
+     ],
+     [
+      "OFFLINE_CAP_H",
+      "double",
+      "24",
+      "S"
+     ],
+     [
+      "OFFLINE_MIN_S",
+      "int",
+      "60",
+      "S"
+     ],
+     [
+      "SKILL_SLOTS",
+      "int",
+      "6",
+      "I"
+     ],
+     [
+      "COMPANION_SLOTS",
+      "int",
+      "4",
+      "S"
+     ],
+     [
+      "RUNE_SLOTS",
+      "int",
+      "6",
+      "S"
+     ],
+     [
+      "DUPE_LVL_BONUS",
+      "double",
+      "0.2",
+      "I"
+     ],
+     [
+      "FISH_BOARD_W",
+      "int",
+      "5",
+      "S"
+     ],
+     [
+      "FISH_BOARD_H",
+      "int",
+      "4",
+      "S"
+     ],
+     [
+      "FISH_MAX_LVL0",
+      "int",
+      "10",
+      "S"
+     ],
+     [
+      "FISH_MERGE_COINS_PCT",
+      "double",
+      "0.02",
+      "S"
+     ],
+     [
+      "FISH_BOARD_DPS_FACTOR",
+      "double",
+      "0.77",
+      "S"
+     ],
+     [
+      "FISH_DISCARD_COINS_PCT",
+      "double",
+      "0.1",
+      "S"
+     ],
+     [
+      "ATTACK_PROGRESS_UNIT",
+      "int",
+      "100",
+      "I"
+     ],
+     [
+      "CRIT_DMG_BASE",
+      "double",
+      "1.5",
+      "S"
+     ],
+     [
+      "MP_POOL0",
+      "double",
+      "100",
+      "S"
+     ],
+     [
+      "MP_REGEN0",
+      "double",
+      "2.0",
+      "S"
+     ],
+     [
+      "BOSS_ROCK_CANDY_P",
+      "double",
+      "0.5",
+      "S"
+     ],
+     [
+      "FIRST_CLEAR_DIAMONDS",
+      "int",
+      "10",
+      "I"
+     ],
+     [
+      "INBOX_EXPIRY_DAYS",
+      "int",
+      "30",
+      "S"
+     ],
+     [
+      "DAILY_GIFT_WEAPON_TICKETS",
+      "int",
+      "1",
+      "S"
+     ],
+     [
+      "LOGIN_DIAMONDS",
+      "int",
+      "50",
+      "I"
+     ],
+     [
+      "LIMIT_BREAK_RANKS",
+      "int",
+      "5",
+      "S"
+     ],
+     [
+      "REF_DAILIES_DONE",
+      "int",
+      "8",
+      "S"
+     ],
+     [
+      "REF_NEW_BOSSES",
+      "int",
+      "4",
+      "S"
+     ],
+     [
+      "CLOCK_BACKWARDS_TOLERANCE_S",
+      "int",
+      "5",
+      "S"
+     ]
+    ]
+   },
+   {
+    "range": "curves!A1:D4",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "id",
+      "base",
+      "growth",
+      "x_offset"
+     ],
+     [
+      "enemy_hp",
+      "20",
+      "1.04",
+      "0"
+     ],
+     [
+      "gold_per_kill",
+      "2",
+      "1.03",
+      "0"
+     ],
+     [
+      "exp_per_kill",
+      "5",
+      "1.025",
+      "0"
+     ]
+    ]
+   },
+   {
+    "range": "dupe_levels!A1:B11",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "level",
+      "cum_copies"
+     ],
+     [
+      "1",
+      "1"
+     ],
+     [
+      "2",
+      "3"
+     ],
+     [
+      "3",
+      "6"
+     ],
+     [
+      "4",
+      "10"
+     ],
+     [
+      "5",
+      "16"
+     ],
+     [
+      "6",
+      "25"
+     ],
+     [
+      "7",
+      "40"
+     ],
+     [
+      "8",
+      "64"
+     ],
+     [
+      "9",
+      "100"
+     ],
+     [
+      "10",
+      "160"
+     ]
+    ]
+   },
+   {
+    "range": "feature_unlocks!A1:F6",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "feature",
+      "condition",
+      "threshold",
+      "screen",
+      "locked_text_key",
+      "tier"
+     ],
+     [
+      "RESEARCH",
+      "AWAKEN_RANK",
+      "1",
+      "SCR_RESEARCH",
+      "feature.research.locked",
+      "MVP"
+     ],
+     [
+      "COMPANIONS",
+      "ALWAYS",
+      "",
+      "SCR_COMPANIONS",
+      "",
+      "MVP"
+     ],
+     [
+      "QUESTS",
+      "STAGE_HIGHEST",
+      "10",
+      "SCR_QUESTS",
+      "feature.quests.locked",
+      "MVP"
+     ],
+     [
+      "DUNGEONS",
+      "STAGE_HIGHEST",
+      "30",
+      "SCR_DUNGEONS",
+      "feature.dungeons.locked",
+      "MVP"
+     ],
+     [
+      "SHOP",
+      "ALWAYS",
+      "",
+      "SCR_SHOP",
+      "",
+      "MVP"
+     ]
+    ]
+   },
+   {
+    "range": "fish_levels!A1:F21",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "level",
+      "discovery_coins",
+      "missile_pct",
+      "sprite",
+      "tint",
+      "name_key"
+     ],
+     [
+      "1",
+      "10",
+      "5.0",
+      "spr_fish_01",
+      "",
+      "fish.01.name"
+     ],
+     [
+      "2",
+      "20",
+      "7.5",
+      "spr_fish_02",
+      "",
+      "fish.02.name"
+     ],
+     [
+      "3",
+      "40",
+      "11.25",
+      "spr_fish_03",
+      "",
+      "fish.03.name"
+     ],
+     [
+      "4",
+      "80",
+      "16.875",
+      "spr_fish_04",
+      "",
+      "fish.04.name"
+     ],
+     [
+      "5",
+      "160",
+      "25.3125",
+      "spr_fish_05",
+      "",
+      "fish.05.name"
+     ],
+     [
+      "6",
+      "320",
+      "37.96875",
+      "spr_fish_06",
+      "",
+      "fish.06.name"
+     ],
+     [
+      "7",
+      "640",
+      "56.953125",
+      "spr_fish_07",
+      "",
+      "fish.07.name"
+     ],
+     [
+      "8",
+      "1280",
+      "85.4296875",
+      "spr_fish_08",
+      "",
+      "fish.08.name"
+     ],
+     [
+      "9",
+      "2560",
+      "128.14453125",
+      "spr_fish_09",
+      "",
+      "fish.09.name"
+     ],
+     [
+      "10",
+      "5120",
+      "192.216796875",
+      "spr_fish_10",
+      "",
+      "fish.10.name"
+     ],
+     [
+      "11",
+      "10240",
+      "288.3251953125",
+      "spr_fish_11",
+      "",
+      "fish.11.name"
+     ],
+     [
+      "12",
+      "20480",
+      "432.48779296875",
+      "spr_fish_12",
+      "",
+      "fish.12.name"
+     ],
+     [
+      "13",
+      "40960",
+      "648.731689453125",
+      "spr_fish_01",
+      "#FFD54F",
+      "fish.13.name"
+     ],
+     [
+      "14",
+      "81920",
+      "973.0975341796875",
+      "spr_fish_02",
+      "#4DD0E1",
+      "fish.14.name"
+     ],
+     [
+      "15",
+      "163840",
+      "1459.6463012695312",
+      "spr_fish_03",
+      "#F06292",
+      "fish.15.name"
+     ],
+     [
+      "16",
+      "327680",
+      "2189.469451904297",
+      "spr_fish_04",
+      "#66BB6A",
+      "fish.16.name"
+     ],
+     [
+      "17",
+      "655360",
+      "3284.2041778564453",
+      "spr_fish_05",
+      "#AB47BC",
+      "fish.17.name"
+     ],
+     [
+      "18",
+      "1310720",
+      "4926.306266784668",
+      "spr_fish_06",
+      "#FFA726",
+      "fish.18.name"
+     ],
+     [
+      "19",
+      "2621440",
+      "7389.459400177002",
+      "spr_fish_07",
+      "#42A5F5",
+      "fish.19.name"
+     ],
+     [
+      "20",
+      "5242880",
+      "11084.189100265503",
+      "spr_fish_08",
+      "#EF5350",
+      "fish.20.name"
+     ]
+    ]
+   },
+   {
+    "range": "hero_levels!A1:F2",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "id",
+      "exp0",
+      "exp_g",
+      "atk_pct_per_level",
+      "mult_per_level",
+      "level_cap"
+     ],
+     [
+      "default",
+      "100",
+      "1.08",
+      "",
+      "1.02",
+      "9999"
+     ]
+    ]
+   },
+   {
+    "range": "localization!A1:G79",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "key",
+      "en",
+      "ja",
+      "ko",
+      "zh_hans",
+      "max_chars",
+      "plural"
+     ],
+     [
+      "awakening.rank_1.name",
+      "Awakened 1",
+      "Awakened 1",
+      "Awakened 1",
+      "Awakened 1",
+      "24",
+      "false"
+     ],
+     [
+      "awakening.rank_2.name",
+      "Awakened 2",
+      "Awakened 2",
+      "Awakened 2",
+      "Awakened 2",
+      "24",
+      "false"
+     ],
+     [
+      "awakening.rank_3.name",
+      "Awakened 3",
+      "Awakened 3",
+      "Awakened 3",
+      "Awakened 3",
+      "24",
+      "false"
+     ],
+     [
+      "awakening.rank_4.name",
+      "Awakened 4",
+      "Awakened 4",
+      "Awakened 4",
+      "Awakened 4",
+      "24",
+      "false"
+     ],
+     [
+      "awakening.rank_5.name",
+      "Awakened 5",
+      "Awakened 5",
+      "Awakened 5",
+      "Awakened 5",
+      "24",
+      "false"
+     ],
+     [
+      "banner.companion.name",
+      "Companion Summon",
+      "Companion Summon",
+      "Companion Summon",
+      "Companion Summon",
+      "24",
+      "false"
+     ],
+     [
+      "banner.rune.name",
+      "Rune Summon",
+      "Rune Summon",
+      "Rune Summon",
+      "Rune Summon",
+      "24",
+      "false"
+     ],
+     [
+      "banner.skill.name",
+      "Skill Summon",
+      "Skill Summon",
+      "Skill Summon",
+      "Skill Summon",
+      "24",
+      "false"
+     ],
+     [
+      "banner.weapon.name",
+      "Weapon Summon",
+      "Weapon Summon",
+      "Weapon Summon",
+      "Weapon Summon",
+      "24",
+      "false"
+     ],
+     [
+      "chapter.01.name",
+      "Dreamland 1",
+      "Dreamland 1",
+      "Dreamland 1",
+      "Dreamland 1",
+      "24",
+      "false"
+     ],
+     [
+      "chapter.02.name",
+      "Dreamland 2",
+      "Dreamland 2",
+      "Dreamland 2",
+      "Dreamland 2",
+      "24",
+      "false"
+     ],
+     [
+      "feature.dungeons.locked",
+      "Unlocks at stage 30",
+      "Unlocks at stage 30",
+      "Unlocks at stage 30",
+      "Unlocks at stage 30",
+      "32",
+      "false"
+     ],
+     [
+      "feature.quests.locked",
+      "Unlocks at stage 10",
+      "Unlocks at stage 10",
+      "Unlocks at stage 10",
+      "Unlocks at stage 10",
+      "32",
+      "false"
+     ],
+     [
+      "feature.research.locked",
+      "Unlocks at Awakening 1",
+      "Unlocks at Awakening 1",
+      "Unlocks at Awakening 1",
+      "Unlocks at Awakening 1",
+      "32",
+      "false"
+     ],
+     [
+      "fish.01.name",
+      "Fish 1",
+      "Fish 1",
+      "Fish 1",
+      "Fish 1",
+      "24",
+      "false"
+     ],
+     [
+      "fish.02.name",
+      "Fish 2",
+      "Fish 2",
+      "Fish 2",
+      "Fish 2",
+      "24",
+      "false"
+     ],
+     [
+      "fish.03.name",
+      "Fish 3",
+      "Fish 3",
+      "Fish 3",
+      "Fish 3",
+      "24",
+      "false"
+     ],
+     [
+      "fish.04.name",
+      "Fish 4",
+      "Fish 4",
+      "Fish 4",
+      "Fish 4",
+      "24",
+      "false"
+     ],
+     [
+      "fish.05.name",
+      "Fish 5",
+      "Fish 5",
+      "Fish 5",
+      "Fish 5",
+      "24",
+      "false"
+     ],
+     [
+      "fish.06.name",
+      "Fish 6",
+      "Fish 6",
+      "Fish 6",
+      "Fish 6",
+      "24",
+      "false"
+     ],
+     [
+      "fish.07.name",
+      "Fish 7",
+      "Fish 7",
+      "Fish 7",
+      "Fish 7",
+      "24",
+      "false"
+     ],
+     [
+      "fish.08.name",
+      "Fish 8",
+      "Fish 8",
+      "Fish 8",
+      "Fish 8",
+      "24",
+      "false"
+     ],
+     [
+      "fish.09.name",
+      "Fish 9",
+      "Fish 9",
+      "Fish 9",
+      "Fish 9",
+      "24",
+      "false"
+     ],
+     [
+      "fish.10.name",
+      "Fish 10",
+      "Fish 10",
+      "Fish 10",
+      "Fish 10",
+      "24",
+      "false"
+     ],
+     [
+      "fish.11.name",
+      "Fish 11",
+      "Fish 11",
+      "Fish 11",
+      "Fish 11",
+      "24",
+      "false"
+     ],
+     [
+      "fish.12.name",
+      "Fish 12",
+      "Fish 12",
+      "Fish 12",
+      "Fish 12",
+      "24",
+      "false"
+     ],
+     [
+      "fish.13.name",
+      "Fish 13",
+      "Fish 13",
+      "Fish 13",
+      "Fish 13",
+      "24",
+      "false"
+     ],
+     [
+      "fish.14.name",
+      "Fish 14",
+      "Fish 14",
+      "Fish 14",
+      "Fish 14",
+      "24",
+      "false"
+     ],
+     [
+      "fish.15.name",
+      "Fish 15",
+      "Fish 15",
+      "Fish 15",
+      "Fish 15",
+      "24",
+      "false"
+     ],
+     [
+      "fish.16.name",
+      "Fish 16",
+      "Fish 16",
+      "Fish 16",
+      "Fish 16",
+      "24",
+      "false"
+     ],
+     [
+      "fish.17.name",
+      "Fish 17",
+      "Fish 17",
+      "Fish 17",
+      "Fish 17",
+      "24",
+      "false"
+     ],
+     [
+      "fish.18.name",
+      "Fish 18",
+      "Fish 18",
+      "Fish 18",
+      "Fish 18",
+      "24",
+      "false"
+     ],
+     [
+      "fish.19.name",
+      "Fish 19",
+      "Fish 19",
+      "Fish 19",
+      "Fish 19",
+      "24",
+      "false"
+     ],
+     [
+      "fish.20.name",
+      "Fish 20",
+      "Fish 20",
+      "Fish 20",
+      "Fish 20",
+      "24",
+      "false"
+     ],
+     [
+      "rarity.common.name",
+      "Common",
+      "Common",
+      "Common",
+      "Common",
+      "24",
+      "false"
+     ],
+     [
+      "rarity.epic.name",
+      "Epic",
+      "Epic",
+      "Epic",
+      "Epic",
+      "24",
+      "false"
+     ],
+     [
+      "rarity.legendary.name",
+      "Legendary",
+      "Legendary",
+      "Legendary",
+      "Legendary",
+      "24",
+      "false"
+     ],
+     [
+      "rarity.mythic.name",
+      "Mythic",
+      "Mythic",
+      "Mythic",
+      "Mythic",
+      "24",
+      "false"
+     ],
+     [
+      "rarity.rare.name",
+      "Rare",
+      "Rare",
+      "Rare",
+      "Rare",
+      "24",
+      "false"
+     ],
+     [
+      "skill.c_01.desc",
+      "A common instant skill.",
+      "A common instant skill.",
+      "A common instant skill.",
+      "A common instant skill.",
+      "0",
+      "false"
+     ],
+     [
+      "skill.c_01.name",
+      "Common Skill 1",
+      "Common Skill 1",
+      "Common Skill 1",
+      "Common Skill 1",
+      "24",
+      "false"
+     ],
+     [
+      "skill.e_08.desc",
+      "A epic buff skill.",
+      "A epic buff skill.",
+      "A epic buff skill.",
+      "A epic buff skill.",
+      "0",
+      "false"
+     ],
+     [
+      "skill.e_08.name",
+      "Epic Skill 8",
+      "Epic Skill 8",
+      "Epic Skill 8",
+      "Epic Skill 8",
+      "24",
+      "false"
+     ],
+     [
+      "skill.l_01.desc",
+      "A legendary instant skill.",
+      "A legendary instant skill.",
+      "A legendary instant skill.",
+      "A legendary instant skill.",
+      "0",
+      "false"
+     ],
+     [
+      "skill.l_01.name",
+      "Legendary Skill 1",
+      "Legendary Skill 1",
+      "Legendary Skill 1",
+      "Legendary Skill 1",
+      "24",
+      "false"
+     ],
+     [
+      "skill.m_02.desc",
+      "A mythic buff skill.",
+      "A mythic buff skill.",
+      "A mythic buff skill.",
+      "A mythic buff skill.",
+      "0",
+      "false"
+     ],
+     [
+      "skill.m_02.name",
+      "Mythic Skill 2",
+      "Mythic Skill 2",
+      "Mythic Skill 2",
+      "Mythic Skill 2",
+      "24",
+      "false"
+     ],
+     [
+      "skill.r_08.desc",
+      "A rare dot skill.",
+      "A rare dot skill.",
+      "A rare dot skill.",
+      "A rare dot skill.",
+      "0",
+      "false"
+     ],
+     [
+      "skill.r_08.name",
+      "Rare Skill 8",
+      "Rare Skill 8",
+      "Rare Skill 8",
+      "Rare Skill 8",
+      "24",
+      "false"
+     ],
+     [
+      "stat.atk.desc",
+      "Raises Attack.",
+      "Raises Attack.",
+      "Raises Attack.",
+      "Raises Attack.",
+      "0",
+      "false"
+     ],
+     [
+      "stat.atk.name",
+      "Attack",
+      "Attack",
+      "Attack",
+      "Attack",
+      "24",
+      "false"
+     ],
+     [
+      "stat.atk_spd.desc",
+      "Raises Attack Speed.",
+      "Raises Attack Speed.",
+      "Raises Attack Speed.",
+      "Raises Attack Speed.",
+      "0",
+      "false"
+     ],
+     [
+      "stat.atk_spd.name",
+      "Attack Speed",
+      "Attack Speed",
+      "Attack Speed",
+      "Attack Speed",
+      "24",
+      "false"
+     ],
+     [
+      "stat.crit_dmg.desc",
+      "Raises Crit Damage.",
+      "Raises Crit Damage.",
+      "Raises Crit Damage.",
+      "Raises Crit Damage.",
+      "0",
+      "false"
+     ],
+     [
+      "stat.crit_dmg.name",
+      "Crit Damage",
+      "Crit Damage",
+      "Crit Damage",
+      "Crit Damage",
+      "24",
+      "false"
+     ],
+     [
+      "stat.crit_rate.desc",
+      "Raises Crit Rate.",
+      "Raises Crit Rate.",
+      "Raises Crit Rate.",
+      "Raises Crit Rate.",
+      "0",
+      "false"
+     ],
+     [
+      "stat.crit_rate.name",
+      "Crit Rate",
+      "Crit Rate",
+      "Crit Rate",
+      "Crit Rate",
+      "24",
+      "false"
+     ],
+     [
+      "stat.def.desc",
+      "Raises Defense.",
+      "Raises Defense.",
+      "Raises Defense.",
+      "Raises Defense.",
+      "0",
+      "false"
+     ],
+     [
+      "stat.def.name",
+      "Defense",
+      "Defense",
+      "Defense",
+      "Defense",
+      "24",
+      "false"
+     ],
+     [
+      "stat.exp_gain.desc",
+      "Raises EXP Gain.",
+      "Raises EXP Gain.",
+      "Raises EXP Gain.",
+      "Raises EXP Gain.",
+      "0",
+      "false"
+     ],
+     [
+      "stat.exp_gain.name",
+      "EXP Gain",
+      "EXP Gain",
+      "EXP Gain",
+      "EXP Gain",
+      "24",
+      "false"
+     ],
+     [
+      "stat.gold_gain.desc",
+      "Raises Gold Gain.",
+      "Raises Gold Gain.",
+      "Raises Gold Gain.",
+      "Raises Gold Gain.",
+      "0",
+      "false"
+     ],
+     [
+      "stat.gold_gain.name",
+      "Gold Gain",
+      "Gold Gain",
+      "Gold Gain",
+      "Gold Gain",
+      "24",
+      "false"
+     ],
+     [
+      "stat.hp.desc",
+      "Raises Health.",
+      "Raises Health.",
+      "Raises Health.",
+      "Raises Health.",
+      "0",
+      "false"
+     ],
+     [
+      "stat.hp.name",
+      "Health",
+      "Health",
+      "Health",
+      "Health",
+      "24",
+      "false"
+     ],
+     [
+      "tut.1.tap",
+      "Tap the monster!",
+      "Tap the monster!",
+      "Tap the monster!",
+      "Tap the monster!",
+      "48",
+      "false"
+     ],
+     [
+      "tut.2.gold",
+      "Monsters drop gold.",
+      "Monsters drop gold.",
+      "Monsters drop gold.",
+      "Monsters drop gold.",
+      "48",
+      "false"
+     ],
+     [
+      "tut.3.hero",
+      "Make your cat stronger",
+      "Make your cat stronger",
+      "Make your cat stronger",
+      "Make your cat stronger",
+      "48",
+      "false"
+     ],
+     [
+      "weapon.c_01.desc",
+      "A common weapon.",
+      "A common weapon.",
+      "A common weapon.",
+      "A common weapon.",
+      "0",
+      "false"
+     ],
+     [
+      "weapon.c_01.name",
+      "Common Weapon 1",
+      "Common Weapon 1",
+      "Common Weapon 1",
+      "Common Weapon 1",
+      "24",
+      "false"
+     ],
+     [
+      "weapon.e_01.desc",
+      "A epic weapon.",
+      "A epic weapon.",
+      "A epic weapon.",
+      "A epic weapon.",
+      "0",
+      "false"
+     ],
+     [
+      "weapon.e_01.name",
+      "Epic Weapon 1",
+      "Epic Weapon 1",
+      "Epic Weapon 1",
+      "Epic Weapon 1",
+      "24",
+      "false"
+     ],
+     [
+      "weapon.l_01.desc",
+      "A legendary weapon.",
+      "A legendary weapon.",
+      "A legendary weapon.",
+      "A legendary weapon.",
+      "0",
+      "false"
+     ],
+     [
+      "weapon.l_01.name",
+      "Legendary Weapon 1",
+      "Legendary Weapon 1",
+      "Legendary Weapon 1",
+      "Legendary Weapon 1",
+      "24",
+      "false"
+     ],
+     [
+      "weapon.m_01.desc",
+      "A mythic weapon.",
+      "A mythic weapon.",
+      "A mythic weapon.",
+      "A mythic weapon.",
+      "0",
+      "false"
+     ],
+     [
+      "weapon.m_01.name",
+      "Mythic Weapon 1",
+      "Mythic Weapon 1",
+      "Mythic Weapon 1",
+      "Mythic Weapon 1",
+      "24",
+      "false"
+     ],
+     [
+      "weapon.r_01.desc",
+      "A rare weapon.",
+      "A rare weapon.",
+      "A rare weapon.",
+      "A rare weapon.",
+      "0",
+      "false"
+     ],
+     [
+      "weapon.r_01.name",
+      "Rare Weapon 1",
+      "Rare Weapon 1",
+      "Rare Weapon 1",
+      "Rare Weapon 1",
+      "24",
+      "false"
+     ]
+    ]
+   },
+   {
+    "range": "meta!A1:B6",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "key",
+      "value"
+     ],
+     [
+      "content_version",
+      "2026.11.01"
+     ],
+     [
+      "min_client_version",
+      "0.1.0"
+     ],
+     [
+      "source_revision",
+      "content fixture baseline"
+     ],
+     [
+      "ship_locales",
+      "en,ja"
+     ],
+     [
+      "notes",
+      "tests/content_fixtures/good_minimal: the baseline every bad_* fixture edits (issue #124)"
+     ]
+    ]
+   },
+   {
+    "range": "progress_targets!A1:C6",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "day",
+      "stage",
+      "tolerance"
+     ],
+     [
+      "1",
+      "240",
+      "0.2"
+     ],
+     [
+      "3",
+      "330",
+      "0.2"
+     ],
+     [
+      "7",
+      "430",
+      "0.2"
+     ],
+     [
+      "14",
+      "480",
+      "0.2"
+     ],
+     [
+      "30",
+      "550",
+      "0.2"
+     ]
+    ]
+   },
+   {
+    "range": "rarities!A1:M6",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "id",
+      "code",
+      "color",
+      "shape_icon",
+      "weapon_atk_pct",
+      "weapon_passive_pct",
+      "skill_dps_pct",
+      "companion_dps_pct",
+      "rune_stat_pct",
+      "limit_break_cost",
+      "dupe_overflow_rock_candy",
+      "override_tolerance",
+      "name_key"
+     ],
+     [
+      "COMMON",
+      "C",
+      "#9E9E9E",
+      "icon_rarity_circle",
+      "20.0",
+      "1.0",
+      "10.0",
+      "16.0",
+      "2.0",
+      "10",
+      "1",
+      "0.1",
+      "rarity.common.name"
+     ],
+     [
+      "RARE",
+      "R",
+      "#42A5F5",
+      "icon_rarity_square",
+      "50.0",
+      "2.0",
+      "20.0",
+      "32.0",
+      "4.0",
+      "20",
+      "2",
+      "0.1",
+      "rarity.rare.name"
+     ],
+     [
+      "EPIC",
+      "E",
+      "#AB47BC",
+      "icon_rarity_diamond",
+      "120.0",
+      "4.0",
+      "40.0",
+      "64.0",
+      "8.0",
+      "40",
+      "5",
+      "0.1",
+      "rarity.epic.name"
+     ],
+     [
+      "LEGENDARY",
+      "L",
+      "#FFA726",
+      "icon_rarity_star",
+      "300.0",
+      "8.0",
+      "80.0",
+      "128.0",
+      "16.0",
+      "80",
+      "20",
+      "0.1",
+      "rarity.legendary.name"
+     ],
+     [
+      "MYTHIC",
+      "M",
+      "#EF5350",
+      "icon_rarity_crown",
+      "700.0",
+      "16.0",
+      "160.0",
+      "256.0",
+      "32.0",
+      "150",
+      "50",
+      "0.1",
+      "rarity.mythic.name"
+     ]
+    ]
+   },
+   {
+    "range": "skills!A1:L6",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "id",
+      "rarity",
+      "dps_pct",
+      "cast_type",
+      "cooldown_ticks",
+      "duration_ticks",
+      "buff_pct",
+      "tier",
+      "name_key",
+      "desc_key",
+      "icon",
+      "vfx"
+     ],
+     [
+      "skill_c_01",
+      "COMMON",
+      "10.0",
+      "INSTANT",
+      "80",
+      "",
+      "",
+      "M0",
+      "skill.c_01.name",
+      "skill.c_01.desc",
+      "icon_skill_c_01",
+      "vfx_skill_c_01"
+     ],
+     [
+      "skill_r_08",
+      "RARE",
+      "20.0",
+      "DOT",
+      "150",
+      "50",
+      "",
+      "M0",
+      "skill.r_08.name",
+      "skill.r_08.desc",
+      "icon_skill_r_08",
+      "vfx_skill_r_08"
+     ],
+     [
+      "skill_e_08",
+      "EPIC",
+      "40.0",
+      "BUFF",
+      "150",
+      "50",
+      "120.0",
+      "M0",
+      "skill.e_08.name",
+      "skill.e_08.desc",
+      "icon_skill_e_08",
+      "vfx_skill_e_08"
+     ],
+     [
+      "skill_l_01",
+      "LEGENDARY",
+      "80.0",
+      "INSTANT",
+      "80",
+      "",
+      "",
+      "M0",
+      "skill.l_01.name",
+      "skill.l_01.desc",
+      "icon_skill_l_01",
+      "vfx_skill_l_01"
+     ],
+     [
+      "skill_m_02",
+      "MYTHIC",
+      "160.0",
+      "BUFF",
+      "150",
+      "50",
+      "480.0",
+      "M0",
+      "skill.m_02.name",
+      "skill.m_02.desc",
+      "icon_skill_m_02",
+      "vfx_skill_m_02"
+     ]
+    ]
+   },
+   {
+    "range": "stats!A1:I9",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "id",
+      "trainable",
+      "per_lvl",
+      "cap",
+      "base",
+      "tier",
+      "name_key",
+      "desc_key",
+      "icon"
+     ],
+     [
+      "ATK",
+      "true",
+      "0.05",
+      "",
+      "10",
+      "M0",
+      "stat.atk.name",
+      "stat.atk.desc",
+      "icon_stat_atk"
+     ],
+     [
+      "HP",
+      "false",
+      "",
+      "",
+      "100",
+      "M0",
+      "stat.hp.name",
+      "stat.hp.desc",
+      "icon_stat_hp"
+     ],
+     [
+      "DEF",
+      "false",
+      "",
+      "",
+      "",
+      "M0",
+      "stat.def.name",
+      "stat.def.desc",
+      "icon_stat_def"
+     ],
+     [
+      "CRIT_RATE",
+      "true",
+      "0.0025",
+      "300",
+      "",
+      "M0",
+      "stat.crit_rate.name",
+      "stat.crit_rate.desc",
+      "icon_stat_crit_rate"
+     ],
+     [
+      "CRIT_DMG",
+      "true",
+      "0.01",
+      "",
+      "1.5",
+      "M0",
+      "stat.crit_dmg.name",
+      "stat.crit_dmg.desc",
+      "icon_stat_crit_dmg"
+     ],
+     [
+      "ATK_SPD",
+      "true",
+      "0.01",
+      "100",
+      "",
+      "M0",
+      "stat.atk_spd.name",
+      "stat.atk_spd.desc",
+      "icon_stat_atk_spd"
+     ],
+     [
+      "GOLD_GAIN",
+      "true",
+      "0.02",
+      "",
+      "",
+      "M0",
+      "stat.gold_gain.name",
+      "stat.gold_gain.desc",
+      "icon_stat_gold_gain"
+     ],
+     [
+      "EXP_GAIN",
+      "true",
+      "0.02",
+      "",
+      "",
+      "M0",
+      "stat.exp_gain.name",
+      "stat.exp_gain.desc",
+      "icon_stat_exp_gain"
+     ]
+    ]
+   },
+   {
+    "range": "tank!A1:E2",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "id",
+      "cap0",
+      "refill_s0",
+      "release_level",
+      "refill_floor_s"
+     ],
+     [
+      "default",
+      "10",
+      "6.0",
+      "1",
+      "2.0"
+     ]
+    ]
+   },
+   {
+    "range": "training_curves!A1:C7",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "stat",
+      "cost0",
+      "cost_g"
+     ],
+     [
+      "ATK",
+      "50",
+      "1.07"
+     ],
+     [
+      "CRIT_RATE",
+      "50",
+      "1.07"
+     ],
+     [
+      "CRIT_DMG",
+      "50",
+      "1.07"
+     ],
+     [
+      "ATK_SPD",
+      "50",
+      "1.07"
+     ],
+     [
+      "GOLD_GAIN",
+      "50",
+      "1.07"
+     ],
+     [
+      "EXP_GAIN",
+      "50",
+      "1.07"
+     ]
+    ]
+   },
+   {
+    "range": "tutorial_steps!A1:L4",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "id",
+      "order",
+      "trigger",
+      "trigger_value",
+      "screen",
+      "highlight",
+      "text_key",
+      "expect_event",
+      "expect_count",
+      "grants",
+      "skippable",
+      "tier"
+     ],
+     [
+      "tut_welcome",
+      "1",
+      "PROFILE_CREATED",
+      "",
+      "SCR_MAIN",
+      "combat_viewport",
+      "tut.1.tap",
+      "TapZapped",
+      "3",
+      "DIAMOND:1500;WEAPON:weapon_c_01:1",
+      "false",
+      "M0"
+     ],
+     [
+      "tut_gold",
+      "2",
+      "PREVIOUS_DONE",
+      "",
+      "SCR_MAIN",
+      "gold_chip",
+      "tut.2.gold",
+      "EnemyKilled",
+      "3",
+      "",
+      "false",
+      "MVP"
+     ],
+     [
+      "tut_hero_tab",
+      "3",
+      "PREVIOUS_DONE",
+      "",
+      "SCR_MAIN",
+      "tab_hero",
+      "tut.3.hero",
+      "",
+      "",
+      "",
+      "true",
+      "MVP"
+     ]
+    ]
+   },
+   {
+    "range": "weapons!A1:J6",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "id",
+      "rarity",
+      "atk_pct",
+      "passive_pct",
+      "element",
+      "tier",
+      "name_key",
+      "desc_key",
+      "icon",
+      "sprite"
+     ],
+     [
+      "weapon_c_01",
+      "COMMON",
+      "20.0",
+      "1.0",
+      "NONE",
+      "M0",
+      "weapon.c_01.name",
+      "weapon.c_01.desc",
+      "icon_weapon_c_01",
+      "spr_weapon_c_01"
+     ],
+     [
+      "weapon_r_01",
+      "RARE",
+      "50.0",
+      "2.0",
+      "LIGHT",
+      "M0",
+      "weapon.r_01.name",
+      "weapon.r_01.desc",
+      "icon_weapon_r_01",
+      "spr_weapon_r_01"
+     ],
+     [
+      "weapon_e_01",
+      "EPIC",
+      "120.0",
+      "4.0",
+      "NONE",
+      "M0",
+      "weapon.e_01.name",
+      "weapon.e_01.desc",
+      "icon_weapon_e_01",
+      "spr_weapon_e_01"
+     ],
+     [
+      "weapon_l_01",
+      "LEGENDARY",
+      "300.0",
+      "8.0",
+      "NONE",
+      "M0",
+      "weapon.l_01.name",
+      "weapon.l_01.desc",
+      "icon_weapon_l_01",
+      "spr_weapon_l_01"
+     ],
+     [
+      "weapon_m_01",
+      "MYTHIC",
+      "700.0",
+      "16.0",
+      "LIGHT",
+      "M0",
+      "weapon.m_01.name",
+      "weapon.m_01.desc",
+      "icon_weapon_m_01",
+      "spr_weapon_m_01"
+     ]
+    ]
+   }
+  ]
+ }
+}
