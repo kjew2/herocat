@@ -99,7 +99,9 @@ public sealed class TimeState
 {
     public long Tick                 { get; set; }        // sim ticks since profile creation; monotone
     public long LastSavedServerTime  { get; set; }        // unix s; stamped by SaveStamp on every write
-    public long LastTickServerTime   { get; set; }        // unix s; catch-up anchor; stamped when ticking stops and when Catchup.Compute runs (01 section 8.7)
+    public long LastTickServerTime   { get; set; }        // unix s; catch-up anchor; stamped when ticking stops and when ComputeOfflineCatchup runs (01 section 8.7)
+    public long AnchorServerTime     { get; set; }        // unix s; set by each ApplyServerTime. Virtual server now = AnchorServerTime + (Tick - AnchorTick) / TICK_HZ (01 section 3.1; issue #5)
+    public long AnchorTick           { get; set; }        // Tick at that ApplyServerTime
     public long CreatedServerTime    { get; init; }       // unix s
     public int  DayKey               { get; set; }        // floor(serverSeconds / DAY_SECONDS) at last rollover (06); the only daily key: quests, dungeon tickets and shop all reset off it (issue #7)
     public int  WeekKey              { get; set; }        // floor((serverSeconds - WEEK_EPOCH_OFFSET) / (7 * DAY_SECONDS)) at last weekly rollover; the only weekly key
@@ -326,7 +328,7 @@ public sealed class LifetimeStats
 - **Quest maps are keyed by id**, not positional (sibling open decision 2 resolved here): a content reorder is harmless; a removed quest id is dropped by the validator. Bonus rewards and achievement rungs are ordinary quest rows keyed by their own ids (06).
 - **`FirstClearExtra`** exists only because `SCR_STAGE_SELECT` (MVP) lets a player jump back and challenge a boss out of order. In the common case the first-clear set is `{BOSS_EVERY, 2*BOSS_EVERY, ..., HighestFirstClearBoss}`.
 - **Timestamps** are `long` unix seconds UTC from `IClock`, named `*ServerTime`.
-- **`PlayerId == Guid.Empty`** marks a local guest that has never reached the server (01 open question 7). The first successful guest auth sets it and uploads.
+- **`PlayerId == Guid.Empty`** marks a local guest that has never reached the server (01 open question 7). The first successful guest auth sets it and uploads; `RngRoot` and every seed stay as they were (issue #9).
 
 ### 3.3 Deliberately not saved
 
@@ -401,6 +403,7 @@ A real day-9 save, abbreviated only in repeated collection entries. 41 KB format
   "SaveSeq": 1874,
   "Time": {
     "Tick": 7842110, "LastSavedServerTime": 1793667200, "LastTickServerTime": 1793667200,
+    "AnchorServerTime": 1793667140, "AnchorTick": 7841510,
     "CreatedServerTime": 1792890000, "DayKey": 20760, "WeekKey": 2965, "LoginDayKey": 20760
   },
   "Hero": { "Level": 143, "Exp": 48211.5, "AwakenRank": 2 },

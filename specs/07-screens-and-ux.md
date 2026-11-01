@@ -93,7 +93,7 @@ Band budget: 120 + 800 + 100 + 640 + 160 = 1,820 rp. The remaining 100 rp of a 1
 |---|---|
 | Safe area | `SafeAreaFitter` on the root panel applies `Screen.safeArea` as padding on `Start` and on resolution change. Nothing is drawn outside it except the background. |
 | HUD wallet chips | Gold, Diamonds, Fish Coins (MVP adds Rock Candy). Each chip: icon 56 rp, value in 40 rp bold, tappable (gold opens `SCR_HERO`, diamonds opens `SCR_SHOP`, Fish Coins opens `SCR_RESEARCH`, Rock Candy opens `SCR_HERO` Awakening tab). Right side: avatar (opens `SCR_PROFILE`), inbox icon with badge, settings gear. |
-| Combat viewport | Full-width camera render texture or a world-space sorting layer; UI elements over it are the stage label (top-left, tappable: `SCR_STAGE_SELECT`), kill counter (top-right), enemy HP bar (under the enemy), boss timer bar (under HP bar, boss only), DPS readout (bottom-left), skill icon row and companion icon row (bottom, 6 + 4 icons, 88 rp each). Tap anywhere else = `TapZap`. |
+| Combat viewport | Full-width camera render texture or a world-space sorting layer; UI elements over it are the stage label (top-left, tappable: `SCR_STAGE_SELECT`), kill counter (top-right), enemy HP bar (under the enemy), boss timer bar (under HP bar, boss only), DPS readout (bottom-left), skill icon row and companion icon row (bottom, 6 + 4 icons, 88 rp each). Tap anywhere else = `TapZap(count)`. |
 | Action strip | Left: `[Boss]` button (visible only while walled, 06/03), `[Auto]` placeholder toggle (P1 Auto Merge). Right: shortcut pills with red dots for Quests claimable, Dungeon tickets unused, Inbox items; each opens its screen. |
 | Fish Board | Left column 160 rp: Magic Tank gauge (fill, `n / cap`, next-fish countdown), `[Release]` and `[Release max]` buttons, `[Merge all]`. Right: 5 x 4 grid, cell 176 rp with 8 rp gaps (5 x 176 + 4 x 8 = 912 rp wide), fish sprite 140 rp inside. A `[Research]` button (MVP) in the tank column bottom. |
 | Tab bar | Six tabs, 180 rp wide each, icon 64 rp over a 28 rp label. Red-dot badge at top-right of the icon. Active tab tinted `accent`. P1 adds a seventh "More" tab opening Guild / Ranking / Events. |
@@ -1056,8 +1056,8 @@ Lifecycle, clock and save
 9. Background for 2 minutes, resume: `SCR_OFFLINE_REWARD` shows about 2 m; combat stays paused behind it and the claimed amounts equal the modal's.
 10. Background for less than `OFFLINE_MIN_S`, resume: no modal; the Magic Tank still advanced.
 11. Swipe-kill mid-boss, relaunch: stage, wallet, collections, board, tank, pity and the boss timer are restored (02).
-12. Debug clock `+8 h` then `+1 day`: the first is capped at the effective offline cap; the second also rolls the day (quests reset, login diamonds granted once, dungeon tickets refilled).
-13. Move the device clock back one hour in system settings and return: no crash, no currency change, the session follows server time (08).
+12. Debug clock `+8 h` then `+1 day`: the first is capped at the effective offline cap; the second also rolls the day (login diamonds granted once; MVP: quests reset, dungeon tickets refilled).
+13. Move the device clock back one hour in system settings and return: no crash, no currency change (08 decides any further policy).
 14. Day boundary while open: the rollover happens within `WALL_CLOCK_SYNC_SEC` of midnight without a relaunch.
 15. Low memory (Android developer options, background process limit): the save is written and the app relaunches to the same state.
 16. Debug Export, Reset profile, Import: the profile returns with the same id and pity counters.
@@ -1077,32 +1077,36 @@ Release build
 3. **Screen reader support.** uGUI has no built-in accessibility tree. Owner: client lead. Default: ship MVP without, add Unity Accessibility package labels in P1.
 4. **CJK number ladders.** ja/ko/zh players expect 万/億 grouping. Owner: localization. Default: K/M/B everywhere in MVP; revisit with soft-launch feedback.
 5. **Stage select farming.** Letting the player farm a lower stage interacts with `GOLD_GAIN` and kill-time tuning (03). Owner: 03. Default: allowed, with every reward bound to `Progress.HighestCleared` as in section 4.14.
-6. **`MoveFish` command.** Dragging a fish to an empty cell is a cosmetic reposition that 05 does not list. Owner: 05. Default: add `MoveFish(src, dst)` as a no-randomness command; if 05 declines, the drop snaps back.
-7. **`MarkSeen` for new badges.** Client-side pref versus sim state. Default: client-side in `Profile.Prefs`, not in the save, so it never affects determinism.
+6. **`MoveFish` command.** Resolved: `MoveFish(src, dst)` is in 00's command vocabulary (00 decision 22); 07 sends it on a drop onto an empty cell.
+7. **`MarkSeen` for new badges.** Resolved (issue #7): new badges stay out of the sim (no `MarkSeen` sim command) and persist in the local profile/UI store, so they never affect state hashes or replays.
 8. **Added screens.** `SCR_CONFIRM` and `SCR_ERROR` should be lifted into 00 section 5.3 as M0 modals.
 
 ## Acceptance criteria
 
-1. Every ID in 00 section 5.3 has a prefab, a `<Screen>Vm`, and a `UiStateCatalog` entry for each state in section 3 (checklist).
-2. From `SCR_MAIN`, each of Train, Summon, Release, Merge, Dungeons, Quests claim and Shop is reachable in one tap; Research, Awakening and equip in two (checklist, measured on the prefab graph).
-3. `ScreenRouter` never shows two modals at once: a PlayMode test requests three modals in one frame and asserts they appear sequentially.
-4. The combat viewport is never covered by a non-mandatory modal while `EnemyIsBoss`: PlayMode test sets a boss stage, requests `SCR_ITEM_DETAIL`, asserts the modal rect does not intersect the viewport rect.
-5. Android back on `SCR_MAIN` with nothing open shows `SCR_CONFIRM` once and quits only on a second press within 2 s; back on `SCR_OFFLINE_REWARD` is ignored; back during a reveal skips it.
-6. All touch targets at least 112 x 112 rp: an EditMode test walks every prefab's `Selectable` rects.
-7. `BigNumber.Short` test vectors in section 7 pass, plus suffix boundaries K through `ab` and a monotonicity sweep.
-8. Rarity badges render the shape glyph; with colours replaced by grey in the `UiStateCatalog` the five rarities remain distinguishable (screenshot checklist).
-9. At OS font scale 1.3x and Large text on, no label overlaps another and none is clipped without ellipsis, on every catalog state (automated overlap test on rects plus screenshot review).
-10. Reduced motion disables fish bob, shake, vignette and card stagger: PlayMode test asserts animator components are disabled and the 10-pull reveal completes within 0.7 s.
-11. Pseudo-localized build (+40% length) passes the overlap test; every string in prefabs resolves through `TextKeyLabel` (EditMode test finds no `TMP_Text` with literal text outside the catalog's debug labels).
-12. Steady state farming on `SCR_MAIN` for 600 frames with the event mask set to none allocates 0 bytes in `SessionRunner.Update` and `GameViewModel.Refresh`; under 1 KB per second with events on.
-13. Damage number pool never exceeds 32 live labels; particle count never exceeds 300 (profiler assertion in a 60 s PlayMode soak with a full board and a boss).
-14. Cold boot to first `SCR_MAIN` frame under 4 s on the floor device; `SCR_SHOP` first push shows skeleton rows within one frame and prices within 2 s on Wi-Fi (device-farm checklist, 10).
-15. 10-pull reveal: card `i` starts at `0.3 + 0.12 i` s with +0.4 s per preceding L/M card; Skip faces every card up in the same frame; Summon again is disabled until the sequencer reports complete (EditMode `RevealSequencer` test).
-16. Fish Board: dragging onto an equal-level fish sends exactly one `MergeFish`; dropping onto a different level sends nothing and plays the invalid-drop shake; Merge all sends pairs lowest level first in reading order (vm unit test with a scripted board).
-17. Tutorial: a fresh profile completes steps 1 to 12 with the scripted inputs in under 3 minutes of sim time; killing the app at step 7 and relaunching resumes at step 7; Skip at step 3 sets `TutorialDone` and leaves `Wallet.Diamond` = 1,500.
-18. Red dots: with one `COMPLETED` quest, one unused dungeon ticket and one inbox item the Quests, Dungeons and Inbox badges show counts 1/1/1; claiming each clears its dot immediately; no dot appears for an affordable Training level.
-19. Every disabled primary button in the catalog has a non-empty reason label (EditMode test over `ReasonLabel` components).
-20. Every screen's `Refresh()` writes a label only when its value changed (counting fake labels, one test per vm).
+How each criterion runs (issue #23): **[core]** criteria test logic in `HeroCat.Client.Core` and run in `src/HeroCat.Runtime.Tests` under dotnet, so `./check.sh` covers them today; **[unity]** criteria need prefabs, rects, the renderer or the profiler and wait for the Unity CI job in 10; **[manual]** criteria are checklists or device-farm runs.
+
+1. [manual] Every ID in 00 section 5.3 has a prefab, a `<Screen>Vm`, and a `UiStateCatalog` entry for each state in section 3 (checklist).
+2. [manual] From `SCR_MAIN`, each of Train, Summon, Release, Merge, Dungeons, Quests claim and Shop is reachable in one tap; Research, Awakening and equip in two (checklist, measured on the prefab graph).
+3. [core] `ScreenRouter` never shows two modals at once: a test requests three modals in one frame and asserts they appear sequentially.
+4. [core + unity] The combat viewport is never covered by a non-mandatory modal while `EnemyIsBoss`: a core test sets a boss stage, requests `SCR_ITEM_DETAIL` and asserts the router defers or shifts it; a Unity test asserts the modal rect does not intersect the viewport rect.
+5. [core] Android back on `SCR_MAIN` with nothing open shows `SCR_CONFIRM` once and quits only on a second press within 2 s; back on `SCR_OFFLINE_REWARD` is ignored; back during a reveal skips it.
+6. [unity] All touch targets at least 112 x 112 rp: an EditMode test walks every prefab's `Selectable` rects.
+7. [core] `BigNumber.Short` test vectors in section 7 pass, plus suffix boundaries K through `ab` and a monotonicity sweep.
+8. [manual] Rarity badges render the shape glyph; with colours replaced by grey in the `UiStateCatalog` the five rarities remain distinguishable (screenshot checklist).
+9. [unity] At OS font scale 1.3x and Large text on, no label overlaps another and none is clipped without ellipsis, on every catalog state (automated overlap test on rects plus screenshot review).
+10. [core + unity] Reduced motion disables fish bob, shake, vignette and card stagger: a core test asserts the 10-pull reveal completes within 0.7 s; a Unity test asserts the animator components are disabled.
+11. [unity] Pseudo-localized build (+40% length) passes the overlap test; every string in prefabs resolves through `TextKeyLabel` (EditMode test finds no `TMP_Text` with literal text outside the catalog's debug labels).
+12. [core] Steady state farming on `SCR_MAIN` for 600 frames with the event mask set to none allocates 0 bytes in `SessionRunner.Update` and `GameViewModel.Refresh`; under 1 KB per second with events on.
+13. [core + unity] Damage number pool never exceeds 32 live labels (core test of the pool); particle count never exceeds 300 (Unity profiler assertion in a 60 s PlayMode soak with a full board and a boss).
+14. [manual] Cold boot to first `SCR_MAIN` frame under 4 s on the floor device; `SCR_SHOP` first push shows skeleton rows within one frame and prices within 2 s on Wi-Fi (device-farm checklist, 10).
+15. [core] 10-pull reveal: card `i` starts at `0.3 + 0.12 i` s with +0.4 s per preceding L/M card; Skip faces every card up in the same frame; Summon again is disabled until the sequencer reports complete (EditMode `RevealSequencer` test).
+16. [core] Fish Board: dragging onto an equal-level fish sends exactly one `MergeFish`; dropping onto a different level sends nothing and plays the invalid-drop shake; dropping onto an empty cell sends one `MoveFish`; `[Merge all]` and `[Release max]` each send exactly one `MergeAll` / `ReleaseMax` command (vm unit test with a scripted board).
+17. [core] Tutorial: a fresh profile completes steps 1 to 12 with the scripted inputs in under 3 minutes of sim time; killing the app at step 7 and relaunching resumes at step 7; Skip at step 3 sets `TutorialDone` and leaves `Wallet.Diamond` = 1,500.
+18. [core] Red dots: with one `COMPLETED` quest, one unused dungeon ticket and one inbox item the Quests, Dungeons and Inbox badges show counts 1/1/1; claiming each clears its dot immediately; no dot appears for an affordable Training level.
+19. [unity] Every disabled primary button in the catalog has a non-empty reason label (EditMode test over `ReasonLabel` components).
+20. [core] Every screen's `Refresh()` writes a label only when its value changed (counting fake labels, one test per vm).
+21. [core] No tick runs while `SCR_OFFLINE_REWARD` is open, and the amounts credited by `ClaimOfflineReward` equal the ones the modal showed (issue #21).
+22. [manual] The section 17.5 device QA checklist passes on both platforms for every playtest build.
 
 ## Constants introduced
 
@@ -1113,11 +1117,12 @@ Release build
 | `UI_MIN_TOUCH` | 112 rp | S | Acceptance 6 |
 | `UI_TOAST_SEC`, `UI_TOAST_RARE_SEC` | 2.0, 4.0 | S | |
 | `UI_REVEAL_FLIP_SEC`, `UI_REVEAL_STAGGER_SEC`, `UI_REVEAL_LPLUS_HOLD_SEC` | 0.3, 0.12, 0.4 | S | Acceptance 15 |
-| `UI_LONG_PRESS_MS` | 400 | S | |
+| `UI_LONG_PRESS_MS`, `UI_DRAG_START_PX` | 350, 8 rp | S | Behaviour values owned by 05 section 6 (issue #18) |
+| `UI_RELEASE_MAX_ANIM_MS`, `UI_MERGE_ALL_ANIM_MS` | 60, 80 | S | Referenced by 05 section 6 |
 | `UI_DAMAGE_LABEL_POOL`, `UI_MAX_PARTICLES` | 32, 300 | S | Acceptance 13 |
 | `UI_SCREEN_CACHE` | 3 Full screens | S | Memory budget in section 13 |
 | `UI_BACK_EXIT_WINDOW_SEC` | 2 | S | |
 | `UI_QUEST_EXPIRY_WARN_SEC` | 3600 | S | 06 Open question 2 |
 | Rarity palette, shape glyphs | section 8 | S | Contrast table |
 | Screens added | `SCR_CONFIRM`, `SCR_ERROR` (Modal, M0) | | Lift into 00 section 5.3 |
-| Commands referenced that 00 does not list | `TrainStat(stat, count)`, `EquipWeapon`, `EquipSkill`, `UnequipSkill`, `ReorderSkills`, `AutoEquipSkills`, `EquipCompanion`, `UnequipCompanion`, `EquipRune`, `BuyResearch`, `Summon(banner, count, payment, requestId)`, `SweepDungeon`, `SelectStage`, `ClaimQuest`, `ClaimAllQuests`, `ClaimDailyGift`, `ExchangeItem`, `ClaimInbox`, `ClaimAllInbox`, `Awaken`, `MoveFish` | | Owners 03/04/05/06 confirm names |
+| Commands and events | 00 section 5.1 names, plus owner-spec names 00 adds (issue #11): `UnequipSkill`, `UnequipCompanion`, `AutoEquipBestSkills` (04), `ClaimAllInbox`, `QuestClaimed`, `QuestsBulkClaimed`, `WeekRolledOver`, `DungeonFloorFirstCleared`, `OfflineRewardComputed` (01/06), `BannerLeveledUp` (01/04), `EnemySpawned`, `BossCleared`, `StageCapReached`, `StatTrained` (03/01); P1 `EquipRune`, `UnequipRune` | | 07 follows the sim owners; no UI-only commands or events |

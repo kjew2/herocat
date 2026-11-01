@@ -312,7 +312,7 @@ Why these shapes:
 - `ATK_SPD` is capped at exactly 2x so the integer attack schedule stays simple and the boss math in section 2.8 stays readable. It is deliberately the cheapest early doubling: level 100 costs `50 * (1.07^100 - 1) / 0.07 = 6.1e5` gold in total, affordable late on day 1.
 - `GOLD_GAIN` and `EXP_GAIN` are investment stats. A level of `GOLD_GAIN` is worth `ln(1 + 0.02/(1 + 0.02 n)) / ln(1.07)` future `ATK` levels; the bot (section 8.3) values it at half that to account for the delay.
 
-`TrainStat(stat, count)` is all-or-nothing for `count` in `TRAIN_BULK_STEPS` (1, 10, 100) and `TrainStatMax(stat)` buys while affordable. Both reject with `StatNotTrainable` for `HP`/`DEF` in MVP, `StatAtCap` at the cap, `NotEnoughGold` otherwise, and mark DPS dirty. Bulk cost is the closed form `50 * 1.07^n * (1.07^m - 1) / 0.07`, quoted and charged identically; `MaxAffordable` is computed by walking the `GeometricTable` (no logarithm, 00 section 8 item 1).
+`TrainStat(stat, count)` is all-or-nothing for `count` in `TRAIN_BULK_STEPS` (1, 10, 100) and `TrainStatMax(stat)` buys while affordable. Both use 01's `RejectCode` with the specific reason in `Detail` (issue #11): `Locked`/`STAT_NOT_TRAINABLE` for `HP`/`DEF` in MVP, `Capped`/`STAT_AT_CAP` at the cap, `CannotAfford`/`GOLD` otherwise. On success they publish `StatTrained(stat, newLevel)` and mark DPS dirty. Bulk cost is the closed form `50 * 1.07^n * (1.07^m - 1) / 0.07`, quoted and charged identically; `MaxAffordable` is computed by walking the `GeometricTable` (no logarithm, 00 section 8 item 1).
 
 ### 5.2 Hero Level
 
@@ -347,15 +347,15 @@ Reason (section 8.4 has the numbers): Whisker Hero has no gear-tier layer, and g
 ```
 Awaken():                                                   # command, from SCR_HERO
   r = Hero.AwakenRank
-  if r >= AWAKEN_STAGES.Length:                     return Rejected(AwakenMaxed)
-  if Stage.HighestCleared < AWAKEN_STAGES[r]:       return Rejected(AwakenStageGate)
-  if Wallet[ROCK_CANDY] < AWAKEN_COST_ROCK_CANDY[r]: return Rejected(NotEnoughRockCandy)
-  Wallet.Apply(-AWAKEN_COST_ROCK_CANDY[r] ROCK_CANDY, TRAINING)
+  if r >= AWAKEN_STAGES.Length:                        return Reject(Capped, "AWAKEN_MAX_RANK")
+  if Progress.HighestCleared < AWAKEN_STAGES[r]:       return Reject(Locked, "AWAKEN_STAGE_NOT_REACHED")
+  if Wallet.RockCandy < AWAKEN_COST_ROCK_CANDY[r]:     return Reject(CannotAfford, "ROCK_CANDY")
+  Wallet.Apply(-AWAKEN_COST_ROCK_CANDY[r] ROCK_CANDY, AWAKENING)                   # reason per 00 contract 6 (issue #11)
   Hero.AwakenRank = r + 1; MarkDpsDirty()
   publish Awakened(Hero.AwakenRank)
 ```
 
-Awakening is a button, not automatic, because it costs a currency. The gate reads `HighestCleared`, not `Stage.Stage`, so a player who jumped back in `SCR_STAGE_SELECT` can still awaken. Companion slot unlocks are the reference game's class-change feel without a second mechanic; slot 1 is open from the start so the companion banner is never useless. The bot (section 8.3) pays each rank as soon as both gates pass; with the recommended curve rank 1 lands on day 1, rank 2 on day 2, rank 3 around day 5, rank 4 around day 31. Rock Candy income is 06's problem: this spec needs at least `100 + 300 = 400` Rock Candy available by day 2 and `800` more by day 5, which is the `ROCK_CANDY_PER_DAY_ASSUMED = 100` input the bot takes (section 8.3). Boss drops alone (`BOSS_ROCK_CANDY_P = 0.5`, one candy) give about 12 per day early and cannot carry it.
+Awakening is a button, not automatic, because it costs a currency. The gate reads `Progress.HighestCleared`, not `Combat.Stage`, so a player who jumped back in `SCR_STAGE_SELECT` can still awaken. Companion slot unlocks are the reference game's class-change feel without a second mechanic; slot 1 is open from the start so the companion banner is never useless. The bot (section 8.3) pays each rank as soon as both gates pass; with the recommended curve rank 1 lands on day 1, rank 2 on day 2, rank 3 around day 5, rank 4 around day 31. Rock Candy income is 06's problem: this spec needs at least `100 + 300 = 400` Rock Candy available by day 2 and `800` more by day 5, which is the `ROCK_CANDY_PER_DAY_ASSUMED = 100` input the bot takes (section 8.3). Boss drops alone (`BOSS_ROCK_CANDY_P = 0.5`, one candy) give about 12 per day early and cannot carry it.
 
 ## 6. Research (MVP, Fish Coin sink)
 
@@ -365,26 +365,26 @@ Cost of level `k -> k+1` of node `x` is `RES_COST0[x] * RES_COST_G[x]^k` Fish Co
 
 | Node id | Effect per level | Max level | `RES_COST0` | `RES_COST_G` | Cost of last level | Why it exists |
 |---|---|---|---|---|---|---|
-| `RES_ATK` | `researchPct += 0.05` | 50 | 150 | 1.20 | 1.1e6 | Direct DPS; makes Fish Coins matter to a player who ignores companions. |
-| `RES_GOLD_GAIN` | `goldMult *= 1 + 0.05 k` (one factor, not per level) | 20 | 250 | 1.40 | 1.5e5 | Second gold-gain source so gold income is not only a Training decision. |
-| `RES_MP_POOL` | `MpPoolMax += 20` | 10 | 200 | 1.50 | 7.7e3 | Burst at spawn: more abilities fire before regen matters. |
-| `RES_MP_REGEN` | `MpRegen += 0.5 /s` | 10 | 300 | 1.50 | 1.2e4 | Companion uptime; the node every companion player wants first. |
-| `RES_TANK_CAP` | `TankCap += 5` | 10 | 200 | 1.50 | 7.7e3 | Bigger buffer between sessions (05). |
-| `RES_TANK_REFILL` | `TankRefillS -= 0.4` (floor 2.0 s) | 10 | 300 | 1.60 | 2.1e4 | More fish per active minute (05). |
-| `RES_FISH_CAP` | `FishMaxLvl += 1` | 10 | 2500 | 2.00 | 1.3e6 | Opens the next fish level and its discovery payout; the Fish Board's growth engine (05 section 8). |
-| `RES_OFFLINE_CAP` | `OfflineCapH += 2` | 6 | 500 | 1.50 | 3.8e3 | Only matters to players who skip a day; cheap on purpose. |
+| `res_atk` | `researchPct += 0.05` | 50 | 150 | 1.20 | 1.1e6 | Direct DPS; makes Fish Coins matter to a player who ignores companions. |
+| `res_gold_gain` | `goldMult *= 1 + 0.05 k` (one factor, not per level) | 20 | 250 | 1.40 | 1.5e5 | Second gold-gain source so gold income is not only a Training decision. |
+| `res_mp_pool` | `MpPoolMax += 20` | 10 | 200 | 1.50 | 7.7e3 | Burst at spawn: more abilities fire before regen matters. |
+| `res_mp_regen` | `MpRegen += 0.5 /s` | 10 | 300 | 1.50 | 1.2e4 | Companion uptime; the node every companion player wants first. |
+| `res_tank_cap` | `TankCap += 5` | 10 | 200 | 1.50 | 7.7e3 | Bigger buffer between sessions (05). |
+| `res_tank_refill` | `TankRefillS -= 0.4` (floor 2.0 s) | 10 | 300 | 1.60 | 2.1e4 | More fish per active minute (05). |
+| `res_fish_cap` | `FishMaxLvl += 1` | 10 | 2500 | 2.00 | 1.3e6 | Opens the next fish level and its discovery payout; the Fish Board's growth engine (05 section 8). |
+| `res_offline_cap` | `OfflineCapH += 2` | 6 | 500 | 1.50 | 3.8e3 | Only matters to players who skip a day; cheap on purpose. |
 
-Research effects are read by the sim through `Query` (`MpPoolMax`, `MpRegenPerTick`, `TankCap`, `TankRefillTicks`, `FishMaxLvl`, `OfflineCapH`, `GoldMult`, `ResearchPct`). `Research(nodeId)` buys one level: rejects `ResearchMaxed`, `ResearchLocked` (before Awakening rank 1), `NotEnoughFishCoins`; charges with reason `RESEARCH`; publishes `ResearchLeveled(nodeId, newLevel, cost)`; marks DPS dirty when the node affects it.
+Research effects are read by the sim through `Query` (`MpPoolMax`, `MpRegenPerTick`, `TankCap`, `TankRefillTicks`, `FishMaxLvl`, `OfflineCapH`, `GoldMult`, `ResearchPct`). Node ids are the `research` table's lowercase `res_*` ids (09; issue #11). `Research(nodeId)` buys one level: rejects `Capped`/`RESEARCH_MAXED`, `Locked`/`RESEARCH_LOCKED` (before Awakening rank 1), `CannotAfford`/`FISH_COIN`; charges with reason `RESEARCH`; publishes `ResearchLeveled(nodeId, newLevel, cost)`; marks DPS dirty when the node affects it.
 
-`RES_OFFLINE_CAP` extends the 24 h base cap from 00 decision 3; it does not change the base. If 00 reads decision 3 as a hard cap, replace this node with `RES_OFFLINE_RATE` (+0.05 to `OFFLINE_RATE` per level, max 5) which is worth more to the daily player anyway; see Open questions.
+`res_offline_cap` extends the 24 h base cap from 00 decision 3; it does not change the base. Catch-up (06) and 08's `offline_bound` use the effective cap `OFFLINE_CAP_H + 2 h * res_offline_cap level` (issue #21).
 
-Fish Coin income that pays for this is roughly `0.2 * (FishMaxLvl - 1)` coins per level-1 fish fully merged (05 section 8), about 1,800 to 2,500 per 2 h active day at Research 0, plus the Fish Coin Dungeon (06; the bot assumes `FISH_COIN_PER_DAY_DUNGEON_ASSUMED = 1000`). Against that income the costs above mean: all MP nodes to level 4 by day 3, `RES_FISH_CAP` level 1 around day 3, level 2 around day 7, level 3 around day 14, level 4 around day 28, `RES_ATK` to about level 15 by day 30. The doubling cost of `RES_FISH_CAP` is what turns linear coin income into a log-in-time Fish Board layer, which is the intended shape: fast at first, never finished.
+Fish Coin income that pays for this is roughly `0.2 * (FishMaxLvl - 1)` coins per level-1 fish fully merged (05 section 8), about 1,800 to 2,500 per 2 h active day at Research 0, plus the Fish Coin Dungeon (06; the bot assumes `FISH_COIN_PER_DAY_DUNGEON_ASSUMED = 1000`). Against that income the costs above mean: all MP nodes to level 4 by day 3, `res_fish_cap` level 1 around day 3, level 2 around day 7, level 3 around day 14, level 4 around day 28, `res_atk` to about level 15 by day 30. The doubling cost of `res_fish_cap` is what turns linear coin income into a log-in-time Fish Board layer, which is the intended shape: fast at first, never finished.
 
 ## 7. The power formula
 
 ### 7.1 Formula
 
-Same shape as 00 section 7, with the Hero Level term compounding (section 5.2) and the crit and speed factors made explicit:
+Same shape as 00 section 7, with the Hero Level term compounding (section 5.2) and the crit and speed factors made explicit. This is the **rated** DPS, `Query.RatedDps`: the expected steady-state value used by `SCR_HERO`, the wall check (section 2.8), the layer shares, the bots, the tools and 08's plausibility bound. It excludes transient buffs.
 
 ```
 DPS = BASE_ATK
@@ -393,25 +393,37 @@ DPS = BASE_ATK
     * (1 + (equippedWeaponPct + sum_owned weaponPassivePct) / 100)   # Weapons         (summons)
     * (1 + sum_equipped skillDpsPct / 100)                           # Skills          (summons)
     * (1 + mpSufficiency * sum_equipped companionDpsPct / 100)       # Companions      (summons + Research)
-    * (1 + (FISH_BOARD_DPS_PCT + missileDpsPct) / 100)               # Fish Board      (active play + Research)
+    * (1 + (FISH_BOARD_DPS_PCT + missileDpsPct) / 100)               # Fish Board      (active play + Research); missileDpsPct is rated-only
     * (1 + researchPct)                                              # Research        (Fish Coins)
     * (1 + runePct)                                                  # Runes           (P1, 1.0 until then)
     * AWAKEN_MULT ^ awakenRank                                       # Awakening       (stage gates + Rock Candy)
     * critFactor * speedFactor                                       # Training, crit and speed stats
-    * (1 + atkBuffPct / 100)                                         # transient buffs; excluded from the rated DPS below
-
-HitDamage = DPS / speedFactor / critFactor / (1 + atkBuffPct/100)    # damage of one non-crit hero hit
 ```
 
-`mpSufficiency = min(1, mpRegenPerSecond / sum_equipped(mpCost / cooldownSeconds))` is the fraction of rated companion uptime the MP pool can sustain (section 2.4). `missileDpsPct` is the trailing-60-second average of missile damage as a percentage of hero DPS, supplied by 05; the bot uses the closed form in 05 section 8. Skills' `skillDpsPct` are rated averages over their cooldown (04 section 6), so the formula is the expected steady-state DPS; the tick loop realises it as discrete casts.
+`mpSufficiency = min(1, mpRegenPerSecond / sum_equipped(mpCost / cooldownSeconds))` is the fraction of rated companion uptime the MP pool can sustain (section 2.4). `missileDpsPct` is 05's closed form (05 section 5.1) and is **rated-only** (issue #15): it never enters the tick loop, which deals missile damage as discrete hits. The sim keeps no trailing average; if `SCR_HERO` wants a live number, the runtime/view-model keeps a 60 s rolling sum of `FishMissileHit`, outside the save and `StateHash`. Skills' `skillDpsPct` are rated averages over their cooldown (04 section 7), so the formula is the expected steady-state DPS.
+
+The tick loop realises that value without counting any layer twice (issue #10). A hero hit carries only the layers that have no discrete event; every discrete source deals a multiple of a unit built from it:
+
+```
+HeroHit       = BASE_ATK * Training * HeroLevel * Weapons
+              * (1 + FISH_BOARD_DPS_PCT / 100)                       # passive board only (05 fishMult_live)
+              * Research * Runes * Awakening                         # one non-crit hero hit, no buff
+hero attack   = HeroHit * (1 + atkBuffPct / 100), then crit           # section 2.2; ATK buffs from skills and companions apply here only
+SkillUnit     = HeroHit * critFactor * speedFactor                   # one second of expected hero attack damage; INSTANT/DOT per-cast numbers (04) are in % of it
+CompanionUnit = SkillUnit * (1 + sum_equipped skillDpsPct / 100)     # companion DAMAGE per-cast numbers (04) are in % of it
+missile       = HeroHit * f                                          # 05; rated through missileDpsPct
+tap           = HeroHit * TAP_ZAP_DMG_PCT                            # not in the rated DPS; the bot never taps
+```
+
+At speed 1 with no crit `SkillUnit == HeroHit`, which is the unit 04's per-cast derivation states. `CompanionUnit` carries the skill factor so that hero + skills + companions multiply as the rated formula does instead of adding. A `BUFF` skill or `BUFF_ATK` companion is rated through its informational `dps_pct` (04) and realised as the hero-attack buff; buff uptime overlap, MP-gating and missiles are the only parts of the rated value that are approximations. Test (acceptance 20): measured DPS over a long fight equals `RatedDps` within 1%.
 
 ### 7.2 Units
 
-Percent fields (`weaponPct`, `skillDpsPct`, `companionDpsPct`, `FISH_BOARD_DPS_PCT`, `missileDpsPct`, `atkBuffPct`) are in percentage points (`40` means +40%) because that is how 04 and 05 tables and the UI state them. `researchPct`, `runePct`, `TRAIN_PER_LVL[*]` and `critRate` are fractions. `Query` exposes every factor separately for `SCR_HERO`'s breakdown panel and for the bot's layer-share report.
+Percent fields (`weaponPct`, `skillDpsPct`, `companionDpsPct`, `FISH_BOARD_DPS_PCT`, `missileDpsPct`, `atkBuffPct`, per-cast `DamagePctPerCast`) are in percentage points (`40` means +40%) because that is how 04 and 05 tables and the UI state them. `researchPct`, `runePct`, `TRAIN_PER_LVL[*]` and `critRate` are fractions. `Query` exposes every factor separately for `SCR_HERO`'s breakdown panel and for the bot's layer-share report.
 
 ### 7.3 Caching
 
-`Dps`, `HitDamage` and the ten factors are cached in `Simulation` and recomputed lazily after `MarkDpsDirty()`, which is called by: any Training purchase, `LevelUp`, `Awakened`, `ResearchLeveled`, any weapon/skill/companion equip or copy gain or limit break (04), any Fish Board change (05 marks dirty once per command, not per fish), buff start and end. `Tick()` reads the cache only; a stat bought mid-fight applies to the next hit.
+`RatedDps`, `HeroHit`, `SkillUnit`, `CompanionUnit` and the ten factors are cached in `Simulation` and recomputed lazily after `MarkDpsDirty()`, which is called by: any Training purchase, `LevelUp`, `Awakened`, `ResearchLeveled`, any weapon/skill/companion equip or copy gain or limit break (04), any Fish Board change (05: DPS recomputed at most once per command). Buffs are applied at hit time and do not dirty the cache. `Tick()` reads the cache only; a stat bought mid-fight applies to the next hit.
 
 ## 8. Layer-share budget, targets and the bot
 
@@ -425,7 +437,7 @@ Percent fields (`weaponPct`, `skillDpsPct`, `companionDpsPct`, `FISH_BOARD_DPS_P
 | Hero Level | EXP, `EXP_G^s` | compounding (section 5.2): **exponential in stage**, `e^(0.0063 s)` |
 | Awakening | stage gates | five steps of x1.5 |
 | Weapons, Skills, Companions | pulls, a fixed number per day | saturating: each new rarity tier is a step, dupes are a slow linear climb |
-| Fish Board | active minutes, Fish Coins | x1.5 per `RES_FISH_CAP` level, costs doubling: **logarithmic in time** |
+| Fish Board | active minutes, Fish Coins | x1.5 per `res_fish_cap` level, costs doubling: **logarithmic in time** |
 | Research | Fish Coins | linear in level, costs geometric: logarithmic in time |
 
 Under `HP_G = 1.07` every stage costs `0.0677` nats and the time-fed layers together add about 0.05 to 0.1 nats per day after day 10. The scratch model (section 8.6) with the 00 constants gives stage 110 on day 1, 210 on day 7, 250 on day 30, with a wall from day 14 to day 30 of 960 active minutes (eight days at two hours). That is not a tuning miss; it is the shape of a stage curve built for a layer this game does not have.
@@ -454,7 +466,7 @@ Five other seeds land at 530-550 on day 30. Multipliers at day 30 (seed 7): Trai
 Reading the table:
 
 - **The 40% cap holds.** Hero Level is the largest layer at 26-28% throughout, by design (section 5.2). Nothing else passes 20%.
-- **The 5% floor is missed by Research (3-5%), Companions on days 1-3, Skills on day 1, and speed on day 30.** Research needs `RES_ATK` to be roughly twice as strong or half as expensive; Companions are MVP and the bot gets slot 2 only at Awakening rank 1, so days 1-3 are expected to be low; `ATK_SPD` is capped at x2 and its share can only fall as the others grow. Section 9 lists the levers. These are the first things the tool must retune, and the acceptance criteria accept them for M0 only.
+- **The 5% floor is missed by Research (3-5%), Companions on days 1-3, Skills on day 1, and speed on day 30.** Research needs `res_atk` to be roughly twice as strong or half as expensive; Companions are MVP and the bot gets slot 2 only at Awakening rank 1, so days 1-3 are expected to be low; `ATK_SPD` is capped at x2 and its share can only fall as the others grow. Section 9 lists the levers. These are the first things the tool must retune. The day-1 misses are unlock timing and are not checked (the floor applies on days 7 and 30 only); Research, Companions and speed are M0 floor exemptions that report `WARN` (section 8.5, issue #12).
 - **Pace.** Day 1 ends at stage 240 with the first wall at stage 70 in the first hour and Awakening rank 1 bought in the first session. Days 2-7 average 27 stages a day; days 7-14 average 7; days 14-30 average 4.4. The longest wall inside 30 days is 460 active minutes (about four sessions) starting around day 20. The sibling's criterion of no wall over 48 h wall-clock in the first 14 days holds; the day-20 wall does not and is the open balance problem for MVP (section 10, question 2).
 
 ### 8.3 The greedy F2P bot policy
@@ -464,10 +476,10 @@ The bot is the reference player for every balance number. It plays `ACTIVE_MIN =
 1. **Gold**: every active minute, buy Training levels while any stat is affordable, always the stat with the highest marginal `ln(DPS)` per gold. `GOLD_GAIN` and `EXP_GAIN` are valued at half the `ATK` levels (or hero levels) their income increase will eventually buy.
 2. **Diamonds and tickets**: at the start of each day, spend every ticket on its banner, then spend diamonds on the banner with the highest expected `ln(DPS)` gain per diamond, where the expectation is over the banner's current published rate table and the gain of each pool item is evaluated against the current collection. Use a 10-pull when the chosen banner's 10x price is affordable, else singles. Re-evaluate after every pull.
 3. **Rock Candy**: awaken as soon as stage gate and cost are both met. Otherwise, if the next gate is more than 50 stages away, spend on limit breaks (04 section 5) on whichever item gives the most `ln(DPS)` per candy, keeping nothing in reserve.
-4. **Fish Coins**: every active minute, if companions are MP-starved buy `RES_MP_REGEN`; else buy the node with the best `ln(DPS)` per coin among `RES_ATK`, `RES_GOLD_GAIN` (payback proxy as for gold), `RES_TANK_*` (valued at 0.08 nats per level, the measured board growth per 10% more fish) and `RES_FISH_CAP` (valued at `0.5 * ln 1.5 * fraction of board already at the cap`).
+4. **Fish Coins**: every active minute, if companions are MP-starved buy `res_mp_regen`; else buy the node with the best `ln(DPS)` per coin among `res_atk`, `res_gold_gain` (payback proxy as for gold), `res_tank_*` (valued at 0.08 nats per level, the measured board growth per 10% more fish) and `res_fish_cap` (valued at `0.5 * ln 1.5 * fraction of board already at the cap`).
 5. **Fish Board**: the attentive policy from 05 section 8 every active minute: release until the board is full or the tank is empty, merge every equal pair lowest level first, repeat; if the board is full with no merge and the tank is not empty, discard the lowest-level fish.
 6. **Boss**: the first attempt is automatic; when walled, retry at the start of every active minute (the real player presses the button; `AttemptBoss` is free).
-7. **Offline**: 22 h of catch-up at `OFFLINE_RATE` for gold and EXP at the current stage, capped by `OfflineCapH`; the tank fills to capacity; nothing else moves (06).
+7. **Offline**: 22 h of catch-up at `OFFLINE_RATE` for gold and EXP at the current stage, capped by the effective `OfflineCapH` (`OFFLINE_CAP_H` plus `res_offline_cap`); the tank fills by 05's `CatchUpTank` over the credited ticks, which reaches capacity; nothing else moves (06, issue #21).
 
 Inputs the bot takes from other specs, with the values assumed for the numbers above: `DIAMONDS_PER_DAY_F2P = 400` and `TUTORIAL_DIAMONDS = 1500` (00); summon tickets per day `WEAPON 2, SKILL 1, COMPANION 1` (06 quests; **assumption to confirm**); `ROCK_CANDY_PER_DAY_ASSUMED = 100` and `FISH_COIN_PER_DAY_DUNGEON_ASSUMED = 1000` from the dungeons (06; **assumptions to confirm**). If 06 lands on different numbers the bot reruns and this section is regenerated.
 
@@ -496,7 +508,7 @@ void EndOfActiveMinute(Simulation sim)
     // 4. fish coins
     SpendFishCoins(sim);
     // 6. boss
-    if (sim.State.Stage.Boss == BossPhase.Walled) sim.AttemptBoss();
+    if (sim.State.Combat.Boss == BossPhase.Walled) sim.AttemptBoss();
 }
 ```
 
@@ -518,7 +530,7 @@ The two alternatives considered and rejected: keeping `HP_G = 1.07` and acceptin
 
 ### 8.5 Layer-share rule as a test
 
-For days 1, 7 and 30 the harness (10) computes `share[layer] = ln(factor[layer]) / ln(DPS / BASE_ATK)` from `Query` and asserts `share <= 0.40` for every layer and `share >= 0.05` for every layer that is unlocked on that day (Companions count from Awakening rank 1, Runes never in MVP). The M0 harness runs without Companions and Research; its floor applies to Training, Hero, Weapons, Skills, Fish and Awakening only.
+The harness (10) computes `share[layer] = ln(factor[layer]) / ln(DPS / BASE_ATK)` from `Query.RatedDps`'s factors and asserts `share <= 0.40` for every layer on days 1, 7 and 30, and `share >= 0.05` on days 7 and 30 only (issue #12): day 1 is where a runaway layer shows first, but a day-1 floor mostly measures unlock timing. `Base` (`BASE_ATK`) is not a layer for the floor; crit and speed are. Runes are not checked before P1. Per-tier floor exemptions live in `src/HeroCat.Bots/Acceptance/acceptance-targets.json` and report `WARN` instead of failing; the ceiling always gates. M0 exempts Research, Companions and speed (the M0 harness runs without Companions and Research). The exemptions are removed when this section's retune lands.
 
 ### 8.6 `tools/power_curve_model.py` for this repo
 
@@ -531,12 +543,12 @@ Model, per active minute: compute `dps()` from the section 7 formula using the c
 Outputs, printed and written as `tools/out/power_curve_<seed>.json`:
 
 1. The day table for days 1, 2, 3, 5, 7, 10, 14, 21, 30: stage, DPS, each layer's multiplier, Training levels per stat, hero level, awaken rank, fish cap, research levels, pulls and L+ per banner, limit breaks.
-2. The layer-share table (section 8.2 format) and a PASS/FAIL line per layer against 40%/5%.
+2. The layer-share table (section 8.2 format) and a PASS/FAIL/WARN line per layer against the section 8.5 rule.
 3. Wall report: first wall stage, longest wall in active minutes and the day it started, total walled minutes.
 4. Economy report: cumulative gold earned and spent, diamonds spent per banner, Fish Coins earned (discovery, merges, dungeon) and spent per node, Rock Candy earned and spent.
 5. A compact line `DAYTABLE 1:240 3:330 7:430 14:480 30:550` for 00 section 6.6 to paste.
 
-`S` constants it validates and what it checks: `HP_G`, `GOLD_G`, `EXP_G`, `HERO_LVL_MULT` (day table within tolerance, 40%/5% rule, longest wall under 14 days <= 240 active minutes); `TRAIN_PER_LVL[CRIT_RATE/CRIT_DMG/ATK_SPD/GOLD_GAIN/EXP_GAIN]` and `TRAIN_CAP[*]` (each stat receives between 5% and 50% of Training gold over 30 days; none is bought to zero); `BOSS_TIME_TICKS` (first wall between stage 60 and 200); `TAP_ZAP_*` (a tapping variant clears a wall at most 2.5x faster than the idle bot); `EXP0`/`HERO_LVL_EXP` (hero level between 0.25 s and 0.45 s at every reported day); `AWAKEN_STAGES[4]`, `AWAKEN_COST_ROCK_CANDY` (rank 3 by day 7, rank 4 not before day 21); `RES_*` costs (every node has at least one level bought by day 7 and `RES_FISH_CAP` reaches 2 by day 10); `BOSS_ROCK_CANDY_P` (boss drops are under 20% of Rock Candy income). The Fish Board constants are `fish_model.py`'s (05); the summon constants are `gacha_model.py`'s (04); this tool consumes both tools' outputs as inputs where it needs them.
+`S` constants it validates and what it checks: `HP_G`, `GOLD_G`, `EXP_G`, `HERO_LVL_MULT` (day table within tolerance, 40%/5% rule, longest wall under 14 days <= 240 active minutes); `TRAIN_PER_LVL[CRIT_RATE/CRIT_DMG/ATK_SPD/GOLD_GAIN/EXP_GAIN]` and `TRAIN_CAP[*]` (each stat receives between 5% and 50% of Training gold over 30 days; none is bought to zero); `BOSS_TIME_TICKS` (first wall between stage 60 and 200); `TAP_ZAP_*` (a tapping variant clears a wall at most 2.5x faster than the idle bot); `EXP0`/`HERO_LVL_EXP` (hero level between 0.25 s and 0.45 s at every reported day); `AWAKEN_STAGES[4]`, `AWAKEN_COST_ROCK_CANDY` (rank 3 by day 7, rank 4 not before day 21); `RES_*` costs (every node has at least one level bought by day 7 and `res_fish_cap` reaches 2 by day 10); `BOSS_ROCK_CANDY_P` (boss drops are under 20% of Rock Candy income). The Fish Board constants are `fish_model.py`'s (05); the summon constants are `gacha_model.py`'s (04); this tool consumes both tools' outputs as inputs where it needs them.
 
 Acceptance in CI (10): the median of 20 seeds within +/-20% of 00 section 6.6 on days 1, 7 and 30; the share rule; the wall rule.
 
@@ -547,8 +559,8 @@ Acceptance in CI (10): the median of 20 seeds within +/-20% of 00 section 6.6 on
 | Day 1 too fast | `HP0` up (x6 is about -45 stages on every day) | None on shares. |
 | Late walls too long | `HERO_LVL_MULT` 1.02 -> 1.025 | Hero share rises toward 40%; check it. |
 | Hero Level over 40% | `HERO_LVL_MULT` down, or raise `HERO_LVL_EXP` growth 1.08 -> 1.09 | Fewer stages/day late. |
-| Research under 5% | `RES_ATK` to 0.08 per level, or `RES_COST_G[RES_ATK]` 1.20 -> 1.15 | Fish Coins drift away from `RES_FISH_CAP`; rerun `fish_model.py`. |
-| Companions under 5% | `MP_REGEN0` 2 -> 3, or lower `mpCost` (04) | Reduces the pull of `RES_MP_REGEN`. |
+| Research under 5% | `res_atk` to 0.08 per level, or `RES_COST_G[res_atk]` 1.20 -> 1.15 | Fish Coins drift away from `res_fish_cap`; rerun `fish_model.py`. |
+| Companions under 5% | `MP_REGEN0` 2 -> 3, or lower `mpCost` (04) | Reduces the pull of `res_mp_regen`. |
 | Training over 25% | `GOLD_G` 1.03 -> 1.025 | Fewer Training levels; `CRIT_RATE` cap reached later. |
 | Gold feels useless late | `GOLD_G` up toward 1.035 | Training share rises. |
 | Walls too frequent | `BOSS_TIME_TICKS` 300 -> 400, or `BOSS_HP_MULT` 10 -> 8 | Flatter feel; prefer this to touching `HP_G`. |
@@ -561,20 +573,20 @@ Never change `HP_G` to fix a local problem; it moves every stage at once and eve
 | Stream | Draws | When | Counter invariant | Consumer rule |
 |---|---|---|---|---|
 | `combat` | 0 in MVP | reserved: P1 enemy variance, skill proc chances | `== 0` | Only `HeroCat.Sim.Combat` may draw. |
-| `crit` | 1 per hero hit | section 2.2, including hits at `critRate == 0` | `== Lifetime.HeroHits` | Only `HeroHit()`. Fish missiles, skills, companions and Tap Zap never draw. |
-| `loot` | 1 per boss kill | `BOSS_ROCK_CANDY_P` roll | `== Lifetime.BossKills` | Only `Kill()` on a boss. P1 drop tables add draws and a new invariant. |
+| `crit` | 1 per hero hit | section 2.2, including hits at `critRate == 0` | `== Stats.HeroHits` | Only `HeroHit()`. Fish missiles, skills, companions and Tap Zap never draw. |
+| `loot` | 1 per boss kill | `BOSS_ROCK_CANDY_P` roll | `== Stats.BossKills` | Only `Kill()` on a boss. P1 drop tables add draws and a new invariant. |
 | `fish_spawn` | per 05 | release cell choice | 05 owns | Fish Board only. |
-| `dungeon` | per 06 | dungeon fight seed derivation | 06 owns | Dungeon runner only. |
+| `dungeon` | 1 per M0 run (06) | dungeon run seed, drawn by the M0 local `IDungeonSeedService` (00 contract 11, issue #25) | 06 owns | Dungeon seed service only. |
 
-Summons are not a client stream (00 section 8 item 2). Draws are consumed even when the outcome is predetermined so the invariants above hold and the server can audit a save (08). Stream seeds derive from the profile seed exactly as the sibling's `StreamNames.StreamSeed` does; 02 persists `(seed, counter)` per name.
+Summons are not a client stream (00 section 8 item 2). Draws are consumed even when the outcome is predetermined so the invariants above hold and the server can audit a save (08). These invariants are the validator's and 08's (02 section 3.4, issue #8). Stream seeds are derived in Runtime, not the sim: the first 8 bytes of SHA-256(`RngRoot` ++ UTF-8 stream name), where `RngRoot` is the immutable Guid set at profile creation (00 contract 2, issue #9); 02 persists `(seed, counter)` per name.
 
 ## 11. Open questions
 
 1. **Adopt the recommended curve?** `HP_G 1.04 / GOLD_G 1.03 / EXP_G 1.025 / HERO_LVL_MULT 1.02` and the new day table in section 8.4. Owner: 00. Default: yes; 03, 05, 06 and 10 write their worked numbers against it from now on, and 00 section 6.6 is replaced by the tool's `DAYTABLE` line once `tools/power_curve_model.py` exists.
-2. **Day-20 wall.** The scratch model shows a 460-active-minute wall starting around day 20 because the summon layers saturate. Candidate fixes, in order of preference: limit breaks priced so the bot buys one every day from day 10 (04 section 5), `RES_ATK` at 0.08 per level, more Awakening ranks at 50-stage spacing. Owner: 03 with 04. Default: ship M0 as is (the M0 exit criterion is two weeks), fix for MVP with the tool.
+2. **Day-20 wall.** The scratch model shows a 460-active-minute wall starting around day 20 because the summon layers saturate. Candidate fixes, in order of preference: limit breaks priced so the bot buys one every day from day 10 (04 section 5), `res_atk` at 0.08 per level, more Awakening ranks at 50-stage spacing. Owner: 03 with 04. Default: ship M0 as is (the M0 exit criterion is two weeks), fix for MVP with the tool.
 3. **Day 1 at 240 stages.** Fine for the genre; wrong if 07's tutorial or 06's first-clear diamond budget assumed ~90. Owner: 00. Default: keep; if 06 needs fewer first clears on day 1, raise `HP0` rather than `HP_G`.
 4. **`HP`/`DEF` trainable only in P1.** Owner: 00 (section 5.1 says Training is per stat). Default: as section 4; the enum keeps all eight.
-5. **`RES_OFFLINE_CAP` versus decision 3.** Default: keep the node as a cap extension; swap for `RES_OFFLINE_RATE` if 00 says the 24 h cap is absolute.
+5. **`res_offline_cap` versus decision 3.** Resolved: the node extends the cap; catch-up uses the effective cap `OFFLINE_CAP_H + 2 h * level` (issue #21).
 6. **Companion slot unlocks tied to Awakening.** Owner: 04. Default: as section 5.3; if 04 wants all four slots open from the start, Companions reach the 5% floor on day 1 and the bot reruns.
 7. **Auto boss retry** (`BOSS_AUTO_RETRY_S = 60`) is P1 here; 07 may want it in MVP for the idle-on-desk player. Default: P1.
 8. **Tap Zap and the server plausibility check.** A tapping player's stage-vs-time bound is up to 4x the idle bound during bosses (section 2.5). 08 must use the tapping bound, not the bot's. Default: 08 uses `DPS * (1 + TAP_ZAP_DMG_PCT * TAP_ZAP_MAX_PER_SEC)` as the upper bound.
@@ -582,24 +594,25 @@ Summons are not a client stream (00 section 8 item 2). Draws are consumed even w
 ## 12. Acceptance criteria
 
 1. From a fresh profile, the first `EnemySpawned` is at tick `SPAWN_DELAY_TICKS` and the first `HitLanded` at `SPAWN_DELAY_TICKS + ATTACK_INTERVAL_TICKS`; with `ATK_SPD` level 100 the hit interval is exactly 5 ticks for 1,000 consecutive hits.
-2. Ten normal kills on stage 1 advance to stage 2 with one `StageCleared(1, 2, false)`; on stage 10 the 10th enemy spawns as a boss with `Hp == BOSS_HP_MULT * Hp(10)` and `BossTimer == BOSS_TIME_TICKS`.
+2. Ten normal kills on stage 1 advance to stage 2 with one `StageCleared(1, 2, false)`; on stage 10 the 10th enemy spawns as a boss with `Hp == BOSS_HP_MULT * Hp(10)` and `BossTicksLeft == BOSS_TIME_TICKS`.
 3. A boss that needs exactly `30 * speedFactor` non-crit hits is cleared; one needing one more hit fails at tick `BOSS_TIME_TICKS` after spawn and publishes `BossFailed(10, 1, remainingFraction)`; a hit landing on the final tick counts.
-4. While `Walled`, mobs of the same stage spawn, pay `Gold(s) * GoldMult` and `Exp(s) * ExpMult`, and `KillsInStage` stays at `KILLS_PER_STAGE - 1`; `AttemptBoss` despawns the mob with no gold or EXP and the next spawn is the boss; `AttemptBoss` is rejected with `NoBossToAttempt` on a normal stage and `BossAlreadyPending` while pending.
-5. `crit.Counter == Lifetime.HeroHits` and `loot.Counter == Lifetime.BossKills` after a 1,000,000-tick fuzz run; fish missiles, skills, companions and Tap Zap consume no `crit` draws.
-6. Over 100,000 hero hits with `CRIT_RATE` level 100 and `CRIT_DMG` level 50 (seed 7), the crit frequency is within 3 standard deviations of 0.25 and mean damage within 1% of `HitDamage * (1 + 0.25 * 1.0)`.
-7. `TapZap(20)` in one second applies exactly `TAP_ZAP_MAX_PER_SEC` taps and reports 14 ignored; the next second accepts 6 again; each applied tap removes `HitDamage * TAP_ZAP_DMG_PCT`.
-8. Queued fish missiles apply on the first `Fighting` tick after queueing, in order, without crit; a missile queued during `Spawning` is not lost; surplus damage beyond the kill is discarded.
-9. `TrainStat(ATK, 10)` with insufficient gold changes nothing; with sufficient gold charges exactly the closed-form bulk cost and raises `atkMult` by `0.5`; `TrainStat(CRIT_RATE, 1)` at level 300 is rejected with `StatAtCap`; `TrainStat(HP, 1)` is rejected with `StatNotTrainable` in MVP.
-10. `critFactor`, `speedFactor`, `heroMult`, `awakenMult` and `researchPct` from `Query` equal hand-computed values for a fixture with `CRIT_RATE` 120, `CRIT_DMG` 80, `ATK_SPD` 100, hero level 50, Awakening rank 2, `RES_ATK` 7, within relative 1e-12.
+4. While `Walled`, mobs of the same stage spawn, pay `Gold(s) * GoldMult` and `Exp(s) * ExpMult`, and `KillsInStage` stays at `KILLS_PER_STAGE - 1`; `AttemptBoss` despawns the mob with no gold or EXP and the next spawn is the boss; `AttemptBoss` is rejected with `NotAvailable`/`NO_BOSS_TO_ATTEMPT` on a normal stage and `NotAvailable`/`BOSS_ALREADY_PENDING` while pending.
+5. `crit.Counter == Stats.HeroHits` and `loot.Counter == Stats.BossKills` after a 1,000,000-tick fuzz run; fish missiles, skills, companions and Tap Zap consume no `crit` draws.
+6. Over 100,000 hero hits with `CRIT_RATE` level 100 and `CRIT_DMG` level 50 (seed 7), the crit frequency is within 3 standard deviations of 0.25 and mean damage within 1% of `HeroHit * (1 + 0.25 * 1.0)`.
+7. `TapZap(20)` in one second applies exactly `TAP_ZAP_MAX_PER_SEC` taps and reports 14 ignored; the next second accepts 6 again; each applied tap removes `HeroHit * TAP_ZAP_DMG_PCT`.
+8. Queued fish missiles apply on the first `Fighting` tick after queueing, in order, without crit; a missile queued during `Spawning` is not lost, including across a save round trip; surplus damage beyond the kill is discarded.
+9. `TrainStat(ATK, 10)` with insufficient gold changes nothing; with sufficient gold charges exactly the closed-form bulk cost and raises `atkMult` by `0.5`; `TrainStat(CRIT_RATE, 1)` at level 300 is rejected with `Capped`/`STAT_AT_CAP`; `TrainStat(HP, 1)` is rejected with `Locked`/`STAT_NOT_TRAINABLE` in MVP; a successful purchase publishes one `StatTrained`.
+10. `critFactor`, `speedFactor`, `heroMult`, `awakenMult` and `researchPct` from `Query` equal hand-computed values for a fixture with `CRIT_RATE` 120, `CRIT_DMG` 80, `ATK_SPD` 100, hero level 50, Awakening rank 2, `res_atk` 7, within relative 1e-12.
 11. `GrantHeroExp` crossing two thresholds in one grant raises the level by 2 and publishes two `LevelUp` events; `heroMult` equals `HERO_LVL_MULT^level` from the `GeometricTable` (bit-identical on x64, ARM64, IL2CPP per 10's golden-file test).
-12. `Awaken()` is rejected with `AwakenStageGate` at `HighestCleared == 49`, with `NotEnoughRockCandy` at stage 50 with 99 candy, succeeds at 100 candy charging exactly 100 with reason `TRAINING`, and opens companion slot 2.
-13. `Research(RES_FISH_CAP)` at level 0 charges 2,500 Fish Coins, at level 9 charges 1,280,000, at level 10 is rejected with `ResearchMaxed`; before Awakening rank 1 every `Research` call is rejected with `ResearchLocked`.
-14. With four companions equipped, `MP_REGEN0 = 2`, costs 10 and cooldowns 100 ticks, the sim fires 12 +/- 1 companion abilities per minute (not 24); after `RES_MP_REGEN` level 4 it fires 24 per minute.
+12. `Awaken()` is rejected with `Locked`/`AWAKEN_STAGE_NOT_REACHED` at `Progress.HighestCleared == 49`, with `CannotAfford`/`ROCK_CANDY` at stage 50 with 99 candy, succeeds at 100 candy charging exactly 100 with reason `AWAKENING`, and opens companion slot 2.
+13. `Research(res_fish_cap)` at level 0 charges 2,500 Fish Coins, at level 9 charges 1,280,000, at level 10 is rejected with `Capped`/`RESEARCH_MAXED`; before Awakening rank 1 every `Research` call is rejected with `Locked`/`RESEARCH_LOCKED`.
+14. With four companions equipped, `MP_REGEN0 = 2`, costs 10 and cooldowns 100 ticks, the sim fires 12 +/- 1 companion abilities per minute (not 24); after `res_mp_regen` level 4 it fires 24 per minute.
 15. Deterministic: two fresh profiles with seed 7, the same scripted commands and `Advance(1_000_000)` produce field-equal `GameState` graphs and identical event sequences; a `DeepClone` taken mid-boss continues identically.
 16. Bot: the median of 20 seeds from `tools/power_curve_model.py` lands within +/-20% of the section 8.4 table on days 1, 7 and 30; the C# bot (10) on the real sim lands within +/-15% of the Python model on the same days.
-17. Shares: on days 1, 7 and 30 no layer exceeds 40% of `ln(DPS / BASE_ATK)`; for MVP every unlocked layer is at or above 5% (M0 accepts Research and Companions absent; the M0 run accepts Skills at 4% on day 1).
+17. Shares: on days 1, 7 and 30 no layer exceeds 40% of `ln(DPS / BASE_ATK)`; on days 7 and 30 every layer except `Base` is at or above 5%, except the tier's exemptions in `acceptance-targets.json`, which report `WARN` (M0: Research, Companions, speed; issue #12).
 18. Walls: first wall between stage 60 and 200 in every seed; no wall opened in the first 14 days exceeds 240 active minutes.
 19. Perf: `Advance(1_000_000)` with `NullEventSink` from a stage-300 profile with six skills and four companions equipped completes in under 2 s in Release; `Advance(100_000)` with the default event mask allocates under 128 bytes per kill.
+20. Rated vs realised (issue #10): for a fixture with two `INSTANT` skills, one `DOT` skill, two `DAMAGE` companions at full MP, a static board (no merges, so no missiles), `ATK_SPD` 50 and `CRIT_RATE` 120 / `CRIT_DMG` 80 with hero-attack damage counted at its expected crit value, total damage dealt over a 100,000-tick fight against an unkillable enemy, divided by the fight's seconds, equals `Query.RatedDps` within 1%.
 
 ## 13. Constants introduced
 
@@ -627,7 +640,7 @@ Every constant this spec adds or changes, for lifting into 00 section 6. Tag `S`
 | `BOSS_ROCK_CANDY_P` | 0.5 | S | 2.6 | One Rock Candy per boss kill at this chance, `loot` stream. |
 | `BOSS_AUTO_RETRY_S` | 60 (P1) | S | 2.7 | |
 | `AWAKEN_UNLOCKS` | companion slots 2/3/4 at ranks 1/2/3, Rune slots at 4/5 | - | 5.3 | |
-| `RES_*` table | section 6 (8 nodes: cost0, growth, max, effect) | S | 6 | `RES_FISH_CAP` validated jointly with 05's tool. |
+| `research` table (`res_*` nodes) | section 6 (8 nodes: cost0, growth, max, effect) | S | 6 | `res_fish_cap` validated jointly with 05's tool. |
 | `ROCK_CANDY_PER_DAY_ASSUMED` | 100 | input from 06 | 8.3 | Bot input, not a game constant. |
 | `FISH_COIN_PER_DAY_DUNGEON_ASSUMED` | 1000 | input from 06 | 8.3 | Bot input. |
 | Summon tickets per day assumed | W 2 / S 1 / C 1 | input from 06 | 8.3 | Bot input. |
