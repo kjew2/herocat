@@ -32,6 +32,7 @@ namespace HeroCat.Client.Screens
         RectTransform _info, _discovery;
         TextMeshProUGUI _discoveryText;
         double _discoveryUntil, _levelFloatUntil;
+        float _cell = UiConstants.BoardCell, _fish = UiConstants.FishSprite;
 
         public FishBoardVm BoardVm => Vm.Board;
         public double Now => Vm.Now;
@@ -301,6 +302,8 @@ namespace HeroCat.Client.Screens
         void BuildBoard()
         {
             var b = Vm.Board;
+            _cell = UiConstants.BoardCellFor(UiConstants.BandBoard, b.Height);   // 176 rp rows do not fit the 640 rp band
+            _fish = _cell * UiConstants.FishSprite / UiConstants.BoardCell;
             UiKit.Fill(UiKit.Panel("Bg", _board, Palette.Panel).rectTransform);
 
             var gauge = UiKit.Bar("Tank", _board, Palette.Diamond, out var tankFill);
@@ -322,7 +325,7 @@ namespace HeroCat.Client.Screens
             // 5 x 4 grid, 176 rp cells with 8 rp gaps (912 rp wide).
             var gridImg = UiKit.Panel("Grid", _board, Palette.Panel, 1f, raycast: true);
             _grid = gridImg.rectTransform;
-            float step = UiConstants.BoardCell + UiConstants.BoardGap;
+            float step = _cell + UiConstants.BoardGap;
             UiKit.Place(_grid, UiConstants.TankColumn, 8, b.Width * step - UiConstants.BoardGap, b.Height * step - UiConstants.BoardGap);
             _grid.gameObject.AddComponent<BoardInput>().Init(this, _grid);
             for (int i = 0; i < b.CellCount && i < _cellFish.Length; i++)
@@ -330,12 +333,12 @@ namespace HeroCat.Client.Screens
                 int col = i % b.Width, row = i / b.Width;
                 _cellPad[i] = UiKit.Panel("Cell" + i, _grid, Palette.PanelRaised, 0.6f);
                 var pad = _cellPad[i].rectTransform;
-                UiKit.Place(pad, col * step, row * step, UiConstants.BoardCell, UiConstants.BoardCell);
+                UiKit.Place(pad, col * step, row * step, _cell, _cell);
                 Anchor("fish.cell." + i, pad);
                 _cellFish[i] = UiKit.CirclePanel("Fish", pad, Color.white);
                 var fr = _cellFish[i].rectTransform;
                 fr.anchorMin = fr.anchorMax = fr.pivot = new Vector2(0.5f, 0.5f);
-                fr.sizeDelta = new Vector2(UiConstants.FishSprite, UiConstants.FishSprite);
+                fr.sizeDelta = new Vector2(_fish, _fish);
                 _cellText[i] = UiKit.Text("Level", fr, UiKit.Title, 0x121212, TextAlignmentOptions.Center, bold: true);
                 UiKit.Fill(_cellText[i].rectTransform);
                 int cell = i;
@@ -343,7 +346,7 @@ namespace HeroCat.Client.Screens
             }
 
             _ghost = UiKit.CirclePanel("DragGhost", _grid, Color.white);
-            _ghost.rectTransform.sizeDelta = new Vector2(UiConstants.FishSprite * 1.15f, UiConstants.FishSprite * 1.15f);   // lift 1.15
+            _ghost.rectTransform.sizeDelta = new Vector2(_fish * 1.15f, _fish * 1.15f);   // lift 1.15
             _ghostText = UiKit.Text("Level", _ghost.rectTransform, UiKit.Title, 0x121212, TextAlignmentOptions.Center, bold: true);
             UiKit.Fill(_ghostText.rectTransform);
             _ghost.gameObject.SetActive(false);
@@ -419,7 +422,7 @@ namespace HeroCat.Client.Screens
         public int CellAt(Vector2 local)
         {
             var b = Vm.Board;
-            float step = UiConstants.BoardCell + UiConstants.BoardGap;
+            float step = _cell + UiConstants.BoardGap;
             if (local.x < 0 || local.y < 0) return -1;
             int col = (int)(local.x / step), row = (int)(local.y / step);
             if (col >= b.Width || row >= b.Height) return -1;

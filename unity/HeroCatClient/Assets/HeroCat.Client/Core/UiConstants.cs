@@ -57,6 +57,19 @@ namespace HeroCat.Client.Core
         /// <summary>Fish discovery card on SCR_MAIN (07 section 5).</summary>
         public const double DiscoveryCardSec = 1.5;
 
+        /// <summary>
+        /// The board cell that fits: 07 section 2 asks for 176 rp cells, but four rows of 176 rp plus gaps (728 rp) do not fit
+        /// the 640 rp board band, so the cell shrinks to fit (never below <see cref="MinTouch"/>), as section 2 already allows
+        /// on short screens. With the seed bands: (640 - 2 x 8 - 3 x 8) / 4 = 150 rp.
+        /// </summary>
+        public static float BoardCellFor(float bandHeight, int rows)
+        {
+            if (rows < 1) rows = 1;
+            float fit = (bandHeight - 2 * BoardGap - (rows - 1) * BoardGap) / rows;
+            if (fit > BoardCell) fit = BoardCell;
+            return fit < MinTouch ? MinTouch : fit;
+        }
+
         /// <summary>A Loading state shows a Retry link after this long (07 section 10 rule 5).</summary>
         public const double LoadingRetrySec = 2, LoadingErrorSec = 10;
     }
