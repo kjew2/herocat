@@ -46,6 +46,16 @@ namespace HeroCat.Client.Screens
                     // Load the glyphs up front: TMP checks for the ellipsis without adding it to a runtime font on demand.
                     if (!_font.TryAddCharacters(Preload, out var missing))
                         Debug.LogWarning("HeroCat: UI font lacks glyphs: " + missing);
+                    // TMP's ellipsis lookup misses the runtime font's own glyph; the default font's baked one serves it.
+                    // Only this runtime asset's list changes, never a project asset.
+                    TMP_FontAsset fallback = null;
+                    try { fallback = TMP_Settings.defaultFontAsset; }
+                    catch (Exception) { }
+                    if (fallback != null)
+                    {
+                        if (_font.fallbackFontAssetTable == null) _font.fallbackFontAssetTable = new System.Collections.Generic.List<TMP_FontAsset>();
+                        _font.fallbackFontAssetTable.Add(fallback);
+                    }
                 }
                 if (_font == null)
                 {
