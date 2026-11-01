@@ -14,6 +14,12 @@ namespace HeroCat.Runtime.Save
         public const int SAVE_KEEP_COUNT = 2;
         public const int SAVE_REPAIR_MAX = 20;
         public const int CORRUPT_KEEP_DAYS = 7;
+
+        /// <summary>Rejected conflict candidates are kept as slot0.conflict-*.sav this long (02 section 2).</summary>
+        public const int CONFLICT_KEEP_DAYS = 30;
+
+        /// <summary>Pending.Summon / Pending.Dungeon older than this is cleared on load (02 section 6.4 P17).</summary>
+        public const int PENDING_STALE_DAYS = 7;
     }
 
     /// <summary>

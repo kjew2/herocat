@@ -524,7 +524,7 @@ Newtonsoft.Json 13.x (`com.unity.nuget.newtonsoft-json` in Unity; the NuGet pack
 | `MissingMemberHandling` | `Ignore` | Unknown fields (newer dev build, removed field) are skipped. See 6.3. |
 | `FloatParseHandling` | `Double` | Never `Decimal`. |
 | `FloatFormatHandling` | `String` for NaN/Infinity on write (then rejected by the validator); default otherwise | Writing `NaN` as a bare token would make the file unparseable by other tools. |
-| Double formatting | Round-trip ("R" semantics; Json.NET default) | A `Gold` value survives bit-exactly. Shortest round-trippable string, so `1.8423371e12` not `1842337100000.0`. |
+| Double formatting | Round-trip exact (`R` formatting; Json.NET default) | A `Gold` value survives bit-exactly. The text is whatever Json.NET's round-trip form writes (`1842337100000.0`, not necessarily the shortest form `1.8423371e12`); only the parsed value is the contract (issue #246). |
 | Enums | `StringEnumConverter` | `"Mode": "Stage"`, `"WEAPON"` keys. Integers accepted on read. A saved member is never renamed in place; a rename is a migration. |
 | `Guid` | Default 36-char lowercase string | |
 | `Dictionary<Banner, BannerState>` | Keys as enum names via the converter | |
@@ -575,20 +575,20 @@ Repair:
 
 | Id | Condition | Repair |
 |---|---|---|
-| P1 | `Combat.Stage < 1` or `> STAGE_CAP`; `KillsInStage` outside `[0, KILLS_PER_STAGE-1]`; `Boss != None` on a stage that is not a multiple of `BOSS_EVERY`; `BossFailsOnStage < 0`; `Selected` outside `[1, HighestCleared]`; any cooldown negative; `MissileQueue` entry negative or non-finite | Clamp; `Boss = None`; `Selected = null`; drop the bad missile entries. |
+| P1 | `Combat.Stage < 1` or `> STAGE_CAP`; `KillsInStage` outside `[0, KILLS_PER_STAGE-1]`; `Boss != None` on a stage that is not a multiple of `BOSS_EVERY`; `BossFailsOnStage < 0`; `Selected` outside `[1, HighestCleared]`; any cooldown negative; `MissileQueue` entry not positive or non-finite (05: every queued missile is a positive hit fraction); `Combat.Mp` negative or non-finite | Clamp; `Boss = None`; `Selected = null`; drop the bad missile entries; `Mp = 0`. |
 | P2 | Any wallet balance negative, NaN or infinite; `Hero.Exp` likewise | Set to 0. |
 | P3 | `Hero.Level < 1`; `AwakenRank` outside `[0, AWAKEN_STAGES.Length]` | Clamp. |
 | P4 | `Training.Level[i]` outside `[0, TRAIN_CAP[i]]` | Clamp. |
 | P5 | `Progress.HighestCleared` outside `[Combat.Stage - 1, Combat.Stage]` | Set to `Stage - 1` (`Stage` is the frontier, issue #35; it equals `Stage` only once `STAGE_CAP` is cleared). |
 | P6 | `HighestFirstClearBoss` not a multiple of `BOSS_EVERY`, negative, or `> HighestCleared` | Floor to a multiple; clamp. |
-| P7 | `Loadout.Skills.Length != SKILL_SLOTS`, `Companions.Length != COMPANION_SLOTS`, `Runes.Length != RUNE_SLOTS` | Pad with `null` / truncate. |
+| P7 | `Loadout.Skills.Length != SKILL_SLOTS`, `Companions.Length != COMPANION_SLOTS`, `Runes.Length != RUNE_SLOTS`; `Combat.SkillCooldowns` / `CompanionCooldowns` not `SKILL_SLOTS` / `COMPANION_SLOTS` long | Pad with `null` (cooldowns with 0) / truncate. |
 | P8 | Equipped id not owned, unknown to content, wrong kind, or duplicated across slots | Set slot to `null` (keep the first duplicate). `Loadout.Weapon` null -> auto-equip the highest-rarity owned weapon (04 rule). |
-| P9 | `Fish.Cells[i] < 0` or `> FISH_MAX_LVL_HARD` (the `fish_levels` row count, which 09 never shrinks) | Clamp to that range, never to the reachable cap (`FISH_MAX_LVL` incl. Research): a fish above a lowered cap stays and cannot merge (05), with no refund (issue #41). `DiscoveredLevels` gains any level present on the board. `HighestLevel` recomputed. |
-| P9b | `TankCount` outside `[0, TankCap]`; `TankRefillTick` outside `[0, refillTicks-1]`; `TankReleaseLevel < 1` or above its content max | Clamp. |
+| P9 | `Fish.Cells[i] < 0` or `> FISH_MAX_LVL_HARD` (the `fish_levels` row count, which 09 never shrinks) | Clamp to that range, never to the reachable cap (`FISH_MAX_LVL` incl. Research): a fish above a lowered cap stays and cannot merge (05), with no refund (issue #41). `DiscoveredLevels` drops levels outside `[1, FISH_MAX_LVL_HARD]` and gains any level present on the board. `HighestLevel` recomputed. `TotalMerges` clamped to `[0, Stats.Merges]`. |
+| P9b | `TankCount` outside `[0, TankCap]`; `TankRefillTick` outside `[0, refillTicks-1]`, or non-zero on a full tank; `TankReleaseLevel < 1` or above its content max | Clamp (a full tank's refill progress to 0, 05 section 3). A repaired board passes `FishBoard.FirstViolation`. |
 | P10 | `Items` key unknown to content, or `Copies <= 0` | Remove the entry. No refund in MVP (issue #56); ids are never deleted (09 section 3.4), so this path is rare. |
 | P11 | `Banners[b].Pity` outside `[0, PITY_HARD-1]`; `Exp < 0` | Clamp. Missing banner for a banner the content defines -> add default. |
 | P12 | Quest id unknown to content; `Progress < 0` | Drop the entry; clamp to 0. A quest with no entry reads as `IN_PROGRESS` with progress 0. |
-| P13 | `Research.Level` key unknown or value `< 1` or `> maxLevel` | Remove / clamp. |
+| P13 | `Research.Level` key unknown or value `< 1` or `> maxLevel` | Remove (unknown or `< 1`: absent reads as level 0) / clamp. |
 | P14 | `OwnedItem.Copies > DUPE_LVL_CUM[10]` (160); `LimitBreaks` outside `[0, LIMIT_BREAK_RANKS]` | Clamp (no Rock Candy is granted on load; conversion happens only at pull time, 04). |
 | P15 | Stream counter invariants (3.4): `combat.Counter != 0` (MVP), `crit.Counter != Stats.HeroHits`, `loot.Counter != Stats.BossKills`, `fish_spawn.Counter != Stats.FishReleased`, Local mode `summon_x.Counter != 3 * TotalPulls` | Set the counter from the stat. The player-visible count is the source of truth for "which draw is next". |
 | P16 | `Combat.DungeonRun != null` on load | `Mode = Stage`, `DungeonRun = null`, emit `DungeonAbandoned`. No refund: tickets are debited on clear only (06 section 6), so an abandoned run never spent one. |
@@ -599,6 +599,8 @@ Repair:
 | P21 | `Tutorial.Step` outside `[0, TUTORIAL_DONE]` (a content change to `tutorial_steps`); `Dungeons.RecentRuns.Count > DUNGEON_RECENT_RUNS_MAX` | Clamp the step; keep the newest `DUNGEON_RECENT_RUNS_MAX` runs. |
 
 Left alone on purpose: `Time.DayKey > dayKey(now)` and `LastSavedServerTime > now` (backwards clock; section 11 handles them), `CreatedServerTime > now` (cosmetic).
+
+A shape no rule expects (a `null` nested collection such as `Combat.MissileQueue`) is a reject, not a crash: the validator wraps any failure of its own in `SaveInvalidException`, so the loader quarantines the file (8.3). An unknown `Rng` name (6.3) is dropped with a log line and is not a repair hit.
 
 ## 7. Migrations
 
@@ -708,7 +710,8 @@ public interface ISaveStore
 Save(state, trigger):
   SaveStamp.Apply(state, clock.NowServerSeconds, db.Version, installId)
       // LastSavedServerTime = now; SaveSeq += 1; ContentVersion = db.Version; ContentHash = db.Hash; DeviceId = installId
-      // if ticks are running: LastTickServerTime = now as well (the window up to now has been ticked, not idle)
+      // if ticks are running: LastTickServerTime = now as well (the window up to now has been ticked, not idle; never moved back)
+      // "ticks are running" = every trigger except Resume (follows a catch-up that stamped the anchor) and Conflict
   bytes = SaveSerializer.Encode(state, deviceKey)
   using fs = new FileStream(slot0.tmp, Create, Write, FileShare.None)
       fs.Write(bytes); fs.Flush(flushToDisk: true)
@@ -716,7 +719,9 @@ Save(state, trigger):
   File.Move(slot0.tmp, slot0.sav, overwrite: true)
 ```
 
-Directory: `Application.persistentDataPath/saves/`. Files: `slot0.sav`, `slot0.prev.sav`, `slot0.tmp`, plus quarantine `slot0.corrupt-<unix>.sav` and conflict archives `slot0.conflict-<unix>.sav`. One slot in MVP; the prefix leaves room.
+Directory: `Application.persistentDataPath/saves/`. Files: `slot0.sav`, `slot0.prev.sav`, `slot0.tmp`, plus quarantine `slot0.corrupt-<unix>.sav` and conflict archives `slot0.conflict-<unix>.sav`; a name already taken (both files quarantined in the same second) gets `-1`, `-2`, ... before `.sav`. Retention ages are judged by the `<unix>` in the name (server seconds from `IClock`), not by file mtimes. One slot in MVP; the prefix leaves room.
+
+Code shape (issue #77): `LocalSaveStore` implements `ISaveStore` on top of a raw-bytes `ISaveSlotStore` (`FileSaveStore` on device, `MemorySaveStore` for tests and bots, the cloud wrapper in MVP), which only reads, rotates, quarantines, archives and purges. After `TooNew` the store refuses every `Save` (`SaveWriteException`). A successful load floors a Local-mode clock at the loaded `LastSavedServerTime` (11.2 rule 4).
 
 Properties: at every instant at least one of `slot0.sav`/`slot0.prev.sav` is complete and CRC-valid; a crash during the `tmp` write leaves `sav`/`prev` untouched; startup deletes stray `slot0.tmp`. Failure throws `SaveWriteException`; the caller keeps memory state and retries at the next trigger (01 section 3.1). `SaveStamp` has already run, so memory carries a newer `LastSavedServerTime` than disk; the consequence is one bounded double-credit window (8.5).
 
@@ -729,10 +734,10 @@ LoadAsync(now, db):
       if not exists: continue
       try:
           sf    = SaveSerializer.Decode(read(file), deviceKey)
-          if sf.SchemaVersion > SaveSchema.Current: throw SaveTooNewException    // propagates; never falls to prev
+          if sf.SchemaVersion > SaveSchema.Current: return TooNew               // never falls to prev, renames nothing; later Saves are refused
           body  = SaveMigrations.Migrate(sf.SchemaVersion, sf.Body, log)
           state = SaveSerializer.Materialize(body)
-          reps  = SaveValidator.Run(state, now, db)                               // throws SaveInvalidException
+          reps  = SaveValidator.Run(state, now, db)                               // throws SaveInvalidException; analytics save_repaired{rule} per id
           if file is prev: analytics save_fallback
           return Loaded / LoadedFromPrev
       catch SaveCorruptException | SaveInvalidException | JsonException: analytics save_reject{file, reason}; continue
@@ -747,7 +752,7 @@ Recovery order, from best to worst outcome: (1) `slot0.sav`, (2) `slot0.prev.sav
 | File | Content | Backed up by OS? |
 |---|---|---|
 | `saves/slot0*.sav` | The save | Excluded from iCloud/Android auto-backup (`NSURLIsExcludedFromBackupKey`, `android:allowBackup` with exclusion rules). Cloud save is the backup; an OS-restored save on a new device would carry the old device's key and lineage and confuse conflict resolution. |
-| `install_id` | `DeviceId` GUID | Excluded. A restored install is a new device. |
+| `install_id` | `DeviceId` GUID, created at first launch and reused; a missing or unreadable file means a new id (`InstallId.LoadOrCreate`) | Excluded. A restored install is a new device. |
 | `device_key` | 32 random bytes for HMAC (section 10) | Secure storage (Keychain / Android Keystore-wrapped), excluded from backup. |
 | `tokens.json` | JWTs | Secure storage. |
 | `profile.json` | `Profile` cache | Included; harmless. |
@@ -871,7 +876,7 @@ The server runs these on every upload and attaches `flags[]` to the response. Th
 ### 11.1 Interface and implementations
 
 ```csharp
-namespace HeroCat.Runtime.Time;
+namespace HeroCat.Runtime.Services;   // with the other Runtime seams (decided in issue #78)
 
 public interface IClock
 {
@@ -913,6 +918,8 @@ public sealed class FakeClock : IClock
     public void Advance(long dt) => NowServerSeconds += dt;
 }
 ```
+
+M0 (issue #78): Local mode is `SystemClock` in `ServerClock.cs`: device time floored at the loaded save's `LastSavedServerTime` through `IClockFloor.SetFloor` (which `LocalSaveStore` calls after each load; the floor only rises), `IsAuthoritative = false`. The monotonic, observing `ServerClock` above replaces it in MVP (issue #149), with `api == null` as Local mode.
 
 ### 11.2 Rules
 
@@ -1335,7 +1342,7 @@ The sink enqueues on the main thread and flushes on the thread pool (01 threadin
 15. Backwards clock: `dayKey(now) < DayKey` resets nothing and emits `clock_anomaly`; `now < LastTickServerTime` credits zero.
 16. The SQL migration set (section 12; issue #33) applies to an empty PostgreSQL 16 database and creates every table in section 12, including `ticket_ledger`, `granted_items`, `store_notifications`, `account_exports`, `events` and the P1 stubs (issue #53). A GDPR hard delete of a player with purchases leaves no row in any table referencing the old `player_id`, and exactly the player's `purchases`, `summon_log` and `diamond_ledger` rows referencing the tombstone account (`status = 'deleted'`); for a player without purchases, nothing remains. Deleting an `accounts` row that still has financial rows fails (`on delete restrict`; issue #32). Runs in CI and in `check.sh` when Postgres is available.
 17. Moved to 06 acceptance 25 (`currency_changed` is owned by 06 section 13; issue #245).
-18. No `UnityEngine`, `DateTime*.Now`, `Stopwatch` in `HeroCat.Sim`; in `HeroCat.Runtime` only `ServerClock.cs` and `SessionRunner.cs` reference the clock APIs (CI grep).
+18. No `UnityEngine`, `DateTime*.Now`, `Stopwatch` in `HeroCat.Sim`; in `HeroCat.Runtime` only `ServerClock.cs` and `SessionRunner.cs` reference the clock APIs (CI grep: `tools/check_clock_apis.py` in `check.sh`, with a self-test that proves it catches a bad line).
 19. IL2CPP build: a save produced by the editor loads on an ARM64 device build and vice versa with zero repairs (device-farm test, 10).
 
 ## Constants introduced

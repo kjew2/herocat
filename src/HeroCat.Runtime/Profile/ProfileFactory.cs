@@ -13,7 +13,8 @@ namespace HeroCat.Runtime.Profile
     /// streams from the immutable RngRoot with SHA-256 (the sim stays hash-free), sizes the board and loadout from content,
     /// and applies the profile-created grant (tut_welcome: TUTORIAL_DIAMONDS and TUTORIAL_WEAPON_ID). The day is not rolled
     /// here: the first ApplyServerTime does that and pays the first login (06 section 4.2 rule 4).
-    /// TODO(#73): install id, the ProfileFactory test vectors and the analytics event.
+    /// The install id is InstallId.LoadOrCreate (02 section 8.4). TODO(#246): the currency_changed{TUTORIAL} analytics row
+    /// for the grant (item 4), since no Simulation exists yet to emit CurrencyChanged.
     /// </summary>
     public static class ProfileFactory
     {

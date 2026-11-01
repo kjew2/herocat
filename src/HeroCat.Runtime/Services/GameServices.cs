@@ -11,8 +11,12 @@ namespace HeroCat.Runtime.Services
     public sealed class GameServices
     {
         public IClock Clock { get; set; }
-        public ISaveStore SaveStore { get; set; }
+        /// <summary>The raw slot store; the session builds its LocalSaveStore (02 section 8) on top.</summary>
+        public ISaveSlotStore SaveStore { get; set; }
         public IAnalytics Analytics { get; set; }
+
+        /// <summary>This install's id (02 section 8.4). Guid.Empty: the session uses a fresh one.</summary>
+        public Guid InstallId { get; set; }
 
         /// <summary>Device build: device clock, saves under {dataDir}/saves.</summary>
         public static GameServices Local(string dataDir, IAnalytics analytics = null) => new GameServices
@@ -20,6 +24,7 @@ namespace HeroCat.Runtime.Services
             Clock = new SystemClock(),
             SaveStore = new FileSaveStore(Path.Combine(dataDir ?? throw new ArgumentNullException(nameof(dataDir)), "saves")),
             Analytics = analytics ?? NullAnalytics.Instance,
+            InstallId = HeroCat.Runtime.Profile.InstallId.LoadOrCreate(dataDir),
         };
 
         /// <summary>Tests and the bot harness: fake clock, in-memory save, in-memory analytics.</summary>

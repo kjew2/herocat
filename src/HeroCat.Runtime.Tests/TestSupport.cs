@@ -28,6 +28,14 @@ namespace HeroCat.Runtime.Tests
         public static readonly Guid Root = new Guid("7e57a7e0-0000-4000-8000-000000000007");
         public static readonly Guid Device = new Guid("de71ce00-0000-4000-8000-000000000001");
 
+        /// <summary>A LocalSaveStore over <paramref name="slots"/> with this test install's id.</summary>
+        public static HeroCat.Runtime.Save.LocalSaveStore Store(HeroCat.Runtime.Save.ISaveSlotStore slots, HeroCat.Runtime.Services.IClock clock = null,
+                                                                HeroCat.Runtime.Services.IAnalytics analytics = null) =>
+            new HeroCat.Runtime.Save.LocalSaveStore(slots, clock ?? new HeroCat.Runtime.Services.FakeClock(T0 + 100), Device, analytics)
+            {
+                NewProfileFactory = (db, now) => ProfileFactory.Create(db, Guid.Empty, now, Device, Root),
+            };
+
         public static GameState NewState(long now = 0) => ProfileFactory.Create(Db, Guid.Empty, now == 0 ? T0 : now, Device, Root);
 
         /// <summary>A sim on a new profile, anchored at T0 and ticked a little.</summary>

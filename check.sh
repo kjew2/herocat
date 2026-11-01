@@ -34,6 +34,10 @@ python3 tools/export_content.py check
 step "Tools: fish_model.py S-constant checks (05 section 9)"
 python3 tools/fish_model.py --quiet
 
+step "Clock purity: no clock reads in HeroCat.Sim, only ServerClock.cs/SessionRunner.cs in HeroCat.Runtime (specs/02 AC 18)"
+python3 tools/check_clock_apis.py --self-test
+python3 tools/check_clock_apis.py
+
 step "Release: build-android.yml helpers (version.json, size gate)"
 python3 .github/scripts/test_android_release.py
 

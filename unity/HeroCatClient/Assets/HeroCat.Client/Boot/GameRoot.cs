@@ -121,7 +121,7 @@ namespace HeroCat.Client.Boot
             // The build-time BackendMode picks the service implementations (01 section 1.2). TODO(#66).
             var services = Backend.Create(Application.persistentDataPath);
             Debug.Log("HeroCat: backend " + Backend.Mode);
-            _save = new RuntimeSaveBridge(services.SaveStore);
+            _save = new RuntimeSaveBridge(services.SaveStore, services.InstallId == System.Guid.Empty ? (System.Guid?)null : services.InstallId);
             _clock = new OffsetClock(services.Clock);
             StartSession();
         }

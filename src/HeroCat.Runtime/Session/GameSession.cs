@@ -45,14 +45,19 @@ namespace HeroCat.Runtime.Session
         readonly List<Event> _pending = new List<Event>();
         double _accTicks, _sinceSave, _sinceSync;
         bool _dirty;
+        bool _clockAnomalyReported;
 
-        GameSession(ContentDb db, GameServices services, GameSessionOptions opt)
+        GameSession(ContentDb db, GameServices services, GameSessionOptions opt, LocalSaveStore store)
         {
             Content = db;
             _services = services;
             _opt = opt;
-            _installId = opt.InstallId ?? Guid.NewGuid();
+            Store = store;
+            _installId = store.InstallId;
         }
+
+        /// <summary>02 section 8's store over services.SaveStore.</summary>
+        public LocalSaveStore Store { get; }
 
         public ContentDb Content { get; }
         public Simulation Sim { get; private set; }
@@ -89,14 +94,19 @@ namespace HeroCat.Runtime.Session
             options ??= new GameSessionOptions();
 
             long now = services.Clock.NowServerSeconds;
-            var load = SaveSystem.Load(services.SaveStore, db, now, services.Analytics);
-            var session = new GameSession(db, services, options) { LoadResult = load };
-
-            GameState state;
-            if (load.HasState) state = load.State;
-            else
+            var installId = options.InstallId ?? (services.InstallId != Guid.Empty ? services.InstallId : Guid.NewGuid());
+            var rngRoot = options.NewProfileRngRoot;
+            var store = new LocalSaveStore(services.SaveStore, services.Clock, installId, services.Analytics)
             {
-                state = ProfileFactory.Create(db, Guid.Empty, now, session._installId, options.NewProfileRngRoot);
+                NewProfileFactory = (d, t) => ProfileFactory.Create(d, Guid.Empty, t, installId, rngRoot),
+            };
+            var load = store.Load(now, db);
+            if (load.Status == LoadStatus.TooNew) throw new SaveTooNewException(load.TooNewVersion, SaveSchema.Current);
+            var session = new GameSession(db, services, options, store) { LoadResult = load };
+
+            GameState state = load.State;
+            if (load.IsNewProfile)
+            {
                 session.IsNewProfile = true;
                 services.Analytics.Track("profile_created", new Dictionary<string, object> { ["rngRoot"] = state.RngRoot.ToString() });
             }
@@ -124,7 +134,7 @@ namespace HeroCat.Runtime.Session
                 _accTicks = 0;
                 _sinceSync = 0;
                 Sync(catchUp: true);
-                SaveNow();
+                SaveNow(SaveTrigger.Resume);
                 return 0;
             }
 
@@ -151,7 +161,7 @@ namespace HeroCat.Runtime.Session
             Drain();
 
             _sinceSave += realDeltaSec;
-            if (_dirty && _sinceSave >= _opt.AutosaveIntervalSec) SaveNow();
+            if (_dirty && _sinceSave >= _opt.AutosaveIntervalSec) SaveNow(SaveTrigger.Periodic);
             return n;
         }
 
@@ -169,7 +179,7 @@ namespace HeroCat.Runtime.Session
         {
             if (IsPaused) return;
             IsPaused = true;
-            SaveNow(ticking: true);
+            SaveNow(SaveTrigger.Pause);
             Analytics.Flush();
         }
 
@@ -185,13 +195,16 @@ namespace HeroCat.Runtime.Session
 
         public void Quit() => Pause();
 
+        /// <summary>Write now (ticking: as if ticks ran until now, else a Resume-style save). Never throws.</summary>
+        public bool SaveNow(bool ticking = false) => SaveNow(ticking ? SaveTrigger.Pause : SaveTrigger.Resume);
+
         /// <summary>Write now. Never throws; returns false and counts the failure (state stays in memory, next save retries).</summary>
-        public bool SaveNow(bool ticking = false)
+        public bool SaveNow(SaveTrigger trigger)
         {
             _sinceSave = 0;
             try
             {
-                SaveSystem.Write(_services.SaveStore, State, Clock.NowServerSeconds, Content, _installId, ticking);
+                Store.Save(State, trigger);
                 _dirty = false;
                 ConsecutiveSaveFailures = 0;
                 LastSaveError = null;
@@ -200,10 +213,8 @@ namespace HeroCat.Runtime.Session
             }
             catch (SaveWriteException e)
             {
-                ConsecutiveSaveFailures++;
+                ConsecutiveSaveFailures++;   // the store emits save_write_failed{consecutive}
                 LastSaveError = e.Message;
-                if (ConsecutiveSaveFailures == SaveConfig.SAVE_FAIL_WARN_COUNT)
-                    Analytics.Track("save_write_failed", new Dictionary<string, object> { ["consecutive"] = ConsecutiveSaveFailures });
                 return false;
             }
         }
@@ -211,6 +222,9 @@ namespace HeroCat.Runtime.Session
         void Sync(bool catchUp)
         {
             long now = Clock.NowServerSeconds;
+            // 02 section 11.3: a resume behind the catch-up anchor credits nothing (the sim never moves the anchor back).
+            long behind = State.Time.LastTickServerTime - now;
+            if (catchUp && behind > 0) ReportClockBackwards(behind);
             Sim.Apply(new ApplyServerTime(now));
             if (catchUp) Sim.Apply(new ComputeOfflineCatchup(now));
             Drain();
@@ -219,7 +233,18 @@ namespace HeroCat.Runtime.Session
         void Drain()
         {
             var e = Sim.DrainEvents();
-            if (e.Count > 0) _pending.AddRange(e);
+            if (e.Count == 0) return;
+            _pending.AddRange(e);
+            foreach (var ev in e)
+                if (ev is ClockWentBackwards b) ReportClockBackwards(b.DeltaSeconds);
+        }
+
+        /// <summary>clock_anomaly{backwards}, at most once per session (02 section 11.3).</summary>
+        void ReportClockBackwards(long seconds)
+        {
+            if (_clockAnomalyReported) return;
+            _clockAnomalyReported = true;
+            Analytics.Track("clock_anomaly", new Dictionary<string, object> { ["kind"] = "backwards", ["seconds"] = seconds });
         }
     }
 }
