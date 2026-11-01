@@ -229,7 +229,8 @@ namespace HeroCat.Sim.Tests
             Assert.That(p.Skills, Is.EqualTo(1.4));
             double board = Combat.Db.FishLevels[0].BoardDpsPct + Combat.Db.FishLevels[1].BoardDpsPct;
             Assert.That(p.FishBoardDpsPct, Is.EqualTo(board));
-            Assert.That(board, Is.EqualTo(0.5 * 5 + 0.5 * 7.5).Within(1e-12));
+            double factor = Combat.Db.Constants.FishBoardDpsFactor;
+            Assert.That(board, Is.EqualTo(factor * 5 + factor * 7.5).Within(1e-12));
             Assert.That(p.CritRate, Is.EqualTo(0.1).Within(1e-12), "a fraction");
             Assert.That(p.Training, Is.EqualTo(1.2).Within(1e-12));
             Assert.That(p.Speed, Is.EqualTo(1.3).Within(1e-12));
