@@ -1,4 +1,4 @@
-id,base,growth
-enemy_hp,20,1.07
-gold_per_kill,2,1.05
-stat_cost,50,1.07
+id,base,growth,x_offset,#notes
+enemy_hp,20,1.04,0,"HP0, HP_G (00 decision 9)"
+gold_per_kill,2,1.03,0,"GOLD0, GOLD_G"
+exp_per_kill,5,1.025,0,"EXP0, EXP_G"

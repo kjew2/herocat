@@ -3,6 +3,7 @@ using System.IO;
 using System.Net.Http;
 using System.Net.Sockets;
 using HeroCat.Remote.Transport;
+using HeroCat.Runtime.Errors;
 using HeroCat.Runtime.Services;
 using Newtonsoft.Json.Linq;
 
@@ -18,10 +19,10 @@ namespace HeroCat.Remote
         public static ServiceException FromStatus(int statusCode, string body)
         {
             string code = CodeFromBody(body) ?? "Http" + statusCode;
-            if (statusCode == 408) return new ServiceException(ServiceErrorKind.Timeout, code);
-            if (statusCode == 409) return new ServiceException(ServiceErrorKind.Conflict, code);
-            if (statusCode >= 400 && statusCode < 500) return new ServiceException(ServiceErrorKind.Rejected, code);
-            return new ServiceException(ServiceErrorKind.Internal, code);
+            if (statusCode == 408) return new ServiceException(ErrorClass.Timeout, code);
+            if (statusCode == 409) return new ServiceException(ErrorClass.Conflict, code);
+            if (statusCode >= 400 && statusCode < 500) return new ServiceException(ErrorClass.Rejected, code);
+            return new ServiceException(ErrorClass.ServerError, code);
         }
 
         public static ServiceException FromException(Exception e)
@@ -31,17 +32,17 @@ namespace HeroCat.Remote
                 case ServiceException se: return se;
                 case TransportException te:
                     return te.Failure == TransportFailure.Timeout
-                        ? new ServiceException(ServiceErrorKind.Timeout, "Timeout", te.Message)
-                        : new ServiceException(ServiceErrorKind.Offline, "Offline", te.Message);
+                        ? new ServiceException(ErrorClass.Timeout, "Timeout", te.Message)
+                        : new ServiceException(ErrorClass.Offline, "Offline", te.Message);
                 case TimeoutException _:
                 case OperationCanceledException _:   // HttpClient reports its timeout as TaskCanceledException
-                    return new ServiceException(ServiceErrorKind.Timeout, "Timeout", e.Message);
+                    return new ServiceException(ErrorClass.Timeout, "Timeout", e.Message);
                 case HttpRequestException _:
                 case SocketException _:
                 case IOException _:
-                    return new ServiceException(ServiceErrorKind.Offline, "Offline", e.Message);
+                    return new ServiceException(ErrorClass.Offline, "Offline", e.Message);
                 default:
-                    return new ServiceException(ServiceErrorKind.Internal, "TransportError", e.GetType().Name + ": " + e.Message);
+                    return new ServiceException(ErrorClass.ServerError, "TransportError", e.GetType().Name + ": " + e.Message);
             }
         }
 
@@ -84,7 +85,7 @@ namespace HeroCat.Remote
             try { response = _transport.Send(new RemoteRequest(method, path, body), Options.RequestTimeout); }
             catch (Exception e) { throw RemoteErrors.FromException(e); }
 
-            if (response == null) throw new ServiceException(ServiceErrorKind.Internal, "NoResponse");
+            if (response == null) throw new ServiceException(ErrorClass.ServerError, "NoResponse");
             if (response.IsSuccess) return response.Body;
             throw RemoteErrors.FromStatus(response.StatusCode, response.Body);
         }

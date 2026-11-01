@@ -1,0 +1,1 @@
+CONTENT E035 weapons[weapon_e_01].atk_pct: atk_pct 140.0 deviates 16.666666666666664% from rarities default 120.0 (tolerance 10.0%)

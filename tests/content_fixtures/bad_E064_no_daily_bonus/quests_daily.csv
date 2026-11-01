@@ -1,0 +1,3 @@
+id,goal,filter,target,reward_currency,reward_amount,sort_order,tier,name_key,icon
+d_login,LOGIN,,1,DIAMOND,0,1,MVP,chapter.01.name,icon_quest_login
+d_kill,KILL_ENEMIES,,100,DIAMOND,20,2,MVP,chapter.01.name,icon_quest_kill

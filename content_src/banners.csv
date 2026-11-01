@@ -1,2 +1,5 @@
-id,kind,name_key,pool_id,rate_c,rate_r,rate_e,rate_l,rate_m,pity_soft_start,pity_soft_step,pity_hard,mythic_share_of_lplus,guarantee_batch_size,guarantee_min_tier,pull_cost_gems,free_pulls_per_day,rng_stream,enabled
-hero_standard,hero,banner.hero_standard.name,hero_standard,0.6,0.28,0.09,0.025,0.005,50,0.0325,80,0.16666666666666666,10,E,100,3,gacha_hero,true
+id,enabled,tier,pull_cost_diamonds,ticket_currency,pool_c,pool_r,pool_e,pool_l,pool_m,pity_soft_start,pity_soft_step,pity_hard,m_share_of_lplus,guarantee_batch_size,guarantee_min_rarity,exp_per_pull,sort_order,name_key,icon,banner_art
+WEAPON,true,M0,100,TICKET_SUMMON_WEAPON,10,8,6,4,2,50,0.0325,80,0.16666666666666666,10,EPIC,1,0,banner.weapon.name,icon_banner_weapon,art_banner_weapon
+SKILL,true,M0,200,TICKET_SUMMON_SKILL,14,11,8,5,2,50,0.0325,80,0.16666666666666666,10,EPIC,1,1,banner.skill.name,icon_banner_skill,art_banner_skill
+COMPANION,true,MVP,300,TICKET_SUMMON_COMPANION,18,14,10,6,2,50,0.0325,80,0.16666666666666666,10,EPIC,1,2,banner.companion.name,icon_banner_companion,art_banner_companion
+RUNE,false,P1,300,TICKET_SUMMON_RUNE,12,10,8,4,2,50,0.0325,80,0.16666666666666666,10,EPIC,1,3,banner.rune.name,icon_banner_rune,art_banner_rune

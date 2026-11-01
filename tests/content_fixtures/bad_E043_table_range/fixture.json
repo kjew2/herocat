@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "curves",
+      "enemy_hp,20,1.04",
+      "enemy_hp,20,1.0"
+    ]
+  ],
+  "csharp": true
+}

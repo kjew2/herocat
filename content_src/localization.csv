@@ -1,0 +1,449 @@
+key,en,ja,ko,zh_hans,max_chars,plural,#context
+awakening.rank_1.name,Awakened 1,,,,24,false,
+awakening.rank_2.name,Awakened 2,,,,24,false,
+awakening.rank_3.name,Awakened 3,,,,24,false,
+awakening.rank_4.name,Awakened 4,,,,24,false,
+awakening.rank_5.name,Awakened 5,,,,24,false,
+banner.companion.name,Companion Summon,,,,24,false,
+banner.rune.name,Rune Summon,,,,24,false,
+banner.skill.name,Skill Summon,,,,24,false,
+banner.weapon.name,Weapon Summon,,,,24,false,
+boot.step.auth,Signing in...,,,,28,false,07 M0 screens
+boot.step.catchup,Catching up...,,,,28,false,07 M0 screens
+boot.step.config,Checking for updates...,,,,28,false,07 M0 screens
+boot.step.content,Loading content...,,,,28,false,07 M0 screens
+boot.step.save,Loading your cat...,,,,28,false,07 M0 screens
+boot.step.warmup,Almost there...,,,,28,false,07 M0 screens
+chapter.01.name,Dreamland 1,,,,24,false,
+chapter.02.name,Dreamland 2,,,,24,false,
+chapter.03.name,Dreamland 3,,,,24,false,
+chapter.04.name,Dreamland 4,,,,24,false,
+chapter.05.name,Dreamland 5,,,,24,false,
+chapter.06.name,Dreamland 6,,,,24,false,
+chapter.07.name,Dreamland 7,,,,24,false,
+chapter.08.name,Dreamland 8,,,,24,false,
+chapter.09.name,Dreamland 9,,,,24,false,
+chapter.10.name,Dreamland 10,,,,24,false,
+chapter.11.name,Dreamland 11,,,,24,false,
+chapter.12.name,Dreamland 12,,,,24,false,
+err.account_banned.body,This account has been suspended. Contact support to appeal.,,,,0,false,
+err.account_banned.title,Account suspended,,,,32,false,
+err.banner_closed.body,This summon is no longer available.,,,,0,false,
+err.banner_closed.title,Summon closed,,,,32,false,
+err.client_too_old.body,A new version is available. Update the game to keep playing.,,,,0,false,
+err.client_too_old.title,Update required,,,,32,false,
+err.content_corrupt.body,The game data is damaged. Reinstall the game or contact support.,,,,0,false,
+err.content_corrupt.title,Game data damaged,,,,32,false,
+err.content_too_old.body,New game data is available. Restart the game to download it.,,,,0,false,
+err.content_too_old.title,Update needed,,,,32,false,
+err.dungeon_seed_cap.body,You've started too many dungeon runs. Try again later.,,,,0,false,
+err.dungeon_seed_cap.title,Try again later,,,,32,false,
+err.export_rate_limited.body,You've requested your data recently. Try again later.,,,,0,false,
+err.export_rate_limited.title,Try again later,,,,32,false,
+err.iap_pending.body,Your purchase is waiting for approval. It will arrive when it is approved.,,,,0,false,
+err.iap_pending.title,Purchase pending,,,,32,false,
+err.insufficient_funds.body,You don't have enough diamonds for this.,,,,0,false,
+err.insufficient_funds.title,Not enough diamonds,,,,32,false,
+err.maintenance.body,The game is under maintenance. Please come back soon.,,,,0,false,
+err.maintenance.title,Maintenance,,,,32,false,
+err.net_offline.body,Check your connection. Your progress is saved on this device.,,,,0,false,
+err.net_offline.title,You're offline,,,,32,false,
+err.net_timeout.body,The server took too long to answer. Try again.,,,,0,false,
+err.net_timeout.title,Connection timed out,,,,32,false,
+err.provider_already_linked.body,That account is already linked to another player.,,,,0,false,
+err.provider_already_linked.title,Account already linked,,,,32,false,
+err.receipt_invalid.body,We couldn't verify this purchase. Contact support if you were charged.,,,,0,false,
+err.receipt_invalid.title,Purchase failed,,,,32,false,
+err.request_rejected.body,The server couldn't complete this request.,,,,0,false,
+err.request_rejected.title,Couldn't do that,,,,32,false,
+err.save_conflict.body,This device and the cloud have different progress. Pick the save to keep.,,,,0,false,
+err.save_conflict.title,Choose a save,,,,32,false,
+err.save_corrupt.body,Your save on this device can't be read. Restore it from the cloud or start over.,,,,0,false,
+err.save_corrupt.title,Save can't be read,,,,32,false,
+err.save_rolled_back.body,Your progress was restored to an earlier point.,,,,0,false,
+err.save_rolled_back.title,Progress restored,,,,32,false,
+err.save_too_new.body,Your save is from a newer version. Update the game to keep playing.,,,,0,false,
+err.save_too_new.title,Update required,,,,32,false,
+err.sku_not_available.body,This offer is not available right now.,,,,0,false,
+err.sku_not_available.title,Not available,,,,32,false,
+err.srv_5xx.body,The server had a problem. Try again.,,,,0,false,
+err.srv_5xx.title,Something went wrong,,,,32,false,
+err.srv_unexpected.body,Something unexpected happened. Try again.,,,,0,false,
+err.srv_unexpected.title,Something went wrong,,,,32,false,
+err.summon_disabled.body,Summons are paused for a moment. Try again later.,,,,0,false,
+err.summon_disabled.title,Summons paused,,,,32,false,
+feature.dungeons.locked,Unlocks at stage 30,,,,32,false,
+feature.quests.locked,Unlocks at stage 10,,,,32,false,
+feature.research.locked,Unlocks at Awakening 1,,,,32,false,
+fish.01.name,Fish 1,,,,24,false,
+fish.02.name,Fish 2,,,,24,false,
+fish.03.name,Fish 3,,,,24,false,
+fish.04.name,Fish 4,,,,24,false,
+fish.05.name,Fish 5,,,,24,false,
+fish.06.name,Fish 6,,,,24,false,
+fish.07.name,Fish 7,,,,24,false,
+fish.08.name,Fish 8,,,,24,false,
+fish.09.name,Fish 9,,,,24,false,
+fish.10.name,Fish 10,,,,24,false,
+fish.11.name,Fish 11,,,,24,false,
+fish.12.name,Fish 12,,,,24,false,
+fish.13.name,Fish 13,,,,24,false,
+fish.14.name,Fish 14,,,,24,false,
+fish.15.name,Fish 15,,,,24,false,
+fish.16.name,Fish 16,,,,24,false,
+fish.17.name,Fish 17,,,,24,false,
+fish.18.name,Fish 18,,,,24,false,
+fish.19.name,Fish 19,,,,24,false,
+fish.20.name,Fish 20,,,,24,false,
+notice.save_corrupt_all.body,"Your save could not be read, so a new game was started. Contact support with id {supportId} to recover it.",,,,0,false,
+notice.save_corrupt_all.title,A new game was started,,,,32,false,
+rarity.common.name,Common,,,,24,false,
+rarity.epic.name,Epic,,,,24,false,
+rarity.legendary.name,Legendary,,,,24,false,
+rarity.mythic.name,Mythic,,,,24,false,
+rarity.rare.name,Rare,,,,24,false,
+reject.already_claimed,Already claimed,,,,48,false,
+reject.already_equipped,Already equipped,,,,48,false,
+reject.bad_argument,Invalid request,,,,48,false,
+reject.bad_cell,Invalid cell,,,,48,false,
+reject.bad_server_time,Clock error,,,,48,false,
+reject.bad_slot,Invalid slot,,,,48,false,
+reject.banner_closed,This summon is closed,,,,48,false,
+reject.board_full,The board is full,,,,48,false,
+reject.board_locked,The board is locked during a dungeon,,,,48,false,
+reject.boss_already_pending,The boss is already waiting,,,,48,false,
+reject.cannot_afford,Can't afford that,,,,48,false,
+reject.capped,Already at max,,,,48,false,
+reject.cell_occupied,That cell is taken,,,,48,false,
+reject.cooldown,Not ready yet,,,,48,false,
+reject.empty_cell,No fish there,,,,48,false,
+reject.fish_at_level_cap,Already the highest level,,,,48,false,
+reject.invalid_count,Invalid amount,,,,48,false,
+reject.invalid_stat,Unknown stat,,,,48,false,
+reject.invalid_target,Invalid target,,,,48,false,
+reject.item_not_owned,You don't own this yet,,,,48,false,
+reject.level_mismatch,Fish must be the same level,,,,48,false,
+reject.locked,Locked,,,,48,false,
+reject.no_boss_to_attempt,No boss to fight here,,,,48,false,
+reject.no_pending_offline_reward,No reward to collect,,,,48,false,
+reject.not_available,Not available,,,,48,false,
+reject.not_enough_diamond,Not enough diamonds,,,,48,false,
+reject.not_enough_fish_coin,Not enough Fish Coins,,,,48,false,
+reject.not_enough_gold,Not enough gold,,,,48,false,
+reject.not_enough_guild_coin,Not enough Guild Coins,,,,48,false,
+reject.not_enough_hero_exp,Not enough EXP,,,,48,false,
+reject.not_enough_rock_candy,Not enough Rock Candy,,,,48,false,
+reject.not_enough_ticket_exp,Not enough EXP tickets,,,,48,false,
+reject.not_enough_ticket_fish_coin,Not enough Fish Coin tickets,,,,48,false,
+reject.not_enough_ticket_rock_candy,Not enough Rock Candy tickets,,,,48,false,
+reject.not_enough_ticket_summon_companion,Not enough companion summon tickets,,,,48,false,
+reject.not_enough_ticket_summon_rune,Not enough rune summon tickets,,,,48,false,
+reject.not_enough_ticket_summon_skill,Not enough skill summon tickets,,,,48,false,
+reject.not_enough_ticket_summon_weapon,Not enough weapon summon tickets,,,,48,false,
+reject.not_implemented,Coming soon,,,,48,false,
+reject.not_owned,You don't own this,,,,48,false,
+reject.rate_limited,"Too fast, try again",,,,48,false,
+reject.skill_in_other_slot,Equipped in another slot,,,,48,false,
+reject.slot_empty,That slot is empty,,,,48,false,
+reject.slot_occupied,That slot is taken,,,,48,false,
+reject.stale_request,Request expired,,,,48,false,
+reject.stat_at_cap,Already at max level,,,,48,false,
+reject.stat_not_trainable,This stat can't be trained,,,,48,false,
+reject.summon_already_applied,Already summoned,,,,48,false,
+reject.summon_bad_count,Invalid summon amount,,,,48,false,
+reject.summon_bad_payload,Summon failed,,,,48,false,
+reject.summon_bad_payment,Can't pay that way,,,,48,false,
+reject.summon_stream_mismatch,Summon failed,,,,48,false,
+reject.tank_empty,The tank is empty,,,,48,false,
+reject.unknown_item,Unknown item,,,,48,false,
+scr.boot.caption,v{0} · content {1} · build {2},,,,60,false,07 M0 screens
+scr.boot.title,Whisker Hero,,,,28,false,07 M0 screens
+scr.collection.chip_companions,Companions,,,,18,false,07 M0 screens
+scr.collection.chip_skills,Skills,,,,18,false,07 M0 screens
+scr.collection.chip_weapons,Weapons,,,,18,false,07 M0 screens
+scr.collection.equip,Equip,,,,18,false,07 M0 screens
+scr.collection.equipped,Equipped,,,,18,false,07 M0 screens
+scr.collection.filter_all,All,,,,18,false,07 M0 screens
+scr.collection.filter_owned,Owned,,,,18,false,07 M0 screens
+scr.collection.level_copies,Lv {0} ({1}/{2}),,,,28,false,07 M0 screens
+scr.collection.level_max,Lv {0} (max),,,,28,false,07 M0 screens
+scr.collection.new_count,({0} new),,,,18,false,07 M0 screens
+scr.collection.not_owned,Not owned,,,,18,false,07 M0 screens
+scr.collection.nothing_equipped,Nothing equipped,,,,28,false,07 M0 screens
+scr.collection.sort_level,Sort: Level,,,,18,false,07 M0 screens
+scr.collection.sort_newest,Sort: Newest,,,,18,false,07 M0 screens
+scr.collection.sort_owned,Sort: Owned,,,,18,false,07 M0 screens
+scr.collection.sort_rarity,Sort: Rarity,,,,18,false,07 M0 screens
+scr.common.back,Back,,,,18,false,07 M0 screens
+scr.common.close,Close,,,,18,false,07 M0 screens
+scr.common.coming_soon,Coming soon,,,,48,false,07 M0 screens
+scr.common.need_more,Need {0} more,,,,18,false,07 M0 screens
+scr.confirm.cancel,Cancel,,,,18,false,07 M0 screens
+scr.confirm.cost,"{0}: {1}, balance after {2}",,,,60,false,07 M0 screens
+scr.confirm.exit_body,Press back again to quit.,,,,160,false,07 M0 screens
+scr.confirm.exit_title,Exit Whisker Hero?,,,,28,false,07 M0 screens
+scr.confirm.ok,Confirm,,,,18,false,07 M0 screens
+scr.confirm.reset_body,This deletes your progress on this device.,,,,160,false,07 M0 screens
+scr.confirm.reset_title,Reset profile?,,,,28,false,07 M0 screens
+scr.error.code_line,{0} · support id {1},,,,80,false,07 M0 screens
+scr.error.contact_support,Contact support,,,,18,false,07 M0 screens
+scr.error.dismiss,Later,,,,18,false,07 M0 screens
+scr.error.reset_profile,Reset profile,,,,18,false,07 M0 screens
+scr.error.restore_cloud,Restore from cloud,,,,18,false,07 M0 screens
+scr.error.retry,Retry,,,,18,false,07 M0 screens
+scr.error.update_app,Update,,,,18,false,07 M0 screens
+scr.hero.buy_levels,Buy {0} levels for {1},,,,28,false,07 M0 screens
+scr.hero.level,Lv {0},,,,18,false,07 M0 screens
+scr.hero.loadout,Loadout,,,,28,false,07 M0 screens
+scr.hero.max,MAX,,,,18,false,07 M0 screens
+scr.hero.plus,+,,,,18,false,07 M0 screens
+scr.hero.step_max,Max,,,,18,false,07 M0 screens
+scr.hero.step_n,x{0},,,,18,false,07 M0 screens
+scr.hero.title,Hero,,,,28,false,07 M0 screens
+scr.hero.training,Training,,,,28,false,07 M0 screens
+scr.item_detail.at_max,Max level,,,,28,false,07 M0 screens
+scr.item_detail.compare,Equipped weapon: ATK {0},,,,60,false,07 M0 screens
+scr.item_detail.compare_button,Compare,,,,18,false,07 M0 screens
+scr.item_detail.kind_companion,Companion,,,,18,false,07 M0 screens
+scr.item_detail.kind_rune,Rune,,,,18,false,07 M0 screens
+scr.item_detail.kind_skill,Skill,,,,18,false,07 M0 screens
+scr.item_detail.kind_weapon,Weapon,,,,18,false,07 M0 screens
+scr.item_detail.level,Level {0}   {1} / {2} copies,,,,60,false,07 M0 screens
+scr.item_detail.new,NEW,,,,18,false,07 M0 screens
+scr.item_detail.next,Next level: {0},,,,60,false,07 M0 screens
+scr.item_detail.passive,Collection passive {0},,,,60,false,07 M0 screens
+scr.item_detail.source,Source: {0} ({1} {2}),,,,60,false,07 M0 screens
+scr.item_detail.weapon_atk,Equipped ATK {0},,,,60,false,07 M0 screens
+scr.main.boss_clearable,Boss: clearable,,,,18,false,07 M0 screens
+scr.main.boss_need,Boss: need ~{0}x,,,,18,false,07 M0 screens
+scr.main.dps,DPS {0},,,,18,false,07 M0 screens
+scr.main.fish_board_full,Board full,,,,18,false,07 M0 screens
+scr.main.fish_board_locked,Board locked,,,,18,false,07 M0 screens
+scr.main.fish_discard,Release back to sea (+{0} coins),,,,40,false,07 M0 screens
+scr.main.fish_discovered,New fish! Level {0} (+{1}),,,,48,false,07 M0 screens
+scr.main.fish_info_body,Missile {0} of a hit · board DPS {1},,,,160,false,07 M0 screens
+scr.main.fish_level,Fish level {0},,,,28,false,07 M0 screens
+scr.main.fish_max_level,Max level: raise the cap in Research,,,,48,false,07 M0 screens
+scr.main.fish_merge_all,Merge all,,,,18,false,07 M0 screens
+scr.main.fish_nothing_to_merge,Nothing to merge,,,,18,false,07 M0 screens
+scr.main.fish_release,Release,,,,18,false,07 M0 screens
+scr.main.fish_release_max,Release max,,,,18,false,07 M0 screens
+scr.main.fish_tank,Magic Tank,,,,18,false,07 M0 screens
+scr.main.fish_tank_empty,Tank empty,,,,18,false,07 M0 screens
+scr.main.kills,kills {0}/{1},,,,18,false,07 M0 screens
+scr.main.stage,Stage {0} · Ch.{1},,,,28,false,07 M0 screens
+scr.main.stage_farming,Farming {0} · frontier {1},,,,28,false,07 M0 screens
+scr.main.tab_collection,Collection,,,,10,false,07 M0 screens
+scr.main.tab_dungeons,Dungeons,,,,10,false,07 M0 screens
+scr.main.tab_hero,Hero,,,,10,false,07 M0 screens
+scr.main.tab_quests,Quests,,,,10,false,07 M0 screens
+scr.main.tab_shop,Shop,,,,10,false,07 M0 screens
+scr.main.tab_summon,Summon,,,,10,false,07 M0 screens
+scr.main.tap_hint,Tap the monster!,,,,48,false,07 M0 screens
+scr.main.toast_boss_failed,Boss escaped: need ~{0}x DPS,,,,48,false,07 M0 screens
+scr.main.toast_first_clear,First clear: +{0} diamonds,,,,48,false,07 M0 screens
+scr.main.toast_login,+{0} diamonds: daily login,,,,48,false,07 M0 screens
+scr.main.toast_new_day,A new day!,,,,48,false,07 M0 screens
+scr.main.toast_save_failed,Could not save. We will try again.,,,,48,false,07 M0 screens
+scr.main.toast_stage_cap,You reached the last stage!,,,,48,false,07 M0 screens
+scr.main.wall,WALL,,,,18,false,07 M0 screens
+scr.offline_reward.away,Away for {0},,,,28,false,07 M0 screens
+scr.offline_reward.claim,Claim,,,,18,false,07 M0 screens
+scr.offline_reward.rewards,Rewards for {0},,,,40,false,07 M0 screens
+scr.offline_reward.rewards_capped,Rewards for {0} (capped at {1}),,,,48,false,07 M0 screens
+scr.offline_reward.stage,Farmed stage {0} at {1}/s,,,,40,false,07 M0 screens
+scr.offline_reward.tank,Magic Tank refilled (+{0} fish),,,,40,false,07 M0 screens
+scr.offline_reward.title,Welcome back!,,,,28,false,07 M0 screens
+scr.skills.auto_equip,Auto-equip,,,,18,false,07 M0 screens
+scr.skills.cast_buff,buff,,,,10,false,07 M0 screens
+scr.skills.cast_dot,damage over time,,,,18,false,07 M0 screens
+scr.skills.cast_instant,instant,,,,10,false,07 M0 screens
+scr.skills.slots,Slots (auto-cast in order),,,,28,false,07 M0 screens
+scr.skills.stats,DPS {0} · CD {1} · {2},,,,48,false,07 M0 screens
+scr.skills.title,Skills,,,,28,false,07 M0 screens
+scr.summon.banner_level,Banner Lv {0},,,,18,false,07 M0 screens
+scr.summon.guarantee,{0}x: at least one {1} guaranteed,,,,60,false,07 M0 screens
+scr.summon.pity,Pity {0} / {1},,,,18,false,07 M0 screens
+scr.summon.pull,Summon x{0}  {1},,,,18,false,07 M0 screens
+scr.summon.rates,View rates,,,,18,false,07 M0 screens
+scr.summon.soft_pity,soft pity from pull {0},,,,28,false,07 M0 screens
+scr.summon.ticket,Use ticket x1 ({0}),,,,18,false,07 M0 screens
+scr.summon.title,Summon,,,,28,false,07 M0 screens
+scr.summon.toast_banner_level,Banner level {0}: rates improved,,,,48,false,07 M0 screens
+scr.summon_result.again,Summon x{0} again  {1},,,,28,false,07 M0 screens
+scr.summon_result.copy,+1 copy ({0}/{1}),,,,18,false,07 M0 screens
+scr.summon_result.level_up,Lv {0} -> {1},,,,18,false,07 M0 screens
+scr.summon_result.new,NEW,,,,18,false,07 M0 screens
+scr.summon_result.skip,Skip,,,,18,false,07 M0 screens
+scr.summon_result.summary,{0} Epic+ · {1} Rare · {2} Common,,,,48,false,07 M0 screens
+scr.weapons.passive,Collection passive: {0} ATK ({1}/{2} owned),,,,60,false,07 M0 screens
+scr.weapons.stats,ATK {0} · passive {1},,,,48,false,07 M0 screens
+scr.weapons.title,Weapons,,,,28,false,07 M0 screens
+skill.c_01.desc,A common instant skill.,,,,0,false,
+skill.c_01.name,Common Skill 1,,,,24,false,
+skill.c_02.desc,A common instant skill.,,,,0,false,
+skill.c_02.name,Common Skill 2,,,,24,false,
+skill.c_03.desc,A common instant skill.,,,,0,false,
+skill.c_03.name,Common Skill 3,,,,24,false,
+skill.c_04.desc,A common instant skill.,,,,0,false,
+skill.c_04.name,Common Skill 4,,,,24,false,
+skill.c_05.desc,A common instant skill.,,,,0,false,
+skill.c_05.name,Common Skill 5,,,,24,false,
+skill.c_06.desc,A common instant skill.,,,,0,false,
+skill.c_06.name,Common Skill 6,,,,24,false,
+skill.c_07.desc,A common instant skill.,,,,0,false,
+skill.c_07.name,Common Skill 7,,,,24,false,
+skill.c_08.desc,A common instant skill.,,,,0,false,
+skill.c_08.name,Common Skill 8,,,,24,false,
+skill.c_09.desc,A common dot skill.,,,,0,false,
+skill.c_09.name,Common Skill 9,,,,24,false,
+skill.c_10.desc,A common dot skill.,,,,0,false,
+skill.c_10.name,Common Skill 10,,,,24,false,
+skill.c_11.desc,A common dot skill.,,,,0,false,
+skill.c_11.name,Common Skill 11,,,,24,false,
+skill.c_12.desc,A common dot skill.,,,,0,false,
+skill.c_12.name,Common Skill 12,,,,24,false,
+skill.c_13.desc,A common buff skill.,,,,0,false,
+skill.c_13.name,Common Skill 13,,,,24,false,
+skill.c_14.desc,A common buff skill.,,,,0,false,
+skill.c_14.name,Common Skill 14,,,,24,false,
+skill.e_01.desc,A epic instant skill.,,,,0,false,
+skill.e_01.name,Epic Skill 1,,,,24,false,
+skill.e_02.desc,A epic instant skill.,,,,0,false,
+skill.e_02.name,Epic Skill 2,,,,24,false,
+skill.e_03.desc,A epic instant skill.,,,,0,false,
+skill.e_03.name,Epic Skill 3,,,,24,false,
+skill.e_04.desc,A epic instant skill.,,,,0,false,
+skill.e_04.name,Epic Skill 4,,,,24,false,
+skill.e_05.desc,A epic instant skill.,,,,0,false,
+skill.e_05.name,Epic Skill 5,,,,24,false,
+skill.e_06.desc,A epic dot skill.,,,,0,false,
+skill.e_06.name,Epic Skill 6,,,,24,false,
+skill.e_07.desc,A epic dot skill.,,,,0,false,
+skill.e_07.name,Epic Skill 7,,,,24,false,
+skill.e_08.desc,A epic buff skill.,,,,0,false,
+skill.e_08.name,Epic Skill 8,,,,24,false,
+skill.l_01.desc,A legendary instant skill.,,,,0,false,
+skill.l_01.name,Legendary Skill 1,,,,24,false,
+skill.l_02.desc,A legendary instant skill.,,,,0,false,
+skill.l_02.name,Legendary Skill 2,,,,24,false,
+skill.l_03.desc,A legendary instant skill.,,,,0,false,
+skill.l_03.name,Legendary Skill 3,,,,24,false,
+skill.l_04.desc,A legendary dot skill.,,,,0,false,
+skill.l_04.name,Legendary Skill 4,,,,24,false,
+skill.l_05.desc,A legendary buff skill.,,,,0,false,
+skill.l_05.name,Legendary Skill 5,,,,24,false,
+skill.m_01.desc,A mythic instant skill.,,,,0,false,
+skill.m_01.name,Mythic Skill 1,,,,24,false,
+skill.m_02.desc,A mythic buff skill.,,,,0,false,
+skill.m_02.name,Mythic Skill 2,,,,24,false,
+skill.r_01.desc,A rare instant skill.,,,,0,false,
+skill.r_01.name,Rare Skill 1,,,,24,false,
+skill.r_02.desc,A rare instant skill.,,,,0,false,
+skill.r_02.name,Rare Skill 2,,,,24,false,
+skill.r_03.desc,A rare instant skill.,,,,0,false,
+skill.r_03.name,Rare Skill 3,,,,24,false,
+skill.r_04.desc,A rare instant skill.,,,,0,false,
+skill.r_04.name,Rare Skill 4,,,,24,false,
+skill.r_05.desc,A rare instant skill.,,,,0,false,
+skill.r_05.name,Rare Skill 5,,,,24,false,
+skill.r_06.desc,A rare instant skill.,,,,0,false,
+skill.r_06.name,Rare Skill 6,,,,24,false,
+skill.r_07.desc,A rare instant skill.,,,,0,false,
+skill.r_07.name,Rare Skill 7,,,,24,false,
+skill.r_08.desc,A rare dot skill.,,,,0,false,
+skill.r_08.name,Rare Skill 8,,,,24,false,
+skill.r_09.desc,A rare dot skill.,,,,0,false,
+skill.r_09.name,Rare Skill 9,,,,24,false,
+skill.r_10.desc,A rare dot skill.,,,,0,false,
+skill.r_10.name,Rare Skill 10,,,,24,false,
+skill.r_11.desc,A rare buff skill.,,,,0,false,
+skill.r_11.name,Rare Skill 11,,,,24,false,
+stat.atk.desc,Raises Attack.,,,,0,false,
+stat.atk.name,Attack,,,,24,false,
+stat.atk_spd.desc,Raises Attack Speed.,,,,0,false,
+stat.atk_spd.name,Attack Speed,,,,24,false,
+stat.crit_dmg.desc,Raises Crit Damage.,,,,0,false,
+stat.crit_dmg.name,Crit Damage,,,,24,false,
+stat.crit_rate.desc,Raises Crit Rate.,,,,0,false,
+stat.crit_rate.name,Crit Rate,,,,24,false,
+stat.def.desc,Raises Defense.,,,,0,false,
+stat.def.name,Defense,,,,24,false,
+stat.exp_gain.desc,Raises EXP Gain.,,,,0,false,
+stat.exp_gain.name,EXP Gain,,,,24,false,
+stat.gold_gain.desc,Raises Gold Gain.,,,,0,false,
+stat.gold_gain.name,Gold Gain,,,,24,false,
+stat.hp.desc,Raises Health.,,,,0,false,
+stat.hp.name,Health,,,,24,false,
+tut.1.tap,Tap the monster!,,,,48,false,
+tut.10.skip,Tap to skip.,,,,48,false,
+tut.11.equip,Equip your best weapon.,,,,48,false,
+tut.12.boss,A boss! Merge fish to fire missiles,,,,48,false,
+tut.2.gold,Monsters drop gold.,,,,48,false,
+tut.3.hero,Make your cat stronger,,,,48,false,
+tut.4.train,Train Attack.,,,,48,false,
+tut.5.back,Back to the fight.,,,,48,false,
+tut.6.release,Release a fish,,,,48,false,
+tut.7.merge,Drag one onto the other,,,,48,false,
+tut.8.summon,Summon weapons here.,,,,48,false,
+tut.9.pull,Summon 10 weapons,,,,48,false,
+weapon.c_01.desc,A common weapon.,,,,0,false,
+weapon.c_01.name,Common Weapon 1,,,,24,false,
+weapon.c_02.desc,A common weapon.,,,,0,false,
+weapon.c_02.name,Common Weapon 2,,,,24,false,
+weapon.c_03.desc,A common weapon.,,,,0,false,
+weapon.c_03.name,Common Weapon 3,,,,24,false,
+weapon.c_04.desc,A common weapon.,,,,0,false,
+weapon.c_04.name,Common Weapon 4,,,,24,false,
+weapon.c_05.desc,A common weapon.,,,,0,false,
+weapon.c_05.name,Common Weapon 5,,,,24,false,
+weapon.c_06.desc,A common weapon.,,,,0,false,
+weapon.c_06.name,Common Weapon 6,,,,24,false,
+weapon.c_07.desc,A common weapon.,,,,0,false,
+weapon.c_07.name,Common Weapon 7,,,,24,false,
+weapon.c_08.desc,A common weapon.,,,,0,false,
+weapon.c_08.name,Common Weapon 8,,,,24,false,
+weapon.c_09.desc,A common weapon.,,,,0,false,
+weapon.c_09.name,Common Weapon 9,,,,24,false,
+weapon.c_10.desc,A common weapon.,,,,0,false,
+weapon.c_10.name,Common Weapon 10,,,,24,false,
+weapon.e_01.desc,A epic weapon.,,,,0,false,
+weapon.e_01.name,Epic Weapon 1,,,,24,false,
+weapon.e_02.desc,A epic weapon.,,,,0,false,
+weapon.e_02.name,Epic Weapon 2,,,,24,false,
+weapon.e_03.desc,A epic weapon.,,,,0,false,
+weapon.e_03.name,Epic Weapon 3,,,,24,false,
+weapon.e_04.desc,A epic weapon.,,,,0,false,
+weapon.e_04.name,Epic Weapon 4,,,,24,false,
+weapon.e_05.desc,A epic weapon.,,,,0,false,
+weapon.e_05.name,Epic Weapon 5,,,,24,false,
+weapon.e_06.desc,A epic weapon.,,,,0,false,
+weapon.e_06.name,Epic Weapon 6,,,,24,false,
+weapon.l_01.desc,A legendary weapon.,,,,0,false,
+weapon.l_01.name,Legendary Weapon 1,,,,24,false,
+weapon.l_02.desc,A legendary weapon.,,,,0,false,
+weapon.l_02.name,Legendary Weapon 2,,,,24,false,
+weapon.l_03.desc,A legendary weapon.,,,,0,false,
+weapon.l_03.name,Legendary Weapon 3,,,,24,false,
+weapon.l_04.desc,A legendary weapon.,,,,0,false,
+weapon.l_04.name,Legendary Weapon 4,,,,24,false,
+weapon.m_01.desc,A mythic weapon.,,,,0,false,
+weapon.m_01.name,Mythic Weapon 1,,,,24,false,
+weapon.m_02.desc,A mythic weapon.,,,,0,false,
+weapon.m_02.name,Mythic Weapon 2,,,,24,false,
+weapon.r_01.desc,A rare weapon.,,,,0,false,
+weapon.r_01.name,Rare Weapon 1,,,,24,false,
+weapon.r_02.desc,A rare weapon.,,,,0,false,
+weapon.r_02.name,Rare Weapon 2,,,,24,false,
+weapon.r_03.desc,A rare weapon.,,,,0,false,
+weapon.r_03.name,Rare Weapon 3,,,,24,false,
+weapon.r_04.desc,A rare weapon.,,,,0,false,
+weapon.r_04.name,Rare Weapon 4,,,,24,false,
+weapon.r_05.desc,A rare weapon.,,,,0,false,
+weapon.r_05.name,Rare Weapon 5,,,,24,false,
+weapon.r_06.desc,A rare weapon.,,,,0,false,
+weapon.r_06.name,Rare Weapon 6,,,,24,false,
+weapon.r_07.desc,A rare weapon.,,,,0,false,
+weapon.r_07.name,Rare Weapon 7,,,,24,false,
+weapon.r_08.desc,A rare weapon.,,,,0,false,
+weapon.r_08.name,Rare Weapon 8,,,,24,false,

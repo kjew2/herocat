@@ -1,0 +1,1 @@
+CONTENT E038 fish_levels: fish_levels has 20 rows but FISH_MAX_LVL0 + research cap needs 25

@@ -1,0 +1,9 @@
+{
+  "append": [
+    [
+      "constants",
+      "UNKNOWN_THING,int,1,I"
+    ]
+  ],
+  "csharp": true
+}

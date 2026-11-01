@@ -1,0 +1,1 @@
+CONTENT E065 achievements[ach_weapons_01].target: OWN_WEAPONS target 5 must be below the pool size 5 (pillar 4)

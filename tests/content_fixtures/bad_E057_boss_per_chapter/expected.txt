@@ -1,0 +1,1 @@
+CONTENT E057 bosses: chapter 'ch_02' has 0 bosses, expected exactly 1

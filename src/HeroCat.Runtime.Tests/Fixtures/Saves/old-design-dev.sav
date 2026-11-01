@@ -1,0 +1,135 @@
+HEROCAT-SAVE fmt=json crc32=f880212f len=2771
+{
+  "SchemaVersion": 1,
+  "Meta": {
+    "LastSavedAtServerSec": 1767225660,
+    "SaveSequence": 3,
+    "DeviceInstallId": "00000000-0000-0000-0000-000000000000",
+    "DebugTainted": false
+  },
+  "State": {
+    "SchemaVersion": 1,
+    "ContentVersion": "1.0",
+    "ProfileId": "01d5a7e0-0000-4000-8000-000000000001",
+    "CreatedAtServerSec": 1767225600,
+    "Tick": 600,
+    "Clock": {
+      "LastSyncServerMs": 1767225600000,
+      "TickAtLastSync": 0
+    },
+    "Daily": {
+      "DayKey": 20454,
+      "Progress": [
+        1,
+        24,
+        0,
+        0
+      ],
+      "Rewarded": [
+        true,
+        false,
+        false,
+        false
+      ]
+    },
+    "Currencies": {
+      "Gold": 52.310999999999986,
+      "Gems": 1050,
+      "FreePullsDaily": 3,
+      "FreePullsBanked": 10,
+      "Shards": 0,
+      "EnhMaterials": 0,
+      "DungeonTickets": 0
+    },
+    "Progression": {
+      "StatLevel": 0,
+      "ClassAdvances": 0,
+      "HighestFirstClearBossStage": 0,
+      "ChestTimerStart": 1767225600,
+      "TutorialGranted": true
+    },
+    "Stage": {
+      "Stage": 3,
+      "KillsInStage": 4,
+      "Boss": "None",
+      "BossFailsOnStage": 0
+    },
+    "Combat": {
+      "Phase": "Spawning",
+      "SpawnTimer": 5,
+      "AttackTimer": 10,
+      "BossTimer": 0,
+      "EnemyIsBoss": false,
+      "EnemyHp": 0.0,
+      "EnemyMaxHp": 24.500860000000003
+    },
+    "Gear": {
+      "Slots": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ]
+    },
+    "Heroes": {
+      "Copies": {},
+      "Equipped": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "AutoEquipBest": true
+    },
+    "HeroBanner": {
+      "PityCounter": 0,
+      "TotalPulls": 0
+    },
+    "Rng": {
+      "ProfileSeed": "71b640276c1d761b",
+      "Streams": {
+        "combat": {
+          "Name": "combat",
+          "Seed": "066141ae5a573564",
+          "Counter": 0
+        },
+        "gear_drop": {
+          "Name": "gear_drop",
+          "Seed": "fd20abcaf97222c8",
+          "Counter": 24
+        },
+        "gear_rarity": {
+          "Name": "gear_rarity",
+          "Seed": "365d889b86013e00",
+          "Counter": 0
+        },
+        "enhance": {
+          "Name": "enhance",
+          "Seed": "3fb32472dd03e7bd",
+          "Counter": 0
+        },
+        "gacha_hero": {
+          "Name": "gacha_hero",
+          "Seed": "ab2acb7fd77a3459",
+          "Counter": 0
+        }
+      }
+    },
+    "Lifetime": {
+      "Kills": 24,
+      "BossKills": 0,
+      "BossFails": 0,
+      "GearDrops": 0,
+      "EnhanceAttempts": 0,
+      "EnhanceSuccesses": 0,
+      "GoldEarned": 52.310999999999986,
+      "OfflineGoldEarned": 0.0,
+      "GemsEarned": 1050,
+      "FirstWallStage": 0
+    }
+  }
+}

@@ -3,6 +3,9 @@
     "rootNamespace": "HeroCat.Client.Editor",
     "references": [
         "HeroCat.Sim",
+        "HeroCat.Runtime",
+        "HeroCat.Client",
+        "HeroCat.Client.Core",
         "Unity.RenderPipelines.Core.Runtime",
         "Unity.RenderPipelines.Universal.Runtime",
         "Unity.RenderPipelines.Universal.2D.Runtime"

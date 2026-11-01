@@ -1,0 +1,267 @@
+{
+  "table": "constants",
+  "rows": [
+    {
+      "key": "TICK_HZ",
+      "type": "int",
+      "value": 10,
+      "kind": "I"
+    },
+    {
+      "key": "BASE_ATK",
+      "type": "double",
+      "value": 10.0,
+      "kind": "I"
+    },
+    {
+      "key": "BASE_HP",
+      "type": "double",
+      "value": 100.0,
+      "kind": "S"
+    },
+    {
+      "key": "ATTACK_INTERVAL_TICKS",
+      "type": "int",
+      "value": 10,
+      "kind": "I"
+    },
+    {
+      "key": "KILLS_PER_STAGE",
+      "type": "int",
+      "value": 10,
+      "kind": "I"
+    },
+    {
+      "key": "SPAWN_DELAY_TICKS",
+      "type": "int",
+      "value": 5,
+      "kind": "I"
+    },
+    {
+      "key": "BOSS_EVERY",
+      "type": "int",
+      "value": 10,
+      "kind": "I"
+    },
+    {
+      "key": "BOSS_HP_MULT",
+      "type": "double",
+      "value": 10.0,
+      "kind": "I"
+    },
+    {
+      "key": "BOSS_TIME_TICKS",
+      "type": "int",
+      "value": 300,
+      "kind": "S"
+    },
+    {
+      "key": "BOSS_GOLD_MULT",
+      "type": "double",
+      "value": 3.0,
+      "kind": "I"
+    },
+    {
+      "key": "CHAPTER_WIDTH",
+      "type": "int",
+      "value": 50,
+      "kind": "S"
+    },
+    {
+      "key": "STAGE_CAP",
+      "type": "int",
+      "value": 9000,
+      "kind": "I"
+    },
+    {
+      "key": "TAP_ZAP_DMG_PCT",
+      "type": "double",
+      "value": 0.5,
+      "kind": "S"
+    },
+    {
+      "key": "TAP_ZAP_MAX_PER_SEC",
+      "type": "int",
+      "value": 6,
+      "kind": "S"
+    },
+    {
+      "key": "TRAIN_BULK_STEPS",
+      "type": "intlist",
+      "value": [
+        1,
+        10,
+        100
+      ],
+      "kind": "I"
+    },
+    {
+      "key": "DIAMONDS_PER_DAY_F2P",
+      "type": "int",
+      "value": 400,
+      "kind": "S"
+    },
+    {
+      "key": "DAY_SECONDS",
+      "type": "int",
+      "value": 86400,
+      "kind": "I"
+    },
+    {
+      "key": "OFFLINE_RATE",
+      "type": "double",
+      "value": 0.5,
+      "kind": "I"
+    },
+    {
+      "key": "OFFLINE_CAP_H",
+      "type": "double",
+      "value": 24.0,
+      "kind": "S"
+    },
+    {
+      "key": "OFFLINE_MIN_S",
+      "type": "int",
+      "value": 60,
+      "kind": "S"
+    },
+    {
+      "key": "SKILL_SLOTS",
+      "type": "int",
+      "value": 6,
+      "kind": "I"
+    },
+    {
+      "key": "COMPANION_SLOTS",
+      "type": "int",
+      "value": 4,
+      "kind": "S"
+    },
+    {
+      "key": "RUNE_SLOTS",
+      "type": "int",
+      "value": 6,
+      "kind": "S"
+    },
+    {
+      "key": "DUPE_LVL_BONUS",
+      "type": "double",
+      "value": 0.2,
+      "kind": "I"
+    },
+    {
+      "key": "FISH_BOARD_W",
+      "type": "int",
+      "value": 5,
+      "kind": "S"
+    },
+    {
+      "key": "FISH_BOARD_H",
+      "type": "int",
+      "value": 4,
+      "kind": "S"
+    },
+    {
+      "key": "FISH_MAX_LVL0",
+      "type": "int",
+      "value": 10,
+      "kind": "S"
+    },
+    {
+      "key": "FISH_MERGE_COINS_PCT",
+      "type": "double",
+      "value": 0.02,
+      "kind": "S"
+    },
+    {
+      "key": "FISH_BOARD_DPS_FACTOR",
+      "type": "double",
+      "value": 0.77,
+      "kind": "S"
+    },
+    {
+      "key": "FISH_DISCARD_COINS_PCT",
+      "type": "double",
+      "value": 0.1,
+      "kind": "S"
+    },
+    {
+      "key": "ATTACK_PROGRESS_UNIT",
+      "type": "int",
+      "value": 100,
+      "kind": "I"
+    },
+    {
+      "key": "CRIT_DMG_BASE",
+      "type": "double",
+      "value": 1.5,
+      "kind": "S"
+    },
+    {
+      "key": "MP_POOL0",
+      "type": "double",
+      "value": 100.0,
+      "kind": "S"
+    },
+    {
+      "key": "MP_REGEN0",
+      "type": "double",
+      "value": 2.0,
+      "kind": "S"
+    },
+    {
+      "key": "BOSS_ROCK_CANDY_P",
+      "type": "double",
+      "value": 0.5,
+      "kind": "S"
+    },
+    {
+      "key": "FIRST_CLEAR_DIAMONDS",
+      "type": "int",
+      "value": 10,
+      "kind": "I"
+    },
+    {
+      "key": "INBOX_EXPIRY_DAYS",
+      "type": "int",
+      "value": 30,
+      "kind": "S"
+    },
+    {
+      "key": "DAILY_GIFT_WEAPON_TICKETS",
+      "type": "int",
+      "value": 1,
+      "kind": "S"
+    },
+    {
+      "key": "LOGIN_DIAMONDS",
+      "type": "int",
+      "value": 50,
+      "kind": "I"
+    },
+    {
+      "key": "LIMIT_BREAK_RANKS",
+      "type": "int",
+      "value": 5,
+      "kind": "S"
+    },
+    {
+      "key": "REF_DAILIES_DONE",
+      "type": "int",
+      "value": 8,
+      "kind": "S"
+    },
+    {
+      "key": "REF_NEW_BOSSES",
+      "type": "int",
+      "value": 4,
+      "kind": "S"
+    },
+    {
+      "key": "CLOCK_BACKWARDS_TOLERANCE_S",
+      "type": "int",
+      "value": 5,
+      "kind": "S"
+    }
+  ]
+}

@@ -1,3 +1,6 @@
 key,value
-content_version,1.0
-source_revision,2026-10-30 poc placeholder content
+content_version,2026.11.01
+min_client_version,0.1.0
+source_revision,"2026-11-01 m0 skeleton, spec 00 seed values (agent)"
+ship_locales,en
+notes,M0 skeleton: values are spec 00 section 6 seeds; S values pending tools/power_curve_model.py and fish_model.py

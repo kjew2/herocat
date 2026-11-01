@@ -1,0 +1,18 @@
+{
+  "edits": [
+    [
+      "meta",
+      "content_version,2026.11.01",
+      "content_version,2026.11.02"
+    ],
+    [
+      "constants",
+      "BOSS_TIME_TICKS,int,300",
+      "BOSS_TIME_TICKS,int,310"
+    ]
+  ],
+  "previous": {},
+  "args": [
+    "--strict-warnings"
+  ]
+}

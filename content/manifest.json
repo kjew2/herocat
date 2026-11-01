@@ -1,0 +1,146 @@
+{
+  "schema_version": 1,
+  "content_version": "2026.11.01",
+  "min_client_version": "0.1.0",
+  "source_revision": "2026-11-01 m0 skeleton, spec 00 seed values (agent)",
+  "hot_apply": false,
+  "tables": {
+    "awakening": {
+      "file": "awakening.json",
+      "rows": 5,
+      "sha256": "1e5ec6c6eb3d52f5f07a9564045941ba35d0b49c1c800d7c270188e6920255be"
+    },
+    "awakening_targets": {
+      "file": "awakening_targets.json",
+      "rows": 5,
+      "sha256": "06246acd0dcc90b89964179d954ae63b7c3717ed5ac06f67e7b0bb0103505e9b"
+    },
+    "banner_levels": {
+      "file": "banner_levels.json",
+      "rows": 30,
+      "sha256": "7b39d7af528f00aadfe5c2c49cd154b3f39c83549eee89f943ef9cd76af61ad4"
+    },
+    "banners": {
+      "file": "banners.json",
+      "rows": 4,
+      "sha256": "baf7db65d02f94cbebb1d77c173f31bcb58307495252d7f5a1c5f265e2c5c29e"
+    },
+    "chapters": {
+      "file": "chapters.json",
+      "rows": 12,
+      "sha256": "7e7ecbe8ddf629c3f563f19dd4cb2b716fd525798cccc0f89050c00865453608"
+    },
+    "constants": {
+      "file": "constants.json",
+      "rows": 43,
+      "sha256": "32d0946697285b6e0c93bb1542ce69400e623bc9509e90c0acfca657e0dda830"
+    },
+    "curves": {
+      "file": "curves.json",
+      "rows": 3,
+      "sha256": "a1490fbffc02c3e973d6c62d7adea5712d100a31934a7851fc355da3be0c6600"
+    },
+    "dupe_levels": {
+      "file": "dupe_levels.json",
+      "rows": 10,
+      "sha256": "5096c7b5f7989ce6b432ee14c0a15945687f5e3f33170b807b322437ea82eedb"
+    },
+    "feature_unlocks": {
+      "file": "feature_unlocks.json",
+      "rows": 5,
+      "sha256": "e42c21a9d1be334fd73ede0678646abec03223bccb6b9ea7455cbb430cac0573"
+    },
+    "fish_levels": {
+      "file": "fish_levels.json",
+      "rows": 20,
+      "sha256": "b5ce7f4895cde9b0f1ec2fdbe3ce141217411e5af4c241944b40cdc6ad15283b"
+    },
+    "hero_levels": {
+      "file": "hero_levels.json",
+      "rows": 1,
+      "sha256": "1ddbec0594520c4a393a9d946734b36c5286562e80ac41072a3ebd0e4673b35b"
+    },
+    "progress_targets": {
+      "file": "progress_targets.json",
+      "rows": 5,
+      "sha256": "96c05f0a4376bcf4e6a035f9866bbcd197b3e2f97a1fdfa6fe0e5c92b451cd13"
+    },
+    "rarities": {
+      "file": "rarities.json",
+      "rows": 5,
+      "sha256": "7da59786cbad1e1ef75456d4650edfb888dac3da043f38a8609dbbe314dcf329"
+    },
+    "runes": {
+      "file": "runes.json",
+      "rows": 0,
+      "sha256": "3261e985463cf5bc04fc2980bab3ccc3559fc1aa0e9f270d9e1e80b76593b1b4"
+    },
+    "skills": {
+      "file": "skills.json",
+      "rows": 40,
+      "sha256": "ffb97ba073d1f756827e5b1fed7ce732a98d9b9216efc1bf22ac50765747355c"
+    },
+    "stats": {
+      "file": "stats.json",
+      "rows": 8,
+      "sha256": "f67339123609d047d64c63ead1f9ef1d53116359bcd4552a3b65bb89e8e3590a"
+    },
+    "tank": {
+      "file": "tank.json",
+      "rows": 1,
+      "sha256": "9087849f1f3728833a8eece4be6da8d1b2ecb75e38958f46e8874c91376ae793"
+    },
+    "training_curves": {
+      "file": "training_curves.json",
+      "rows": 6,
+      "sha256": "f5e62efb9603794d646a294cb5cc6f478417cc2b8f9cddd5089f9af5774b837b"
+    },
+    "tutorial_steps": {
+      "file": "tutorial_steps.json",
+      "rows": 12,
+      "sha256": "6bb0fdaf33df711614791b88e61119122b9ab41087fb648e3a8820413d6e3b16"
+    },
+    "weapons": {
+      "file": "weapons.json",
+      "rows": 30,
+      "sha256": "c8f30908990902df6e0252539e42256f789ac177b19f76fa6877583ae765e951"
+    }
+  },
+  "localization": {
+    "en": {
+      "file": "localization.en.json",
+      "rows": 448,
+      "sha256": "def6ffbef5427090ead335740f2955a409504fffbe02561fe0dafb02cb87c22e"
+    }
+  },
+  "content_hash": "7afd1a567f6da4bb97b1030297d538546a951da1f6da0fdb32c931c93def9a0b",
+  "s_constants": [
+    "BASE_HP",
+    "BOSS_ROCK_CANDY_P",
+    "BOSS_TIME_TICKS",
+    "CHAPTER_WIDTH",
+    "CLOCK_BACKWARDS_TOLERANCE_S",
+    "COMPANION_SLOTS",
+    "CRIT_DMG_BASE",
+    "DAILY_GIFT_WEAPON_TICKETS",
+    "DIAMONDS_PER_DAY_F2P",
+    "FISH_BOARD_DPS_FACTOR",
+    "FISH_BOARD_H",
+    "FISH_BOARD_W",
+    "FISH_DISCARD_COINS_PCT",
+    "FISH_MAX_LVL0",
+    "FISH_MERGE_COINS_PCT",
+    "INBOX_EXPIRY_DAYS",
+    "LIMIT_BREAK_RANKS",
+    "MP_POOL0",
+    "MP_REGEN0",
+    "OFFLINE_CAP_H",
+    "OFFLINE_MIN_S",
+    "REF_DAILIES_DONE",
+    "REF_NEW_BOSSES",
+    "RUNE_SLOTS",
+    "TAP_ZAP_DMG_PCT",
+    "TAP_ZAP_MAX_PER_SEC"
+  ],
+  "notes": "M0 skeleton: values are spec 00 section 6 seeds; S values pending tools/power_curve_model.py and fish_model.py"
+}

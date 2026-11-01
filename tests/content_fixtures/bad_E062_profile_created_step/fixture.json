@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "tutorial_steps",
+      "tut_welcome,1,PROFILE_CREATED",
+      "tut_welcome,1,PREVIOUS_DONE"
+    ]
+  ],
+  "csharp": true
+}

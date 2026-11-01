@@ -1,0 +1,1 @@
+CONTENT E040 constants: missing required constant 'LOGIN_DIAMONDS'

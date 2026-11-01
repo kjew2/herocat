@@ -1,0 +1,1 @@
+CONTENT E048 rarities[RARE].weapon_atk_pct: weapon_atk_pct must be non-decreasing in rarity; rarities[RARE] has 15.0 < previous 20.0

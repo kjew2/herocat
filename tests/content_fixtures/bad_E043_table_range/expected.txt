@@ -1,0 +1,1 @@
+CONTENT E043 curves[enemy_hp].growth: value 1.0 out of range (> 1)

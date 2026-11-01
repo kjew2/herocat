@@ -1,0 +1,23 @@
+{
+  "table": "curves",
+  "rows": [
+    {
+      "id": "enemy_hp",
+      "base": 20.0,
+      "growth": 1.04,
+      "x_offset": 0
+    },
+    {
+      "id": "gold_per_kill",
+      "base": 2.0,
+      "growth": 1.03,
+      "x_offset": 0
+    },
+    {
+      "id": "exp_per_kill",
+      "base": 5.0,
+      "growth": 1.025,
+      "x_offset": 0
+    }
+  ]
+}

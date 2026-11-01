@@ -1,0 +1,9 @@
+{
+  "edits": [
+    [
+      "stats",
+      "ATK,true",
+      "ATTACK,true"
+    ]
+  ]
+}

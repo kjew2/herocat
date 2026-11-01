@@ -1,7 +1,9 @@
 using System;
 using System.IO;
-using HeroCat.Runtime.Save;
+using HeroCat.Runtime.Content;
+using HeroCat.Runtime.Profile;
 using HeroCat.Sim;
+using HeroCat.Sim.Commands;
 using HeroCat.Sim.Content;
 using HeroCat.Sim.State;
 using NUnit.Framework;
@@ -10,46 +12,38 @@ namespace HeroCat.Runtime.Tests
 {
     internal static class TestContent
     {
-        static readonly Lazy<ContentDb> _db = new Lazy<ContentDb>(() =>
-        {
-            string dir = FileContentSource.FindContentDirectory(TestContext.CurrentContext.TestDirectory)
-                         ?? throw new InvalidOperationException("Content/manifest.json not found above the test directory");
-            return ContentDb.LoadFromDirectory(dir);
-        });
+        static readonly Lazy<string> _dir = new Lazy<string>(() =>
+            FileContentSource.FindContentDirectory(TestContext.CurrentContext.TestDirectory)
+            ?? throw new InvalidOperationException("content/manifest.json not found above the test directory"));
 
+        static readonly Lazy<ContentDb> _db = new Lazy<ContentDb>(() => ContentLoader.LoadFromDirectory(_dir.Value, Tier.M0));
+
+        public static string Dir => _dir.Value;
+        public static string RepoRoot => Path.GetDirectoryName(_dir.Value);
         public static ContentDb Db => _db.Value;
 
         /// <summary>2026-01-01T00:00:00Z.</summary>
         public static readonly long T0 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds();
 
-        public static readonly Guid ProfileId = new Guid(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11);
+        public static readonly Guid Root = new Guid("7e57a7e0-0000-4000-8000-000000000007");
+        public static readonly Guid Device = new Guid("de71ce00-0000-4000-8000-000000000001");
 
-        public static Simulation NewSim(ulong seed = 7) =>
-            new Simulation(Db, GameState.NewProfile(Db, ProfileId, seed, T0));
+        /// <summary>A LocalSaveStore over <paramref name="slots"/> with this test install's id.</summary>
+        public static HeroCat.Runtime.Save.LocalSaveStore Store(HeroCat.Runtime.Save.ISaveSlotStore slots, HeroCat.Runtime.Services.IClock clock = null,
+                                                                HeroCat.Runtime.Services.IAnalytics analytics = null) =>
+            new HeroCat.Runtime.Save.LocalSaveStore(slots, clock ?? new HeroCat.Runtime.Services.FakeClock(T0 + 100), Device, analytics)
+            {
+                NewProfileFactory = (db, now) => ProfileFactory.Create(db, Guid.Empty, now, Device, Root),
+            };
 
-        /// <summary>Canonical JSON of the state, for equality.</summary>
-        public static string Dump(GameState s) => SaveSerializer.StateToJson(s);
+        public static GameState NewState(long now = 0) => ProfileFactory.Create(Db, Guid.Empty, now == 0 ? T0 : now, Device, Root);
 
-        /// <summary>The reference spend policy (specs/04 section 9), trimmed.</summary>
-        public static void Spend(Simulation sim)
+        /// <summary>A sim on a new profile, anchored at T0 and ticked a little.</summary>
+        public static Simulation PlayedSim()
         {
-            sim.BuyStatLevelsMax();
-            int slot = sim.Query.WeakestGearSlot();
-            if (slot >= 0 && sim.State.Gear.Slots[slot].Enhance < sim.Content.Constants.EnhMax &&
-                sim.State.Currencies.Gold >= sim.Query.EnhanceCost)
-                sim.Enhance(slot);
-            if (sim.Query.IsChestReady) sim.ClaimIdleChest();
-            while (sim.Query.CanPull && sim.Pull().Ok) { }
-            if (sim.Query.IsWalled && sim.Query.BossClearable) sim.AttemptBoss();
-        }
-
-        /// <summary>A sim that has done a bit of everything: pulls, kills, gear, enhancements.</summary>
-        public static Simulation PlayedSim(ulong seed = 7)
-        {
-            var sim = NewSim(seed);
-            sim.ApplyTutorialGrants();
-            sim.SyncWallClock(T0, applyCatchUp: false);
-            for (int i = 0; i < 10; i++) { sim.Advance(600); Spend(sim); }
+            var sim = new Simulation(NewState(), Db);
+            sim.Apply(new ApplyServerTime(T0));
+            sim.Advance(600);
             return sim;
         }
     }

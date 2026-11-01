@@ -1,0 +1,1 @@
+CONTENT E074 localization[awakening.rank_1.name].ja: ja text is 28 chars, budget 24

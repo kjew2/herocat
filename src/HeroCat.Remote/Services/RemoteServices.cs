@@ -2,12 +2,8 @@ using System;
 using System.IO;
 using HeroCat.Remote.Transport;
 using HeroCat.Runtime.Save;
+using HeroCat.Runtime.Errors;
 using HeroCat.Runtime.Services;
-using HeroCat.Sim.Content;
-using HeroCat.Sim.Gacha;
-using HeroCat.Sim.Rng;
-using HeroCat.Sim.State;
-using HeroCat.Sim.Time;
 using Newtonsoft.Json.Linq;
 
 namespace HeroCat.Remote.Services
@@ -20,27 +16,44 @@ namespace HeroCat.Remote.Services
     }
 
     /// <summary>
-    /// The P1 remote composition root (specs/08 section 1). GameServices lives in HeroCat.Runtime, which cannot
-    /// reference this assembly, so the specs' <c>Services.Remote(...)</c> is this static factory.
+    /// The remote half of the composition root (01 section 1.2), supplied to GameServices.Build through
+    /// ServicesOptions.Remote because HeroCat.Runtime cannot reference this assembly. A stub over the vendor-neutral
+    /// transport spike: server clock and local-first cloud save; the other seams keep their local implementations.
+    /// TODO(#143): rebuilt on the ApiClient (SummonClient #145, InboxClient, ReceiptClient #147, ConfigClient #144,
+    /// DungeonSeedClient #146).
     /// </summary>
     public static class RemoteGameServices
     {
-        /// <summary>
-        /// Server clock (falls back to the device clock until synced), local-first cloud save under {dataDir}/saves,
-        /// remote gacha stub. Pass <see cref="OfflineTransport.Instance"/> until a vendor transport exists.
-        /// </summary>
+        /// <summary>Pass <see cref="OfflineTransport.Instance"/> until a vendor transport exists.</summary>
         public static GameServices Create(string dataDir, IRemoteTransport transport, RemoteOptions options = null,
                                           IAnalytics analytics = null)
         {
             if (dataDir == null) throw new ArgumentNullException(nameof(dataDir));
-            var client = new RemoteClient(transport, options);
-            return new GameServices
+            return GameServices.Build(BackendMode.Remote, new ServicesOptions
             {
-                Clock = new ServerClock(client, new SystemClock()),
-                Gacha = new RemoteGachaService(),
-                SaveStore = new CloudSaveStore(new FileSaveStore(Path.Combine(dataDir, "saves")), client),
-                Analytics = analytics ?? NullAnalytics.Instance,
-            };
+                DataDir = dataDir,
+                Analytics = analytics,
+                Remote = o => Wire(o, transport, options),
+            });
+        }
+
+        /// <summary>
+        /// A ServicesOptions.Remote factory over <paramref name="transport"/>: the Local set with the remote clock and the
+        /// local-first cloud slots, so the LocalSaveStore and the summon service capture the same clock.
+        /// <paramref name="syncNow"/> tries one clock sync before anything reads the time.
+        /// </summary>
+        public static GameServices Wire(ServicesOptions o, IRemoteTransport transport, RemoteOptions options = null, bool syncNow = false)
+        {
+            var client = new RemoteClient(transport, options);
+            var clock = new ServerClock(client, o.Clock ?? new SystemClock());
+            if (syncNow) clock.TrySync();
+            var slots = new CloudSaveStore(o.Slots ?? new FileSaveStore(Path.Combine(o.DataDir, "saves")), client);
+            return GameServices.Build(BackendMode.Local, new ServicesOptions
+            {
+                DataDir = o.DataDir, Content = o.Content, State = o.State, Analytics = o.Analytics, Network = o.Network,
+                Clock = clock, Slots = slots, InstallId = o.InstallId, DeviceKey = o.DeviceKey, WrapClock = o.WrapClock,
+                DebugReceiptCatalog = o.DebugReceiptCatalog,
+            });
         }
     }
 
@@ -71,7 +84,7 @@ namespace HeroCat.Remote.Services
             try { server = JObject.Parse(body ?? "")["serverSeconds"].Value<long>(); }
             catch (Exception e) when (!(e is ServiceException))
             {
-                throw new ServiceException(ServiceErrorKind.Internal, "BadResponse", "time: " + e.Message);
+                throw new ServiceException(ErrorClass.ServerError, "BadResponse", "time: " + e.Message);
             }
             _offsetSeconds = server - _device.NowServerSeconds;
             IsAuthoritative = true;
@@ -85,36 +98,22 @@ namespace HeroCat.Remote.Services
     }
 
     /// <summary>
-    /// Stub. The server-rolled pull (specs/08 section 4.3) needs a request/response contract that IGachaService's
-    /// local shape (rng stream and mutable state passed in) does not have yet, so every call is Unsupported.
-    /// Do not wire this into a Simulation yet: Simulation.Pull charges before calling the service, so a throw here
-    /// would cost the player the gems.
-    /// </summary>
-    public sealed class RemoteGachaService : IGachaService
-    {
-        public PullResult[] Pull(ContentDb content, BannerDef banner, BannerState bannerState, HeroState heroes,
-                                 Currencies currencies, IRandomSource rng, int count) =>
-            throw new ServiceException(ServiceErrorKind.Unsupported, "RemoteGachaNotImplemented",
-                "Server-rolled pulls (specs/08 section 4.3) are not implemented yet.");
-    }
-
-    /// <summary>
     /// Local-first cloud save (specs/08 section 9: a save never fails because the network did). Every operation
     /// goes to the local store; <see cref="Write"/> also queues the bytes, and <see cref="Upload"/> sends the
     /// latest queued copy. Cloud download and the conflict rule (section 5.2) are P1.
     /// </summary>
-    public sealed class CloudSaveStore : ISaveStore
+    public sealed class CloudSaveStore : ISaveSlotStore
     {
-        readonly ISaveStore _local;
+        readonly ISaveSlotStore _local;
         readonly RemoteClient _client;
 
-        public CloudSaveStore(ISaveStore local, RemoteClient client)
+        public CloudSaveStore(ISaveSlotStore local, RemoteClient client)
         {
             _local = local ?? throw new ArgumentNullException(nameof(local));
             _client = client ?? throw new ArgumentNullException(nameof(client));
         }
 
-        public ISaveStore Local => _local;
+        public ISaveSlotStore Local => _local;
 
         /// <summary>Newest bytes written locally and not yet accepted by the server; null when in sync.</summary>
         public byte[] PendingUpload { get; private set; }
@@ -128,6 +127,13 @@ namespace HeroCat.Remote.Services
         }
 
         public void Quarantine(SaveSlot slot, long nowServerSec) => _local.Quarantine(slot, nowServerSec);
+
+        public void ArchiveConflict(byte[] bytes, long nowServerSec) => _local.ArchiveConflict(bytes, nowServerSec);
+
+        public void DeleteStrayTemp() => _local.DeleteStrayTemp();
+
+        public void Purge(long nowServerSec, long corruptMaxAgeSec, long conflictMaxAgeSec) =>
+            _local.Purge(nowServerSec, corruptMaxAgeSec, conflictMaxAgeSec);
 
         public void DeleteAll()
         {

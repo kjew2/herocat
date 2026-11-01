@@ -1,139 +1,248 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using HeroCat.Sim.Content;
+using HeroCat.Sim.Economy;
 using HeroCat.Sim.State;
 
-namespace HeroCat.Sim
+namespace HeroCat.Sim.Replay
 {
     /// <summary>
-    /// The canonical state hash (specs/03 section 22, specs/10 section 6): SHA-256 over a fixed binary encoding of
-    /// GameState. Not JSON and independent of any serialiser. Fixed field order, maps sorted by ordinal key,
-    /// doubles as raw IEEE-754 bits, everything little-endian, strings as int32 UTF-8 length (-1 = null) + bytes,
-    /// arrays as int32 count (-1 = null) + elements.
+    /// The canonical state encoding (00 contract 12, specs/10 section 2): a fixed binary form of every GameState field in
+    /// declaration order, independent of any serializer. Little-endian; doubles as raw IEEE-754 bits; strings as int32
+    /// UTF-8 length (-1 = null) + bytes; arrays and lists as int32 count (-1 = null) + elements; dictionaries and sets
+    /// sorted by key (ordinal for strings, ordinal value for enums); a nullable record as a presence byte + fields.
     ///
-    /// Not hashed: SchemaVersion and ContentVersion (save bookkeeping; content is pinned by ContentHash in the
-    /// segment), Cert (it contains this hash) and PendingReceipt (an in-flight request, not sim state).
-    /// Changing what is hashed or how is a new Version: bump it and regenerate Fixtures/Replay.
+    /// <see cref="Hash"/> (StateHash) leaves out save bookkeeping that changes on every write, not in play:
+    /// SchemaVersion, ContentVersion, ContentHash, DeviceId, SaveSeq and Time.LastSavedServerTime. It includes the
+    /// transient Combat.Fight, so a mid-fight DeepClone hashes like its source. <see cref="Encode(GameState, bool)"/> with
+    /// bookkeeping is the value-equality form (<see cref="StateEquality"/>). Changing what is encoded is a new
+    /// <see cref="Version"/>: bump it and regenerate the golden files through the bot CLI.
     /// </summary>
     public static class StateHasher
     {
-        public const int Version = 1;
-        static readonly byte[] Magic = Encoding.ASCII.GetBytes("HEROCAT-STATEHASH-v1");
+        public const int Version = 2;
+        static readonly byte[] Magic = Encoding.ASCII.GetBytes("HEROCAT-STATEHASH-v2");
 
-        /// <summary>Lowercase hex SHA-256 of <see cref="Encode"/>.</summary>
-        public static string Hash(GameState s) => Sha256.Hex(Sha256.Compute(Encode(s)));
+        /// <summary>Lowercase hex SHA-256 of the play-state encoding.</summary>
+        public static string Hash(GameState s) => Sha256.Hex(Sha256.Compute(Encode(s, includeBookkeeping: false)));
 
-        public static byte[] Encode(GameState s)
+        public static byte[] Encode(GameState s) => Encode(s, includeBookkeeping: false);
+
+        public static byte[] Encode(GameState s, bool includeBookkeeping)
         {
             if (s == null) throw new ArgumentNullException(nameof(s));
-            var w = new CanonicalWriter(1024);
+            var w = new CanonicalWriter(2048);   // literal-ok: initial buffer capacity, not balance
             w.Bytes(Magic);
-
-            w.Bytes(s.ProfileId.ToByteArray());   // fixed RFC-independent .NET layout on every platform
-            w.I64(s.CreatedAtServerSec);
-            w.I64(s.Tick);
-
-            w.I64(s.Clock.LastSyncServerMs);
-            w.I64(s.Clock.TickAtLastSync);
-
-            var d = s.Daily;
-            w.I64(d.DayKey);
-            if (d.Progress == null) w.I32(-1); else { w.I32(d.Progress.Length); foreach (var v in d.Progress) w.I32(v); }
-            if (d.Rewarded == null) w.I32(-1); else { w.I32(d.Rewarded.Length); foreach (var v in d.Rewarded) w.Bool(v); }
-
-            var c = s.Currencies;
-            w.F64(c.Gold);
-            w.I64(c.Gems);
-            w.I32(c.FreePullsDaily);
-            w.I32(c.FreePullsBanked);
-            w.I64(c.Shards);
-            w.I64(c.EnhMaterials);
-            w.I32(c.DungeonTickets);
-
-            var p = s.Progression;
-            w.I32(p.StatLevel);
-            w.I32(p.ClassAdvances);
-            w.I32(p.HighestFirstClearBossStage);
-            w.I64(p.ChestTimerStart);
-            w.Bool(p.TutorialGranted);
-
-            var st = s.Stage;
-            w.I32(st.Stage);
-            w.I32(st.KillsInStage);
-            w.I32((int)st.Boss);
-            w.I32(st.BossFailsOnStage);
-
-            var cb = s.Combat;
-            w.I32((int)cb.Phase);
-            w.I32(cb.SpawnTimer);
-            w.I32(cb.AttackTimer);
-            w.I32(cb.BossTimer);
-            w.Bool(cb.EnemyIsBoss);
-            w.F64(cb.EnemyHp);
-            w.F64(cb.EnemyMaxHp);
-
-            var slots = s.Gear.Slots;
-            if (slots == null) w.I32(-1);
-            else
+            if (includeBookkeeping)
             {
-                w.I32(slots.Length);
-                foreach (var g in slots)
-                {
-                    w.Bool(g != null);
-                    if (g == null) continue;
-                    w.I32(g.Slot);
-                    w.I32((int)g.Rarity);
-                    w.I32(g.Tier);
-                    w.I32(g.Enhance);
-                }
+                w.I32(s.SchemaVersion);
+                w.Str(s.ContentVersion);
+                w.Str(s.ContentHash);
+                w.Guid(s.DeviceId);
+                w.I64(s.SaveSeq);
+                w.I64(s.Time?.LastSavedServerTime ?? 0);
+            }
+            w.Guid(s.PlayerId);
+            w.Guid(s.RngRoot);
+
+            var t = s.Time;
+            w.I64(t.Tick); w.I64(t.LastTickServerTime); w.I64(t.AnchorServerTime); w.I64(t.AnchorTick);
+            w.I64(t.CreatedServerTime); w.I32(t.DayKey); w.I32(t.WeekKey); w.I32(t.LoginDayKey);
+
+            w.I32(s.Hero.Level); w.F64(s.Hero.Exp); w.I32(s.Hero.AwakenRank);
+            w.Ints(s.Training.Level);
+
+            var wa = s.Wallet;
+            w.F64(wa.Gold); w.I64(wa.Diamond); w.F64(wa.FishCoin); w.I64(wa.RockCandy);
+            w.Ints(wa.DungeonTicket); w.Ints(wa.SummonTicket); w.I64(wa.GuildCoin);
+
+            Collection(w, s.Weapons); Collection(w, s.Skills); Collection(w, s.Companions); Collection(w, s.Runes);
+
+            var lo = s.Loadout;
+            w.Str(lo.Weapon); w.Strs(lo.Skills); w.Strs(lo.Companions); w.Strs(lo.Runes);
+
+            var f = s.Fish;
+            w.Ints(f.Cells); w.I32(f.TankCount); w.I32(f.TankRefillTick); w.I32(f.TankReleaseLevel);
+            w.IntSet(f.DiscoveredLevels); w.I32(f.HighestLevel); w.I64(f.TotalMerges); w.Bool(f.AutoMergeEnabled);
+
+            var banners = SortedEnumKeys(s.Banners);
+            w.I32(banners.Count);
+            foreach (var b in banners)
+            {
+                var st = s.Banners[b];
+                w.I32((int)b);
+                w.Bool(st != null);
+                if (st == null) continue;
+                w.I32(st.Pity); w.I64(st.Exp); w.I64(st.TotalPulls);
             }
 
-            var h = s.Heroes;
-            var copies = SortedKeys(h.Copies);
-            w.I32(copies.Count);
-            foreach (var k in copies) { w.Str(k); w.I32(h.Copies[k]); }
-            if (h.Equipped == null) w.I32(-1); else { w.I32(h.Equipped.Length); foreach (var e in h.Equipped) w.Str(e); }
-            w.Bool(h.AutoEquipBest);
+            var c = s.Combat;
+            w.I32((int)c.Mode); w.I32(c.Stage); w.I32(c.KillsInStage); w.I32((int)c.Boss); w.I32(c.BossFailsOnStage);
+            w.Bool(c.Selected.HasValue); w.I32(c.Selected.GetValueOrDefault()); w.F64(c.Mp);
+            w.Ints(c.SkillCooldowns); w.Ints(c.CompanionCooldowns);
+            if (c.MissileQueue == null) w.I32(-1); else { w.I32(c.MissileQueue.Count); foreach (var m in c.MissileQueue) w.F64(m); }
+            var dr = c.DungeonRun;
+            w.Bool(dr != null);
+            if (dr != null)
+            {
+                w.I32((int)dr.Kind); w.I32(dr.Floor); w.U64(dr.Seed); w.I64(dr.StreamCounter); w.Str(dr.GrantId);
+                w.I32(dr.EnemyIndex); w.I32(dr.TicksLeft);
+            }
+            var fi = c.Fight;
+            w.Bool(fi != null);
+            if (fi != null)
+            {
+                w.I32((int)fi.Phase); w.I32(fi.SpawnTimer); w.F64(fi.EnemyHp); w.F64(fi.EnemyMaxHp); w.Bool(fi.EnemyIsBoss);
+                w.I32(fi.BossTicksLeft); w.I32(fi.AttackProgress);
+                w.I32(fi.ActiveDots.Count);
+                foreach (var d in fi.ActiveDots) { w.I32(d.TicksLeft); w.F64(d.DamagePerTick); }
+                w.F64(fi.AtkBuffPct); w.I32(fi.AtkBuffTicksLeft); w.I32(fi.PendingTaps); w.I32(fi.TapsThisSecond);
+                w.I64(fi.TapWindowTick);
+            }
 
-            w.I32(s.HeroBanner.PityCounter);
-            w.I64(s.HeroBanner.TotalPulls);
+            var p = s.Progress;
+            w.I32(p.HighestCleared); w.I32(p.HighestFirstClearBoss); w.I32(p.StageCapReached);
 
-            w.U64(s.Rng.ProfileSeed);
-            var streams = SortedKeys(s.Rng.Streams);
+            Quests(w, s.Quests.Daily); Quests(w, s.Quests.Weekly); Quests(w, s.Quests.Achievement);
+
+            var dg = s.Dungeons;
+            w.Ints(dg.BestFloor); w.Ints(dg.EntriesToday); w.Ints(dg.SweepsToday);
+            w.I32(dg.RecentRuns.Count);
+            foreach (var r in dg.RecentRuns) { w.Str(r.GrantId); w.I32((int)r.Kind); w.I32(r.Floor); w.Bool(r.Cleared); }
+
+            w.Bool(s.Shop.DailyGiftClaimed); IntMap(w, s.Shop.ExchangeCounts);
+            IntMap(w, s.Research.Level);
+            w.StrSet(s.Inbox.ClaimedIds); w.I64(s.Inbox.LastFetchedServerTime);
+
+            var o = s.Offline;
+            w.Bool(o.Pending != null);
+            if (o.Pending != null)
+            {
+                var cr = o.Pending;
+                w.I64(cr.ElapsedSec); w.I64(cr.CreditedSec); w.Bool(cr.Capped); w.F64(cr.Gold); w.F64(cr.Exp); w.I32(cr.TankFill);
+                w.I32(cr.Stage); w.F64(cr.KillTimeSec); w.I64(cr.ComputedServerTime);
+            }
+            w.I64(o.LifetimeOfflineSecCredited);
+
+            var pe = s.Pending;
+            w.Bool(pe.Summon != null);
+            if (pe.Summon != null)
+            {
+                w.Str(pe.Summon.RequestId); w.I32((int)pe.Summon.Banner); w.I32(pe.Summon.Count); w.Str(pe.Summon.Payment);
+                w.I64(pe.Summon.RequestedServerTime);
+            }
+            w.Bool(pe.Dungeon != null);
+            if (pe.Dungeon != null)
+            {
+                w.Str(pe.Dungeon.RequestId); w.I32((int)pe.Dungeon.Kind); w.I32(pe.Dungeon.Floor); w.I64(pe.Dungeon.RequestedServerTime);
+            }
+            w.I32(pe.Receipts.Count);
+            foreach (var r in pe.Receipts)
+            {
+                w.Str(r.RequestId); w.Str(r.Platform); w.Str(r.Sku); w.Str(r.TransactionId); w.Str(r.Payload); w.I64(r.RequestedServerTime);
+            }
+
+            w.I32(s.Tutorial.Step); w.Bool(s.Tutorial.Skipped); w.Bool(s.Tutorial.TutorialDiamondsGranted);
+
+            var streams = SortedKeys(s.Rng);
             w.I32(streams.Count);
             foreach (var k in streams)
             {
-                var r = s.Rng.Streams[k];
+                var r = s.Rng[k];
                 w.Str(k);
-                w.Str(r?.Name);
-                w.U64(r?.Seed ?? 0);
-                w.U64(r?.Counter ?? 0);
+                w.Bool(r != null);
+                if (r == null) continue;
+                w.Str(r.Seed); w.I64(r.Counter);
             }
 
-            var l = s.Lifetime;
-            w.I64(l.Kills);
-            w.I64(l.BossKills);
-            w.I64(l.BossFails);
-            w.I64(l.GearDrops);
-            w.I64(l.EnhanceAttempts);
-            w.I64(l.EnhanceSuccesses);
-            w.F64(l.GoldEarned);
-            w.F64(l.OfflineGoldEarned);
-            w.I64(l.GemsEarned);
-            w.I32(l.FirstWallStage);
+            var x = s.Stats;
+            w.I64(x.Kills); w.I64(x.BossKills); w.I64(x.BossFails); w.I64(x.HeroHits); w.I64(x.Taps); w.I64(x.Pulls);
+            w.I64(x.Merges); w.I64(x.FishReleased); w.I64(x.FishDiscards); w.I64(x.DungeonClears); w.I64(x.TrainingLevelsBought);
+            w.I32(x.FirstWallStage); w.I64(x.ActiveSeconds);
+            w.F64(x.GoldEarned); w.F64(x.GoldSpent); w.F64(x.FishCoinEarned);
+            w.I64(x.DiamondsEarned); w.I64(x.DiamondsSpent); w.I64(x.DiamondsPurchased);
+            ReasonMap(w, x.ClientDiamondsEarned); ReasonMap(w, x.ClientDiamondsSpent);
+            var tb = SortedEnumKeys(x.ClientTicketsEarned);
+            w.I32(tb.Count);
+            foreach (var b in tb) { w.I32((int)b); ReasonMap(w, x.ClientTicketsEarned[b]); }
 
+            w.Bool(s.DebugTainted);
             return w.ToArray();
         }
 
-        static List<string> SortedKeys<T>(Dictionary<string, T> map)
+        static void Collection(CanonicalWriter w, CollectionState c)
+        {
+            var keys = SortedKeys(c.Items);
+            w.I32(keys.Count);
+            foreach (var k in keys)
+            {
+                var it = c.Items[k];
+                w.Str(k);
+                w.Bool(it != null);
+                if (it == null) continue;
+                w.I32(it.Copies); w.I32(it.LimitBreaks); w.I64(it.FirstAcquiredServerTime);
+            }
+        }
+
+        static void Quests(CanonicalWriter w, Dictionary<string, QuestProgress> q)
+        {
+            var keys = SortedKeys(q);
+            w.I32(keys.Count);
+            foreach (var k in keys)
+            {
+                var v = q[k];
+                w.Str(k);
+                w.Bool(v != null);
+                if (v == null) continue;
+                w.I64(v.Progress); w.I32((int)v.State);
+            }
+        }
+
+        static void IntMap(CanonicalWriter w, Dictionary<string, int> m)
+        {
+            var keys = SortedKeys(m);
+            w.I32(keys.Count);
+            foreach (var k in keys) { w.Str(k); w.I32(m[k]); }
+        }
+
+        static void ReasonMap(CanonicalWriter w, Dictionary<CurrencyReason, long> m)
+        {
+            var keys = SortedEnumKeys(m);
+            w.I32(keys.Count);
+            foreach (var k in keys) { w.I32((int)k); w.I64(m[k]); }
+        }
+
+        internal static List<string> SortedKeys<T>(Dictionary<string, T> map)
         {
             var keys = map == null ? new List<string>() : new List<string>(map.Keys);
             keys.Sort(StringComparer.Ordinal);
             return keys;
         }
+
+        internal static List<TKey> SortedEnumKeys<TKey, T>(Dictionary<TKey, T> map) where TKey : struct, Enum
+        {
+            var keys = map == null ? new List<TKey>() : new List<TKey>(map.Keys);
+            keys.Sort((a, b) => Convert.ToInt32(a).CompareTo(Convert.ToInt32(b)));
+            return keys;
+        }
+    }
+
+    /// <summary>Value equality of two states over every persisted field plus the transient fight (02 acceptance 1).</summary>
+    public static class StateEquality
+    {
+        public static bool Equal(GameState a, GameState b)
+        {
+            var x = StateHasher.Encode(a, includeBookkeeping: true);
+            var y = StateHasher.Encode(b, includeBookkeeping: true);
+            if (x.Length != y.Length) return false;
+            for (int i = 0; i < x.Length; i++) if (x[i] != y[i]) return false;
+            return true;
+        }
     }
 
     /// <summary>Growable little-endian byte writer shared by StateHasher and CommandLogCodec.</summary>
+    // literal-ok-begin: little-endian byte encoding (widths and shifts), not balance
     internal sealed class CanonicalWriter
     {
         byte[] _b;
@@ -182,6 +291,40 @@ namespace HeroCat.Sim
             Bytes(bytes);
         }
 
+        public void Guid(System.Guid g) => Bytes(g.ToByteArray());   // fixed .NET layout on every platform
+
+        public void Ints(int[] a)
+        {
+            if (a == null) { I32(-1); return; }
+            I32(a.Length);
+            foreach (var v in a) I32(v);
+        }
+
+        public void Strs(string[] a)
+        {
+            if (a == null) { I32(-1); return; }
+            I32(a.Length);
+            foreach (var v in a) Str(v);
+        }
+
+        public void IntSet(HashSet<int> set)
+        {
+            if (set == null) { I32(-1); return; }
+            var l = new List<int>(set);
+            l.Sort();
+            I32(l.Count);
+            foreach (var v in l) I32(v);
+        }
+
+        public void StrSet(HashSet<string> set)
+        {
+            if (set == null) { I32(-1); return; }
+            var l = new List<string>(set);
+            l.Sort(StringComparer.Ordinal);
+            I32(l.Count);
+            foreach (var v in l) Str(v);
+        }
+
         public byte[] ToArray()
         {
             var r = new byte[_n];
@@ -189,11 +332,13 @@ namespace HeroCat.Sim
             return r;
         }
     }
+    // literal-ok-end
 
     /// <summary>
     /// FIPS 180-4 SHA-256, hand-rolled so the hash has no platform crypto dependency (Unity IL2CPP stripping,
     /// browser WebAssembly). Integer-only, so it is bit-exact everywhere.
     /// </summary>
+    // literal-ok-begin: FIPS 180-4 SHA-256 constants and bit operations, not balance
     public static class Sha256
     {
         static readonly uint[] K =
@@ -277,4 +422,5 @@ namespace HeroCat.Sim
 
         static uint Rotr(uint x, int n) => (x >> n) | (x << (32 - n));
     }
+    // literal-ok-end
 }

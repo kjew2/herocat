@@ -1,388 +1,224 @@
 using System;
 using System.Collections.Generic;
+using HeroCat.Sim.Commands;
 using HeroCat.Sim.Content;
+using HeroCat.Sim.Economy;
 using HeroCat.Sim.Events;
-using HeroCat.Sim.Gacha;
-using HeroCat.Sim.Rng;
+using HeroCat.Sim.Replay;
 using HeroCat.Sim.State;
 
 namespace HeroCat.Sim
 {
     /// <summary>
-    /// The one simulation (specs/03). Everything observable is a pure function of (ContentDb, GameState) plus
-    /// the sequence of ticks/commands/SyncWallClock calls. Single-threaded; not thread-safe. Holds no state of
-    /// its own besides caches rebuilt from GameState in the constructor.
+    /// The one simulation (01 section 2.2). Commands in, events out (00 contract 5): the client, bots and server
+    /// re-simulator mutate state only through <see cref="Apply"/> and <see cref="Advance"/>, and observe it through
+    /// <see cref="DrainEvents"/> and <see cref="GetSnapshot"/>. Everything observable is a pure function of
+    /// (ContentDb, genesis GameState, command log). Single-threaded; not thread-safe.
+    ///
+    /// Advance ticks time forward (virtual server clock, day rollover) and the stage combat loop (Simulation.Combat.cs).
+    /// Summons, the fish board and offline catch-up live in their own partial files (Simulation.Summons/Fish/Offline.cs).
     /// </summary>
-    public sealed partial class Simulation
+    public sealed partial class Simulation : IEventEmitter
     {
-        readonly Constants _k;
-        readonly IEventSink _sink;
-        readonly IGachaService _gacha;
-        readonly BannerDef _banner;
-        readonly long _msPerTick;
-        readonly int[][] _questsByType;
-
-        RngStream _gearDrop, _gearRarity, _enhance, _gachaHero;
-
-        bool _dpsDirty = true;
-        double _dps, _hit, _statMult, _gearMult, _heroMult, _classMult;
+        readonly List<Event> _events = new List<Event>(SimConfig.EVENT_BUFFER_MAX);
+        readonly DamageNumber[] _damage = new DamageNumber[SimConfig.DMG_NUMBERS_PER_TICK_MAX];
+        readonly int _tickHz;
+        ICommandLog _log = NullCommandLog.Instance;
+        EnemyKilledBatch _batch;
+        Snapshot _snapshot;
+        bool _busy;
         long _nextDayTick;
 
-        public Simulation(ContentDb content, GameState state, IEventSink events = null, IGachaService gacha = null)
+        public Simulation(GameState state, ContentDb db)
         {
-            Content = content ?? throw new ArgumentNullException(nameof(content));
             State = state ?? throw new ArgumentNullException(nameof(state));
-            _sink = events ?? NullEventSink.Instance;
-            _gacha = gacha ?? new LocalGachaService();
-            _k = content.Constants;
-            _banner = content.HeroBanner;
-            _msPerTick = 1000 / _k.TickHz;
-
-            _questsByType = new int[4][];
-            for (int t = 0; t < 4; t++)
-            {
-                var l = new List<int>();
-                for (int i = 0; i < content.DailyQuests.Count; i++)
-                    if ((int)content.DailyQuests[i].Type == t) l.Add(i);
-                _questsByType[t] = l.ToArray();
-            }
-
-            NormalizeShape();
-            Query = new SimQuery(this);
-            Debug = new DebugCommands(this);
+            Db = db ?? throw new ArgumentNullException(nameof(db));
+            _tickHz = db.Constants.TickHz;
             RecomputeNextDayTick();
+            RefreshSnapshot();
         }
 
-        public ContentDb Content { get; }
+        /// <summary>Read by Runtime for saving; screens never see it (01 section 2.2).</summary>
         public GameState State { get; }
-        public SimQuery Query { get; }
-        public DebugCommands Debug { get; }
 
-        /// <summary>Make arrays/streams match content (new profile, or a save from older content).</summary>
-        void NormalizeShape()
+        public ContentDb Db { get; }
+
+        public long Tick => State.Time.Tick;
+
+        /// <summary>Where Apply records commands (before applying them). Null resets to the no-op log.</summary>
+        public ICommandLog CommandLog
         {
-            var s = State;
-            s.Rng ??= new RngState();
-            s.Rng.Streams ??= new Dictionary<string, RngStream>(StringComparer.Ordinal);
-            foreach (var name in StreamNames.All)
-                if (!s.Rng.Streams.ContainsKey(name))
-                    s.Rng.Streams[name] = new RngStream(name, StreamNames.StreamSeed(s.Rng.ProfileSeed, name));
-            _gearDrop = s.Rng.Streams[StreamNames.GearDrop];
-            _gearRarity = s.Rng.Streams[StreamNames.GearRarity];
-            _enhance = s.Rng.Streams[StreamNames.Enhance];
-            _gachaHero = s.Rng.Streams[StreamNames.GachaHero];
-
-            if (s.Gear.Slots == null || s.Gear.Slots.Length != Content.GearSlotCount)
-                s.Gear.Slots = Resize(s.Gear.Slots, Content.GearSlotCount);
-            if (s.Heroes.Equipped == null || s.Heroes.Equipped.Length != _k.HeroSlots)
-                s.Heroes.Equipped = Resize(s.Heroes.Equipped, _k.HeroSlots);
-            s.Heroes.Copies ??= new Dictionary<string, int>(StringComparer.Ordinal);
-            int nq = Content.DailyQuests.Count;
-            if (s.Daily.Progress == null || s.Daily.Progress.Length != nq) s.Daily.Progress = Resize(s.Daily.Progress, nq);
-            if (s.Daily.Rewarded == null || s.Daily.Rewarded.Length != nq) s.Daily.Rewarded = Resize(s.Daily.Rewarded, nq);
-            if (s.Combat.Phase == CombatPhase.Spawning && s.Combat.SpawnTimer <= 0) s.Combat.SpawnTimer = _k.SpawnDelayTicks;
+            get => _log;
+            set => _log = value ?? NullCommandLog.Instance;
         }
 
-        static T[] Resize<T>(T[] a, int n)
+        /// <summary>Bot harness: coalesce kill events from the first one, keeping memory flat (01 section 2.3).</summary>
+        public bool ForceCoalesce { get; set; }
+
+        // ================================================================================================ the door
+
+        /// <summary>
+        /// Validate, mutate, emit (01 section 2.2). A reject changes nothing and emits nothing. Never throws for player
+        /// input; a null command, or Apply re-entered from inside Apply or Advance, is a programmer error and throws.
+        /// </summary>
+        public ApplyResult Apply(Command cmd)
         {
-            var r = new T[n];
-            if (a != null) Array.Copy(a, r, Math.Min(a.Length, n));
+            if (cmd == null) throw new ArgumentNullException(nameof(cmd));
+            if (_busy) throw new InvalidOperationException("Simulation.Apply re-entered: queue the command instead (01 section 2.3)");
+            _busy = true;
+            try
+            {
+                cmd = cmd with { IssuedAtTick = State.Time.Tick };
+                _log.Append(cmd);
+                var r = cmd.Execute(this);
+                if (r.Ok) MarkDpsDirty();   // 03 section 7.3: DPS recomputed at most once per command, whatever it changed
+                RefreshSnapshot();
+                return r;
+            }
+            finally
+            {
+                _busy = false;
+            }
+        }
+
+        /// <summary>Runs <paramref name="ticks"/> sim ticks (1 / TICK_HZ s each).</summary>
+        public void Advance(int ticks) => AdvanceTicks(ticks);
+
+        /// <summary>Advance for long gaps (replay).</summary>
+        public void AdvanceTicks(long ticks)
+        {
+            if (ticks < 0) throw new ArgumentOutOfRangeException(nameof(ticks));
+            if (_busy) throw new InvalidOperationException("Simulation.Advance re-entered");
+            _busy = true;
+            try
+            {
+                _batch = null;
+                for (long i = 0; i < ticks; i++) TickOnce();
+                RefreshSnapshot();
+            }
+            finally
+            {
+                _busy = false;
+            }
+        }
+
+        /// <summary>Moves the buffered events out; the caller owns the returned list.</summary>
+        public IReadOnlyList<Event> DrainEvents()
+        {
+            if (_events.Count == 0) return Array.Empty<Event>();
+            var r = _events.ToArray();
+            _events.Clear();
+            _batch = null;
             return r;
         }
 
-        bool Wants(EventKinds k) => (_sink.Mask & k) != 0;
+        /// <summary>The snapshot taken at the end of the last Advance or Apply. Allocation-free.</summary>
+        public Snapshot GetSnapshot() => _snapshot;
 
-        // ================================================================ tick loop (specs/03 section 7)
+        /// <summary>Lowercase hex SHA-256 of the canonical state encoding (00 contract 12).</summary>
+        public string StateHash() => StateHasher.Hash(State);
 
-        /// <summary>Advance exactly one tick (1 / TICK_HZ seconds).</summary>
-        public void Tick()
+        /// <summary>
+        /// Replays <paramref name="log"/>: Advance to each command's IssuedAtTick, then Apply it. Then Advance to
+        /// <paramref name="toTick"/> (-1: stop at the last command). Throws <see cref="ReplayException"/> on a record
+        /// before the current tick.
+        /// </summary>
+        public void Replay(IReadOnlyList<Command> log, long toTick = -1)
         {
-            var st = State;
-            st.Tick += 1;
-            if (st.Tick >= _nextDayTick) RollDayFromTicks();
-
-            var cb = st.Combat;
-            if (cb.Phase == CombatPhase.Spawning)
+            foreach (var c in log)
             {
-                cb.SpawnTimer -= 1;
-                if (cb.SpawnTimer <= 0) Spawn();
-                return;
+                if (c.IssuedAtTick < Tick) throw new ReplayException($"command {c} at tick {c.IssuedAtTick} is before the current tick {Tick}");
+                AdvanceTicks(c.IssuedAtTick - Tick);
+                Apply(c);
             }
-
-            cb.AttackTimer -= 1;
-            if (cb.AttackTimer <= 0)
+            if (toTick >= 0)
             {
-                cb.AttackTimer = _k.AttackIntervalTicks;
-                double dmg = HitDamageCached;
-                cb.EnemyHp -= dmg;
-                if (Wants(EventKinds.HitLanded)) _sink.Publish(new HitLanded(st.Tick, dmg, Math.Max(0, cb.EnemyHp)));
-                if (cb.EnemyHp <= 0) { Kill(); return; }
-            }
-            if (cb.EnemyIsBoss)
-            {
-                cb.BossTimer -= 1;
-                if (cb.BossTimer <= 0) BossFail();
+                if (toTick < Tick) throw new ReplayException($"end tick {toTick} is before the current tick {Tick}");
+                AdvanceTicks(toTick - Tick);
             }
         }
 
-        /// <summary>Tick() repeated.</summary>
-        public void Advance(long ticks)
-        {
-            for (long i = 0; i < ticks; i++) Tick();
-        }
+        // ================================================================================================ tick
 
-        /// <summary>Convenience: advance by simulated seconds (seconds * TICK_HZ ticks).</summary>
-        public void AdvanceSeconds(double seconds) => Advance((long)(seconds * _k.TickHz));
-
-        void Spawn()
+        void TickOnce()
         {
-            var stg = State.Stage;
-            var cb = State.Combat;
-            int s = stg.Stage;
-            bool isBoss = stg.Boss == BossPhase.Pending;
-            double hp = Content.EnemyHp(s);
-            if (isBoss)
+            var t = State.Time;
+            t.Tick += 1;
+            if (t.Tick % _tickHz == 0) State.Stats.ActiveSeconds += 1;
+            if (t.Tick >= _nextDayTick && IsAnchored)
             {
-                var rule = Content.BossRuleFor(s);
-                hp = rule.HpMult * hp;
-                cb.BossTimer = rule.TimeTicks;
-                QuestProgress(QuestType.ClearBoss, 1);   // boss fights STARTED count (specs/00 section 7.2)
+                EnsureDay(VirtualNowServerSeconds);
+                RecomputeNextDayTick();
             }
-            else cb.BossTimer = 0;
-            cb.EnemyIsBoss = isBoss;
-            cb.EnemyHp = cb.EnemyMaxHp = hp;
-            cb.AttackTimer = _k.AttackIntervalTicks;
-            cb.Phase = CombatPhase.Fighting;
-            if (Wants(EventKinds.EnemySpawned)) _sink.Publish(new EnemySpawned(State.Tick, s, isBoss, hp));
+            StampLastTick();   // Simulation.Offline.cs: the catch-up anchor follows ticked time
+            TickTank();     // 05 section 3: before combat, in every Combat.Mode
+            TickCombat();   // 03 section 2.1 (Simulation.Combat.cs)
         }
 
-        void Kill()
+        // ================================================================================================ events
+
+        void IEventEmitter.Emit(Event e) => Emit(e);
+
+        /// <summary>Buffers an event stamped with the current tick, coalescing kill events past EVENT_COALESCE_AT.</summary>
+        internal void Emit(Event e)
         {
-            var st = State;
-            var stg = st.Stage;
-            var cb = st.Combat;
-            int s = stg.Stage;
-            bool isBoss = cb.EnemyIsBoss;
-            BossRuleDef rule = isBoss ? Content.BossRuleFor(s) : null;
-
-            double gold = Content.GoldPerKill(s);
-            if (isBoss) gold *= rule.GoldMult;
-            AddGold(gold);
-            st.Lifetime.Kills += 1;
-            if (isBoss) st.Lifetime.BossKills += 1;
-            if (Wants(EventKinds.EnemyKilled)) _sink.Publish(new EnemyKilled(st.Tick, s, isBoss, gold));
-            QuestProgress(QuestType.KillMobs, 1);
-
-            RollGearDrop(isBoss, s, rule);
-
-            if (isBoss)
+            e.Tick = State.Time.Tick;
+            if (ForceCoalesce || _events.Count >= SimConfig.EVENT_COALESCE_AT)
             {
-                FirstClearCheck(s, rule);
-                if (Wants(EventKinds.BossCleared)) _sink.Publish(new BossCleared(st.Tick, s));
-                AdvanceStage(viaBoss: true);
-            }
-            else if (stg.Boss == BossPhase.Walled)
-            {
-                // farming a walled stage: no kill credit toward advance
-            }
-            else
-            {
-                stg.KillsInStage += 1;
-                if (stg.KillsInStage == _k.KillsPerStage - 1 && _k.IsBossStage(s))
-                    stg.Boss = BossPhase.Pending;                 // the 10th enemy of a boss stage is the boss
-                else if (stg.KillsInStage >= _k.KillsPerStage)
-                    AdvanceStage(viaBoss: false);
-            }
-
-            cb.Phase = CombatPhase.Spawning;
-            cb.SpawnTimer = _k.SpawnDelayTicks;
-            cb.EnemyIsBoss = false;
-            cb.EnemyHp = 0;
-            cb.BossTimer = 0;
-        }
-
-        void AdvanceStage(bool viaBoss)
-        {
-            var stg = State.Stage;
-            int from = stg.Stage;
-            if (from >= _k.StageCap)
-            {
-                stg.KillsInStage = 0;
-                stg.Boss = BossPhase.None;
-                stg.BossFailsOnStage = 0;
-                if (Wants(EventKinds.StageCapReached)) _sink.Publish(new StageCapReached(State.Tick, from));
-                return;
-            }
-            stg.Stage = from + 1;
-            stg.KillsInStage = 0;
-            stg.Boss = BossPhase.None;
-            stg.BossFailsOnStage = 0;
-            if (Wants(EventKinds.StageAdvanced)) _sink.Publish(new StageAdvanced(State.Tick, from, from + 1, viaBoss));
-            ApplyClassAdvances();
-        }
-
-        /// <summary>Reaching CLASS_STAGES[k] grants advance k+1 on arrival (specs/04 section 6).</summary>
-        void ApplyClassAdvances()
-        {
-            var p = State.Progression;
-            var adv = Content.ClassAdvances;
-            while (p.ClassAdvances < adv.Count && State.Stage.Stage >= adv[p.ClassAdvances].Stage)
-            {
-                p.ClassAdvances += 1;
-                MarkDpsDirty();
-                if (Wants(EventKinds.ClassAdvanced))
-                    _sink.Publish(new ClassAdvanced(State.Tick, p.ClassAdvances, State.Stage.Stage, Content.ClassMult(p.ClassAdvances)));
-            }
-        }
-
-        void BossFail()
-        {
-            var stg = State.Stage;
-            var cb = State.Combat;
-            int s = stg.Stage;
-            stg.Boss = BossPhase.Walled;
-            stg.BossFailsOnStage += 1;
-            State.Lifetime.BossFails += 1;
-            if (State.Lifetime.FirstWallStage == 0) State.Lifetime.FirstWallStage = s;
-            if (Wants(EventKinds.BossFailed)) _sink.Publish(new BossFailed(State.Tick, s, stg.BossFailsOnStage));
-            cb.Phase = CombatPhase.Spawning;
-            cb.SpawnTimer = _k.SpawnDelayTicks;
-            cb.EnemyIsBoss = false;
-            cb.EnemyHp = 0;
-            cb.BossTimer = 0;
-        }
-
-        // ================================================================ economy hooks
-
-        void AddGold(double gold)
-        {
-            State.Currencies.Gold += gold;
-            State.Lifetime.GoldEarned += gold;
-        }
-
-        void AddGems(long gems)
-        {
-            State.Currencies.Gems += gems;
-            State.Lifetime.GemsEarned += gems;
-        }
-
-        void FirstClearCheck(int stage, BossRuleDef rule)
-        {
-            var p = State.Progression;
-            if (stage <= p.HighestFirstClearBossStage) return;
-            p.HighestFirstClearBossStage = stage;
-            AddGems(rule.FirstClearGems);
-            if (Wants(EventKinds.FirstClear)) _sink.Publish(new FirstClear(State.Tick, stage, rule.FirstClearGems));
-        }
-
-        void QuestProgress(QuestType type, int delta)
-        {
-            var idx = _questsByType[(int)type];
-            if (idx.Length == 0) return;
-            var d = State.Daily;
-            for (int j = 0; j < idx.Length; j++)
-            {
-                int i = idx[j];
-                d.Progress[i] += delta;
-                if (!d.Rewarded[i] && d.Progress[i] >= Content.DailyQuests[i].Target)
+                if (e is EnemyKilled k)
                 {
-                    d.Rewarded[i] = true;
-                    var q = Content.DailyQuests[i];
-                    AddGems(q.RewardGems);
-                    if (Wants(EventKinds.QuestCompleted)) _sink.Publish(new QuestCompleted(State.Tick, q.Id, q.RewardGems));
+                    FoldKill(k.Stage, k.Gold, k.Exp);
+                    return;
+                }
+                if (e is CurrencyChanged cc && cc.Reason == CurrencyReason.KILL)
+                {
+                    OpenBatch(State.Combat.Stage);   // the kill's gold and EXP are summed through its EnemyKilled
+                    return;
                 }
             }
+            _events.Add(e);
         }
 
-        /// <summary>specs/03 section 8.2 + specs/04 sections 5.2-5.5 (auto-equip if strictly better base, else sell).</summary>
-        void RollGearDrop(bool isBoss, int stage, BossRuleDef rule)
+        EnemyKilledBatch OpenBatch(int stage)
         {
-            double p = isBoss ? rule.GearDropP : _k.GearDropP;
-            if (_gearDrop.NextDouble() >= p) return;
-            double u1 = _gearRarity.NextDouble(), u2 = _gearRarity.NextDouble();
-            var rarity = SampleGearRarity(u1, isBoss ? rule.GearMinRarity : Rarity.C);
-            int slot = (int)(u2 * Content.GearSlotCount);
-            var piece = new GearPiece(slot, rarity, _k.TierOf(stage), 0);
-            State.Lifetime.GearDrops += 1;
-
-            var slots = State.Gear.Slots;
-            var cur = slots[slot];
-            bool equip = cur == null || GearBasePct(piece) > GearBasePct(cur);
-            double sold;
-            GearPiece replaced = null;
-            if (equip)
-            {
-                slots[slot] = piece;
-                replaced = cur;
-                sold = cur == null ? 0 : SellValue(cur);
-                MarkDpsDirty();
-            }
-            else sold = SellValue(piece);
-            if (sold > 0) AddGold(sold);
-            if (Wants(EventKinds.GearDropped)) _sink.Publish(new GearDropped(State.Tick, slot, piece, equip, replaced, sold));
+            if (_batch != null) return _batch;
+            _batch = new EnemyKilledBatch { FromStage = stage, ToStage = stage };
+            _events.Add(_batch);
+            return _batch;
         }
 
-        Rarity SampleGearRarity(double u, Rarity min)
-        {
-            var w = Content.GearRarity;
-            double total = 0;
-            for (int r = (int)min; r <= (int)Rarity.M; r++) total += w[r].Weight;
-            double acc = 0;
-            for (int r = (int)min; r <= (int)Rarity.M; r++)
-            {
-                acc += w[r].Weight / total;
-                if (u < acc) return (Rarity)r;
-            }
-            return Rarity.M;
-        }
+        // ================================================================================================ snapshot
 
-        internal double GearBasePct(GearPiece p) => Content.GearSlotPct(p.Tier) * Content.GearRarity[(int)p.Rarity].Mult;
-
-        internal double SellValue(GearPiece p) =>
-            _k.GearSellKills * Content.GoldPerKill(p.Tier) * Content.GearRarity[(int)p.Rarity].Mult;
-
-        // ================================================================ DPS (specs/03 section 8.4)
-
-        internal void MarkDpsDirty() => _dpsDirty = true;
-
-        internal double HitDamageCached
-        {
-            get
-            {
-                if (_dpsDirty) RecomputeDps();
-                return _hit;
-            }
-        }
-
-        internal double DpsCached { get { if (_dpsDirty) RecomputeDps(); return _dps; } }
-        internal double StatMultCached { get { if (_dpsDirty) RecomputeDps(); return _statMult; } }
-        internal double GearMultCached { get { if (_dpsDirty) RecomputeDps(); return _gearMult; } }
-        internal double HeroMultCached { get { if (_dpsDirty) RecomputeDps(); return _heroMult; } }
-        internal double ClassMultCached { get { if (_dpsDirty) RecomputeDps(); return _classMult; } }
-
-        void RecomputeDps()
+        void RefreshSnapshot()
         {
             var s = State;
-            _statMult = 1.0 + _k.StatPerLvl * s.Progression.StatLevel;
-            double gear = 1.0;
-            foreach (var p in s.Gear.Slots)
-                if (p != null) gear *= 1.0 + GearBasePct(p) * (1.0 + _k.EnhPerLvl * p.Enhance);
-            _gearMult = gear;
-            double heroSum = 0;
-            foreach (var id in s.Heroes.Equipped)
-                if (id != null) heroSum += HeroPct(id);
-            _heroMult = 1.0 + heroSum / 100.0;
-            _classMult = Content.ClassMult(s.Progression.ClassAdvances);
-            _dps = _k.BaseAtk * _statMult * _gearMult * _heroMult * _classMult;
-            _hit = _dps * _k.AttackIntervalTicks / _k.TickHz;
-            _dpsDirty = false;
-        }
-
-        internal double HeroPct(string id)
-        {
-            if (id == null || !State.Heroes.Copies.TryGetValue(id, out int copies) || copies <= 0) return 0;
-            if (!Content.Heroes.TryGetValue(id, out var def)) return 0;
-            return Content.HeroPct(def, Content.HeroLevel(copies));
+            var f = s.Combat.Fight;
+            var k = Db.Constants;
+            _snapshot = new Snapshot(_damage, _damageCount)
+            {
+                Tick = s.Time.Tick,
+                Stage = s.Combat.Stage,
+                KillsInStage = s.Combat.KillsInStage,
+                Chapter = k.ChapterOf(s.Combat.Stage < 1 ? 1 : s.Combat.Stage),
+                BossPhase = s.Combat.Boss,
+                BossTicksLeft = f != null ? f.BossTicksLeft : 0,
+                EnemyHp = f != null ? f.EnemyHp : 0,
+                EnemyHpMax = f != null ? f.EnemyMaxHp : 0,
+                HeroDps = Query.RatedDps,
+                Gold = s.Wallet.Gold,
+                Diamonds = s.Wallet.Diamond,
+                FishCoin = s.Wallet.FishCoin,
+                RockCandy = s.Wallet.RockCandy,
+                HeroExp = s.Hero.Exp,
+                HeroExpToNext = Db.HeroLvlExp(s.Hero.Level < 1 ? 1 : s.Hero.Level),
+                HeroLevel = s.Hero.Level,
+                AwakenRank = s.Hero.AwakenRank,
+                Mp = s.Combat.Mp,
+                MpMax = k.MpPool0,
+                TankFish = s.Fish.TankCount,
+                TankCap = FishTankCap,
+                TankRefillTicksLeft = FishTankRefillTicks - s.Fish.TankRefillTick,
+            };
         }
     }
 }

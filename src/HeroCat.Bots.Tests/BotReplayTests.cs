@@ -1,50 +1,58 @@
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
+using System.Linq;
+using HeroCat.Bots.Golden;
 using HeroCat.Bots.Policies;
-using HeroCat.Sim;
+using HeroCat.Runtime.Replay;
 using NUnit.Framework;
 
 namespace HeroCat.Bots.Tests
 {
-    /// <summary>specs/10 section 4.4: a bot run's command log replays on its genesis to the same StateHash.</summary>
+    /// <summary>
+    /// 10 section 2: a bot run's JSONL command log replays on its genesis (BotRunner.Genesis, the harness epoch) to the same
+    /// StateHash after each day's first catch-up and at the end. The runner drives the sim through SessionRunner; the replay
+    /// uses only Simulation.Apply and Advance, so this also proves that nothing in the session path mutates state outside
+    /// Apply (00 contract 5).
+    /// </summary>
     public class BotReplayTests
     {
-        [TestCase("greedy-f2p", 7UL, 3)]
-        [TestCase("whale", 11UL, 2)]
-        public void BotRun_ReplaysToSameStateHash_EveryDay(string bot, ulong seed, int days)
+        [TestCase(7UL, 3)]
+        [TestCase(11UL, 2)]
+        public void BotRun_ReplaysToSameStateHash_EveryDay(ulong seed, int days)
         {
-            var log = new ListCommandLog();
-            var dayEnds = new List<(int count, long tick, string hash)>();
-            var runner = new BotRunner(Content.Db)
-            {
-                CommandLog = log,
-                AfterDay = (d, ctx) => dayEnds.Add((log.Count, ctx.State.Tick, ctx.Sim.StateHash())),
-            };
-            runner.Run(BotPolicies.Create(bot), seed, days);
-            Assert.That(log.Count, Is.GreaterThan(100));
+            var log = new MemoryJsonlCommandLog();
+            var run = new BotRunner(Content.Db) { CommandLog = log }.Run(new GreedyF2PBot(), seed, days);
+            Assert.That(log.Lines.Count, Is.GreaterThan(4 * days), "system commands plus the policy's");
 
-            var sim = new Simulation(Content.Db, BotRunner.Genesis(Content.Db, seed));
-            var records = log.ToArray();
-            int from = 0;
-            foreach (var (count, tick, hash) in dayEnds)
-            {
-                sim.Replay(new ReadOnlySpan<CommandRecord>(records, from, count - from), null, tick);
-                Assert.That(sim.StateHash(), Is.EqualTo(hash));
-                from = count;
-            }
+            string expected = GoldenFiles.HashesText(run.DayHashes, run.FinalTick, run.FinalHash);
+            string actual = seed == GoldenFiles.Seed
+                ? GoldenFiles.Replay(Content.Db, JsonlCommandLog.Parse(log.Text), run.FinalTick)
+                : ReplayOther(seed, log, run.FinalTick);
+            Assert.That(actual, Is.EqualTo(expected));
         }
 
-        [Test, Explicit("timing; run by hand")]
-        public void NullLog_NoMeasurableSlowdown()
+        static string ReplayOther(ulong seed, MemoryJsonlCommandLog log, long finalTick)
         {
-            new BotRunner(Content.Db).Run(new GreedyF2PBot(), 7, 3);   // warm up
-            var sw = Stopwatch.StartNew();
-            new BotRunner(Content.Db).Run(new GreedyF2PBot(), 7, 30);
-            long nullMs = sw.ElapsedMilliseconds;
-            sw.Restart();
-            new BotRunner(Content.Db) { CommandLog = new ListCommandLog() }.Run(new GreedyF2PBot(), 7, 30);
-            TestContext.Progress.WriteLine($"null log {nullMs} ms, list log {sw.ElapsedMilliseconds} ms");
+            var sim = BotRunner.NewSimulation(Content.Db, seed);
+            var cmds = JsonlCommandLog.Parse(log.Text);
+            var days = new System.Collections.Generic.List<DayHash>();
+            int catchups = 0;
+            foreach (var c in cmds)
+            {
+                sim.AdvanceTicks(c.IssuedAtTick - sim.Tick);
+                sim.Apply(c);
+                if (c is HeroCat.Sim.Commands.ComputeOfflineCatchup && ++catchups % 2 == 1) days.Add(new DayHash(days.Count + 1, sim.Tick, sim.StateHash()));
+            }
+            sim.AdvanceTicks(finalTick - sim.Tick);
+            return GoldenFiles.HashesText(days, sim.Tick, sim.StateHash());
+        }
+
+        [Test]
+        public void Replay_DetectsATamperedLog()
+        {
+            var log = new MemoryJsonlCommandLog();
+            var run = new BotRunner(Content.Db) { CommandLog = log }.Run(new GreedyF2PBot(), GoldenFiles.Seed, 1);
+            var cmds = JsonlCommandLog.Parse(log.Text).Where(c => !(c is HeroCat.Sim.Commands.TrainStat)).ToList();
+            string actual = GoldenFiles.Replay(Content.Db, cmds, run.FinalTick);
+            Assert.That(actual, Is.Not.EqualTo(GoldenFiles.HashesText(run.DayHashes, run.FinalTick, run.FinalHash)));
         }
     }
 }

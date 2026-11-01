@@ -1,0 +1,1798 @@
+{
+  "table": "localization",
+  "locale": "en",
+  "rows": [
+    {
+      "key": "awakening.rank_1.name",
+      "text": "Awakened 1"
+    },
+    {
+      "key": "awakening.rank_2.name",
+      "text": "Awakened 2"
+    },
+    {
+      "key": "awakening.rank_3.name",
+      "text": "Awakened 3"
+    },
+    {
+      "key": "awakening.rank_4.name",
+      "text": "Awakened 4"
+    },
+    {
+      "key": "awakening.rank_5.name",
+      "text": "Awakened 5"
+    },
+    {
+      "key": "banner.companion.name",
+      "text": "Companion Summon"
+    },
+    {
+      "key": "banner.rune.name",
+      "text": "Rune Summon"
+    },
+    {
+      "key": "banner.skill.name",
+      "text": "Skill Summon"
+    },
+    {
+      "key": "banner.weapon.name",
+      "text": "Weapon Summon"
+    },
+    {
+      "key": "boot.step.auth",
+      "text": "Signing in..."
+    },
+    {
+      "key": "boot.step.catchup",
+      "text": "Catching up..."
+    },
+    {
+      "key": "boot.step.config",
+      "text": "Checking for updates..."
+    },
+    {
+      "key": "boot.step.content",
+      "text": "Loading content..."
+    },
+    {
+      "key": "boot.step.save",
+      "text": "Loading your cat..."
+    },
+    {
+      "key": "boot.step.warmup",
+      "text": "Almost there..."
+    },
+    {
+      "key": "chapter.01.name",
+      "text": "Dreamland 1"
+    },
+    {
+      "key": "chapter.02.name",
+      "text": "Dreamland 2"
+    },
+    {
+      "key": "chapter.03.name",
+      "text": "Dreamland 3"
+    },
+    {
+      "key": "chapter.04.name",
+      "text": "Dreamland 4"
+    },
+    {
+      "key": "chapter.05.name",
+      "text": "Dreamland 5"
+    },
+    {
+      "key": "chapter.06.name",
+      "text": "Dreamland 6"
+    },
+    {
+      "key": "chapter.07.name",
+      "text": "Dreamland 7"
+    },
+    {
+      "key": "chapter.08.name",
+      "text": "Dreamland 8"
+    },
+    {
+      "key": "chapter.09.name",
+      "text": "Dreamland 9"
+    },
+    {
+      "key": "chapter.10.name",
+      "text": "Dreamland 10"
+    },
+    {
+      "key": "chapter.11.name",
+      "text": "Dreamland 11"
+    },
+    {
+      "key": "chapter.12.name",
+      "text": "Dreamland 12"
+    },
+    {
+      "key": "err.account_banned.body",
+      "text": "This account has been suspended. Contact support to appeal."
+    },
+    {
+      "key": "err.account_banned.title",
+      "text": "Account suspended"
+    },
+    {
+      "key": "err.banner_closed.body",
+      "text": "This summon is no longer available."
+    },
+    {
+      "key": "err.banner_closed.title",
+      "text": "Summon closed"
+    },
+    {
+      "key": "err.client_too_old.body",
+      "text": "A new version is available. Update the game to keep playing."
+    },
+    {
+      "key": "err.client_too_old.title",
+      "text": "Update required"
+    },
+    {
+      "key": "err.content_corrupt.body",
+      "text": "The game data is damaged. Reinstall the game or contact support."
+    },
+    {
+      "key": "err.content_corrupt.title",
+      "text": "Game data damaged"
+    },
+    {
+      "key": "err.content_too_old.body",
+      "text": "New game data is available. Restart the game to download it."
+    },
+    {
+      "key": "err.content_too_old.title",
+      "text": "Update needed"
+    },
+    {
+      "key": "err.dungeon_seed_cap.body",
+      "text": "You've started too many dungeon runs. Try again later."
+    },
+    {
+      "key": "err.dungeon_seed_cap.title",
+      "text": "Try again later"
+    },
+    {
+      "key": "err.export_rate_limited.body",
+      "text": "You've requested your data recently. Try again later."
+    },
+    {
+      "key": "err.export_rate_limited.title",
+      "text": "Try again later"
+    },
+    {
+      "key": "err.iap_pending.body",
+      "text": "Your purchase is waiting for approval. It will arrive when it is approved."
+    },
+    {
+      "key": "err.iap_pending.title",
+      "text": "Purchase pending"
+    },
+    {
+      "key": "err.insufficient_funds.body",
+      "text": "You don't have enough diamonds for this."
+    },
+    {
+      "key": "err.insufficient_funds.title",
+      "text": "Not enough diamonds"
+    },
+    {
+      "key": "err.maintenance.body",
+      "text": "The game is under maintenance. Please come back soon."
+    },
+    {
+      "key": "err.maintenance.title",
+      "text": "Maintenance"
+    },
+    {
+      "key": "err.net_offline.body",
+      "text": "Check your connection. Your progress is saved on this device."
+    },
+    {
+      "key": "err.net_offline.title",
+      "text": "You're offline"
+    },
+    {
+      "key": "err.net_timeout.body",
+      "text": "The server took too long to answer. Try again."
+    },
+    {
+      "key": "err.net_timeout.title",
+      "text": "Connection timed out"
+    },
+    {
+      "key": "err.provider_already_linked.body",
+      "text": "That account is already linked to another player."
+    },
+    {
+      "key": "err.provider_already_linked.title",
+      "text": "Account already linked"
+    },
+    {
+      "key": "err.receipt_invalid.body",
+      "text": "We couldn't verify this purchase. Contact support if you were charged."
+    },
+    {
+      "key": "err.receipt_invalid.title",
+      "text": "Purchase failed"
+    },
+    {
+      "key": "err.request_rejected.body",
+      "text": "The server couldn't complete this request."
+    },
+    {
+      "key": "err.request_rejected.title",
+      "text": "Couldn't do that"
+    },
+    {
+      "key": "err.save_conflict.body",
+      "text": "This device and the cloud have different progress. Pick the save to keep."
+    },
+    {
+      "key": "err.save_conflict.title",
+      "text": "Choose a save"
+    },
+    {
+      "key": "err.save_corrupt.body",
+      "text": "Your save on this device can't be read. Restore it from the cloud or start over."
+    },
+    {
+      "key": "err.save_corrupt.title",
+      "text": "Save can't be read"
+    },
+    {
+      "key": "err.save_rolled_back.body",
+      "text": "Your progress was restored to an earlier point."
+    },
+    {
+      "key": "err.save_rolled_back.title",
+      "text": "Progress restored"
+    },
+    {
+      "key": "err.save_too_new.body",
+      "text": "Your save is from a newer version. Update the game to keep playing."
+    },
+    {
+      "key": "err.save_too_new.title",
+      "text": "Update required"
+    },
+    {
+      "key": "err.sku_not_available.body",
+      "text": "This offer is not available right now."
+    },
+    {
+      "key": "err.sku_not_available.title",
+      "text": "Not available"
+    },
+    {
+      "key": "err.srv_5xx.body",
+      "text": "The server had a problem. Try again."
+    },
+    {
+      "key": "err.srv_5xx.title",
+      "text": "Something went wrong"
+    },
+    {
+      "key": "err.srv_unexpected.body",
+      "text": "Something unexpected happened. Try again."
+    },
+    {
+      "key": "err.srv_unexpected.title",
+      "text": "Something went wrong"
+    },
+    {
+      "key": "err.summon_disabled.body",
+      "text": "Summons are paused for a moment. Try again later."
+    },
+    {
+      "key": "err.summon_disabled.title",
+      "text": "Summons paused"
+    },
+    {
+      "key": "feature.dungeons.locked",
+      "text": "Unlocks at stage 30"
+    },
+    {
+      "key": "feature.quests.locked",
+      "text": "Unlocks at stage 10"
+    },
+    {
+      "key": "feature.research.locked",
+      "text": "Unlocks at Awakening 1"
+    },
+    {
+      "key": "fish.01.name",
+      "text": "Fish 1"
+    },
+    {
+      "key": "fish.02.name",
+      "text": "Fish 2"
+    },
+    {
+      "key": "fish.03.name",
+      "text": "Fish 3"
+    },
+    {
+      "key": "fish.04.name",
+      "text": "Fish 4"
+    },
+    {
+      "key": "fish.05.name",
+      "text": "Fish 5"
+    },
+    {
+      "key": "fish.06.name",
+      "text": "Fish 6"
+    },
+    {
+      "key": "fish.07.name",
+      "text": "Fish 7"
+    },
+    {
+      "key": "fish.08.name",
+      "text": "Fish 8"
+    },
+    {
+      "key": "fish.09.name",
+      "text": "Fish 9"
+    },
+    {
+      "key": "fish.10.name",
+      "text": "Fish 10"
+    },
+    {
+      "key": "fish.11.name",
+      "text": "Fish 11"
+    },
+    {
+      "key": "fish.12.name",
+      "text": "Fish 12"
+    },
+    {
+      "key": "fish.13.name",
+      "text": "Fish 13"
+    },
+    {
+      "key": "fish.14.name",
+      "text": "Fish 14"
+    },
+    {
+      "key": "fish.15.name",
+      "text": "Fish 15"
+    },
+    {
+      "key": "fish.16.name",
+      "text": "Fish 16"
+    },
+    {
+      "key": "fish.17.name",
+      "text": "Fish 17"
+    },
+    {
+      "key": "fish.18.name",
+      "text": "Fish 18"
+    },
+    {
+      "key": "fish.19.name",
+      "text": "Fish 19"
+    },
+    {
+      "key": "fish.20.name",
+      "text": "Fish 20"
+    },
+    {
+      "key": "notice.save_corrupt_all.body",
+      "text": "Your save could not be read, so a new game was started. Contact support with id {supportId} to recover it."
+    },
+    {
+      "key": "notice.save_corrupt_all.title",
+      "text": "A new game was started"
+    },
+    {
+      "key": "rarity.common.name",
+      "text": "Common"
+    },
+    {
+      "key": "rarity.epic.name",
+      "text": "Epic"
+    },
+    {
+      "key": "rarity.legendary.name",
+      "text": "Legendary"
+    },
+    {
+      "key": "rarity.mythic.name",
+      "text": "Mythic"
+    },
+    {
+      "key": "rarity.rare.name",
+      "text": "Rare"
+    },
+    {
+      "key": "reject.already_claimed",
+      "text": "Already claimed"
+    },
+    {
+      "key": "reject.already_equipped",
+      "text": "Already equipped"
+    },
+    {
+      "key": "reject.bad_argument",
+      "text": "Invalid request"
+    },
+    {
+      "key": "reject.bad_cell",
+      "text": "Invalid cell"
+    },
+    {
+      "key": "reject.bad_server_time",
+      "text": "Clock error"
+    },
+    {
+      "key": "reject.bad_slot",
+      "text": "Invalid slot"
+    },
+    {
+      "key": "reject.banner_closed",
+      "text": "This summon is closed"
+    },
+    {
+      "key": "reject.board_full",
+      "text": "The board is full"
+    },
+    {
+      "key": "reject.board_locked",
+      "text": "The board is locked during a dungeon"
+    },
+    {
+      "key": "reject.boss_already_pending",
+      "text": "The boss is already waiting"
+    },
+    {
+      "key": "reject.cannot_afford",
+      "text": "Can't afford that"
+    },
+    {
+      "key": "reject.capped",
+      "text": "Already at max"
+    },
+    {
+      "key": "reject.cell_occupied",
+      "text": "That cell is taken"
+    },
+    {
+      "key": "reject.cooldown",
+      "text": "Not ready yet"
+    },
+    {
+      "key": "reject.empty_cell",
+      "text": "No fish there"
+    },
+    {
+      "key": "reject.fish_at_level_cap",
+      "text": "Already the highest level"
+    },
+    {
+      "key": "reject.invalid_count",
+      "text": "Invalid amount"
+    },
+    {
+      "key": "reject.invalid_stat",
+      "text": "Unknown stat"
+    },
+    {
+      "key": "reject.invalid_target",
+      "text": "Invalid target"
+    },
+    {
+      "key": "reject.item_not_owned",
+      "text": "You don't own this yet"
+    },
+    {
+      "key": "reject.level_mismatch",
+      "text": "Fish must be the same level"
+    },
+    {
+      "key": "reject.locked",
+      "text": "Locked"
+    },
+    {
+      "key": "reject.no_boss_to_attempt",
+      "text": "No boss to fight here"
+    },
+    {
+      "key": "reject.no_pending_offline_reward",
+      "text": "No reward to collect"
+    },
+    {
+      "key": "reject.not_available",
+      "text": "Not available"
+    },
+    {
+      "key": "reject.not_enough_diamond",
+      "text": "Not enough diamonds"
+    },
+    {
+      "key": "reject.not_enough_fish_coin",
+      "text": "Not enough Fish Coins"
+    },
+    {
+      "key": "reject.not_enough_gold",
+      "text": "Not enough gold"
+    },
+    {
+      "key": "reject.not_enough_guild_coin",
+      "text": "Not enough Guild Coins"
+    },
+    {
+      "key": "reject.not_enough_hero_exp",
+      "text": "Not enough EXP"
+    },
+    {
+      "key": "reject.not_enough_rock_candy",
+      "text": "Not enough Rock Candy"
+    },
+    {
+      "key": "reject.not_enough_ticket_exp",
+      "text": "Not enough EXP tickets"
+    },
+    {
+      "key": "reject.not_enough_ticket_fish_coin",
+      "text": "Not enough Fish Coin tickets"
+    },
+    {
+      "key": "reject.not_enough_ticket_rock_candy",
+      "text": "Not enough Rock Candy tickets"
+    },
+    {
+      "key": "reject.not_enough_ticket_summon_companion",
+      "text": "Not enough companion summon tickets"
+    },
+    {
+      "key": "reject.not_enough_ticket_summon_rune",
+      "text": "Not enough rune summon tickets"
+    },
+    {
+      "key": "reject.not_enough_ticket_summon_skill",
+      "text": "Not enough skill summon tickets"
+    },
+    {
+      "key": "reject.not_enough_ticket_summon_weapon",
+      "text": "Not enough weapon summon tickets"
+    },
+    {
+      "key": "reject.not_implemented",
+      "text": "Coming soon"
+    },
+    {
+      "key": "reject.not_owned",
+      "text": "You don't own this"
+    },
+    {
+      "key": "reject.rate_limited",
+      "text": "Too fast, try again"
+    },
+    {
+      "key": "reject.skill_in_other_slot",
+      "text": "Equipped in another slot"
+    },
+    {
+      "key": "reject.slot_empty",
+      "text": "That slot is empty"
+    },
+    {
+      "key": "reject.slot_occupied",
+      "text": "That slot is taken"
+    },
+    {
+      "key": "reject.stale_request",
+      "text": "Request expired"
+    },
+    {
+      "key": "reject.stat_at_cap",
+      "text": "Already at max level"
+    },
+    {
+      "key": "reject.stat_not_trainable",
+      "text": "This stat can't be trained"
+    },
+    {
+      "key": "reject.summon_already_applied",
+      "text": "Already summoned"
+    },
+    {
+      "key": "reject.summon_bad_count",
+      "text": "Invalid summon amount"
+    },
+    {
+      "key": "reject.summon_bad_payload",
+      "text": "Summon failed"
+    },
+    {
+      "key": "reject.summon_bad_payment",
+      "text": "Can't pay that way"
+    },
+    {
+      "key": "reject.summon_stream_mismatch",
+      "text": "Summon failed"
+    },
+    {
+      "key": "reject.tank_empty",
+      "text": "The tank is empty"
+    },
+    {
+      "key": "reject.unknown_item",
+      "text": "Unknown item"
+    },
+    {
+      "key": "scr.boot.caption",
+      "text": "v{0} · content {1} · build {2}"
+    },
+    {
+      "key": "scr.boot.title",
+      "text": "Whisker Hero"
+    },
+    {
+      "key": "scr.collection.chip_companions",
+      "text": "Companions"
+    },
+    {
+      "key": "scr.collection.chip_skills",
+      "text": "Skills"
+    },
+    {
+      "key": "scr.collection.chip_weapons",
+      "text": "Weapons"
+    },
+    {
+      "key": "scr.collection.equip",
+      "text": "Equip"
+    },
+    {
+      "key": "scr.collection.equipped",
+      "text": "Equipped"
+    },
+    {
+      "key": "scr.collection.filter_all",
+      "text": "All"
+    },
+    {
+      "key": "scr.collection.filter_owned",
+      "text": "Owned"
+    },
+    {
+      "key": "scr.collection.level_copies",
+      "text": "Lv {0} ({1}/{2})"
+    },
+    {
+      "key": "scr.collection.level_max",
+      "text": "Lv {0} (max)"
+    },
+    {
+      "key": "scr.collection.new_count",
+      "text": "({0} new)"
+    },
+    {
+      "key": "scr.collection.not_owned",
+      "text": "Not owned"
+    },
+    {
+      "key": "scr.collection.nothing_equipped",
+      "text": "Nothing equipped"
+    },
+    {
+      "key": "scr.collection.sort_level",
+      "text": "Sort: Level"
+    },
+    {
+      "key": "scr.collection.sort_newest",
+      "text": "Sort: Newest"
+    },
+    {
+      "key": "scr.collection.sort_owned",
+      "text": "Sort: Owned"
+    },
+    {
+      "key": "scr.collection.sort_rarity",
+      "text": "Sort: Rarity"
+    },
+    {
+      "key": "scr.common.back",
+      "text": "Back"
+    },
+    {
+      "key": "scr.common.close",
+      "text": "Close"
+    },
+    {
+      "key": "scr.common.coming_soon",
+      "text": "Coming soon"
+    },
+    {
+      "key": "scr.common.need_more",
+      "text": "Need {0} more"
+    },
+    {
+      "key": "scr.confirm.cancel",
+      "text": "Cancel"
+    },
+    {
+      "key": "scr.confirm.cost",
+      "text": "{0}: {1}, balance after {2}"
+    },
+    {
+      "key": "scr.confirm.exit_body",
+      "text": "Press back again to quit."
+    },
+    {
+      "key": "scr.confirm.exit_title",
+      "text": "Exit Whisker Hero?"
+    },
+    {
+      "key": "scr.confirm.ok",
+      "text": "Confirm"
+    },
+    {
+      "key": "scr.confirm.reset_body",
+      "text": "This deletes your progress on this device."
+    },
+    {
+      "key": "scr.confirm.reset_title",
+      "text": "Reset profile?"
+    },
+    {
+      "key": "scr.error.code_line",
+      "text": "{0} · support id {1}"
+    },
+    {
+      "key": "scr.error.contact_support",
+      "text": "Contact support"
+    },
+    {
+      "key": "scr.error.dismiss",
+      "text": "Later"
+    },
+    {
+      "key": "scr.error.reset_profile",
+      "text": "Reset profile"
+    },
+    {
+      "key": "scr.error.restore_cloud",
+      "text": "Restore from cloud"
+    },
+    {
+      "key": "scr.error.retry",
+      "text": "Retry"
+    },
+    {
+      "key": "scr.error.update_app",
+      "text": "Update"
+    },
+    {
+      "key": "scr.hero.buy_levels",
+      "text": "Buy {0} levels for {1}"
+    },
+    {
+      "key": "scr.hero.level",
+      "text": "Lv {0}"
+    },
+    {
+      "key": "scr.hero.loadout",
+      "text": "Loadout"
+    },
+    {
+      "key": "scr.hero.max",
+      "text": "MAX"
+    },
+    {
+      "key": "scr.hero.plus",
+      "text": "+"
+    },
+    {
+      "key": "scr.hero.step_max",
+      "text": "Max"
+    },
+    {
+      "key": "scr.hero.step_n",
+      "text": "x{0}"
+    },
+    {
+      "key": "scr.hero.title",
+      "text": "Hero"
+    },
+    {
+      "key": "scr.hero.training",
+      "text": "Training"
+    },
+    {
+      "key": "scr.item_detail.at_max",
+      "text": "Max level"
+    },
+    {
+      "key": "scr.item_detail.compare",
+      "text": "Equipped weapon: ATK {0}"
+    },
+    {
+      "key": "scr.item_detail.compare_button",
+      "text": "Compare"
+    },
+    {
+      "key": "scr.item_detail.kind_companion",
+      "text": "Companion"
+    },
+    {
+      "key": "scr.item_detail.kind_rune",
+      "text": "Rune"
+    },
+    {
+      "key": "scr.item_detail.kind_skill",
+      "text": "Skill"
+    },
+    {
+      "key": "scr.item_detail.kind_weapon",
+      "text": "Weapon"
+    },
+    {
+      "key": "scr.item_detail.level",
+      "text": "Level {0}   {1} / {2} copies"
+    },
+    {
+      "key": "scr.item_detail.new",
+      "text": "NEW"
+    },
+    {
+      "key": "scr.item_detail.next",
+      "text": "Next level: {0}"
+    },
+    {
+      "key": "scr.item_detail.passive",
+      "text": "Collection passive {0}"
+    },
+    {
+      "key": "scr.item_detail.source",
+      "text": "Source: {0} ({1} {2})"
+    },
+    {
+      "key": "scr.item_detail.weapon_atk",
+      "text": "Equipped ATK {0}"
+    },
+    {
+      "key": "scr.main.boss_clearable",
+      "text": "Boss: clearable"
+    },
+    {
+      "key": "scr.main.boss_need",
+      "text": "Boss: need ~{0}x"
+    },
+    {
+      "key": "scr.main.dps",
+      "text": "DPS {0}"
+    },
+    {
+      "key": "scr.main.fish_board_full",
+      "text": "Board full"
+    },
+    {
+      "key": "scr.main.fish_board_locked",
+      "text": "Board locked"
+    },
+    {
+      "key": "scr.main.fish_discard",
+      "text": "Release back to sea (+{0} coins)"
+    },
+    {
+      "key": "scr.main.fish_discovered",
+      "text": "New fish! Level {0} (+{1})"
+    },
+    {
+      "key": "scr.main.fish_info_body",
+      "text": "Missile {0} of a hit · board DPS {1}"
+    },
+    {
+      "key": "scr.main.fish_level",
+      "text": "Fish level {0}"
+    },
+    {
+      "key": "scr.main.fish_max_level",
+      "text": "Max level: raise the cap in Research"
+    },
+    {
+      "key": "scr.main.fish_merge_all",
+      "text": "Merge all"
+    },
+    {
+      "key": "scr.main.fish_nothing_to_merge",
+      "text": "Nothing to merge"
+    },
+    {
+      "key": "scr.main.fish_release",
+      "text": "Release"
+    },
+    {
+      "key": "scr.main.fish_release_max",
+      "text": "Release max"
+    },
+    {
+      "key": "scr.main.fish_tank",
+      "text": "Magic Tank"
+    },
+    {
+      "key": "scr.main.fish_tank_empty",
+      "text": "Tank empty"
+    },
+    {
+      "key": "scr.main.kills",
+      "text": "kills {0}/{1}"
+    },
+    {
+      "key": "scr.main.stage",
+      "text": "Stage {0} · Ch.{1}"
+    },
+    {
+      "key": "scr.main.stage_farming",
+      "text": "Farming {0} · frontier {1}"
+    },
+    {
+      "key": "scr.main.tab_collection",
+      "text": "Collection"
+    },
+    {
+      "key": "scr.main.tab_dungeons",
+      "text": "Dungeons"
+    },
+    {
+      "key": "scr.main.tab_hero",
+      "text": "Hero"
+    },
+    {
+      "key": "scr.main.tab_quests",
+      "text": "Quests"
+    },
+    {
+      "key": "scr.main.tab_shop",
+      "text": "Shop"
+    },
+    {
+      "key": "scr.main.tab_summon",
+      "text": "Summon"
+    },
+    {
+      "key": "scr.main.tap_hint",
+      "text": "Tap the monster!"
+    },
+    {
+      "key": "scr.main.toast_boss_failed",
+      "text": "Boss escaped: need ~{0}x DPS"
+    },
+    {
+      "key": "scr.main.toast_first_clear",
+      "text": "First clear: +{0} diamonds"
+    },
+    {
+      "key": "scr.main.toast_login",
+      "text": "+{0} diamonds: daily login"
+    },
+    {
+      "key": "scr.main.toast_new_day",
+      "text": "A new day!"
+    },
+    {
+      "key": "scr.main.toast_save_failed",
+      "text": "Could not save. We will try again."
+    },
+    {
+      "key": "scr.main.toast_stage_cap",
+      "text": "You reached the last stage!"
+    },
+    {
+      "key": "scr.main.wall",
+      "text": "WALL"
+    },
+    {
+      "key": "scr.offline_reward.away",
+      "text": "Away for {0}"
+    },
+    {
+      "key": "scr.offline_reward.claim",
+      "text": "Claim"
+    },
+    {
+      "key": "scr.offline_reward.rewards",
+      "text": "Rewards for {0}"
+    },
+    {
+      "key": "scr.offline_reward.rewards_capped",
+      "text": "Rewards for {0} (capped at {1})"
+    },
+    {
+      "key": "scr.offline_reward.stage",
+      "text": "Farmed stage {0} at {1}/s"
+    },
+    {
+      "key": "scr.offline_reward.tank",
+      "text": "Magic Tank refilled (+{0} fish)"
+    },
+    {
+      "key": "scr.offline_reward.title",
+      "text": "Welcome back!"
+    },
+    {
+      "key": "scr.skills.auto_equip",
+      "text": "Auto-equip"
+    },
+    {
+      "key": "scr.skills.cast_buff",
+      "text": "buff"
+    },
+    {
+      "key": "scr.skills.cast_dot",
+      "text": "damage over time"
+    },
+    {
+      "key": "scr.skills.cast_instant",
+      "text": "instant"
+    },
+    {
+      "key": "scr.skills.slots",
+      "text": "Slots (auto-cast in order)"
+    },
+    {
+      "key": "scr.skills.stats",
+      "text": "DPS {0} · CD {1} · {2}"
+    },
+    {
+      "key": "scr.skills.title",
+      "text": "Skills"
+    },
+    {
+      "key": "scr.summon.banner_level",
+      "text": "Banner Lv {0}"
+    },
+    {
+      "key": "scr.summon.guarantee",
+      "text": "{0}x: at least one {1} guaranteed"
+    },
+    {
+      "key": "scr.summon.pity",
+      "text": "Pity {0} / {1}"
+    },
+    {
+      "key": "scr.summon.pull",
+      "text": "Summon x{0}  {1}"
+    },
+    {
+      "key": "scr.summon.rates",
+      "text": "View rates"
+    },
+    {
+      "key": "scr.summon.soft_pity",
+      "text": "soft pity from pull {0}"
+    },
+    {
+      "key": "scr.summon.ticket",
+      "text": "Use ticket x1 ({0})"
+    },
+    {
+      "key": "scr.summon.title",
+      "text": "Summon"
+    },
+    {
+      "key": "scr.summon.toast_banner_level",
+      "text": "Banner level {0}: rates improved"
+    },
+    {
+      "key": "scr.summon_result.again",
+      "text": "Summon x{0} again  {1}"
+    },
+    {
+      "key": "scr.summon_result.copy",
+      "text": "+1 copy ({0}/{1})"
+    },
+    {
+      "key": "scr.summon_result.level_up",
+      "text": "Lv {0} -> {1}"
+    },
+    {
+      "key": "scr.summon_result.new",
+      "text": "NEW"
+    },
+    {
+      "key": "scr.summon_result.skip",
+      "text": "Skip"
+    },
+    {
+      "key": "scr.summon_result.summary",
+      "text": "{0} Epic+ · {1} Rare · {2} Common"
+    },
+    {
+      "key": "scr.weapons.passive",
+      "text": "Collection passive: {0} ATK ({1}/{2} owned)"
+    },
+    {
+      "key": "scr.weapons.stats",
+      "text": "ATK {0} · passive {1}"
+    },
+    {
+      "key": "scr.weapons.title",
+      "text": "Weapons"
+    },
+    {
+      "key": "skill.c_01.desc",
+      "text": "A common instant skill."
+    },
+    {
+      "key": "skill.c_01.name",
+      "text": "Common Skill 1"
+    },
+    {
+      "key": "skill.c_02.desc",
+      "text": "A common instant skill."
+    },
+    {
+      "key": "skill.c_02.name",
+      "text": "Common Skill 2"
+    },
+    {
+      "key": "skill.c_03.desc",
+      "text": "A common instant skill."
+    },
+    {
+      "key": "skill.c_03.name",
+      "text": "Common Skill 3"
+    },
+    {
+      "key": "skill.c_04.desc",
+      "text": "A common instant skill."
+    },
+    {
+      "key": "skill.c_04.name",
+      "text": "Common Skill 4"
+    },
+    {
+      "key": "skill.c_05.desc",
+      "text": "A common instant skill."
+    },
+    {
+      "key": "skill.c_05.name",
+      "text": "Common Skill 5"
+    },
+    {
+      "key": "skill.c_06.desc",
+      "text": "A common instant skill."
+    },
+    {
+      "key": "skill.c_06.name",
+      "text": "Common Skill 6"
+    },
+    {
+      "key": "skill.c_07.desc",
+      "text": "A common instant skill."
+    },
+    {
+      "key": "skill.c_07.name",
+      "text": "Common Skill 7"
+    },
+    {
+      "key": "skill.c_08.desc",
+      "text": "A common instant skill."
+    },
+    {
+      "key": "skill.c_08.name",
+      "text": "Common Skill 8"
+    },
+    {
+      "key": "skill.c_09.desc",
+      "text": "A common dot skill."
+    },
+    {
+      "key": "skill.c_09.name",
+      "text": "Common Skill 9"
+    },
+    {
+      "key": "skill.c_10.desc",
+      "text": "A common dot skill."
+    },
+    {
+      "key": "skill.c_10.name",
+      "text": "Common Skill 10"
+    },
+    {
+      "key": "skill.c_11.desc",
+      "text": "A common dot skill."
+    },
+    {
+      "key": "skill.c_11.name",
+      "text": "Common Skill 11"
+    },
+    {
+      "key": "skill.c_12.desc",
+      "text": "A common dot skill."
+    },
+    {
+      "key": "skill.c_12.name",
+      "text": "Common Skill 12"
+    },
+    {
+      "key": "skill.c_13.desc",
+      "text": "A common buff skill."
+    },
+    {
+      "key": "skill.c_13.name",
+      "text": "Common Skill 13"
+    },
+    {
+      "key": "skill.c_14.desc",
+      "text": "A common buff skill."
+    },
+    {
+      "key": "skill.c_14.name",
+      "text": "Common Skill 14"
+    },
+    {
+      "key": "skill.e_01.desc",
+      "text": "A epic instant skill."
+    },
+    {
+      "key": "skill.e_01.name",
+      "text": "Epic Skill 1"
+    },
+    {
+      "key": "skill.e_02.desc",
+      "text": "A epic instant skill."
+    },
+    {
+      "key": "skill.e_02.name",
+      "text": "Epic Skill 2"
+    },
+    {
+      "key": "skill.e_03.desc",
+      "text": "A epic instant skill."
+    },
+    {
+      "key": "skill.e_03.name",
+      "text": "Epic Skill 3"
+    },
+    {
+      "key": "skill.e_04.desc",
+      "text": "A epic instant skill."
+    },
+    {
+      "key": "skill.e_04.name",
+      "text": "Epic Skill 4"
+    },
+    {
+      "key": "skill.e_05.desc",
+      "text": "A epic instant skill."
+    },
+    {
+      "key": "skill.e_05.name",
+      "text": "Epic Skill 5"
+    },
+    {
+      "key": "skill.e_06.desc",
+      "text": "A epic dot skill."
+    },
+    {
+      "key": "skill.e_06.name",
+      "text": "Epic Skill 6"
+    },
+    {
+      "key": "skill.e_07.desc",
+      "text": "A epic dot skill."
+    },
+    {
+      "key": "skill.e_07.name",
+      "text": "Epic Skill 7"
+    },
+    {
+      "key": "skill.e_08.desc",
+      "text": "A epic buff skill."
+    },
+    {
+      "key": "skill.e_08.name",
+      "text": "Epic Skill 8"
+    },
+    {
+      "key": "skill.l_01.desc",
+      "text": "A legendary instant skill."
+    },
+    {
+      "key": "skill.l_01.name",
+      "text": "Legendary Skill 1"
+    },
+    {
+      "key": "skill.l_02.desc",
+      "text": "A legendary instant skill."
+    },
+    {
+      "key": "skill.l_02.name",
+      "text": "Legendary Skill 2"
+    },
+    {
+      "key": "skill.l_03.desc",
+      "text": "A legendary instant skill."
+    },
+    {
+      "key": "skill.l_03.name",
+      "text": "Legendary Skill 3"
+    },
+    {
+      "key": "skill.l_04.desc",
+      "text": "A legendary dot skill."
+    },
+    {
+      "key": "skill.l_04.name",
+      "text": "Legendary Skill 4"
+    },
+    {
+      "key": "skill.l_05.desc",
+      "text": "A legendary buff skill."
+    },
+    {
+      "key": "skill.l_05.name",
+      "text": "Legendary Skill 5"
+    },
+    {
+      "key": "skill.m_01.desc",
+      "text": "A mythic instant skill."
+    },
+    {
+      "key": "skill.m_01.name",
+      "text": "Mythic Skill 1"
+    },
+    {
+      "key": "skill.m_02.desc",
+      "text": "A mythic buff skill."
+    },
+    {
+      "key": "skill.m_02.name",
+      "text": "Mythic Skill 2"
+    },
+    {
+      "key": "skill.r_01.desc",
+      "text": "A rare instant skill."
+    },
+    {
+      "key": "skill.r_01.name",
+      "text": "Rare Skill 1"
+    },
+    {
+      "key": "skill.r_02.desc",
+      "text": "A rare instant skill."
+    },
+    {
+      "key": "skill.r_02.name",
+      "text": "Rare Skill 2"
+    },
+    {
+      "key": "skill.r_03.desc",
+      "text": "A rare instant skill."
+    },
+    {
+      "key": "skill.r_03.name",
+      "text": "Rare Skill 3"
+    },
+    {
+      "key": "skill.r_04.desc",
+      "text": "A rare instant skill."
+    },
+    {
+      "key": "skill.r_04.name",
+      "text": "Rare Skill 4"
+    },
+    {
+      "key": "skill.r_05.desc",
+      "text": "A rare instant skill."
+    },
+    {
+      "key": "skill.r_05.name",
+      "text": "Rare Skill 5"
+    },
+    {
+      "key": "skill.r_06.desc",
+      "text": "A rare instant skill."
+    },
+    {
+      "key": "skill.r_06.name",
+      "text": "Rare Skill 6"
+    },
+    {
+      "key": "skill.r_07.desc",
+      "text": "A rare instant skill."
+    },
+    {
+      "key": "skill.r_07.name",
+      "text": "Rare Skill 7"
+    },
+    {
+      "key": "skill.r_08.desc",
+      "text": "A rare dot skill."
+    },
+    {
+      "key": "skill.r_08.name",
+      "text": "Rare Skill 8"
+    },
+    {
+      "key": "skill.r_09.desc",
+      "text": "A rare dot skill."
+    },
+    {
+      "key": "skill.r_09.name",
+      "text": "Rare Skill 9"
+    },
+    {
+      "key": "skill.r_10.desc",
+      "text": "A rare dot skill."
+    },
+    {
+      "key": "skill.r_10.name",
+      "text": "Rare Skill 10"
+    },
+    {
+      "key": "skill.r_11.desc",
+      "text": "A rare buff skill."
+    },
+    {
+      "key": "skill.r_11.name",
+      "text": "Rare Skill 11"
+    },
+    {
+      "key": "stat.atk.desc",
+      "text": "Raises Attack."
+    },
+    {
+      "key": "stat.atk.name",
+      "text": "Attack"
+    },
+    {
+      "key": "stat.atk_spd.desc",
+      "text": "Raises Attack Speed."
+    },
+    {
+      "key": "stat.atk_spd.name",
+      "text": "Attack Speed"
+    },
+    {
+      "key": "stat.crit_dmg.desc",
+      "text": "Raises Crit Damage."
+    },
+    {
+      "key": "stat.crit_dmg.name",
+      "text": "Crit Damage"
+    },
+    {
+      "key": "stat.crit_rate.desc",
+      "text": "Raises Crit Rate."
+    },
+    {
+      "key": "stat.crit_rate.name",
+      "text": "Crit Rate"
+    },
+    {
+      "key": "stat.def.desc",
+      "text": "Raises Defense."
+    },
+    {
+      "key": "stat.def.name",
+      "text": "Defense"
+    },
+    {
+      "key": "stat.exp_gain.desc",
+      "text": "Raises EXP Gain."
+    },
+    {
+      "key": "stat.exp_gain.name",
+      "text": "EXP Gain"
+    },
+    {
+      "key": "stat.gold_gain.desc",
+      "text": "Raises Gold Gain."
+    },
+    {
+      "key": "stat.gold_gain.name",
+      "text": "Gold Gain"
+    },
+    {
+      "key": "stat.hp.desc",
+      "text": "Raises Health."
+    },
+    {
+      "key": "stat.hp.name",
+      "text": "Health"
+    },
+    {
+      "key": "tut.1.tap",
+      "text": "Tap the monster!"
+    },
+    {
+      "key": "tut.10.skip",
+      "text": "Tap to skip."
+    },
+    {
+      "key": "tut.11.equip",
+      "text": "Equip your best weapon."
+    },
+    {
+      "key": "tut.12.boss",
+      "text": "A boss! Merge fish to fire missiles"
+    },
+    {
+      "key": "tut.2.gold",
+      "text": "Monsters drop gold."
+    },
+    {
+      "key": "tut.3.hero",
+      "text": "Make your cat stronger"
+    },
+    {
+      "key": "tut.4.train",
+      "text": "Train Attack."
+    },
+    {
+      "key": "tut.5.back",
+      "text": "Back to the fight."
+    },
+    {
+      "key": "tut.6.release",
+      "text": "Release a fish"
+    },
+    {
+      "key": "tut.7.merge",
+      "text": "Drag one onto the other"
+    },
+    {
+      "key": "tut.8.summon",
+      "text": "Summon weapons here."
+    },
+    {
+      "key": "tut.9.pull",
+      "text": "Summon 10 weapons"
+    },
+    {
+      "key": "weapon.c_01.desc",
+      "text": "A common weapon."
+    },
+    {
+      "key": "weapon.c_01.name",
+      "text": "Common Weapon 1"
+    },
+    {
+      "key": "weapon.c_02.desc",
+      "text": "A common weapon."
+    },
+    {
+      "key": "weapon.c_02.name",
+      "text": "Common Weapon 2"
+    },
+    {
+      "key": "weapon.c_03.desc",
+      "text": "A common weapon."
+    },
+    {
+      "key": "weapon.c_03.name",
+      "text": "Common Weapon 3"
+    },
+    {
+      "key": "weapon.c_04.desc",
+      "text": "A common weapon."
+    },
+    {
+      "key": "weapon.c_04.name",
+      "text": "Common Weapon 4"
+    },
+    {
+      "key": "weapon.c_05.desc",
+      "text": "A common weapon."
+    },
+    {
+      "key": "weapon.c_05.name",
+      "text": "Common Weapon 5"
+    },
+    {
+      "key": "weapon.c_06.desc",
+      "text": "A common weapon."
+    },
+    {
+      "key": "weapon.c_06.name",
+      "text": "Common Weapon 6"
+    },
+    {
+      "key": "weapon.c_07.desc",
+      "text": "A common weapon."
+    },
+    {
+      "key": "weapon.c_07.name",
+      "text": "Common Weapon 7"
+    },
+    {
+      "key": "weapon.c_08.desc",
+      "text": "A common weapon."
+    },
+    {
+      "key": "weapon.c_08.name",
+      "text": "Common Weapon 8"
+    },
+    {
+      "key": "weapon.c_09.desc",
+      "text": "A common weapon."
+    },
+    {
+      "key": "weapon.c_09.name",
+      "text": "Common Weapon 9"
+    },
+    {
+      "key": "weapon.c_10.desc",
+      "text": "A common weapon."
+    },
+    {
+      "key": "weapon.c_10.name",
+      "text": "Common Weapon 10"
+    },
+    {
+      "key": "weapon.e_01.desc",
+      "text": "A epic weapon."
+    },
+    {
+      "key": "weapon.e_01.name",
+      "text": "Epic Weapon 1"
+    },
+    {
+      "key": "weapon.e_02.desc",
+      "text": "A epic weapon."
+    },
+    {
+      "key": "weapon.e_02.name",
+      "text": "Epic Weapon 2"
+    },
+    {
+      "key": "weapon.e_03.desc",
+      "text": "A epic weapon."
+    },
+    {
+      "key": "weapon.e_03.name",
+      "text": "Epic Weapon 3"
+    },
+    {
+      "key": "weapon.e_04.desc",
+      "text": "A epic weapon."
+    },
+    {
+      "key": "weapon.e_04.name",
+      "text": "Epic Weapon 4"
+    },
+    {
+      "key": "weapon.e_05.desc",
+      "text": "A epic weapon."
+    },
+    {
+      "key": "weapon.e_05.name",
+      "text": "Epic Weapon 5"
+    },
+    {
+      "key": "weapon.e_06.desc",
+      "text": "A epic weapon."
+    },
+    {
+      "key": "weapon.e_06.name",
+      "text": "Epic Weapon 6"
+    },
+    {
+      "key": "weapon.l_01.desc",
+      "text": "A legendary weapon."
+    },
+    {
+      "key": "weapon.l_01.name",
+      "text": "Legendary Weapon 1"
+    },
+    {
+      "key": "weapon.l_02.desc",
+      "text": "A legendary weapon."
+    },
+    {
+      "key": "weapon.l_02.name",
+      "text": "Legendary Weapon 2"
+    },
+    {
+      "key": "weapon.l_03.desc",
+      "text": "A legendary weapon."
+    },
+    {
+      "key": "weapon.l_03.name",
+      "text": "Legendary Weapon 3"
+    },
+    {
+      "key": "weapon.l_04.desc",
+      "text": "A legendary weapon."
+    },
+    {
+      "key": "weapon.l_04.name",
+      "text": "Legendary Weapon 4"
+    },
+    {
+      "key": "weapon.m_01.desc",
+      "text": "A mythic weapon."
+    },
+    {
+      "key": "weapon.m_01.name",
+      "text": "Mythic Weapon 1"
+    },
+    {
+      "key": "weapon.m_02.desc",
+      "text": "A mythic weapon."
+    },
+    {
+      "key": "weapon.m_02.name",
+      "text": "Mythic Weapon 2"
+    },
+    {
+      "key": "weapon.r_01.desc",
+      "text": "A rare weapon."
+    },
+    {
+      "key": "weapon.r_01.name",
+      "text": "Rare Weapon 1"
+    },
+    {
+      "key": "weapon.r_02.desc",
+      "text": "A rare weapon."
+    },
+    {
+      "key": "weapon.r_02.name",
+      "text": "Rare Weapon 2"
+    },
+    {
+      "key": "weapon.r_03.desc",
+      "text": "A rare weapon."
+    },
+    {
+      "key": "weapon.r_03.name",
+      "text": "Rare Weapon 3"
+    },
+    {
+      "key": "weapon.r_04.desc",
+      "text": "A rare weapon."
+    },
+    {
+      "key": "weapon.r_04.name",
+      "text": "Rare Weapon 4"
+    },
+    {
+      "key": "weapon.r_05.desc",
+      "text": "A rare weapon."
+    },
+    {
+      "key": "weapon.r_05.name",
+      "text": "Rare Weapon 5"
+    },
+    {
+      "key": "weapon.r_06.desc",
+      "text": "A rare weapon."
+    },
+    {
+      "key": "weapon.r_06.name",
+      "text": "Rare Weapon 6"
+    },
+    {
+      "key": "weapon.r_07.desc",
+      "text": "A rare weapon."
+    },
+    {
+      "key": "weapon.r_07.name",
+      "text": "Rare Weapon 7"
+    },
+    {
+      "key": "weapon.r_08.desc",
+      "text": "A rare weapon."
+    },
+    {
+      "key": "weapon.r_08.name",
+      "text": "Rare Weapon 8"
+    }
+  ]
+}

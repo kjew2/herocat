@@ -13,6 +13,7 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../HeroCat.Bots/HeroCat.Bots.csproj" />
+    <ProjectReference Include="../HeroCat.Runtime/HeroCat.Runtime.csproj" />
     <ProjectReference Include="../HeroCat.Sim/HeroCat.Sim.csproj" />
   </ItemGroup>
 </Project>

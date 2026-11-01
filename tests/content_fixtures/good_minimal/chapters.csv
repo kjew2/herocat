@@ -1,0 +1,3 @@
+id,index,from_stage,name_key,background,music,tier
+ch_01,1,1,chapter.01.name,bg_ch_01,bgm_ch_01,M0
+ch_02,2,51,chapter.02.name,bg_ch_02,bgm_ch_02,M0

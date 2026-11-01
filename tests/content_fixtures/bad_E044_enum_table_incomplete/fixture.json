@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "stats",
+      "HP,false,,,100,M0,stat.hp.name,stat.hp.desc,icon_stat_hp\n",
+      ""
+    ]
+  ],
+  "csharp": true
+}

@@ -7,7 +7,7 @@ The specs in `specs/` are the source of truth for this project. Start with `spec
 When something is discussed and agreed with the user that diverges from what a spec says, update the spec in the same change:
 
 - Edit the affected spec(s) so they describe the agreed design, not the original plan. Fix every spec the change touches, including constants and contracts in `specs/00-overview.md`.
-- Update anything that mirrors the spec in the same change: test vectors, `golden/` files, `src/HeroCat.Bots/Acceptance/acceptance-targets.json`, `tools/` models, and the `web/` prototype where relevant.
+- Update anything that mirrors the spec in the same change: test vectors, `golden/` files, `src/HeroCat.Bots/Acceptance/acceptance-targets.json`, and `tools/` models where relevant.
 - If the README's spec table no longer matches, update it too.
 - Do not leave code and specs disagreeing. An existing mismatch with no agreed decision behind it is a gap: handle it with the rules below.
 
@@ -23,7 +23,7 @@ When unsure between 1 and 3, treat it as 3. Create issues with `gh api repos/kje
 
 ## Run every check before calling a change done
 
-`./check.sh` runs everything CI runs: content build drift, the web prototype's spec vectors, .NET build and tests, the tick benchmark, the 20-seed acceptance sweep and the golden-file check.
+`./check.sh` runs everything CI runs: content build drift, .NET build and tests, the tick benchmark, the 20-seed acceptance sweep and the golden-file check.
 
 - `./check.sh --fast` for the inner loop (skips golden tests, the bench and the acceptance sweep). Run the full `./check.sh` before you finish.
 - `./check.sh --no-dotnet` on a machine without the .NET SDK. It is a partial check: say so when you report results.
@@ -36,7 +36,10 @@ This file is how lessons reach the next agent. When the user corrects you on som
 
 ## Lessons
 
-- The product is a Unity app for iOS and Android; `web/` is a dev and playtest build, not shipped (`specs/00` section 7, decision 11). Keep the sim Unity-safe (netstandard2.1, C# 9).
-- Unity cannot run in cloud sessions. Only the client's engine-free `unity/HeroCatClient/Assets/HeroCat.Client/Core/` is compiled (inside `HeroCat.Runtime.Tests`); say so when you change the Unity-only screens.
-- Cloud sessions install the .NET 8 SDK and the wasm-tools workload through `.claude/hooks/session-start.sh`. If `dotnet` is missing, run that script with `CLAUDE_CODE_REMOTE=true`, then the full `./check.sh`. The browser test needs Playwright: run it with `NODE_PATH=$(npm root -g)` if `require('playwright')` fails.
+- The product is a Unity 6 app for iOS and Android and the only client; there is no web build (`specs/00` decisions 31-32). Keep the sim Unity-safe (netstandard2.1, C# 9).
+- Code names are `HeroCat.*`; "Whisker Hero" is only the product's working title (`specs/00` decision 30).
+- Unity cannot run in cloud sessions. Only the client's engine-free `unity/HeroCatClient/Assets/HeroCat.Client/Core/` is compiled and tested (inside `HeroCat.Runtime.Tests`); `Boot/`, `Screens/` and `Editor/ContentPreBuild.cs` are only type-checked against Unity API stubs by `tools/unity_typecheck`, which proves nothing about behaviour in Unity. Say so when you change them.
+- Cloud sessions install the .NET 8 SDK through `.claude/hooks/session-start.sh`. If `dotnet` is missing, run that script with `CLAUDE_CODE_REMOTE=true`, then the full `./check.sh`.
+- The acceptance sweep is report-only until the balance decision #249 lands (`REWRITE_REPORT_ONLY=1`, agreed with the user); golden checks are hard again. Report the sweep's result honestly; never regenerate targets or thresholds to hide a regression.
+- When a task is blocked on a user decision, ask (or file the decision issue) and keep going with other unblocked work; do not sit idle waiting for the answer.
 - Generated test data is large and not for reading. Never open, grep through or hand-edit `golden/` files: regenerate them through the bot CLI, never edit by hand.

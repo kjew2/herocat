@@ -1,0 +1,13 @@
+id,order,trigger,trigger_value,screen,highlight,text_key,expect_event,expect_count,grants,skippable,tier
+tut_welcome,1,PROFILE_CREATED,,SCR_MAIN,combat_viewport,tut.1.tap,TapZapped,3,DIAMOND:1500;WEAPON:weapon_c_01:1,false,M0
+tut_gold,2,PREVIOUS_DONE,,SCR_MAIN,gold_chip,tut.2.gold,EnemyKilled,3,,false,MVP
+tut_hero_tab,3,PREVIOUS_DONE,,SCR_MAIN,tab_hero,tut.3.hero,,,,true,MVP
+tut_train,4,PREVIOUS_DONE,,SCR_HERO,train_atk,tut.4.train,StatTrained,1,,true,MVP
+tut_back,5,PREVIOUS_DONE,,SCR_HERO,back,tut.5.back,,,,true,MVP
+tut_release,6,PREVIOUS_DONE,,SCR_MAIN,release_button,tut.6.release,FishReleased,2,,true,MVP
+tut_merge,7,PREVIOUS_DONE,,SCR_MAIN,fish_board,tut.7.merge,FishMerged,1,,true,MVP
+tut_summon_tab,8,PREVIOUS_DONE,,SCR_MAIN,tab_summon,tut.8.summon,,,,true,MVP
+tut_pull,9,PREVIOUS_DONE,,SCR_SUMMON,pull10_weapon,tut.9.pull,ItemAcquired,10,,true,MVP
+tut_skip_reveal,10,PREVIOUS_DONE,,SCR_SUMMON_RESULT,skip,tut.10.skip,,,,true,MVP
+tut_equip,11,PREVIOUS_DONE,,SCR_WEAPONS,equip,tut.11.equip,ItemEquipped,1,,true,MVP
+tut_boss,12,PREVIOUS_DONE,,SCR_MAIN,boss_button,tut.12.boss,BossCleared|BossFailed,1,,true,MVP

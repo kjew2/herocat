@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "constants",
+      "BOSS_EVERY,int,10",
+      "BOSS_EVERY,int,0"
+    ]
+  ],
+  "csharp": true
+}

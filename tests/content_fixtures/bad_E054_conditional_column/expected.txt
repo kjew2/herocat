@@ -1,0 +1,1 @@
+CONTENT E054 skills[skill_c_01].duration_ticks: duration_ticks must be empty when cast_type = INSTANT

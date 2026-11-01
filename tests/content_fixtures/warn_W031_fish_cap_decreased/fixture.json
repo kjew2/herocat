@@ -1,0 +1,23 @@
+{
+  "edits": [
+    [
+      "meta",
+      "content_version,2026.11.01",
+      "content_version,2026.11.02"
+    ],
+    [
+      "constants",
+      "FISH_MAX_LVL0,int,10",
+      "FISH_MAX_LVL0,int,9"
+    ],
+    [
+      "meta",
+      "notes,",
+      "notes,FISH_MAX_LVL0 lowered: "
+    ]
+  ],
+  "previous": {},
+  "args": [
+    "--strict-warnings"
+  ]
+}

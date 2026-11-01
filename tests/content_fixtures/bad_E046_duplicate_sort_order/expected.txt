@@ -1,0 +1,1 @@
+CONTENT E046 banners[SKILL].sort_order: duplicate sort_order 0 (also at banners[WEAPON])

@@ -1,6 +1,6 @@
 # 07 - Screens and UX
 
-Every screen in 00 section 5.3: what it is for, how it is laid out on a portrait phone, which view-model fields each element binds to, which `Command` each action sends, which `Event`s it reacts to, and its empty, loading, error, locked and first-time states. Then the rules that hold across screens: formatting, palette, touch, haptics, sound, badges, modals, accessibility, localization, performance, the tutorial, the placeholder-art plan and the Unity implementation shape. The client is presentation only (00 section 4): nothing here computes a game number; every number is read from a view-model that was filled from a sim snapshot or an event.
+Every screen in 00 section 5.3: what it is for, how it is laid out on a portrait phone, which view-model fields each element binds to, which `Command` each action sends, which `Event`s it reacts to, and its empty, loading, error, locked and first-time states. Then the rules that hold across screens: formatting, palette, touch, haptics, sound, badges, modals, accessibility, localization, performance, the tutorial, the placeholder-art plan, the Unity implementation shape and the Unity project setup, builds and device QA (section 17). The client is presentation only (00 section 4): nothing here computes a game number; every number is read from a view-model that was filled from a sim snapshot or an event.
 
 Tiers covered: M0 (`SCR_BOOT`, `SCR_MAIN`, `SCR_HERO`, `SCR_WEAPONS`, `SCR_SKILLS`, `SCR_SUMMON`, `SCR_SUMMON_RESULT`, `SCR_OFFLINE_REWARD`, `SCR_ITEM_DETAIL`), MVP (the rest of 5.3 except P1 rows), P1 (`SCR_RUNES`, `SCR_GUILD`, `SCR_RANKING`, `SCR_EVENTS`) in outline.
 
@@ -93,7 +93,7 @@ Band budget: 120 + 800 + 100 + 640 + 160 = 1,820 rp. The remaining 100 rp of a 1
 |---|---|
 | Safe area | `SafeAreaFitter` on the root panel applies `Screen.safeArea` as padding on `Start` and on resolution change. Nothing is drawn outside it except the background. |
 | HUD wallet chips | Gold, Diamonds, Fish Coins (MVP adds Rock Candy). Each chip: icon 56 rp, value in 40 rp bold, tappable (gold opens `SCR_HERO`, diamonds opens `SCR_SHOP`, Fish Coins opens `SCR_RESEARCH`, Rock Candy opens `SCR_HERO` Awakening tab). Right side: avatar (opens `SCR_PROFILE`), inbox icon with badge, settings gear. |
-| Combat viewport | Full-width camera render texture or a world-space sorting layer; UI elements over it are the stage label (top-left, tappable: `SCR_STAGE_SELECT`), kill counter (top-right), enemy HP bar (under the enemy), boss timer bar (under HP bar, boss only), DPS readout (bottom-left), skill icon row and companion icon row (bottom, 6 + 4 icons, 88 rp each). Tap anywhere else = `TapZap`. |
+| Combat viewport | Full-width camera render texture or a world-space sorting layer; UI elements over it are the stage label (top-left, tappable: `SCR_STAGE_SELECT`), kill counter (top-right), enemy HP bar (under the enemy), boss timer bar (under HP bar, boss only), DPS readout (bottom-left), skill icon row and companion icon row (bottom, 6 + 4 icons, 88 rp each). Tap anywhere else = `TapZap(count)`. |
 | Action strip | Left: `[Boss]` button (visible only while walled, 06/03), `[Auto]` placeholder toggle (P1 Auto Merge). Right: shortcut pills with red dots for Quests claimable, Dungeon tickets unused, Inbox items; each opens its screen. |
 | Fish Board | Left column 160 rp: Magic Tank gauge (fill, `n / cap`, next-fish countdown), `[Release]` and `[Release max]` buttons, `[Merge all]`. Right: 5 x 4 grid, cell 176 rp with 8 rp gaps (5 x 176 + 4 x 8 = 912 rp wide), fish sprite 140 rp inside. A `[Research]` button (MVP) in the tank column bottom. |
 | Tab bar | Six tabs, 180 rp wide each, icon 64 rp over a 28 rp label. Red-dot badge at top-right of the icon. Active tab tinted `accent`. P1 adds a seventh "More" tab opening Guild / Ranking / Events. |
@@ -105,9 +105,11 @@ Band budget: 120 + 800 + 100 + 640 + 160 = 1,820 rp. The remaining 100 rp of a 1
 ## 3. Binding conventions used by every screen section
 
 - A screen is a uGUI prefab with a `ScreenBase` subclass. `Bind(vm)` resolves references once; `Refresh()` writes only changed values through change-only setters (`NumberLabel`, `IntLabel`, `TextKeyLabel`, `BarFill`, `BadgeDot`); `OnEvent(Event e)` handles the events listed per screen.
-- View-models live in `Whisker.Client.ViewModels`, one class per screen named `<Screen>Vm` (`MainVm`, `HeroVm`, ...). They are plain C#, no `UnityEngine`. They are filled from `Simulation.Snapshot()` after any tick that ran and from events as they drain (01).
-- A view-model field listed as `bind` is read-only display; `cmd` means the element sends that `Command` through `Commands.Send(cmd)`; a rejection comes back as `Rejected(code)` and renders as a toast with the localized reason (`err.<CODE>`).
-- States every screen implements unless the section says otherwise: **Loading** (skeleton rows, shimmer, no spinner longer than 2 s before a retry link), **Empty** (illustration key + one-line copy + the primary action that fills it), **Error** (inline card from 01 taxonomy with Retry), **Locked** (greyed content, lock icon, unlock condition text, no interaction), **First-time** (one coach-mark overlay pointing at the primary action, shown once, stored in `Profile.SeenCoachMarks`).
+- View-models live in `HeroCat.Client.Core` (`Assets/HeroCat.Client/Core/`, section 16), one class per screen named `<Screen>Vm` (`MainVm`, `HeroVm`, ...). They are plain C#, no `UnityEngine`. They are filled from `Simulation.Snapshot()` after any tick that ran and from events as they drain (01).
+- A view-model field listed as `bind` is read-only display; `cmd` means the element sends that `Command` through `Commands.Send(cmd)`; a rejection comes back as `ApplyResult.Reject(code, reason)` (01's `RejectCode` category plus a reason from the owning spec's closed list, issue #11) and renders as 01's `Reject` presentation (issue #30): a button shake plus a short toast anchored under the pressed button with the localized reason `reject.<reason_lower>`; the category only picks the toast styling. `err.<code_lower>.title` / `.body` keys are for 01's error taxonomy (`SCR_ERROR`), not for rejections. Codes and reasons stay UPPER_SNAKE as 01 section 7 and the owning specs list them (08's wire codes, issue #30); the client lowercases them when it builds the key (`NOT_ENOUGH_GOLD` -> `reject.not_enough_gold`, `NET_OFFLINE` -> `err.net_offline.title`), because 09's key pattern is lowercase (issue #248).
+- States every screen implements unless the section says otherwise: **Loading** (skeleton rows, shimmer, no spinner longer than 2 s before a retry link), **Empty** (illustration key + one-line copy + the primary action that fills it), **Error** (inline card from 01 taxonomy with Retry), **Locked** (greyed content, lock icon, unlock condition text, no interaction), **First-time** (one coach-mark overlay pointing at the primary action, shown once, stored in `ClientPrefs.SeenCoachMarks`).
+- `ClientPrefs` (issue #47) is a Runtime store, a local JSON file next to the save, never cloud-synced and never in `GameState`. It holds everything in this spec that does not change a game number: seen coach marks, new-item badges (issue #7), sort/filter and Training-step choices, and the `SCR_SETTINGS` toggles. Losing it on reinstall is acceptable.
+- Locked conditions come from the 09 `feature_unlocks` table (issue #45), the same rows the sim's rejections read, so a Locked state and the sim always agree. The table's MVP seed: Research at Awakening rank 1 (00 decision 11), Quests at stage 10, Dungeons at stage 30 (row `DUNGEONS`); Companions (banner and slot 1, 04) and Shop are never locked.
 
 ## 4. Screens
 
@@ -135,7 +137,7 @@ Purpose: cold-boot progress and the only place a fatal startup error is shown. R
 | Step label | `BootVm.StepKey` (`boot.step.content`, `boot.step.config`, `boot.step.auth`, `boot.step.save`, `boot.step.catchup`, `boot.step.warmup`) |
 | Version caption | `BootVm.ClientVersion`, `ContentVersion`, `BuildHash` |
 
-States: Loading is the whole screen. Error: `SCR_ERROR` blocking, with the 01 taxonomy code, `[Retry]` and, for `SAVE_CORRUPT`, `[Restore from cloud]` (MVP) / `[Reset profile]` (two-step confirm). Content newer than the client (`CLIENT_TOO_OLD`): `SCR_ERROR` with `[Update]` opening the store page. No interaction otherwise; back button ignored. Events: none from the sim; it reacts to `SessionRunner.BootProgress`.
+States: Loading is the whole screen. Error: `SCR_ERROR` blocking, with the 01 taxonomy code, `[Retry]` and, for the recoverable `SAVE_CORRUPT`, `[Restore from cloud]` (MVP) / `[Reset profile]` (two-step confirm) (issue #30). No readable save copy anywhere is not an error: boot continues with a new profile and `SCR_MAIN` shows the one-time save-reset notice (section 4.27; 02 section 8.3, issue #248). Content newer than the client (`CLIENT_TOO_OLD`): `SCR_ERROR` with `[Update]` opening the store page. No interaction otherwise; back button ignored. Events: none from the sim; it reacts to `SessionRunner.BootProgress`.
 
 ### 4.2 `SCR_TITLE` (Full, MVP)
 
@@ -162,11 +164,11 @@ Purpose: account pick on first launch and after logout; skipped when a guest or 
 | Platform buttons | `Auth.LinkOrSignIn(provider)`; only the platform's own provider is shown |
 | Legal links | open in-app browser; `TitleVm.AgeGateRequired` (08 compliance) shows a birth-year picker modal before any sign-in |
 
-States: Loading during the auth round-trip (buttons disabled, spinner on the pressed one). Error inline under the buttons (`err.AUTH_*`). Conflict: when the cloud save and the local save differ, the 02 conflict modal is shown here before `SCR_MAIN` with both saves' stage, hero level, server time and a `[Keep this device]` / `[Use cloud]` pair.
+States: Loading during the auth round-trip (buttons disabled, spinner on the pressed one). Error inline under the buttons (`err.<code_lower>.*` for 01's auth codes, e.g. `err.provider_already_linked.title`; issues #30, #248). Conflict: when the cloud save and the local save differ, the 02 conflict modal is shown here before `SCR_MAIN` with both saves' stage, hero level, server time and a `[Keep this device]` / `[Use cloud]` pair.
 
 ### 4.3 `SCR_MAIN` (Full root, M0)
 
-Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them. It is never popped and keeps ticking under every other screen.
+Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them. It is never popped and keeps ticking under every other screen except `SCR_OFFLINE_REWARD` (section 4.18).
 
 ```
 +----------------------------------------------+
@@ -200,34 +202,34 @@ Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them
 | Gold chip | `Wallet.Gold` | suffix ladder; pulses on increase from `BOSS`/`OFFLINE` only, not per kill |
 | Diamond chip | `Wallet.Diamond` | pulses on any increase |
 | Fish Coin chip | `Wallet.FishCoin` | |
-| Rock Candy chip (MVP) | `Wallet.RockCandy` | shown once `Stage.Highest >= AWAKEN_STAGES[0]` |
+| Rock Candy chip (MVP) | `Wallet.RockCandy` | shown once `Progress.HighestCleared >= AWAKEN_STAGES[0]` |
 | Avatar | `Profile.AvatarId` | tap: push `SCR_PROFILE` |
 | Inbox icon | `Inbox.UnclaimedCount` badge | tap: push `SCR_INBOX` |
 | Settings gear | | tap: push `SCR_SETTINGS` |
-| Stage label | `Combat.Stage`, `Combat.Chapter` | tap: push `SCR_STAGE_SELECT` (MVP; M0 no-op) |
+| Stage label | `Combat.Stage`, `Combat.Chapter`, `Combat.Selected` | tap: push `SCR_STAGE_SELECT` (MVP; M0 no-op); while farming a side stage it reads "Farming 95 · frontier 100" (issue #35) |
 | Kill counter | `Combat.KillsInStage / KILLS_PER_STAGE` | red when `IsWalled` |
 | WALL badge | `Combat.IsWalled` | |
 | Enemy sprite, HP bar | `Combat.EnemyId`, `EnemyIsBoss`, `EnemyHp`, `EnemyMaxHp` | HP bar text "1.2M / 1.7M" |
-| Boss timer bar | `Combat.BossTimerTicks / BOSS_TIME_TICKS` | boss only; turns `bad` under 5 s |
-| Hero sprite | `Hero.AwakenRank` (tint/aura), `Hero.EquippedWeaponId` (held sprite) | |
-| Damage numbers | from `DamageDealt(amount, isCrit, source)` events | pooled, section 13 |
+| Boss timer bar | `Combat.Fight.BossTicksLeft / BOSS_TIME_TICKS` | boss only; turns `bad` under 5 s |
+| Hero sprite | `Hero.AwakenRank` (tint/aura), `Loadout.Weapon` (held sprite) | |
+| Damage numbers | from `HitLanded` (hero hits, crit flag), `SkillCast`, `CompanionAbilityUsed` and `FishMissileHit` events (issue #11) | pooled, section 13 |
 | DPS readout | `Combat.Dps` | updates at most 2 Hz |
 | Skill icons x6 | `Loadout.Skills[i]`: `IconId`, `CooldownPct`, `IsEmpty` | tap: push `SCR_ITEM_DETAIL`; long-press (P1 manual cast) |
 | MP bar | `Loadout.Mp / Loadout.MpMax` | |
 | Companion icons x4 | `Loadout.Companions[i]`: `IconId`, `AbilityReadyPct` | |
-| Tap on viewport | `cmd TapZap` | at most `TAP_ZAP_MAX_PER_SEC`; extra taps still play the tap VFX but send nothing |
+| Tap on viewport | `cmd TapZap(count)` | taps accumulated this frame, at most `TAP_ZAP_MAX_PER_SEC`; extra taps still play the tap VFX but send nothing |
 | Boss button | `Combat.IsWalled`, `Combat.BossClearable`, `Combat.NeedDpsRatio` | `cmd AttemptBoss`; label "Boss: need ~2.3x" or "Boss: clearable" (green border) |
 | Shortcut pills | `Badges.QuestsClaimable`, `Badges.DungeonTicketsUnused`, `Badges.InboxUnclaimed` | push the respective screen |
 | Tank gauge | `Fish.TankCount / Fish.TankCap`, `Fish.NextFishSec` | |
-| Release / Release max | `Fish.CanRelease` | `cmd ReleaseFish` / `cmd ReleaseFish` repeated `min(tank, emptyCells)` times in one frame |
-| Merge all | `Fish.MergeAllCount` (pairs available) | `cmd MergeFish(src, dst)` for each pair, lowest level first, one frame |
+| Release / Release max | `Fish.CanRelease` | `cmd ReleaseFish` / `cmd ReleaseMax` (one sim command, 05 section 6.1; issue #11) |
+| Merge all | `Fish.MergeAllCount` (pairs available) | `cmd MergeAll` (one sim command; pair order is 05's `MergeAll` contract) |
 | Grid cells | `Fish.Cells[20]`: `Level` (0 empty), `IsSelected`, `IsNew`, `IsDropTarget` | interaction in section 5 |
 | Research button (MVP) | `Badges.ResearchAffordable` dot | push `SCR_RESEARCH` |
 | Tab bar | `Badges.*` per tab | replace top Full screen |
 
-Events `SCR_MAIN` reacts to: `EnemySpawned` (new sprite, HP full), `DamageDealt` (number), `EnemyKilled` (death VFX, gold burst toward chip), `StageCleared` (stage label pulse), `BossFailed` (WALL badge in, boss button in, toast with need ratio), `BossCleared` (green flash, first-clear diamond toast if `FirstClearGranted`), `LevelUp` (hero sprite flash, "Lv 32" float), `FishReleased` (cell pop-in), `FishMerged` (merge VFX, missile launch toward enemy), `FishDiscovered` (discovery card overlay 1.5 s with coins), `QuestCompleted` (Quests badge), `DayRolledOver` (toast, badges), `Awakened` (full-width card over the combat viewport, combat keeps running), `StageCapReached` (toast), `OfflineRewardComputed` (push `SCR_OFFLINE_REWARD`).
+Events `SCR_MAIN` reacts to: `EnemySpawned` (new sprite, HP full), `HitLanded` / `SkillCast` / `CompanionAbilityUsed` / `FishMissileHit` (number), `EnemyKilled` (death VFX, gold burst toward chip), `StageCleared` (stage label pulse), `BossFailed` (WALL badge in, boss button in, toast with need ratio), `BossCleared` (green flash, first-clear diamond toast if `FirstClearGranted`), `LevelUp` (hero sprite flash, "Lv 32" float), `FishReleased` (cell pop-in), `FishMerged` (merge VFX, missile launch toward enemy), `FishDiscovered` (discovery card overlay 1.5 s with coins), `QuestCompleted` (Quests badge), `DayRolledOver` (toast, badges), `Awakened` (full-width card over the combat viewport, combat keeps running), `StageCapReached` (toast), `OfflineRewardComputed` (push `SCR_OFFLINE_REWARD`). Login diamonds are auto-granted on the first tick of the day (`CurrencyChanged(DIAMOND, LOGIN)`, issue #20) and toast "+{LOGIN_DIAMONDS} diamonds: daily login" with the `DayRolledOver` toast.
 
-States: Loading never (boot covers it). First-time: `SCR_TUTORIAL` overlay. Error: non-blocking `SCR_ERROR` card in the action strip position for network errors (MVP) while the sim keeps running offline. Locked elements: Rock Candy chip, stage label tap, Research button and the Dungeons/Quests/Shop tabs before their unlock conditions show a lock glyph and a toast naming the condition.
+States: Loading never (boot covers it). First-time: `SCR_TUTORIAL` overlay. Error: 01's `Offline` banner is drawn as the non-blocking `SCR_ERROR` card in the action strip position (MVP), keeping the combat viewport clear while the sim keeps running offline (issue #30). Locked elements: Rock Candy chip, stage label tap, the Research button and the Dungeons/Quests tabs before their `feature_unlocks` condition (issue #45) show a lock glyph and a toast naming the condition; the HUD Fish Coin chip still opens `SCR_RESEARCH`, which shows its Locked state. The Shop tab is never locked.
 
 ### 4.4 `SCR_HERO` (Full, M0)
 
@@ -258,11 +260,11 @@ Purpose: all gold and Rock Candy sinks on the hero: Training per stat, Hero Leve
 | DPS | `Combat.Dps` |
 | Awakening row (MVP) | `Awaken.Rank`, `Awaken.NextStage`, `Awaken.NextCost`, `Awaken.CanAfford`, `Awaken.StageReached`; `[Awaken]` opens `SCR_CONFIRM` with cost and balance-after, then `cmd Awaken` |
 | Loadout icons | `Loadout.Weapon`, `Loadout.Skills[6]`, `Loadout.Companions[4]`; tap: `SCR_ITEM_DETAIL`; empty slot tap: push the matching collection screen |
-| Bulk step selector | `Training.Step` in `TRAIN_BULK_STEPS` {1, 10, 100, Max}; persisted in `Profile.Prefs.TrainStep` |
+| Bulk step selector | `Training.Step` in `TRAIN_BULK_STEPS` {1, 10, 100, Max}; persisted in `ClientPrefs.TrainStep` (issue #47) |
 | Per-stat row x8 | `Training.Rows[stat]`: `Level`, `EffectText` (from 03 per-stat formatter), `Cost` (bulk cost for the selected step), `Count` (levels the step buys; Max computes affordable), `CanAfford`, `AtCap`; `[+]` sends `cmd TrainStat(stat, count)` all-or-nothing |
 | Research button (MVP) | `Badges.ResearchAffordable`; push `SCR_RESEARCH` |
 
-Events: `TrainingPurchased(stat, count, cost)` (row flash, "+5%" float), `LevelUp`, `Awakened` (rank glyph animates), `CurrencyChanged(GOLD)` (re-evaluate `CanAfford`).
+Events: `StatTrained(stat, count, cost)` (row flash, "+5%" float), `LevelUp`, `Awakened` (rank glyph animates), `CurrencyChanged(GOLD)` (re-evaluate `CanAfford`).
 
 States: a stat at its cap (03) shows "MAX" in place of the cost and a disabled button. Awakening before the stage gate: button disabled with "Reach stage 150". First-time: coach mark on ATK `[+]`. The `Max` step shows "Buy 37 levels for 3.71M" so the player knows what they are tapping.
 
@@ -289,13 +291,13 @@ Purpose: the 30-weapon collection, equip, level-up readout, and the owned-collec
 | Chips | push sibling collection screen (replace, same stack depth) |
 | Equipped summary | `Equipped`: `Rarity`, `NameKey`, `Level`, `AtkPct` |
 | Passive total | `PassiveTotalPct`, `OwnedCount / PoolSize` (04 `WEAPON_PASSIVE_PCT`) |
-| Sort / filter | `Sort` in {Rarity, Level, Newest, Owned first}, `Filter` in {All, Owned, Rarity r}; persisted prefs |
+| Sort / filter | `Sort` in {Rarity, Level, Newest, Owned first}, `Filter` in {All, Owned, Rarity r}; persisted in `ClientPrefs` |
 | Grid tile x30 | `Tiles[i]`: `Id`, `Rarity`, `IconId`, `Owned`, `Level`, `CopiesToNext`, `IsNew`, `IsEquipped`; unowned at 30% opacity with "?" |
 | Selected panel | `Selected`: stats, `NextLevelCopies` ("4/6"), `AtkPct`, `PassivePct`; `[Equip]` sends `cmd EquipWeapon(id)` (disabled when equipped or unowned); `[i]` pushes `SCR_ITEM_DETAIL` |
 
-Events: `ItemAcquired(kind=WEAPON)` (tile flips from "?" or copies tick up, `IsNew` set), `WeaponEquipped` (equipped summary swap), `ItemLeveledUp`.
+Events: `ItemAcquired(kind=WEAPON)` (tile flips from "?" or copies tick up, `IsNew` set; a level change is read from the snapshot, level is derived from copies, 04), `ItemEquipped(WEAPON)` (equipped summary swap; also fires with `auto: true` after a summon's `AutoEquipBestWeapon`).
 
-States: Empty is impossible after the tutorial (the first summon is scripted). New badges clear when the tile is tapped or the screen is left (`cmd MarkSeen(ids)` is a client-side pref, not a sim command). Locked: none.
+States: Empty is impossible: profile creation grants the starter weapon `TUTORIAL_WEAPON_ID` (09 `tut_welcome`, issue #46). New badges clear when the tile is tapped or the screen is left (a `ClientPrefs` update, not a sim command; issues #7, #47). Locked: none.
 
 ### 4.6 `SCR_SKILLS` (Full, M0)
 
@@ -315,12 +317,12 @@ Purpose: 40-skill collection, six auto-cast slots, slot order.
 
 | Element | `SkillsVm` field or command |
 |---|---|
-| Slot x6 | `Slots[i]`: `SkillId?`, `IconId`, `Rarity`, `Level`, `CooldownSec`; tap with a selection: `cmd EquipSkill(slot, id)`; tap without: `cmd UnequipSkill(slot)`; drag slot onto slot (MVP): `cmd ReorderSkills(from, to)` |
-| Auto-equip | `AutoEquipWouldChange` dot; `cmd AutoEquipSkills` (04 ordering rule) |
+| Slot x6 | `Slots[i]`: `SkillId?`, `IconId`, `Rarity`, `Level`, `CooldownSec`; tap with a selection: `cmd EquipSkill(slot, id)`; tap without: `cmd UnequipSkill(slot)`; drag slot onto slot (MVP): reorder is sent as `cmd EquipSkill` calls for the two slots (04 section 7.2: the sim only sees `EquipSkill`) |
+| Auto-equip | `AutoEquipWouldChange` dot; `cmd AutoEquipBestSkills` (04 ordering rule) |
 | Tiles x40 | as weapons plus `DpsPct`, `CooldownTicks`, `CastType` (instant / dot / buff) glyph |
 | Selected panel | `[Equip to slot v]` lists the six slots with current occupant; disabled when unowned |
 
-Events: `ItemAcquired(kind=SKILL)`, `SkillEquipped`, `SkillsReordered`, `ItemLeveledUp`.
+Events: `ItemAcquired(kind=SKILL)`, `ItemEquipped(SKILL)`.
 
 ### 4.7 `SCR_COMPANIONS` (Full, MVP)
 
@@ -346,7 +348,7 @@ Purpose: 50-companion collection, four slots, the shared MP pool readout.
 | MP budget | `EquippedMpPerSec` vs `MpRegenPerSec`; shown `bad` when cost exceeds regen (04 explains the trade) |
 | Tiles x50 | plus `AbilityType` glyph (damage / buff / gold / MP regen), `MpCost`, `IntervalSec` |
 
-Events: `ItemAcquired(kind=COMPANION)`, `CompanionEquipped`, `ItemLeveledUp`. Locked before the Companion banner unlock (04): whole screen shows "Unlocks at stage 20" over the greyed grid.
+Events: `ItemAcquired(kind=COMPANION)`, `ItemEquipped(COMPANION)`. Locked: none; the Companion banner and slot 1 are open from the start (04, issue #45).
 
 ### 4.8 `SCR_RUNES` (Full, P1)
 
@@ -359,9 +361,9 @@ Purpose: the Fish Coin sink (03 node list: MP pool, MP regen, tank capacity, tan
 ```
 +----------------------------------------------+
 | <  Research              [F] 812 Fish Coins  |
-| Tank capacity   Lv 2  10 -> 12    120 [ Buy ]|
-| Tank refill     Lv 1  6.0s -> 5.5s 150 [Buy] |
-| Fish level cap  Lv 0  10 -> 11    800 [ Buy ]|
+| Tank capacity   Lv 2  20 -> 25    450 [ Buy ]|
+| Tank refill     Lv 1  5.6s -> 5.2s 480 [Buy] |
+| Fish level cap  Lv 0  10 -> 11  2,500 [ Buy ]|
 | MP pool         Lv 3  ...                    |
 | MP regen        Lv 1                         |
 | Gold gain       Lv 0                         |
@@ -371,10 +373,10 @@ Purpose: the Fish Coin sink (03 node list: MP pool, MP regen, tank capacity, tan
 
 | Element | `ResearchVm` field or command |
 |---|---|
-| Row per node | `Rows[node]`: `Level`, `MaxLevel`, `CurrentText`, `NextText`, `Cost`, `CanAfford`, `AtMax`; `[Buy]` sends `cmd BuyResearch(node)` |
+| Row per node | `Rows[node]`: `Level`, `MaxLevel`, `CurrentText`, `NextText`, `Cost`, `CanAfford`, `AtMax`; `[Buy]` sends `cmd Research(nodeId)` |
 | Header | `Wallet.FishCoin` |
 
-Events: `ResearchPurchased(node, level)` (row flash, tank gauge on `SCR_MAIN` updates via snapshot), `CurrencyChanged(FISH_COIN)`. Locked before stage 15 (03 unlock): greyed with the condition. First-time coach mark on Tank capacity.
+Events: `ResearchLeveled(node, level)` (row flash, tank gauge on `SCR_MAIN` updates via snapshot), `CurrencyChanged(FISH_COIN)`. Locked before Awakening rank 1 (`feature_unlocks`, 00 decision 11, issue #45; the sim rejects with `RESEARCH_LOCKED`): greyed with "Unlocks at Awakening I". First-time coach mark on Tank capacity.
 
 ### 4.10 `SCR_SUMMON` (Full, M0)
 
@@ -395,22 +397,22 @@ Purpose: the diamond sink. One tab per banner; 1x and 10x; rates, pity and banne
 
 | Element | `SummonVm` field or command |
 |---|---|
-| Banner tabs | `Banners[b]`: `Unlocked`, `BadgeNewLevel`; Companion tab locked before its unlock stage |
+| Banner tabs | `Banners[b]`: `Unlocked`, `BadgeNewLevel`; all three banners are open from the start (04; issue #45) |
 | Banner level | `Level`, `Exp`, `ExpToNext` (04 thresholds) |
-| Pity | `PityCounter`, `PITY_SOFT_START`, `PITY_HARD`; bar with a marker at 50 |
+| Pity | `Banners[b].Pity`, `PITY_SOFT_START`, `PITY_HARD`; bar with a marker at 50 |
 | View rates | opens a rates panel (inline, not a new screen) listing the published table for the current banner level from `RateTable[level]` (04) and the pity ramp rows |
 | Summon x1 / x10 | `PullCost`, `CanPull1`, `CanPull10` (diamond balance); `cmd Summon(banner, count: 1 or 10, payment: DIAMOND, requestId)` |
 | Use ticket | `TicketCount`; `cmd Summon(banner, 1, payment: TICKET, requestId)`; hidden when 0 |
 
-MVP server path (01): the button shows a spinner on the pressed button for up to 10 s while the request is in flight; the HUD diamond chip does not change until the server result lands (04 payload); on `SUMMON_TIMEOUT` the client retries the same `requestId` silently twice, then shows a non-blocking `SCR_ERROR` card with "Retry" and "Your diamonds were not charged unless the result appears in your collection" (the server replays by `requestId`). M0 local path returns synchronously.
+MVP server path (01): the button shows a spinner on the pressed button for up to 10 s while the request is in flight, which also covers the save upload 01 runs before a pull when there are unsynced local earnings (issue #49); the HUD diamond chip does not change until the server result lands (04 payload); on a timeout (`NET_TIMEOUT`, 01's `Timeout` class; there is no `SUMMON_TIMEOUT` code, issue #30) the client shows the "Retrying..." toast and retries the same `requestId` (01 section 5.2), and once retries are exhausted closes the overlay with the `SUMMON_PENDING_SAVED` toast and a "Pending..." button that resolves the summon by replay (01 section 8.5 step 4; the server replays by `requestId`). M0 local path returns synchronously.
 
-Events: `SummonResolved(results[])` (push `SCR_SUMMON_RESULT`), `BannerLevelUp` (banner bar fill, toast "Banner level 4: rates improved"), `CurrencyChanged(DIAMOND)`.
+Summon results are not a sim event: the `SummonResultPayload` returned by `ISummonService` (01 section 2.5) is applied through `ApplySummonResult` and then pushes `SCR_SUMMON_RESULT` (issues #11, #13). Events: `ItemAcquired` x N, `BannerLeveledUp` (banner bar fill, toast "Banner level 4: rates improved"), `CurrencyChanged(DIAMOND)`.
 
-States: Locked banner tab; disabled buttons name the shortfall ("Need 760 more"). Error as above. First-time: the tutorial scripts the first x10 on Weapons.
+States: disabled buttons name the shortfall ("Need 760 more"). Error as above. First-time: the tutorial scripts the first x10 on Weapons.
 
 ### 4.11 `SCR_SUMMON_RESULT` (Overlay, M0)
 
-Purpose: the reveal. Driven entirely by the already-applied `SummonResolved` payload; skippable at any time; the HUD stays live above it.
+Purpose: the reveal. Driven entirely by the already-applied `SummonResultPayload`; skippable at any time; the HUD stays live above it.
 
 ```
 +----------------------------------------------+
@@ -432,7 +434,7 @@ Purpose: the reveal. Driven entirely by the already-applied `SummonResolved` pay
 | Close | pops the overlay |
 | Tap a face-up card | push `SCR_ITEM_DETAIL` |
 
-Reveal rules are in section 6. Events: `SummonResolved` for "again" replaces the cards in place.
+Reveal rules are in section 6. The `SummonResultPayload` of an "again" request replaces the cards in place.
 
 ### 4.12 `SCR_DUNGEONS` (Full, MVP)
 
@@ -468,11 +470,11 @@ Purpose: the three daily dungeons and the Tower card (P1).
 
 Events: `DungeonCleared`, `DungeonFailed`, `DungeonFloorFirstCleared`, `DayRolledOver` (tickets refresh), `CurrencyChanged(TICKET_*)`.
 
-States: Locked before `DUNGEON_UNLOCK_STAGE` (whole screen greyed, "Unlocks at stage 30"). Empty tickets: buttons disabled, "More tickets in the Shop" link to `SCR_SHOP` exchange tab. Error: none (local sim; seed fetch failure in MVP falls back to a retry toast and the button re-enables).
+States: Locked before its `feature_unlocks` condition (row `DUNGEONS`, stage 30; issue #45): whole screen greyed, "Unlocks at stage 30". Empty tickets: buttons disabled, "More tickets in the Shop" link to `SCR_SHOP` exchange tab. Error: none (local sim; seed fetch failure in MVP falls back to a retry toast and the button re-enables).
 
 ### 4.13 `SCR_DUNGEON_RUN` (Full, MVP)
 
-Purpose: the fixed fight. Replaces the combat viewport region; the Fish Board is hidden; the HUD stays.
+Purpose: the fixed fight. Replaces the combat viewport region; the HUD stays. The run is ticked in the main loop (`Combat.Mode == Dungeon`, issue #42): main-stage combat waits while it runs and resumes with its kills and boss state intact. The Fish Board is hidden and frozen (issue #40): its passive DPS still applies, the tank keeps refilling, and board commands are rejected (`reject.board_locked`) until the run ends.
 
 ```
 +----------------------------------------------+
@@ -491,34 +493,34 @@ Purpose: the fixed fight. Replaces the combat viewport region; the Fish Board is
 |---|---|
 | Title | `Dungeon`, `Floor` |
 | Fight widgets | same bindings as `SCR_MAIN` combat viewport from the run's own snapshot |
-| Skip fight | runs the remaining ticks instantly (the outcome is already determined; 06 section 6.1) and shows the result card |
-| Result card | `Outcome` (Cleared / Failed), `RewardText`, `RemainingHpPct`; `[Collect]` pops to `SCR_DUNGEONS`; on Cleared with another ticket, `[Next floor]` sends `cmd StartDungeon(d, floor + 1)` if `Clearable` |
+| Skip fight | runs the remaining ticks headlessly in one frame (no player input can change the outcome, issue #40) and shows the result card |
+| Result card | `Outcome` (Cleared / Failed), `RewardText`, `RemainingHpPct`; `[Collect]` pops to `SCR_DUNGEONS`; a clear debits one ticket, a fail costs nothing (00 decision 16, issue #42); on Cleared with another ticket, `[Next floor]` sends `cmd StartDungeon(d, floor + 1)` if `Clearable` |
 
-Events: `DamageDealt`, `DungeonCleared`, `DungeonFailed`. Back button: same as Skip fight. The main combat keeps ticking underneath (stage farming continues during a run; the run is a separate sub-state, 06).
+Events: `DungeonStarted`, `HitLanded`, `SkillCast`, `CompanionAbilityUsed`, `DungeonCleared`, `DungeonFailed`, `DungeonAbandoned`. Back button: same as Skip fight.
 
 ### 4.14 `SCR_STAGE_SELECT` (Modal, MVP)
 
-Purpose: jump back to a cleared stage (to farm an easier stage for `GOLD_GAIN`-tuned kill rates or to let a weak loadout breathe), and challenge the current boss from anywhere.
+Purpose: farm a cleared side stage (an easier stage for `GOLD_GAIN`-tuned kill rates, or to let a weak loadout breathe) without losing the frontier, and challenge the frontier boss from anywhere. Side-stage farming (issue #35, 03): `Combat.Stage` stays the frontier and keeps its `KillsInStage` and walled state; `Combat.Selected` is the farm target; kills there pay that stage's gold and EXP and never advance progress; returning resumes the frontier exactly where it was.
 
 ```
 +----------------------------------------------+
 | Stages                                [ X ]  |
-| Highest cleared: 99    Farming: 100 (walled) |
+| Highest cleared: 99  Frontier: 100 (walled)  |
 | Chapter 2  (51-100)   v                      |
 |  [91] [92] [93] [94] [95] [96] [97] [98] [99]|
-|  [100 boss]  <- current                      |
-| [ Return to highest ]   [ Challenge boss ]   |
+|  [100 boss]  <- frontier     Farming: 95     |
+| [ Return to frontier ]  [ Challenge boss ]   |
 +----------------------------------------------+
 ```
 
 | Element | `StageSelectVm` field or command |
 |---|---|
-| Chapter dropdown | `Chapters[]` (`CHAPTER_WIDTH` groups up to `Stage.Highest`) |
-| Stage chips | `Stages[]`: `Number`, `IsBoss`, `IsCurrent`, `Cleared`; tap: `cmd SelectStage(n)` for `n <= Stage.Highest` |
-| Return to highest | `cmd SelectStage(Stage.Highest)` |
-| Challenge boss | `cmd AttemptBoss` (only when walled) |
+| Chapter dropdown | `Chapters[]` (`CHAPTER_WIDTH` groups up to `Progress.HighestCleared`) |
+| Stage chips | `Stages[]`: `Number`, `IsBoss`, `IsFrontier`, `IsSelected`, `Cleared`; tap: `cmd SelectStage(n)` for `n <= Progress.HighestCleared` (02's meaning: highest stage of any kind completed, issue #35); tapping the frontier chip equals Return |
+| Return to frontier | `cmd SelectStage(null)`; shown while `Combat.Selected != null` |
+| Challenge boss | `cmd AttemptBoss` for the frontier boss only (only when walled) |
 
-Rules the modal makes visible: offline gold, dungeon floor difficulty and first-clear eligibility all read `Stage.Highest`, never the selected stage (06 and 03), so a lower stage is never a loophole; the modal says "Rewards for offline time use your highest stage". Events: `StageSelected`, `StageCleared`.
+Rules the modal makes visible: offline gold and dungeon floor difficulty read `Progress.HighestCleared` and first-clear diamonds read `Progress.HighestFirstClearBoss`, never the selected stage (06, 03 and 02; issue #35), so a lower stage is never a loophole; the modal says "Rewards for offline time use your highest stage". Events: `StageChanged` (from `SelectStage`), `StageCleared`; the selected stage is read from the snapshot (`Combat.Selected`, null = frontier), there is no `StageSelected` event (issue #11).
 
 ### 4.15 `SCR_QUESTS` (Full, MVP)
 
@@ -526,7 +528,7 @@ Rules the modal makes visible: offline gold, dungeon floor difficulty and first-
 +----------------------------------------------+
 | <  Quests   [Daily *] Weekly  Achievements   |
 | Daily progress  8 / 11   [30 claimed] [70 !] |
-|  Log in                 1/1    [ Claim ]     |
+|  Log in                 1/1    done          |
 |  Defeat 300 monsters  300/300  [ Claim ]     |
 |  Attempt a boss 3 times  2/3   |======  |    |
 |  Summon a weapon         1/1   claimed       |
@@ -541,12 +543,12 @@ Rules the modal makes visible: offline gold, dungeon floor difficulty and first-
 | Tabs | `Tab` in {DAILY, WEEKLY, ACHIEVEMENT}; badge per tab = count `COMPLETED` |
 | Daily progress bar | `DailyCompletedCount / 11`, bonus chips for `d_bonus_5`, `d_bonus_8` with their state |
 | Row per quest | `Rows[]`: `TitleKey`, `TitleArgs` (target), `Progress`, `Target`, `State`, `RewardIcon`, `RewardAmount`, `GoScreen` (deep link for `IN_PROGRESS` rows) |
-| Claim | `cmd ClaimQuest(id)`; Claim all: `cmd ClaimAllQuests(tab)` with a summary toast "+140 diamonds" |
+| Claim | `cmd ClaimQuest(id)`; Claim all: `cmd ClaimAllQuests(tab)` with a summary toast "+140 diamonds". `d_login` pays nothing (login diamonds are auto-granted on rollover, issue #20): its row shows "done" with no Claim button and only counts toward the bonus rows |
 | Achievements tab | one row per ladder showing the lowest unclaimed rung and "3 / 11 rungs" |
 
 Events: `QuestCompleted` (row state swap, badge), `QuestClaimed`, `QuestsBulkClaimed` (toast), `DayRolledOver` / `WeekRolledOver` (full refresh; a toast "Missions reset" if the screen is open).
 
-States: Locked before stage 10 (quests unlock after the first boss). Empty daily list cannot occur. Forfeit warning: 60 minutes before rollover, rows with `COMPLETED` state show an amber "expires soon" caption (06 Open question 2).
+States: Locked before its `feature_unlocks` condition (stage 10, after the first boss; issue #45). Empty daily list cannot occur. Forfeit warning: 60 minutes before rollover, rows with `COMPLETED` state show an amber "expires soon" caption (06 Open question 2).
 
 ### 4.16 `SCR_SHOP` (Full, MVP)
 
@@ -573,7 +575,7 @@ States: Locked before stage 10 (quests unlock after the first boss). Empty daily
 | Diamond packs | `Packs[]`: `Total`, `BonusPct`, `FirstPurchaseAvailable`, `LocalizedPrice`, `PerUsd` |
 | Exchange | `Offers[]`: `Price`, `Grant`, `UsedToday / Limit`; `cmd ExchangeItem(offerId, qty)` with a qty stepper |
 
-IAP states: pressed button shows a spinner; the store sheet is native; on success a toast "Purchase complete: check your Inbox" and the Inbox badge increments when the server grant lands (08); on `IAP_PENDING` (deferred approval) a card explains; on failure a non-blocking `SCR_ERROR` with the store's message. Prices are never shown before the store returns them (skeleton rows meanwhile). `shop_view` analytics on open.
+IAP states: pressed button shows a spinner; the store sheet is native; on success a toast "Purchase complete: check your Inbox" and the Inbox badge increments when the server grant lands (08); on `IAP_PENDING` (deferred approval, 01 code) a card explains; a store-side cancel shows nothing; other failures show `SCR_ERROR` with the presentation of their 01 class (e.g. `RECEIPT_INVALID` is `Rejected`: a modal with the specific message; issue #30). Prices are never shown before the store returns them (skeleton rows meanwhile). `shop_view` analytics on open (fields in 06 section 13).
 
 ### 4.17 `SCR_INBOX` (Modal, MVP)
 
@@ -592,7 +594,8 @@ IAP states: pressed button shows a spinner; the store sheet is native; on succes
 
 | Element | `InboxVm` field or command |
 |---|---|
-| Rows | `Items[]`: `Id`, `Type` glyph, `TitleKey`, `BodyKey`, `BodyArgs`, `Grants[]`, `ExpiresInSec?`, `Claiming` |
+| Rows | `Items[]`: `Id`, `Type` glyph, `TitleKey`, `BodyKey`, `BodyArgs`, `Grants[]`, `ExpiresInSec?`, `AvailableInSec?`, `Claiming` |
+| Scheduled portions | package portions are inbox rows with a future `available_at` (08, issue #51); the list shows at most one future portion per package, greyed, "arrives in 14h", with no Claim, and never counts it in the badge |
 | Claim / Claim all | `cmd ClaimInbox(id, requestId)` / `cmd ClaimAllInbox(requestId)` (server mutations) |
 
 States: Loading skeleton while `GET /inbox` is in flight (cached list shown immediately if present). Empty: illustration + "Nothing here. Rewards from purchases and events arrive here." Error: inline card with Retry; cached items stay visible but Claim is disabled offline. Rows animate out on claim; the wallet chip pulses.
@@ -605,7 +608,7 @@ Content is defined in 06 section 7.3. Layout:
 +----------------------------------------------+
 |  Welcome back!                               |
 |  Away for 12h 04m                            |
-|  Rewards for 12h 04m                         |   "(capped at 24h)" when Capped
+|  Rewards for 12h 04m                         |   "(capped at 26h)" when Capped; the cap shown is the effective one
 |   [G] +997K gold                             |
 |   [E] +1.2M EXP                              |
 |   [T] Magic Tank refilled (+10 fish)         |
@@ -614,7 +617,7 @@ Content is defined in 06 section 7.3. Layout:
 +----------------------------------------------+
 ```
 
-`OfflineRewardVm` is the `OfflineReward` record plus formatted strings. `[Claim]` sends `cmd ClaimOfflineReward`; the modal then plays a gold burst into the HUD chip and pops. Not dismissible by scrim or back button. If `Pending` is null at show time (double-show race) the modal pops silently.
+`OfflineRewardVm` is the `OfflineReward` record plus formatted strings. Rules (issue #21): ticks do not run while this modal is open, so the numbers shown are exactly what is credited; the cap is the effective cap `OFFLINE_CAP_H` plus the `RES_OFFLINE_CAP` Research extension; a second gap while a reward is pending is summed into the same record, and the "Farmed stage" line shows the latest stage and rate; the tank line is the `CatchUpTank` count over credited ticks, applied at claim. `[Claim]` sends `cmd ClaimOfflineReward`; the modal then plays a gold burst into the HUD chip and pops. Not dismissible by scrim or back button. If `Pending` is null at show time (double-show race) the modal pops silently.
 
 ### 4.19 `SCR_ITEM_DETAIL` (Modal, M0)
 
@@ -667,10 +670,12 @@ States: unowned item shows "Not owned" and no Equip. Opened from `SCR_SUMMON_RES
 | Element | `SettingsVm` field or command |
 |---|---|
 | Account block | `Account.Provider`, `PlayerIdShort`, `Linked[]`; `Auth.Link(provider)`, `Auth.Logout()` (01 logout flow: upload save, clear token, `SCR_TITLE`) |
-| Notification toggles | `Prefs.Notify*` (local OS scheduling; MVP: tank full, dungeon reset; P1: missions expiring) |
-| Language | `Prefs.Locale` from the 09 locale list; applies on the next screen push without restart |
-| Accessibility toggles | `Prefs.Sound`, `Music`, `Haptics`, `ReducedMotion`, `LargeText` (section 11) |
-| Battery saver | `Prefs.TargetFps` 60 / 30 |
+| Notification toggles | `ClientPrefs.Notify*` (local OS scheduling; MVP: tank full, dungeon reset; P1: missions expiring) |
+| Language | `ClientPrefs.Locale` from the shipped locales (09 `meta.ship_locales`; hidden while only `en` ships, issue #57); applies on the next screen push without restart |
+| Accessibility toggles | `ClientPrefs.Sound`, `Music`, `Haptics`, `ReducedMotion`, `LargeText` (section 11) |
+| Battery saver | `ClientPrefs.TargetFps` 60 / 30 |
+
+Every toggle on this screen lives in `ClientPrefs` (issue #47): local to the device, not cloud-synced, not in `GameState`.
 | Restore purchases | `Iap.Restore()`; result toast |
 | Delete account | `SCR_CONFIRM` with typed "DELETE" field (08 GDPR flow), then `Account.Delete()` and `SCR_TITLE` |
 | Version caption | `ClientVersion`, `ContentVersion`, `SaveSchemaVersion`, `BuildHash`; long-press copies diagnostics |
@@ -683,7 +688,7 @@ States: offline shows account actions disabled with "Needs connection". Dev buil
 |---|---|
 | Name | `DisplayName`; `[Edit]` opens a text field (2 to 12 chars, server-filtered, 08); `Profile.Rename(name)` |
 | Avatar | `AvatarId` from a fixed set of 12 cat portraits; `Profile.SetAvatar(id)` |
-| Stats | `Stage.Highest`, `Hero.Level`, `Awaken.Rank`, `TotalSummons`, `LifetimeMerges`, `Collection counts x3`, `CreatedAt`, `PlayDays` |
+| Stats | `Progress.HighestCleared`, `Hero.Level`, `Hero.AwakenRank`, `Stats.Pulls`, `Stats.Merges`, `Collection counts x3`, `CreatedAt`, `PlayDays` |
 | Player id | `PlayerId` with copy button (support) |
 
 ### 4.22 `SCR_GUILD` (Full, P1)
@@ -700,7 +705,7 @@ Outline: a card per active event with countdown, progress and a `[Go]` deep link
 
 ### 4.25 `SCR_TUTORIAL` (Overlay, MVP)
 
-Purpose: the first three minutes. A spotlight cut-out over one target, a one-line caption, a pointer hand. Steps in section 14. `TutorialVm.Step`, `TargetElementId`, `CaptionKey`, `CanSkip`. It blocks taps outside the spotlight except on the HUD; the sim keeps running. Reacts to the event each step waits for (section 14 table). Skip rules in section 14.
+Purpose: the first three minutes. A spotlight cut-out over one target, a one-line caption, a pointer hand. Steps in section 14. `TutorialVm.Step` (from `GameState.Tutorial.Step`, 02), `TargetElementId`, `CaptionKey`, `CanSkip`. It blocks taps outside the spotlight except on the HUD; the sim keeps ticking except during step 1 (section 14). Reacts to the event each step waits for (section 14 table). Skip rules in section 14.
 
 ### 4.26 `SCR_CONFIRM` (Modal, M0, added)
 
@@ -708,29 +713,42 @@ Generic: `TitleKey`, `BodyKey` + args, optional cost line (`CostCurrency`, `Cost
 
 ### 4.27 `SCR_ERROR` (Modal or inline card, M0, added)
 
-Driven by 01's error taxonomy. `Code`, `TitleKey`, `BodyKey`, `Blocking`, `Actions[]` from a per-code table: `RETRY`, `UPDATE_APP`, `RESET_PROFILE`, `RESTORE_CLOUD`, `CONTACT_SUPPORT`, `DISMISS`. Blocking variant sits above everything (boot failures, maintenance mode with countdown, `CLIENT_TOO_OLD`); non-blocking variant is a card in the action-strip position that the sim runs under (network loss, summon timeout). Never two at once: a new error replaces the visible one and the replaced code is logged.
+Driven by 01's error taxonomy (issue #30): 01 section 7's code table is the source of codes, classes and retry; 07 only renders them. `Code`, `TitleKey` (`err.<code_lower>.title`), `BodyKey` (`err.<code_lower>.body`; the UPPER_SNAKE code lowercased, issue #248), `Blocking`, `Actions[]` from 01's per-code table: `RETRY`, `UPDATE_APP`, `RESET_PROFILE`, `RESTORE_CLOUD`, `CONTACT_SUPPORT`, `DISMISS`. Presentation by 01 class:
+
+| 01 class | `SCR_ERROR` presentation |
+|---|---|
+| `Reject` (sim) | never `SCR_ERROR`: button shake + toast under the pressed button (section 3) |
+| `Offline` | non-blocking card in the action-strip position (07's placement of 01's "banner"); the sim runs under it; auto-hides on reconnect |
+| `Timeout` / `ServerError` | "Retrying..." toast during automatic retries, then the modal with `[Retry]` / `[Later]` |
+| `Rejected` (server) | modal with the code's specific message |
+| `Conflict` | the 02 conflict modal, not `SCR_ERROR` |
+| `Maintenance`, `Fatal`, `CLIENT_TOO_OLD` and boot failures | blocking variant above everything (maintenance with its countdown) |
+
+Never two at once: a new error replaces the visible one and the replaced code is logged.
+
+Save-reset notice (issue #248): when boot replaced an unreadable save with a new profile (02 section 8.3, `BootResult.SaveResetNotice`), `SCR_MAIN` shows one acknowledge-only modal with `notice.save_corrupt_all.title` and `notice.save_corrupt_all.body` (`{supportId}` argument: "your save could not be read; a new game was started; contact support with id X") and `[OK]` / `[Contact support]`. It is not an error class and is shown once (the next boot loads the new save); the tutorial overlay waits until it is closed.
 
 ## 5. Fish Board interaction states and feedback
 
-The board on `SCR_MAIN` is the one touch-heavy surface. Rules from 05 restated as UI states:
+The board on `SCR_MAIN` is the one touch-heavy surface. Behaviour, commands, events and `UI_LONG_PRESS_MS` are 05 section 6's contract; the presentation below (scales, shakes, badges, animation timings) is this spec's, and the UI constants live in this spec's constants list (issue #18). Rules from 05 restated as UI states:
 
 | State | Visual | Transitions |
 |---|---|---|
-| Idle | fish bob (2 s loop, disabled under Reduced motion); empty cells show a faint pad | touch down on a fish -> Dragging; tap on a fish -> Selected; tap Release -> release |
+| Idle | fish bob (2 s loop, disabled under Reduced motion); empty cells show a faint pad | touch down on a fish and move beyond `UI_DRAG_START_PX` -> Dragging; tap on a fish -> Selected; tap Release -> release |
 | Selected (tap-select) | cell ring in `accent`, equal-level fish on the board pulse once | tap an equal-level fish -> `cmd MergeFish(src, dst)`; tap anywhere else -> Idle; long-press -> Info |
-| Dragging | fish lifts (scale 1.15, shadow), follows the finger at 60 Hz; the cell under the finger highlights `ok` if equal level, `bad` if occupied by another level, neutral if empty | release over equal level -> `cmd MergeFish`; release over empty -> `cmd MoveFish(src, dst)` (05, cosmetic reposition, no sim randomness); release elsewhere -> snap back 120 ms |
-| Info (long-press 400 ms) | tooltip card: level, missile % (`FISH_MISSILE_PCT`), board DPS contribution, coins on next merge | release -> Idle |
+| Dragging | fish lifts (scale 1.15, shadow), follows the finger at 60 Hz; the cell under the finger highlights `ok` if equal level, `bad` if occupied by another level, neutral if empty | release over equal level -> `cmd MergeFish`; release over empty -> `cmd MoveFish(src, dst)` (00 decision 22, cosmetic reposition, no sim randomness); release elsewhere -> snap back 120 ms |
+| Info (long-press `UI_LONG_PRESS_MS`) | popover card: level, name, missile % (`FISH_MISSILE_PCT`), board DPS contribution, merges to next level, and a `[Release back to sea (+N coins)]` button | button -> `cmd DiscardFish(cell)` (05); tap outside -> Idle |
 | Invalid drop | the target cell shakes 3 x 6 rp over 180 ms, `bad` flash, light haptic | -> Idle |
 | Merge | source slides into target 120 ms, target pops to level+1 (scale 1.3 -> 1.0, 200 ms), missile sprite launches toward the enemy, coin chip float `+n` | `FishMerged` event; `FishDiscovered` adds the discovery card for 1.5 s with `FISH_DISCOVERY_COINS[n]` |
 | Release | fish drops into a random empty cell from the tank gauge with a 150 ms arc | `FishReleased`; board full -> Release button disabled with "Board full" and the merge-all button pulses once |
-| Tank empty | Release buttons disabled, countdown to next fish shown | `TankFishAdded` re-enables |
-| At level cap | a capped fish shows a crown; dragging it onto an equal capped fish shows "Max level: raise the cap in Research" | no command |
+| Tank empty | Release buttons disabled, countdown to next fish shown | re-enabled from the snapshot when `Fish.TankCount > 0` (no event; 05's `TankFishReady` is opt-in, issue #18) |
+| At level cap | a capped fish shows a crown; dragging it onto an equal capped fish shows "Max level: raise the cap in Research". A fish above a lowered cap (content change) is kept with its board DPS and shows the crown too (05, issue #41) | no command |
 | Backgrounded mid-drag | on resume the drag is cancelled and the fish snaps back; nothing was sent | |
 | Boss fight | board stays active (merging is how you burst a boss); the merge VFX missile is the visible payoff | |
 
-Merge-all order: lowest level first, left-to-right, top-to-bottom pairs, so the result is deterministic and the player can predict it. Buttons send commands in one frame; the sim processes them in order and the view animates from the resulting events with 40 ms stagger.
+Merge-all order: lowest level first, left-to-right, top-to-bottom pairs, so the result is deterministic and the player can predict it; this order is 05's `MergeAll` contract. `[Release max]` and `[Merge all]` each send one sim command (`ReleaseMax`, `MergeAll`; issue #11); the view animates from the resulting events in the sim's order, `UI_RELEASE_MAX_ANIM_MS` / `UI_MERGE_ALL_ANIM_MS` apart. Fish rejections use 05's reasons (`TANK_EMPTY`, `BOARD_FULL`, `EMPTY_CELL`, `CELL_OCCUPIED`, `LEVEL_MISMATCH`, `FISH_AT_LEVEL_CAP`, `BAD_CELL` for same or out-of-range cells, `BOARD_LOCKED` during a dungeon run) as `reject.<reason_lower>` toasts.
 
-Haptics: light on pick-up, medium on merge, success pattern on discovery, failure pattern on invalid drop. Sound: pick, drop, merge pitch rising with level (12 steps), discovery fanfare.
+Haptics: light on pick-up, medium on merge, success pattern on discovery, failure pattern on invalid drop. Sound: pick, drop, merge pitch rising with level (12 steps; levels above 12 clamp to step 12, issue #48), discovery fanfare.
 
 ## 6. Summon reveal rules
 
@@ -748,22 +766,23 @@ Applies to `SCR_SUMMON_RESULT`. The sim and HUD already reflect the result when 
 
 ## 7. Number and time formatting
 
-`Whisker.Sim.Format.BigNumber.Short(double)` is the single implementation shared by client, bots and server rate tables (00 item 9). Contract:
+`BigNumber.Short(double)` in the client's engine-free Core (`HeroCat.Client.Core`, tested in `HeroCat.Runtime.Tests`) is the single implementation (00 item 9); nothing else formats a number for a player, and it moves to a shared assembly only if bots or the server ever need to. Contract:
 
-1. `v < 1000`: rounded to an integer, no suffix (`0`, `2`, `999`). Negative values format the magnitude with a leading `-`. NaN or infinity formats `?` and is a bug.
-2. `v >= 1000`: `k = floor(log1000 v)` by repeated division (never `Math.Log`), mantissa `m = v / 1000^k` to three significant digits (`1.23`, `12.3`, `123`); if rounding carries to 1000, bump `k`.
+1. Round to three significant digits first, then choose the suffix (issue #22). A rounded value below 1000 prints as an integer with no suffix (`0`, `2`, `999.4 -> 999`); `999.5` rounds to `1.00K`. Negative values format the magnitude with a leading `-`. NaN or infinity formats `?` and is a bug.
+2. Otherwise `k = floor(log1000 v)` by repeated division (never `Math.Log`), mantissa `m = v / 1000^k` to three significant digits (`1.23`, `12.3`, `123`); if rounding carries to 1000, bump `k`.
 3. Suffix: `K`, `M`, `B`, `T`, then two lowercase letters: `aa` = 1e15, `ab` = 1e18, ... `az` = 1e90, `ba` = 1e93. `double.MaxValue` is `180dt`.
 4. Culture-invariant `.` separator, no grouping, no allocation beyond the returned string.
 
 | Input | Output |
 |---|---|
+| 999.4 | `999` |
 | 999.5 | `1.00K` |
 | 12345 | `12.3K` |
 | 1.7e5 | `170K` |
 | 4.56e7 | `45.6M` |
 | 2.9e18 | `2.90ab` |
 
-Integers that are counts (diamonds, tickets, copies, pity) use `IntText` with locale grouping (`1,240`) and never the suffix ladder below 1e6; above, they also use the ladder. Percentages: `+48%`, one decimal below 10% (`+5.0%`), ladder above 1000% (`+1.64K%`). Chances: integer percent, floored, so 99.6% never reads as 100%. Multipliers: `x2.25`, `x1.5e3` above 1000.
+Integers that are counts (diamonds, tickets, copies, pity) use `IntText` and are shown in full with locale grouping below 1e6 (`1,240`, `999,999`); from 1e6 they use the ladder (00 contract 9: 3 significant digits on the ladder, integer counts below 1e6 in full). Percentages: `+48%`, one decimal below 10% (`+5.0%`), ladder above 1000% (`+1.64K%`). Chances: integer percent, floored, so 99.6% never reads as 100%. Multipliers: `x2.25`, on the ladder above 1000 (`x1.50K`), never scientific notation.
 
 Time: `Duration(s)`: `12h 04m`, `45m 10s`, `12s` (two largest units); `Countdown(s)`: `6h 12m` above an hour, `12:34` below, `0:04` below a minute; boss timer: `17.3 s`.
 
@@ -792,7 +811,7 @@ Type scale (TextMeshPro, one font family, two weights): display 64 rp (summon su
 | Button tap | selection / light click | `ui_tap` |
 | Rejected command toast | light | `ui_deny` |
 | Fish pick-up, drop | light | `fish_pick`, `fish_drop` |
-| Fish merge | medium | `fish_merge_01..12` by resulting level |
+| Fish merge | medium | `fish_merge_01..12` by resulting level, clamped at 12 |
 | Fish discovery | success | `fish_discover` |
 | Enemy killed | none | `hit_kill` (max 4 per second, pooled) |
 | Crit | none | `hit_crit` |
@@ -814,7 +833,7 @@ Music: one combat loop per chapter skin, ducked 50% under modals, off during a r
 
 1. **One-tap reach.** From `SCR_MAIN`, every primary sink (Train, Summon, Release/Merge, Dungeons, Quests claim, Shop) is one tap; every secondary (Research, Awakening, equip) is two.
 2. **Red-dot policy.** A dot means "a free thing is waiting": claimable quest, unused dungeon ticket, unclaimed inbox item, affordable Research node, new collectible unseen, free daily gift. Never for "you could spend money" or for affordable Training (that would be permanent). Dots clear when the thing is claimed or seen, never on a timer.
-3. **Toasts.** One at a time, bottom of the content area above the tab bar, 2 s (4 s for L/M acquisitions), identical consecutive toasts collapse with "x3". Toasts never carry actions; anything actionable is a card or a modal.
+3. **Toasts.** One at a time, bottom of the content area above the tab bar, except rejection toasts, which anchor under the pressed button (01 `Reject`, issue #30); 2 s (4 s for L/M acquisitions), identical consecutive toasts collapse with "x3". Toasts never carry actions; anything actionable is a card or a modal.
 4. **Modals.** Never two at once; requests queue and show in order after the current one closes. A modal never covers the combat viewport while `EnemyIsBoss` is true: `SCR_OFFLINE_REWARD`, `SCR_INBOX`, `SCR_STAGE_SELECT`, `SCR_PROFILE`, `SCR_ITEM_DETAIL` and `SCR_CONFIRM` wait for the boss fight to end or shift down to the Fish Board region if invoked by the player during a boss. Mandatory modals (`SCR_OFFLINE_REWARD`) are the only non-dismissible ones.
 5. **Loading.** Skeletons, not spinners, for lists; a spinner only on the pressed button. Nothing blocks the sim. After 2 s a Retry link appears; after 10 s the 01 error card.
 6. **Empty.** One illustration key, one sentence, one action that fills it.
@@ -835,12 +854,12 @@ Music: one combat loop per chapter skin, ducked 50% under modals, off during a r
 
 ## 12. Localization
 
-- Every string is a key (`scr.<screen>.<element>`, `err.<CODE>`, `quest.<id>.title`, `item.<id>.name`), resolved through `ContentDb.Text(key, args)` (09). No literal strings in prefabs or code; a missing key renders the key itself in dev and the English fallback in release and logs once.
+- Every string is a key (`scr.<screen>.<element>`, `err.<code_lower>.title` / `.body`, `reject.<reason_lower>`, `notice.<code_lower>.title` / `.body`, `quest.<id>.title`, `item.<id>.name`; keys are lowercase, issue #248), resolved through `ContentDb.Text(key, args)` (09). No literal strings in prefabs or code; a missing key renders the key itself in dev and the English fallback in release and logs once.
 - Pluralisation through ICU MessageFormat in the 09 table (`{n, plural, one {# copy} other {# copies}}`); never concatenate number + noun in code.
 - Numbers and dates through the formatters in section 7 with the locale's grouping separator; the suffix ladder letters are not localised (K/M/B/T/aa are shown in all locales; Open question 4 for ja/ko/zh 万/億 ladders).
 - RTL readiness: all layouts use horizontal layout groups with `childAlignment` mirrored by a single `RtlFlipper` component; icons that imply direction (back chevron, arrows) are mirrored; text uses TMP's RTL support. No RTL locale ships in MVP, but the flip is tested in CI with a pseudo-RTL locale.
 - Length budgets (09 column `maxChars` at 1.3x): HUD chip value 7, tab label 10, button label 18, row title 28, toast 48, modal body 160, quest title 40. The 09 validator fails a translation over budget; pseudo-localization (`[!!! Ţêšţ !!!]`, +40% length) is built nightly and screenshotted per screen.
-- Locale list MVP: `en`, plus one of `ja` / `ko` chosen by soft-launch market; content for `zh-Hans` prepared.
+- Locale list MVP (issue #57): soft launch ships `en` only (`meta.ship_locales = en`; PH/CA/NZ are English-first). `ja` is kept fully translated in the pipeline and CI fixtures use `ship_locales = en,ja`, so pseudo-localization and the length budgets are exercised with a real second locale; content for `zh-Hans` prepared.
 
 ## 13. Performance rules
 
@@ -849,30 +868,30 @@ Music: one combat loop per chapter skin, ducked 50% under modals, off during a r
 - Particles: at most 3 active systems in the combat viewport and 1 on the board; total live particles under 300; VFX prefabs are pooled per type with a cap of 8 instances.
 - One Canvas per band (HUD, combat UI, action strip, Fish Board, tab bar, Full screen, modal, overlay, toasts) so a changing number rebuilds only its band. Per-frame text updates limited to the HP bar text, boss timer and damage numbers; everything else updates on change (change-only setters) at most 10 Hz.
 - Zero steady-state managed allocation from `SessionRunner.Update` and `*Vm.Refresh` when no event arrived; under 1 KB per second while farming. No LINQ, closures, boxing or `string.Format` in the update path.
-- Atlases: `ui_icons`, `ui_frames` (shared); one sprite atlas per Full screen (`scr_hero`, `scr_collection` shared by the three collection screens, `scr_summon`, `scr_dungeons`, `scr_quests`, `scr_shop`); `fish` (12 levels + crown), `weapons_icons`, `skills_icons`, `companions_icons`; combat: one atlas per chapter skin (enemy + background), hero atlas, VFX atlas. Addressables groups mirror this list (section 16).
+- Atlases: `ui_icons`, `ui_frames` (shared); one sprite atlas per Full screen (`scr_hero`, `scr_collection` shared by the three collection screens, `scr_summon`, `scr_dungeons`, `scr_quests`, `scr_shop`); `fish` (`UI_FISH_SPRITE_LEVELS` = 12 levels, tint/frame variants, crown), `weapons_icons`, `skills_icons`, `companions_icons`; combat: one atlas per chapter skin (enemy + background), hero atlas, VFX atlas. Addressables groups mirror this list (section 16).
 - Cold boot to `SCR_MAIN` under 4 s on the floor device (10 budget); `SCR_MAIN` assets are in the always-loaded group; everything else loads on first push with the skeleton state covering the load.
 - Memory under 350 MB PSS on the 2 GB device with two Full screens cached; screens not visited for 5 minutes are unloaded (`ScreenRouter` LRU of 3 cached Full screens).
 
 ## 14. Tutorial flow (MVP)
 
-Goal: by minute three the player has trained, merged, summoned and seen a boss, without reading. Steps are content rows (09 `tutorial_steps`) so copy and gating are data. Each step waits on one event; the spotlight blocks everything else except the HUD.
+Goal: by minute three the player has trained, merged, summoned and seen a boss, without reading. Steps are content rows (09 `tutorial_steps`) so copy and gating are data. Each step waits on events, stored as the row's `expect_event` and `expect_count` (issue #46): `expect_event` is one event name or a `|`-separated list, and an occurrence of any listed event counts (09 section 5.29; issue #246); the spotlight blocks everything else except the HUD. Steps waiting on a screen push or an overlay close observe `ScreenRouter`, not the sim. State is `GameState.Tutorial.Step` in the save (02), advanced by the `SetTutorialStep(step)` command (01) when a step completes; `TUTORIAL_DONE` is the row count of `tutorial_steps`. Ticks keep running during every step except step 1, where the enemy waits for the player's taps (issue #46; 01 Open question 1).
 
-| Step | Spotlight | Caption key | Waits for | Grant |
+| Step | Spotlight | Caption key | Waits for (`expect_event` x `expect_count`) | Grant |
 |---|---|---|---|---|
-| 1 | combat viewport | `tut.1.tap` "Tap the monster!" | 3 x `TapZap` accepted | |
+| 1 | combat viewport | `tut.1.tap` "Tap the monster!" | 3 x `TapZap` accepted | row `tut_welcome` (09, trigger `PROFILE_CREATED`): its `TUTORIAL_DIAMONDS` and `TUTORIAL_WEAPON_ID` grants are applied once at profile creation, guarded by `Tutorial.TutorialDiamondsGranted` (02) |
 | 2 | `SCR_MAIN` gold chip after first kills | `tut.2.gold` | `EnemyKilled` x3 | |
 | 3 | Hero tab | `tut.3.hero` "Make your cat stronger" | `SCR_HERO` pushed | |
-| 4 | ATK `[+]` | `tut.4.train` | `TrainingPurchased` | |
+| 4 | ATK `[+]` | `tut.4.train` | `StatTrained` | |
 | 5 | back chevron | `tut.5.back` | `SCR_MAIN` on top | |
 | 6 | Release button | `tut.6.release` "Release a fish" | `FishReleased` x2 | |
 | 7 | the two level-1 fish | `tut.7.merge` "Drag one onto the other" | `FishMerged` | `FishDiscovered(2)` plays naturally |
-| 8 | Summon tab | `tut.8.summon` | `SCR_SUMMON` pushed | `TUTORIAL_DIAMONDS` (1500) is already in the wallet from profile creation |
-| 9 | Summon x10 (Weapon) | `tut.9.pull` "Summon 10 weapons" | `SummonResolved` | the tutorial's 10-pull is a normal server/local roll; no rigged result |
+| 8 | Summon tab | `tut.8.summon` | `SCR_SUMMON` pushed | `TUTORIAL_DIAMONDS` (1500) and the starter weapon `TUTORIAL_WEAPON_ID` are already granted at profile creation (09 `tut_welcome`, issue #46) |
+| 9 | Summon x10 (Weapon) | `tut.9.pull` "Summon 10 weapons" | `ItemAcquired(kind=WEAPON)` x10 (after `ApplySummonResult`) | the tutorial's 10-pull is a normal server/local roll; no rigged result |
 | 10 | Skip on the reveal (if still running after 3 s) | `tut.10.skip` | overlay closed | |
-| 11 | Equip on the best new weapon (`SCR_WEAPONS` auto-pushed) | `tut.11.equip` | `WeaponEquipped` | |
-| 12 | back to `SCR_MAIN`; stage 10 boss approaching | `tut.12.boss` "A boss! Merge fish to fire missiles" | `BossCleared` or `BossFailed` | tutorial ends; `Profile.TutorialDone = true` |
+| 11 | Equip on the best new weapon (`SCR_WEAPONS` auto-pushed) | `tut.11.equip` | `ItemEquipped(WEAPON)` | |
+| 12 | back to `SCR_MAIN`; stage 10 boss approaching | `tut.12.boss` "A boss! Merge fish to fire missiles" | `BossCleared\|BossFailed` x1 (either completes it) | tutorial ends; `Tutorial.Step = TUTORIAL_DONE` |
 
-Rules: `[Skip tutorial]` is available from step 3 onward (steps 1 and 2 take under 20 s) and completes all grants a skipped step would have made (none are conditional). Steps are resumable: `Profile.TutorialStep` is saved after each step, and a relaunch resumes at that step with the spotlight re-aimed. Coach marks for MVP screens (Quests, Dungeons, Shop, Research) are separate one-shot overlays shown on first push of each screen, not part of this flow. The whole flow is skipped for a restored cloud save with `TutorialDone`.
+Rules: `[Skip tutorial]` is available from step 3 onward (steps 1 and 2 take under 20 s) and completes all grants a skipped step would have made (none are conditional). Skip sends `SetTutorialStep(TUTORIAL_DONE)` and sets `Tutorial.Skipped`. Steps are resumable: `Tutorial.Step` is in the save, so a relaunch resumes at that step with the spotlight re-aimed. Coach marks for MVP screens (Quests, Dungeons, Shop, Research) are separate one-shot overlays shown on first push of each screen (`ClientPrefs.SeenCoachMarks`), not part of this flow. The whole flow is skipped for a restored cloud save with `Tutorial.Step == TUTORIAL_DONE`.
 
 ## 15. Placeholder art (M0) and the MVP asset list
 
@@ -892,6 +911,8 @@ No artist in M0. Everything is a coloured `Image` with a TMP label, so the slice
 
 ### 15.2 MVP asset list for the artist
 
+Fish art is a fixed set of `UI_FISH_SPRITE_LEVELS` (12) sprites (issue #48). A level `n` above 12 reuses sprite 12 with tint/frame variant `n - 12`; merge sounds clamp at step 12. The 09 validator warns when content can raise the fish level above the sprite count (`FISH_MAX_LVL0` plus the `res_fish_cap` maximum).
+
 | Category | Count | Spec |
 |---|---|---|
 | Hero cat | 1 body, 5 awakening auras, 1 idle + 1 attack + 1 hurt animation (Unity 2D Animation rig, 12 fps keyframes) | 512 rp tall |
@@ -901,7 +922,7 @@ No artist in M0. Everything is a coloured `Image` with a TMP label, so the slice
 | Companion portraits | 50 idle sprites + 50 icons | 256 rp / 128 rp |
 | Enemies | 8 chapter skins x 3 mob variants = 24 mobs, 8 bosses, each with idle + hurt + death (3 frames each) | mobs 320 rp, bosses 480 rp |
 | Backgrounds | 8 chapter backgrounds (static + 2 parallax layers) | 1080 x 900 rp |
-| Fish | 15 levels + crown overlay + tank gauge art | 140 rp |
+| Fish | 12 levels (`UI_FISH_SPRITE_LEVELS`) + tint/frame variants for levels above 12 + crown overlay + tank gauge art (issue #48) | 140 rp |
 | UI icons | 48 line icons (currencies 5, tabs 7, dungeons 3, ability types 4, quest kinds 3, misc 26) | 64 rp, atlas `ui_icons` |
 | UI frames | 9-slice panels x 4, buttons x 3 states x 2 styles, chips, badges, rarity frames x 5 | atlas `ui_frames` |
 | Avatars | 12 cat portraits | 256 rp |
@@ -914,16 +935,160 @@ No artist in M0. Everything is a coloured `Image` with a TMP label, so the slice
 
 ## 16. Unity implementation notes
 
-- **uGUI + TextMeshPro** (00 section 3). One prefab per screen under `Assets/Whisker.Client/Screens/<ScreenId>/<ScreenId>.prefab` with a `ScreenBase` subclass. Sub-prefabs for repeated rows (collection tile, quest row, inbox row, dungeon card, shop card) are nested prefabs instantiated into pooled lists.
-- **`ScreenRouter`** (`Whisker.Client.Navigation`): a stack of `ScreenEntry { ScreenId, Type, Instance, Args }`. `Push(id, args)`, `Replace(id, args)` (tab bar), `Pop()`, `PopTo(id)`, `ShowModal(id, args)` (queues if a modal is visible), `ShowOverlay(id)`. It owns the Android back-button mapping (section 1) and the LRU cache of three Full screens. Screens are loaded through Addressables by `ScreenId` and released when evicted.
-- **ViewModels** in `Whisker.Client.ViewModels`, plain C# (no `UnityEngine`), one per screen plus `HudVm`, `BadgesVm`, `ToastQueue`, `RevealSequencer`. `GameViewModel` owns them and is the only client type holding a `Simulation` reference besides `SessionRunner`. `Refresh()` runs on frames where a tick ran, an event arrived or a command marked dirty (01); screens update from their vm with change-only setters.
+- **uGUI + TextMeshPro** (00 section 3). One prefab per screen under `Assets/HeroCat.Client/Screens/<ScreenId>/<ScreenId>.prefab` with a `ScreenBase` subclass. M0 has no prefabs: each screen is one code builder (`ScreenView` subclass) creating placeholder art (section 15.1), so it can run before an artist exists; prefabs replace the builders with the MVP art. The Unity-only `Boot/`, `Screens/` and `Editor/ContentPreBuild.cs` are type-checked in `check.sh` against API stubs (`tools/unity_typecheck`), since Unity cannot run in cloud sessions. Sub-prefabs for repeated rows (collection tile, quest row, inbox row, dungeon card, shop card) are nested prefabs instantiated into pooled lists.
+- **`ScreenRouter`** (engine-free, `HeroCat.Client.Core`; the view layer implements its `IScreenHost`): a stack of `ScreenEntry { ScreenId, Type, Instance, Args }`. `Push(id, args)`, `Replace(id, args)` (tab bar), `Pop()`, `PopTo(id)`, `ShowModal(id, args)` (queues if a modal is visible), `ShowOverlay(id)`. It owns the Android back-button mapping (section 1) and the LRU cache of three Full screens. Screens are loaded through Addressables by `ScreenId` and released when evicted.
+- **Engine-free core** (issue #23): view-models and every piece of client logic that does not need the engine live in `Assets/HeroCat.Client/Core/` (asmdef `HeroCat.Client.Core`, `noEngineReferences: true`, namespace `HeroCat.Client.Core`), which `src/HeroCat.Runtime.Tests` compiles and tests under dotnet without Unity. That is: one vm per screen plus `HudVm`, `BadgesVm`, `ToastQueue`, `RevealSequencer`, and the logic of `ScreenRouter` (stack, modal queue, Android back mapping, LRU), the Fish Board interaction state machine, the Tap Zap throttle, the damage-number pool, badge rules, tutorial step logic and `SafeAreaMath`. MonoBehaviours, prefabs and uGUI code only adapt these to the engine. `GameViewModel` owns them and is the only client type holding a `Simulation` reference besides `SessionRunner`. `Refresh()` runs on frames where a tick ran, an event arrived or a command marked dirty (01); screens update from their vm with change-only setters.
 - **Binding approach**: explicit. No reflection binding, no per-frame polling of properties. A screen's `Refresh()` is a flat list of setter calls; `OnEvent` is a `switch` on event type. Reasons: zero allocation is easy to audit, and the bot harness's view-model tests (10) run without Unity.
-- **Commands**: `Commands.Send(Command)` -> `Simulation.Apply` on the main thread between frames; result `Accepted` or `Rejected(code)`; the screen toasts `err.<code>`. Server-backed commands (summon, inbox, shop) go through `Whisker.Runtime` clients and return a `Task<Result>`; the vm sets `InFlight` flags for spinners.
+- **Commands**: `Commands.Send(Command)` -> `Simulation.Apply` on the main thread between frames; result `ApplyResult.Accepted` or `ApplyResult.Reject(code, reason)`; the screen toasts `reject.<reason_lower>` (section 3). Server-backed commands (summon, inbox, shop) go through `HeroCat.Runtime` clients and return a `Task<Result>`; the vm sets `InFlight` flags for spinners.
 - **Addressables groups**: `always` (`SCR_MAIN`, HUD, tab bar, fish atlas, `ui_icons`, `ui_frames`, chapter 1 skin, hero), one group per Full screen prefab + its atlas, `chapters` (one bundle per chapter skin, downloaded ahead when the player enters the previous chapter), `audio_sfx`, `audio_music` (one bundle per loop), `collection_icons` (three icon atlases, loaded on first collection screen).
 - **Input**: Input System package; `TapZap` from a full-viewport `IPointerClickHandler` behind the combat UI; Fish Board drag through `IBeginDragHandler` / `IDragHandler` / `IEndDragHandler` on cells; back button via `Keyboard.current.escapeKey`.
-- **Safe area**: one `SafeAreaFitter` on the root `RectTransform`; bands are children with fixed heights and the combat band `flexibleHeight = 1`.
-- **Localization**: `TextKeyLabel` component holds the key; a locale change re-resolves every live label through an event. Fonts: one TMP font asset with fallback chain `latin -> ja -> ko -> zh-Hans`.
-- **Dev tooling**: `Debug` section in `SCR_SETTINGS` compiled under `WHISKER_CHEATS`; a `UiStateCatalog` scene that instantiates every screen in every state (empty, loading, error, locked, first-time) for screenshot review and pseudo-localization builds.
+- **Safe area**: one `SafeAreaFitter` on the root `RectTransform`; bands are children with fixed heights and the combat band `flexibleHeight = 1`. Details in section 17.2.
+- **Localization**: `TextKeyLabel` component holds the key; a locale change re-resolves every live label through an event. A hot-applied content swap (00's four tables: `localization`, `shop_products`, `shop_packages`, `inbox_templates`; issue #54) re-resolves labels the same way and makes `ShopVm` and `InboxVm` re-read their rows. Fonts: one TMP font asset with fallback chain `latin -> ja -> ko -> zh-Hans`.
+- **Dev tooling**: `Debug` section in `SCR_SETTINGS` compiled under `HEROCAT_CHEATS` (section 17.3); a `UiStateCatalog` scene that instantiates every screen in every state (empty, loading, error, locked, first-time) for screenshot review and pseudo-localization builds.
+
+## 17. Unity project setup, builds and device QA
+
+The engine-level setup of `unity/HeroCatClient`, carried over from the retired client prototype spec and adapted to this design (issue #3). 01 owns `SessionRunner` and the lifecycle mapping; this section adds only what is client-side.
+
+### 17.1 Unity version and project settings
+
+**Unity `6000.6.7f1`**, pinned in `ProjectSettings/ProjectVersion.txt` (00 section 3). Everyone opens the project in exactly this version; the pin is bumped only between playtest rounds, in its own PR. Why Unity 6 and not 2022.3 or 6.0:
+
+- 2022.3 is out of support and 6.0 LTS support ends October 2026; a client that becomes the product should not start on a stream that is ending.
+- Google Play's current requirements (target API 35 or newer, 16 KB page size support for apps targeting Android 15 and newer) are met by Unity 6 out of the box; on 2022.3 they depend on late patch releases.
+- Build Profiles (17.4) replace per-platform define juggling for the Dev versus Release split.
+- C# 9 is the compiler default, matching the sim's `LangVersion 9.0` and netstandard2.1.
+
+UI stack: **uGUI + TextMeshPro** (00 section 3, issue #2). The UI Toolkit screens in the repo are old design and are rewritten as uGUI prefabs, not ported.
+
+Template: **Universal 2D** (URP with the 2D Renderer). Configure the URP asset for the floor device (00 section 3: 2 GB, Android 8):
+
+| URP setting | Value | Why |
+|---|---|---|
+| Renderer | 2D Renderer; no 2D lights in M0 | flat sprites and UI; lights only if the MVP art asks for them |
+| HDR | off | memory and bandwidth on low-end GPUs |
+| MSAA | off | sprites and UI do not need it |
+| Render Scale | 1.0 | |
+| Post-processing | off | rarity flashes and vignettes are sprites (section 6), not post effects |
+| Depth Texture, Opaque Texture | off | |
+| SRP Batcher | on (default) | |
+
+Other project settings: Color Space Linear, Active Input Handling **Input System Package (New)**, Scripting Backend IL2CPP, API Compatibility Level **.NET Standard 2.1** (the sim's surface is the same in dotnet and Unity), Default Orientation **Portrait** with every other auto-rotation orientation off, incremental GC on.
+
+Packages and assemblies:
+
+- `HeroCat.Sim`, `HeroCat.Runtime` and `HeroCat.Remote` enter Unity as local `file:` packages pointing at `src/` (`Packages/manifest.json`), not copied DLLs, so edits and breakpoints work in both hosts.
+- `src/Directory.Build.props` redirects dotnet `obj/` and `bin/` out of the package folders; Unity imports every file in a package folder, so a generated `AssemblyInfo.cs` there would compile twice. Commit the `.meta` files Unity writes into `src/`.
+- C# level: C# 9 only in code Unity compiles; no file-scoped types, `required` members or raw string literals.
+
+| asmdef | Location | References | Flags |
+|---|---|---|---|
+| `HeroCat.Client.Core` | `Assets/HeroCat.Client/Core/` | `HeroCat.Sim`, `HeroCat.Runtime` | `noEngineReferences: true`; also compiled by `src/HeroCat.Runtime.Tests` (section 16) |
+| `HeroCat.Client` | `Assets/HeroCat.Client/` | `HeroCat.Client.Core`, `HeroCat.Sim`, `HeroCat.Runtime`, `HeroCat.Remote`, `Unity.InputSystem`, `Unity.TextMeshPro`, Addressables | engine references on; `HEROCAT_CHEATS` is a define in Dev build profiles only (17.4) |
+| `HeroCat.Client.Editor` | `Assets/HeroCat.Client/Editor/` | `HeroCat.Client`, `HeroCat.Client.Core` | `includePlatforms: ["Editor"]`; holds `ContentPreBuild` (verifies `content/`, copies it into `StreamingAssets/content` and `Resources/content`, checks the `asset` addresses; 09 sections 3.2 and 10.1, issue #133) and the build-profile menu (17.4) |
+
+Rules: only `Boot/` and `Screens/` hold `MonoBehaviour`s; nothing outside `Boot/GameRoot.cs`, `SessionRunner` and `GameViewModel` holds a `Simulation` reference.
+
+### 17.2 Safe area and screen fit
+
+`SafeAreaFitter` reads `Screen.safeArea` on `Start` and on any frame where the safe area or screen size changed, converts it with `Core/SafeAreaMath` (engine-free, unit-tested) and applies it as anchors on the root `RectTransform`. Every band in section 2 is a child of that root; only the background and the camera clear colour draw into the notch and home-indicator bands. Tablets get the same portrait layout stretched to width (tablet layout is P2).
+
+### 17.3 Frame loop and sim bridge rules
+
+`SessionRunner` (01 section 3) is the only `Update()` that touches the sim. The client adds these rules:
+
+1. **Frame rate and sleep.** At boot: `Application.targetFrameRate = ClientPrefs.TargetFps` (60, or 30 with Battery saver), `QualitySettings.vSyncCount = 0`, `Screen.sleepTimeout = SleepTimeout.NeverSleep` while `SCR_MAIN` is the top Full screen (a modal over it included) and `SleepTimeout.SystemSetting` elsewhere (01 section 3.3; `ScreenRouter.KeepScreenAwake`, applied by `GameRoot` on change). The phone-on-the-desk idle mode depends on it.
+2. **Unscaled time only.** The tick accumulator uses `Time.unscaledDeltaTime`; `Time.timeScale` is never changed. `MAX_TICKS_PER_FRAME`, `TICK_BUDGET_MS` and `AUTOSAVE_INTERVAL_SEC` are 01's; the client does not redefine them.
+3. **Commands between frames.** Commands come only from UI callbacks on the main thread, which never interleave with `Advance`. `OnEvent` never sends a command; anything a feedback item wants from the sim is queued to the next frame.
+4. **Time enters through logged commands.** The client never reads `DateTime.Now`. Server time reaches the sim only as the logged `ApplyServerTime` system command at boot, resume, gap recovery and every `WALL_CLOCK_SYNC_SEC` (60 s) while open; between syncs the sim's tick-driven clock rolls the day (issue #5). Offline catch-up also runs through `Simulation.Apply`, never by writing state (issue #6).
+5. **Lifecycle.** `OnApplicationPause(true)`: save synchronously, stop ticking. `OnApplicationPause(false)`: reset the accumulator, resync time, run catch-up; `SCR_OFFLINE_REWARD` follows if the gap reached `OFFLINE_MIN_S`. `Application.lowMemory`: save, then unload non-visible screens. `OnApplicationFocus` is deliberately unused: on Android both focus and pause fire on backgrounding, and on split-screen focus loss an idle game should keep running. Full table in 01 section 3.3.
+6. **Dev clock.** Dev builds wrap the clock in `OffsetClock` so the Debug section can move time; the offset is not persisted, so a relaunch after a `+8h` cheat looks like the clock going back, which is the case to test.
+7. **Debug compile-out.** The Debug section of `SCR_SETTINGS`, the time-scale control, the clock offset and the perf overlay are compiled only under `UNITY_EDITOR || DEVELOPMENT_BUILD || HEROCAT_CHEATS`. A Release build contains no cheat UI and no code path that changes time scale or moves the clock.
+
+### 17.4 Build profiles and platform settings
+
+Four Build Profiles (`Assets/Settings/BuildProfiles/`): `Android-Dev`, `Android-Release`, `iOS-Dev`, `iOS-Release`. Dev profiles define `HEROCAT_CHEATS` and enable Development Build, Autoconnect Profiler and Script Debugging; Release profiles have none of these. Build Profile assets are generated by Unity, so the repo does not hand-write them: `Editor/BuildProfiles.cs` adds **Tools > HeroCat > Build Profiles > Create Dev + Release From Selected**, which copies a platform profile into `<Platform>-Dev` and `<Platform>-Release`, sets `HEROCAT_CHEATS` on `*-Dev` only and removes it from the Player Settings defines. A pre-build check fails any `*-Release` build marked Development and any non-development build that still defines `HEROCAT_CHEATS`.
+
+Common Player Settings:
+
+| Setting | Value |
+|---|---|
+| Product name | `Whisker Hero` (working title); company and bundle id `com.<studio>.herocat` are placeholders |
+| Version / bundle code | semantic version / increment per build |
+| Default orientation | Portrait, auto-rotate off |
+| Scripting backend | IL2CPP |
+| API compatibility | .NET Standard 2.1 |
+| Managed stripping | Low (safe with Newtonsoft); raised later if size matters |
+| Incremental GC | on |
+| Active Input Handling | Input System Package (New) |
+| Color space | Linear |
+| Status bar | hidden |
+
+Android:
+
+| Setting | Value | Why |
+|---|---|---|
+| Minimum API level | 26 (Android 8) | 00 section 3 minimum |
+| Target API level | highest installed (35 or newer) | Google Play requirement |
+| Target architectures | ARM64; ARMv7 only if the device farm needs it (10) | Play requires 64-bit |
+| Graphics APIs | OpenGLES3 in M0; Vulkan evaluated on the device set before MVP | low-end Vulkan drivers are uneven |
+| Build type | APK for Dev, AAB for Release | sideload for playtests, Play for release |
+| Keystore | debug keystore for Dev; project keystore kept outside the repo for Release | |
+| 16 KB page sizes | on (Unity 6 default) | Play requirement for apps targeting Android 15+ |
+| Internet permission | off in M0 (no network code); on from MVP (08) | |
+| Optimized frame pacing | on | smoother frame pacing on GLES3 |
+
+Build commands for CI: `Unity -batchmode -quit -projectPath unity/HeroCatClient -executeMethod HeroCat.Client.Editor.Builds.AndroidDev -logFile -` (APK, debug keystore) and `...Builds.AndroidRelease` (signed AAB, used by `build-android.yml`, 10 section 6.2). `Editor/Builds.cs` wraps `BuildPipeline.BuildPlayer` with the `Android-Dev` / `Android-Release` profile when it exists, takes the version from `unity/HeroCatClient/version.json` and the versionCode from `-androidVersionCode`.
+
+iOS:
+
+| Setting | Value | Why |
+|---|---|---|
+| Target minimum iOS | 15.0 | 00 section 3 minimum |
+| Architecture | ARM64 | |
+| Graphics API | Metal | only option |
+| Requires full screen | on | portrait-only, no multitasking layouts |
+| Signing | automatic with the team ID; Dev uses a development provisioning profile | |
+| Strip engine code | on | |
+
+Xcode: the newest release that supports the installed iOS SDK, building the Unity-generated project with no manual edits. Playtests install directly on registered devices; TestFlight from MVP.
+
+### 17.5 Device QA checklist (lifecycle, clock, save, touch)
+
+The checks only a real phone catches. Run with an `Android-Dev` build on the floor device (2 GB, Android 8) and an iPhone on iOS 15, then repeat items 1, 3, 9 and 18 with the Release profiles. Record pass/fail and the build number.
+
+Install and layout
+
+1. Fresh install, cold start: first `SCR_MAIN` frame within 4 s (section 13).
+2. Rotate the device: layout stays portrait.
+3. Notch, Dynamic Island and gesture bar never cover the HUD wallet chips, the Fish Board or the tab bar.
+4. Every tab, modal and overlay opens and closes; Android back follows section 1 stack rules.
+
+Touch
+
+5. Tap Zap at full speed: taps beyond `TAP_ZAP_MAX_PER_SEC` play the VFX and send nothing.
+6. Fish Board: drag-merge, tap-select merge, drop on empty cell, invalid drop, long-press info with discard; a drag never starts below `UI_DRAG_START_PX` and long-press fires at `UI_LONG_PRESS_MS`.
+7. Background the app mid-drag: on resume the fish is back in its cell and nothing was sent.
+8. Every tappable is at least `UI_MIN_TOUCH` on the floor device; no mis-taps between adjacent tab bar items.
+
+Lifecycle, clock and save
+
+9. Background for 2 minutes, resume: `SCR_OFFLINE_REWARD` shows about 2 m; combat stays paused behind it and the claimed amounts equal the modal's.
+10. Background for less than `OFFLINE_MIN_S`, resume: no modal; the Magic Tank still advanced.
+11. Swipe-kill mid-boss, relaunch: stage, wallet, collections, board, tank, pity and the boss timer are restored (02).
+12. Debug clock `+8 h` then `+1 day`: the first is capped at the effective offline cap; the second also rolls the day (login diamonds granted once; MVP: quests reset, dungeon tickets refilled).
+13. Move the device clock back one hour in system settings and return: no crash, no currency change (08 decides any further policy).
+14. Day boundary while open: the rollover happens within `WALL_CLOCK_SYNC_SEC` of midnight without a relaunch.
+15. Low memory (Android developer options, background process limit): the save is written and the app relaunches to the same state.
+16. Debug Export, Reset profile, Import: the profile returns with the same id and pity counters.
+
+Performance
+
+17. Perf overlay on `SCR_MAIN`, full board, boss on screen: at or above 30 fps on the floor device, 60 fps on 2019 mid-range; 30 minutes on the desk without thermal throttling.
+
+Release build
+
+18. No Debug section in `SCR_SETTINGS`; time scale and clock offset cannot be changed; the perf overlay cannot be enabled.
 
 ## Open questions
 
@@ -931,33 +1096,37 @@ No artist in M0. Everything is a coloured `Image` with a TMP label, so the slice
 2. **Modal deferral during bosses.** Rule 4 in section 10 delays player-invoked modals during a 30 s boss. Owner: UX. Default: shift the modal down over the Fish Board region instead of delaying, except `SCR_OFFLINE_REWARD`, which is never shown mid-boss (boot and resume happen before the first tick anyway).
 3. **Screen reader support.** uGUI has no built-in accessibility tree. Owner: client lead. Default: ship MVP without, add Unity Accessibility package labels in P1.
 4. **CJK number ladders.** ja/ko/zh players expect 万/億 grouping. Owner: localization. Default: K/M/B everywhere in MVP; revisit with soft-launch feedback.
-5. **Stage select farming.** Letting the player farm a lower stage interacts with `GOLD_GAIN` and kill-time tuning (03). Owner: 03. Default: allowed, with every reward bound to `Stage.Highest` as in section 4.14.
-6. **`MoveFish` command.** Dragging a fish to an empty cell is a cosmetic reposition that 05 does not list. Owner: 05. Default: add `MoveFish(src, dst)` as a no-randomness command; if 05 declines, the drop snaps back.
-7. **`MarkSeen` for new badges.** Client-side pref versus sim state. Default: client-side in `Profile.Prefs`, not in the save, so it never affects determinism.
+5. **Stage select farming.** Resolved (issue #35): side-stage farming as in section 4.14; the frontier is kept, kills on a selected stage never advance, and offline, dungeon and first-clear rewards are bound to `Progress.HighestCleared` / `HighestFirstClearBoss`.
+6. **`MoveFish` command.** Resolved: `MoveFish(src, dst)` is in 00's command vocabulary (00 decision 22); 07 sends it on a drop onto an empty cell.
+7. **New-item badges and client prefs.** Resolved (issues #7, #47): new badges, coach marks, sort/filter/step choices and settings toggles stay out of the sim (no sim command) and persist in the Runtime `ClientPrefs` local JSON store next to the save, not cloud-synced, so they never affect state hashes or replays.
 8. **Added screens.** `SCR_CONFIRM` and `SCR_ERROR` should be lifted into 00 section 5.3 as M0 modals.
 
 ## Acceptance criteria
 
-1. Every ID in 00 section 5.3 has a prefab, a `<Screen>Vm`, and a `UiStateCatalog` entry for each state in section 3 (checklist).
-2. From `SCR_MAIN`, each of Train, Summon, Release, Merge, Dungeons, Quests claim and Shop is reachable in one tap; Research, Awakening and equip in two (checklist, measured on the prefab graph).
-3. `ScreenRouter` never shows two modals at once: a PlayMode test requests three modals in one frame and asserts they appear sequentially.
-4. The combat viewport is never covered by a non-mandatory modal while `EnemyIsBoss`: PlayMode test sets a boss stage, requests `SCR_ITEM_DETAIL`, asserts the modal rect does not intersect the viewport rect.
-5. Android back on `SCR_MAIN` with nothing open shows `SCR_CONFIRM` once and quits only on a second press within 2 s; back on `SCR_OFFLINE_REWARD` is ignored; back during a reveal skips it.
-6. All touch targets at least 112 x 112 rp: an EditMode test walks every prefab's `Selectable` rects.
-7. `BigNumber.Short` test vectors in section 7 pass, plus suffix boundaries K through `ab` and a monotonicity sweep.
-8. Rarity badges render the shape glyph; with colours replaced by grey in the `UiStateCatalog` the five rarities remain distinguishable (screenshot checklist).
-9. At OS font scale 1.3x and Large text on, no label overlaps another and none is clipped without ellipsis, on every catalog state (automated overlap test on rects plus screenshot review).
-10. Reduced motion disables fish bob, shake, vignette and card stagger: PlayMode test asserts animator components are disabled and the 10-pull reveal completes within 0.7 s.
-11. Pseudo-localized build (+40% length) passes the overlap test; every string in prefabs resolves through `TextKeyLabel` (EditMode test finds no `TMP_Text` with literal text outside the catalog's debug labels).
-12. Steady state farming on `SCR_MAIN` for 600 frames with the event mask set to none allocates 0 bytes in `SessionRunner.Update` and `GameViewModel.Refresh`; under 1 KB per second with events on.
-13. Damage number pool never exceeds 32 live labels; particle count never exceeds 300 (profiler assertion in a 60 s PlayMode soak with a full board and a boss).
-14. Cold boot to first `SCR_MAIN` frame under 4 s on the floor device; `SCR_SHOP` first push shows skeleton rows within one frame and prices within 2 s on Wi-Fi (device-farm checklist, 10).
-15. 10-pull reveal: card `i` starts at `0.3 + 0.12 i` s with +0.4 s per preceding L/M card; Skip faces every card up in the same frame; Summon again is disabled until the sequencer reports complete (EditMode `RevealSequencer` test).
-16. Fish Board: dragging onto an equal-level fish sends exactly one `MergeFish`; dropping onto a different level sends nothing and plays the invalid-drop shake; Merge all sends pairs lowest level first in reading order (vm unit test with a scripted board).
-17. Tutorial: a fresh profile completes steps 1 to 12 with the scripted inputs in under 3 minutes of sim time; killing the app at step 7 and relaunching resumes at step 7; Skip at step 3 sets `TutorialDone` and leaves `Wallet.Diamond` = 1,500.
-18. Red dots: with one `COMPLETED` quest, one unused dungeon ticket and one inbox item the Quests, Dungeons and Inbox badges show counts 1/1/1; claiming each clears its dot immediately; no dot appears for an affordable Training level.
-19. Every disabled primary button in the catalog has a non-empty reason label (EditMode test over `ReasonLabel` components).
-20. Every screen's `Refresh()` writes a label only when its value changed (counting fake labels, one test per vm).
+How each criterion runs (issue #23): **[core]** criteria test logic in `HeroCat.Client.Core` and run in `src/HeroCat.Runtime.Tests` under dotnet, so `./check.sh` covers them today; **[unity]** criteria need prefabs, rects, the renderer or the profiler and wait for the Unity CI job in 10; **[manual]** criteria are checklists or device-farm runs.
+
+1. [manual] Every ID in 00 section 5.3 has a prefab, a `<Screen>Vm`, and a `UiStateCatalog` entry for each state in section 3 (checklist).
+2. [manual] From `SCR_MAIN`, each of Train, Summon, Release, Merge, Dungeons, Quests claim and Shop is reachable in one tap; Research, Awakening and equip in two (checklist, measured on the prefab graph).
+3. [core] `ScreenRouter` never shows two modals at once: a test requests three modals in one frame and asserts they appear sequentially.
+4. [core + unity] The combat viewport is never covered by a non-mandatory modal while `EnemyIsBoss`: a core test sets a boss stage, requests `SCR_ITEM_DETAIL` and asserts the router defers or shifts it; a Unity test asserts the modal rect does not intersect the viewport rect.
+5. [core] Android back on `SCR_MAIN` with nothing open shows `SCR_CONFIRM` once and quits only on a second press within 2 s; back on `SCR_OFFLINE_REWARD` is ignored; back during a reveal skips it.
+6. [unity] All touch targets at least 112 x 112 rp: an EditMode test walks every prefab's `Selectable` rects.
+7. [core] `BigNumber.Short` test vectors in section 7 pass, plus suffix boundaries K through `ab` and a monotonicity sweep.
+8. [manual] Rarity badges render the shape glyph; with colours replaced by grey in the `UiStateCatalog` the five rarities remain distinguishable (screenshot checklist).
+9. [unity] At OS font scale 1.3x and Large text on, no label overlaps another and none is clipped without ellipsis, on every catalog state (automated overlap test on rects plus screenshot review).
+10. [core + unity] Reduced motion disables fish bob, shake, vignette and card stagger: a core test asserts the 10-pull reveal completes within 0.7 s; a Unity test asserts the animator components are disabled.
+11. [unity] Pseudo-localized build (+40% length) passes the overlap test; every string in prefabs resolves through `TextKeyLabel` (EditMode test finds no `TMP_Text` with literal text outside the catalog's debug labels).
+12. [core] Steady state farming on `SCR_MAIN` for 600 frames with the event mask set to none allocates 0 bytes in `SessionRunner.Update` and `GameViewModel.Refresh`; under 1 KB per second with events on.
+13. [core + unity] Damage number pool never exceeds 32 live labels (core test of the pool); particle count never exceeds 300 (Unity profiler assertion in a 60 s PlayMode soak with a full board and a boss).
+14. [manual] Cold boot to first `SCR_MAIN` frame under 4 s on the floor device; `SCR_SHOP` first push shows skeleton rows within one frame and prices within 2 s on Wi-Fi (device-farm checklist, 10).
+15. [core] 10-pull reveal: card `i` starts at `0.3 + 0.12 i` s with +0.4 s per preceding L/M card; Skip faces every card up in the same frame; Summon again is disabled until the sequencer reports complete (EditMode `RevealSequencer` test).
+16. [core] Fish Board: dragging onto an equal-level fish sends exactly one `MergeFish`; dropping onto a different level sends nothing and plays the invalid-drop shake; dropping onto an empty cell sends one `MoveFish`; `[Merge all]` and `[Release max]` each send exactly one `MergeAll` / `ReleaseMax` command (vm unit test with a scripted board).
+17. [core] Tutorial: a fresh profile completes steps 1 to 12 with the scripted inputs in under 3 minutes of sim time; killing the app at step 7 and relaunching resumes at step 7; Skip at step 3 sets `Tutorial.Step = TUTORIAL_DONE` and `Tutorial.Skipped`, and leaves `Wallet.Diamond` = 1,500 and the starter weapon owned.
+18. [core] Red dots: with one `COMPLETED` quest, one unused dungeon ticket and one inbox item the Quests, Dungeons and Inbox badges show counts 1/1/1; claiming each clears its dot immediately; no dot appears for an affordable Training level.
+19. [unity] Every disabled primary button in the catalog has a non-empty reason label (EditMode test over `ReasonLabel` components).
+20. [core] Every screen's `Refresh()` writes a label only when its value changed (counting fake labels, one test per vm).
+21. [core] No tick runs while `SCR_OFFLINE_REWARD` is open, and the amounts credited by `ClaimOfflineReward` equal the ones the modal showed (issue #21).
+22. [manual] The section 17.5 device QA checklist passes on both platforms for every playtest build.
 
 ## Constants introduced
 
@@ -968,11 +1137,13 @@ No artist in M0. Everything is a coloured `Image` with a TMP label, so the slice
 | `UI_MIN_TOUCH` | 112 rp | S | Acceptance 6 |
 | `UI_TOAST_SEC`, `UI_TOAST_RARE_SEC` | 2.0, 4.0 | S | |
 | `UI_REVEAL_FLIP_SEC`, `UI_REVEAL_STAGGER_SEC`, `UI_REVEAL_LPLUS_HOLD_SEC` | 0.3, 0.12, 0.4 | S | Acceptance 15 |
-| `UI_LONG_PRESS_MS` | 400 | S | |
+| `UI_LONG_PRESS_MS`, `UI_DRAG_START_PX` | 350, 8 rp | S | Behaviour values owned by 05 section 6 (issue #18) |
+| `UI_RELEASE_MAX_ANIM_MS`, `UI_MERGE_ALL_ANIM_MS` | 60, 80 | S | Referenced by 05 section 6 |
 | `UI_DAMAGE_LABEL_POOL`, `UI_MAX_PARTICLES` | 32, 300 | S | Acceptance 13 |
 | `UI_SCREEN_CACHE` | 3 Full screens | S | Memory budget in section 13 |
+| `UI_FISH_SPRITE_LEVELS` | 12 | S | Fish sprite and merge-sound count; levels above use tint variants; 09 warns when content exceeds it (issue #48) |
 | `UI_BACK_EXIT_WINDOW_SEC` | 2 | S | |
 | `UI_QUEST_EXPIRY_WARN_SEC` | 3600 | S | 06 Open question 2 |
 | Rarity palette, shape glyphs | section 8 | S | Contrast table |
 | Screens added | `SCR_CONFIRM`, `SCR_ERROR` (Modal, M0) | | Lift into 00 section 5.3 |
-| Commands referenced that 00 does not list | `TrainStat(stat, count)`, `EquipWeapon`, `EquipSkill`, `UnequipSkill`, `ReorderSkills`, `AutoEquipSkills`, `EquipCompanion`, `UnequipCompanion`, `EquipRune`, `BuyResearch`, `Summon(banner, count, payment, requestId)`, `SweepDungeon`, `SelectStage`, `ClaimQuest`, `ClaimAllQuests`, `ClaimDailyGift`, `ExchangeItem`, `ClaimInbox`, `ClaimAllInbox`, `Awaken`, `MoveFish` | | Owners 03/04/05/06 confirm names |
+| Commands and events | 00 section 5.1 names, plus owner-spec names 00 adds (issue #11): `UnequipSkill`, `UnequipCompanion`, `AutoEquipBestSkills` (04), `ClaimAllInbox`, `QuestClaimed`, `QuestsBulkClaimed`, `WeekRolledOver`, `DungeonFloorFirstCleared`, `OfflineRewardComputed` (01/06), `BannerLeveledUp` (01/04), `EnemySpawned`, `BossCleared`, `StageCapReached`, `StatTrained` (03/01); P1 `EquipRune`, `UnequipRune` | | 07 follows the sim owners; no UI-only commands or events |

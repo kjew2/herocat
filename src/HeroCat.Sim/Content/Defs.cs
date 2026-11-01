@@ -1,0 +1,407 @@
+using System.Collections.Generic;
+
+namespace HeroCat.Sim.Content
+{
+    // Row types built by ContentDb.Build (09 section 9.3). Sealed, get-only, collections read-only. Strings are
+    // localization keys and asset addresses only; the text lives in Runtime's Localizer (09 section 13).
+    // Defs for tables whose systems have not landed (companions, runes, research, quests, dungeons, shop, inbox,
+    // enemies, bosses, plausibility) are added by those issues on top of their generated DTOs.
+
+    /// <summary>A grantlist entry: a currency grant (Currency set) or an item grant (ItemKind and ItemId set).</summary>
+    public readonly struct Grant
+    {
+        public Grant(Currency? currency, string itemKind, string itemId, long amount)
+        {
+            Currency = currency;
+            ItemKind = itemKind;
+            ItemId = itemId;
+            Amount = amount;
+        }
+
+        public Currency? Currency { get; }
+        public string ItemKind { get; }   // WEAPON, SKILL, COMPANION, RUNE
+        public string ItemId { get; }
+        public long Amount { get; }
+    }
+
+    public sealed class StatDef
+    {
+        internal StatDef(Stat id, bool trainable, double? perLvl, int? cap, double? baseValue, Tier tier, string nameKey,
+                         string descKey, string icon)
+        {
+            Id = id; Trainable = trainable; PerLvl = perLvl; Cap = cap; Base = baseValue; Tier = tier;
+            NameKey = nameKey; DescKey = descKey; Icon = icon;
+        }
+
+        public Stat Id { get; }
+        public bool Trainable { get; }
+        public double? PerLvl { get; }   // TRAIN_PER_LVL[stat]
+        public int? Cap { get; }         // TRAIN_CAP[stat]; null = uncapped
+        public double? Base { get; }
+        public Tier Tier { get; }
+        public string NameKey { get; }
+        public string DescKey { get; }
+        public string Icon { get; }
+    }
+
+    public sealed class TrainingCurveDef
+    {
+        internal TrainingCurveDef(Stat stat, CurveDef cost) { Stat = stat; Cost = cost; }
+
+        public Stat Stat { get; }
+        public CurveDef Cost { get; }   // TRAIN_COST0 * TRAIN_COST_G^n
+    }
+
+    public sealed class ChapterDef
+    {
+        internal ChapterDef(string id, int index, int fromStage, string nameKey, string background, string music, Tier tier)
+        {
+            Id = id; Index = index; FromStage = fromStage; NameKey = nameKey; Background = background; Music = music;
+            Tier = tier;
+        }
+
+        public string Id { get; }
+        public int Index { get; }
+        public int FromStage { get; }
+        public string NameKey { get; }
+        public string Background { get; }
+        public string Music { get; }
+        public Tier Tier { get; }
+    }
+
+    public sealed class RarityDef
+    {
+        internal RarityDef(Rarity id, string code, string color, string shapeIcon, double weaponAtkPct,
+                           double weaponPassivePct, double skillDpsPct, double companionDpsPct, double runeStatPct,
+                           long limitBreakCost, long dupeOverflowRockCandy, double overrideTolerance, string nameKey)
+        {
+            Id = id; Code = code; Color = color; ShapeIcon = shapeIcon; WeaponAtkPct = weaponAtkPct;
+            WeaponPassivePct = weaponPassivePct; SkillDpsPct = skillDpsPct; CompanionDpsPct = companionDpsPct;
+            RuneStatPct = runeStatPct; LimitBreakCost = limitBreakCost; DupeOverflowRockCandy = dupeOverflowRockCandy;
+            OverrideTolerance = overrideTolerance; NameKey = nameKey;
+        }
+
+        public Rarity Id { get; }
+        public string Code { get; }
+        public string Color { get; }
+        public string ShapeIcon { get; }
+        public double WeaponAtkPct { get; }
+        public double WeaponPassivePct { get; }
+        public double SkillDpsPct { get; }
+        public double CompanionDpsPct { get; }
+        public double RuneStatPct { get; }
+        public long LimitBreakCost { get; }
+        public long DupeOverflowRockCandy { get; }
+        public double OverrideTolerance { get; }
+        public string NameKey { get; }
+    }
+
+    public sealed class WeaponDef
+    {
+        internal WeaponDef(string id, Rarity rarity, double atkPct, double passivePct, Element element, Tier tier,
+                           string nameKey, string descKey, string icon, string sprite)
+        {
+            Id = id; Rarity = rarity; AtkPct = atkPct; PassivePct = passivePct; Element = element; Tier = tier;
+            NameKey = nameKey; DescKey = descKey; Icon = icon; Sprite = sprite;
+        }
+
+        public string Id { get; }
+        public Rarity Rarity { get; }
+        public double AtkPct { get; }
+        public double PassivePct { get; }
+        public Element Element { get; }
+        public Tier Tier { get; }
+        public string NameKey { get; }
+        public string DescKey { get; }
+        public string Icon { get; }
+        public string Sprite { get; }
+    }
+
+    public sealed class SkillDef
+    {
+        internal SkillDef(string id, Rarity rarity, double dpsPct, CastType castType, int cooldownTicks, int? durationTicks,
+                          double? buffPct, double damagePctPerCast, double damagePctPerTick, Tier tier, string nameKey,
+                          string descKey, string icon, string vfx)
+        {
+            Id = id; Rarity = rarity; DpsPct = dpsPct; CastType = castType; CooldownTicks = cooldownTicks;
+            DurationTicks = durationTicks; BuffPct = buffPct; DamagePctPerCast = damagePctPerCast;
+            DamagePctPerTick = damagePctPerTick; Tier = tier; NameKey = nameKey; DescKey = descKey; Icon = icon; Vfx = vfx;
+        }
+
+        public string Id { get; }
+        public Rarity Rarity { get; }
+        public double DpsPct { get; }
+        public CastType CastType { get; }
+        public int CooldownTicks { get; }
+        public int? DurationTicks { get; }
+        public double? BuffPct { get; }
+
+        /// <summary>INSTANT: dps_pct * cooldown / ATTACK_INTERVAL_TICKS, in % of one SkillUnit (04 section 7.1); else 0.</summary>
+        public double DamagePctPerCast { get; }
+
+        /// <summary>DOT: dps_pct * cooldown / duration / ATTACK_INTERVAL_TICKS (04 section 7.1); else 0.</summary>
+        public double DamagePctPerTick { get; }
+
+        public Tier Tier { get; }
+        public string NameKey { get; }
+        public string DescKey { get; }
+        public string Icon { get; }
+        public string Vfx { get; }
+    }
+
+    public sealed class BannerLevelDef
+    {
+        internal BannerLevelDef(int level, int expRequired, IReadOnlyDictionary<Rarity, double> rates)
+        {
+            Level = level; ExpRequired = expRequired; Rates = rates;
+        }
+
+        public int Level { get; }
+        public int ExpRequired { get; }   // BANNER_LVL_EXP, cumulative
+        public IReadOnlyDictionary<Rarity, double> Rates { get; }
+    }
+
+    public sealed class BannerDef
+    {
+        internal BannerDef(Banner id, bool enabled, Tier tier, int pullCostDiamonds, Currency ticketCurrency,
+                           IReadOnlyDictionary<Rarity, int> poolSize, int pitySoftStart, double pitySoftStep, int pityHard,
+                           double mShareOfLplus, int guaranteeBatchSize, Rarity guaranteeMinRarity, int expPerPull,
+                           int sortOrder, string nameKey, string icon, string bannerArt,
+                           IReadOnlyList<BannerLevelDef> levels, IReadOnlyDictionary<Rarity, IReadOnlyList<string>> pool)
+        {
+            Id = id; Enabled = enabled; Tier = tier; PullCostDiamonds = pullCostDiamonds; TicketCurrency = ticketCurrency;
+            PoolSize = poolSize; PitySoftStart = pitySoftStart; PitySoftStep = pitySoftStep; PityHard = pityHard;
+            MShareOfLplus = mShareOfLplus; GuaranteeBatchSize = guaranteeBatchSize; GuaranteeMinRarity = guaranteeMinRarity;
+            ExpPerPull = expPerPull; SortOrder = sortOrder; NameKey = nameKey; Icon = icon; BannerArt = bannerArt;
+            Levels = levels; Pool = pool;
+            BaseLplus = levels.Count > 0 ? levels[0].Rates[Rarity.LEGENDARY] + levels[0].Rates[Rarity.MYTHIC] : 0.0;
+        }
+
+        public Banner Id { get; }
+        public bool Enabled { get; }
+        public Tier Tier { get; }
+        public int PullCostDiamonds { get; }
+        public Currency TicketCurrency { get; }
+        public IReadOnlyDictionary<Rarity, int> PoolSize { get; }
+        public int PitySoftStart { get; }
+        public double PitySoftStep { get; }
+        public int PityHard { get; }
+        public double MShareOfLplus { get; }
+        public int GuaranteeBatchSize { get; }
+        public Rarity GuaranteeMinRarity { get; }
+        public int ExpPerPull { get; }
+        public int SortOrder { get; }
+        public string NameKey { get; }
+        public string Icon { get; }
+        public string BannerArt { get; }
+
+        /// <summary>[0] is level 1. Empty for a banner without banner_levels rows (a disabled one).</summary>
+        public IReadOnlyList<BannerLevelDef> Levels { get; }
+
+        /// <summary>Level-1 L + M rate.</summary>
+        public double BaseLplus { get; }
+
+        /// <summary>Item ids per rarity, ordinal-sorted (09 section 3.4): what the server's audit row indexes.</summary>
+        public IReadOnlyDictionary<Rarity, IReadOnlyList<string>> Pool { get; }
+
+        public int MaxLevel => Levels.Count;
+
+        /// <summary>L+ rate on pull n since the last L+ (00 section 6.3). n is 1-based.</summary>
+        public double PityRate(int n)
+        {
+            if (n >= PityHard) return 1.0;
+            int over = n - PitySoftStart;
+            double r = BaseLplus + PitySoftStep * (over > 0 ? over : 0);
+            return r < 1.0 ? r : 1.0;
+        }
+
+        /// <summary>Count of levels with ExpRequired &lt;= exp, at least 1 (04 section 4).</summary>
+        public int LevelFor(long exp)
+        {
+            int n = 0;
+            for (int i = 0; i < Levels.Count; i++) if (Levels[i].ExpRequired <= exp) n++;
+            return n < 1 ? 1 : n;
+        }
+
+        /// <summary>The rate table for a banner level (1-based), clamped to the table.</summary>
+        public IReadOnlyDictionary<Rarity, double> RateTable(int level)
+        {
+            int i = level - 1;
+            if (i < 0) i = 0;
+            if (i >= Levels.Count) i = Levels.Count - 1;
+            return Levels[i].Rates;
+        }
+    }
+
+    public sealed class AwakeningDef
+    {
+        internal AwakeningDef(int rank, int stageGate, long rockCandyCost, double mult, int companionSlotsAfter,
+                              int runeSlotsAfter, Tier tier, string nameKey, string icon)
+        {
+            Rank = rank; StageGate = stageGate; RockCandyCost = rockCandyCost; Mult = mult;
+            CompanionSlotsAfter = companionSlotsAfter; RuneSlotsAfter = runeSlotsAfter; Tier = tier; NameKey = nameKey;
+            Icon = icon;
+        }
+
+        public int Rank { get; }
+        public int StageGate { get; }
+        public long RockCandyCost { get; }
+        public double Mult { get; }
+        public int CompanionSlotsAfter { get; }
+        public int RuneSlotsAfter { get; }
+        public Tier Tier { get; }
+        public string NameKey { get; }
+        public string Icon { get; }
+    }
+
+    public sealed class HeroLevelsDef
+    {
+        internal HeroLevelsDef(CurveDef exp, double? atkPctPerLevel, double? multPerLevel, int levelCap, CurveDef mult)
+        {
+            Exp = exp; AtkPctPerLevel = atkPctPerLevel; MultPerLevel = multPerLevel; LevelCap = levelCap; Mult = mult;
+        }
+
+        /// <summary>HERO_LVL_EXP(l) = exp0 * exp_g^l, EXP to go from level l to l + 1.</summary>
+        public CurveDef Exp { get; }
+
+        public double? AtkPctPerLevel { get; }
+        public double? MultPerLevel { get; }
+        public int LevelCap { get; }
+
+        /// <summary>HERO_LVL_MULT^level as a cached table (base 1); null when the linear column is the populated one.</summary>
+        public CurveDef Mult { get; }
+    }
+
+    public sealed class FishLevelDef
+    {
+        internal FishLevelDef(int level, long discoveryCoins, double missilePct, double mergeCoins, double boardDpsPct,
+                              string sprite, string tint, string nameKey)
+        {
+            Level = level; DiscoveryCoins = discoveryCoins; MissilePct = missilePct; MergeCoins = mergeCoins;
+            BoardDpsPct = boardDpsPct; Sprite = sprite; Tint = tint; NameKey = nameKey;
+        }
+
+        public int Level { get; }
+        public long DiscoveryCoins { get; }   // FISH_DISCOVERY_COINS[n]
+        public double MissilePct { get; }     // FISH_MISSILE_PCT[n], % of one hero hit
+
+        /// <summary>discovery_coins * FISH_MERGE_COINS_PCT, unrounded (issue #16).</summary>
+        public double MergeCoins { get; }
+
+        /// <summary>FISH_BOARD_DPS_FACTOR * missile_pct (05 section 5.2).</summary>
+        public double BoardDpsPct { get; }
+
+        public string Sprite { get; }
+        public string Tint { get; }
+        public string NameKey { get; }
+    }
+
+    public sealed class TankDef
+    {
+        internal TankDef(int cap0, double refillS0, int refillTicks0, int releaseLevel, double refillFloorS)
+        {
+            Cap0 = cap0; RefillS0 = refillS0; RefillTicks0 = refillTicks0; ReleaseLevel = releaseLevel;
+            RefillFloorS = refillFloorS;
+        }
+
+        public int Cap0 { get; }            // TANK_CAP0
+        public double RefillS0 { get; }     // TANK_REFILL_S0
+        public int RefillTicks0 { get; }    // round(refill_s0 * TICK_HZ)
+        public int ReleaseLevel { get; }
+        public double RefillFloorS { get; }
+    }
+
+    public sealed class TutorialStepDef
+    {
+        internal TutorialStepDef(string id, int order, TutorialTrigger trigger, string triggerValue, string screen,
+                                 string highlight, string textKey, string expectEvent, int? expectCount,
+                                 IReadOnlyList<Grant> grants, bool skippable, Tier tier)
+        {
+            Id = id; Order = order; Trigger = trigger; TriggerValue = triggerValue; Screen = screen;
+            Highlight = highlight; TextKey = textKey; ExpectEvent = expectEvent; ExpectCount = expectCount;
+            Grants = grants; Skippable = skippable; Tier = tier;
+        }
+
+        public string Id { get; }
+        public int Order { get; }
+        public TutorialTrigger Trigger { get; }
+        public string TriggerValue { get; }
+        public string Screen { get; }
+        public string Highlight { get; }
+        public string TextKey { get; }
+        public string ExpectEvent { get; }
+        public int? ExpectCount { get; }
+
+        /// <summary>
+        /// The event names <see cref="ExpectEvent"/> lists, split on <c>|</c> (09 section 5.29; issue #246 item 1): any
+        /// of them counts toward <see cref="ExpectCount"/>. Empty for a tap-to-continue step.
+        /// </summary>
+        public IReadOnlyList<string> ExpectEvents => Names();
+
+        /// <summary>True when an event of this name counts toward the step.</summary>
+        public bool Expects(string eventName) => eventName != null && System.Array.IndexOf(Names(), eventName) >= 0;
+
+        string[] Names() =>
+            _expectEvents ??= string.IsNullOrEmpty(ExpectEvent) ? System.Array.Empty<string>() : ExpectEvent.Split('|');
+
+        string[] _expectEvents;
+        public IReadOnlyList<Grant> Grants { get; }
+        public bool Skippable { get; }
+        public Tier Tier { get; }
+    }
+
+    public sealed class ProgressTargetDef
+    {
+        internal ProgressTargetDef(int day, int stage, double tolerance) { Day = day; Stage = stage; Tolerance = tolerance; }
+
+        public int Day { get; }
+        public int Stage { get; }
+        public double Tolerance { get; }
+    }
+
+    public sealed class FeatureUnlockDef
+    {
+        internal FeatureUnlockDef(string feature, FeatureCondition condition, int? threshold, string screen,
+                                  string lockedTextKey, Tier tier)
+        {
+            Feature = feature; Condition = condition; Threshold = threshold; Screen = screen;
+            LockedTextKey = lockedTextKey; Tier = tier;
+        }
+
+        public string Feature { get; }
+        public FeatureCondition Condition { get; }
+        public int? Threshold { get; }
+        public string Screen { get; }
+        public string LockedTextKey { get; }
+        public Tier Tier { get; }
+    }
+
+    public sealed class AwakeningTargetDef
+    {
+        internal AwakeningTargetDef(int rank, int maxDaysAfterGate) { Rank = rank; MaxDaysAfterGate = maxDaysAfterGate; }
+
+        public int Rank { get; }
+        public int MaxDaysAfterGate { get; }
+    }
+
+    /// <summary>A Research node (09 section 5.18, 03 section 6). MVP rows; an M0 build has none.</summary>
+    public sealed class ResearchDef
+    {
+        internal ResearchDef(string id, ResearchEffect effect, double effectPerLevel, double? effectFloor, int maxLevel,
+                             double cost0, double costG, int unlockAwakenRank, Tier tier)
+        {
+            Id = id; Effect = effect; EffectPerLevel = effectPerLevel; EffectFloor = effectFloor; MaxLevel = maxLevel;
+            Cost0 = cost0; CostG = costG; UnlockAwakenRank = unlockAwakenRank; Tier = tier;
+        }
+
+        public string Id { get; }
+        public ResearchEffect Effect { get; }
+        public double EffectPerLevel { get; }
+        public double? EffectFloor { get; }
+        public int MaxLevel { get; }
+        public double Cost0 { get; }
+        public double CostG { get; }
+        public int UnlockAwakenRank { get; }
+        public Tier Tier { get; }
+    }
+}

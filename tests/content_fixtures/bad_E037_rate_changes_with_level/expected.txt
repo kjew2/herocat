@@ -1,0 +1,1 @@
+CONTENT E037 banner_levels[WEAPON,2].rate_l: rate_l must not change with level; level 2 has 0.03, level 1 has 0.025

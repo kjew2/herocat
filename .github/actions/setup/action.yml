@@ -1,0 +1,30 @@
+# Shared setup for the check.sh wrappers (pr.yml, content.yml, nightly-bots.yml): Python 3.12, the .NET 8 SDK alone on
+# PATH, and the NuGet cache. Checkout stays in each workflow (a local action needs the repository checked out first).
+name: herocat-setup
+description: Python 3.12 and the .NET 8 SDK for ./check.sh
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    # Install the SDK into its own directory so `dotnet` sees only .NET 8 (the runner images ship newer SDKs).
+    - uses: actions/setup-dotnet@v4
+      env:
+        DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
+      with:
+        dotnet-version: "8.0.x"
+
+    - name: Confirm .NET 8 SDK
+      shell: bash
+      run: |
+        dotnet --info
+        dotnet --version | grep -q '^8\.' || { echo "expected a .NET 8 SDK, got $(dotnet --version)" >&2; exit 1; }
+
+    - uses: actions/cache@v4
+      with:
+        path: ~/.nuget/packages
+        key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.*.props', '**/Directory.*.targets') }}
+        restore-keys: nuget-${{ runner.os }}-

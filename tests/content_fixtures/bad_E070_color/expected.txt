@@ -1,0 +1,1 @@
+CONTENT E070 rarities[COMMON].color: '#9e9e9e' is not a #RRGGBB color

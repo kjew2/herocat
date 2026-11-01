@@ -1,0 +1,365 @@
+{
+  "table": "banner_levels",
+  "rows": [
+    {
+      "banner": "WEAPON",
+      "level": 1,
+      "exp_required": 0,
+      "rates": {
+        "COMMON": 0.6,
+        "RARE": 0.28,
+        "EPIC": 0.09,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "WEAPON",
+      "level": 2,
+      "exp_required": 10,
+      "rates": {
+        "COMMON": 0.58,
+        "RARE": 0.292,
+        "EPIC": 0.098,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "WEAPON",
+      "level": 3,
+      "exp_required": 25,
+      "rates": {
+        "COMMON": 0.56,
+        "RARE": 0.304,
+        "EPIC": 0.106,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "WEAPON",
+      "level": 4,
+      "exp_required": 55,
+      "rates": {
+        "COMMON": 0.54,
+        "RARE": 0.316,
+        "EPIC": 0.114,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "WEAPON",
+      "level": 5,
+      "exp_required": 90,
+      "rates": {
+        "COMMON": 0.52,
+        "RARE": 0.328,
+        "EPIC": 0.122,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "WEAPON",
+      "level": 6,
+      "exp_required": 145,
+      "rates": {
+        "COMMON": 0.5,
+        "RARE": 0.34,
+        "EPIC": 0.13,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "WEAPON",
+      "level": 7,
+      "exp_required": 215,
+      "rates": {
+        "COMMON": 0.48,
+        "RARE": 0.352,
+        "EPIC": 0.138,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "WEAPON",
+      "level": 8,
+      "exp_required": 305,
+      "rates": {
+        "COMMON": 0.46,
+        "RARE": 0.364,
+        "EPIC": 0.146,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "WEAPON",
+      "level": 9,
+      "exp_required": 415,
+      "rates": {
+        "COMMON": 0.44,
+        "RARE": 0.376,
+        "EPIC": 0.154,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "WEAPON",
+      "level": 10,
+      "exp_required": 540,
+      "rates": {
+        "COMMON": 0.42,
+        "RARE": 0.388,
+        "EPIC": 0.162,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "SKILL",
+      "level": 1,
+      "exp_required": 0,
+      "rates": {
+        "COMMON": 0.6,
+        "RARE": 0.28,
+        "EPIC": 0.09,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "SKILL",
+      "level": 2,
+      "exp_required": 10,
+      "rates": {
+        "COMMON": 0.58,
+        "RARE": 0.292,
+        "EPIC": 0.098,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "SKILL",
+      "level": 3,
+      "exp_required": 25,
+      "rates": {
+        "COMMON": 0.56,
+        "RARE": 0.304,
+        "EPIC": 0.106,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "SKILL",
+      "level": 4,
+      "exp_required": 55,
+      "rates": {
+        "COMMON": 0.54,
+        "RARE": 0.316,
+        "EPIC": 0.114,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "SKILL",
+      "level": 5,
+      "exp_required": 90,
+      "rates": {
+        "COMMON": 0.52,
+        "RARE": 0.328,
+        "EPIC": 0.122,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "SKILL",
+      "level": 6,
+      "exp_required": 145,
+      "rates": {
+        "COMMON": 0.5,
+        "RARE": 0.34,
+        "EPIC": 0.13,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "SKILL",
+      "level": 7,
+      "exp_required": 215,
+      "rates": {
+        "COMMON": 0.48,
+        "RARE": 0.352,
+        "EPIC": 0.138,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "SKILL",
+      "level": 8,
+      "exp_required": 305,
+      "rates": {
+        "COMMON": 0.46,
+        "RARE": 0.364,
+        "EPIC": 0.146,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "SKILL",
+      "level": 9,
+      "exp_required": 415,
+      "rates": {
+        "COMMON": 0.44,
+        "RARE": 0.376,
+        "EPIC": 0.154,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "SKILL",
+      "level": 10,
+      "exp_required": 540,
+      "rates": {
+        "COMMON": 0.42,
+        "RARE": 0.388,
+        "EPIC": 0.162,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "COMPANION",
+      "level": 1,
+      "exp_required": 0,
+      "rates": {
+        "COMMON": 0.6,
+        "RARE": 0.28,
+        "EPIC": 0.09,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "COMPANION",
+      "level": 2,
+      "exp_required": 10,
+      "rates": {
+        "COMMON": 0.58,
+        "RARE": 0.292,
+        "EPIC": 0.098,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "COMPANION",
+      "level": 3,
+      "exp_required": 25,
+      "rates": {
+        "COMMON": 0.56,
+        "RARE": 0.304,
+        "EPIC": 0.106,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "COMPANION",
+      "level": 4,
+      "exp_required": 55,
+      "rates": {
+        "COMMON": 0.54,
+        "RARE": 0.316,
+        "EPIC": 0.114,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "COMPANION",
+      "level": 5,
+      "exp_required": 90,
+      "rates": {
+        "COMMON": 0.52,
+        "RARE": 0.328,
+        "EPIC": 0.122,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "COMPANION",
+      "level": 6,
+      "exp_required": 145,
+      "rates": {
+        "COMMON": 0.5,
+        "RARE": 0.34,
+        "EPIC": 0.13,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "COMPANION",
+      "level": 7,
+      "exp_required": 215,
+      "rates": {
+        "COMMON": 0.48,
+        "RARE": 0.352,
+        "EPIC": 0.138,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "COMPANION",
+      "level": 8,
+      "exp_required": 305,
+      "rates": {
+        "COMMON": 0.46,
+        "RARE": 0.364,
+        "EPIC": 0.146,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "COMPANION",
+      "level": 9,
+      "exp_required": 415,
+      "rates": {
+        "COMMON": 0.44,
+        "RARE": 0.376,
+        "EPIC": 0.154,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    },
+    {
+      "banner": "COMPANION",
+      "level": 10,
+      "exp_required": 540,
+      "rates": {
+        "COMMON": 0.42,
+        "RARE": 0.388,
+        "EPIC": 0.162,
+        "LEGENDARY": 0.025,
+        "MYTHIC": 0.005
+      }
+    }
+  ]
+}

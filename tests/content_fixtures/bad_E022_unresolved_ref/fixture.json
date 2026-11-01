@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "training_curves",
+      "CRIT_RATE,50",
+      "ATTACK,50"
+    ]
+  ],
+  "csharp": true
+}

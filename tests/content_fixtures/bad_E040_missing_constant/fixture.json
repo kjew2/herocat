@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "constants",
+      "LOGIN_DIAMONDS,int,50,I\n",
+      ""
+    ]
+  ],
+  "csharp": true
+}

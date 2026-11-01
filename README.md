@@ -13,7 +13,7 @@ Start with `specs/00-overview.md`. It fixes the tech stack, the authority split,
 | `specs/04-summons-and-collections.md` | Banners, pity, banner level, weapons, skills, companions, runes |
 | `specs/05-fish-merge-minigame.md` | Board, tank, merge rules, discovery, missiles, auto-merge |
 | `specs/06-economy-and-daily-loop.md` | Currencies, daily sources/sinks, quests, dungeons, offline, shop, inbox |
-| `specs/07-screens-and-ux.md` | Navigation map, every screen, states, UX and design rules |
+| `specs/07-screens-and-ux.md` | Navigation map, every screen, states, UX and design rules, Unity client setup and device builds |
 | `specs/08-backend-and-live-ops.md` | Services, API contracts, auth, IAP, anti-cheat, config, compliance |
 | `specs/09-content-data-pipeline.md` | Table schemas, exporter, validation, `ContentDb`, localization |
 | `specs/10-testing-release-and-ops.md` | Test pyramid, bots, CI/CD, store release, KPIs, runbooks, roadmap |
@@ -22,18 +22,18 @@ Tools (Python 3.9+, stdlib only unless noted):
 
 | Tool | Status | Does |
 |---|---|---|
-| `tools/power_curve_model.py` | to write (spec 03 section 8.6) | Greedy F2P bot across all power layers; prints the day table and layer shares; validates the `S` constants 03 lists |
-| `tools/gacha_model.py` | copy from `idle-rng-game/tools/`, rename streams, add banner levels (spec 04) | Exact pity distribution and consolidated rates per banner level; the oracle for the server summon test |
-| `tools/fish_model.py` | to write (spec 05) | Tank and merge throughput, Fish Coin and DPS income per active minute for attentive and lazy policies |
-| `tools/export_content.py` | to write (spec 09) | Sheet -> `content_src/*.csv` -> validated `content/*.json` + `manifest.json`; translator CSV round trip; pseudo-localization |
-| `tools/content.py` | to write (spec 09 section 11) | Loader the three models use so they read the same JSON the game ships |
+| `tools/power_curve_model.py` | in repo (spec 03 section 8.6, issue #87); `--check` runs in full `check.sh`, report-only until the `S` bands pass | Greedy F2P bot across all power layers; prints the day table and layer shares; validates the `S` constants 03 lists |
+| `tools/gacha_model.py` | in repo (spec 04 section 14); `--check` run by `check.sh` (hard gate) | Exact pity distribution and consolidated rates per banner level; the oracle for the server summon test |
+| `tools/fish_model.py` | in repo (spec 05 section 9); run by `check.sh` (hard gate) | Tank and merge throughput, Fish Coin and DPS income per active minute for attentive and lazy policies |
+| `tools/export_content.py` | `build` / `check` / `gen-dtos` landed (spec 09, issue #121); table rules #122, versioning #123, `pull` #132, translator verbs #213 to come | Sheet -> `content_src/*.csv` -> validated `content/*.json` + `manifest.json` + the Sim's generated DTOs; translator CSV round trip; pseudo-localization |
+| `tools/content.py` | in repo (spec 09 section 11, issue #130); `power_curve_model.py` reads through it | Loader the three models use so they read the same JSON the game ships |
 
 Milestones (spec 00 section 11):
 
 - **M0 vertical slice**: sim core, local weapon/skill summons, fish board, offline catch-up, local save, seven placeholder-art screens; bots print the day table and two simulated weeks land within tolerance; one person plays 20 minutes on device unprompted.
-- **MVP**: everything tagged MVP, backend (auth, cloud save, server summons, IAP, inbox, config), analytics, tutorial, EN + one locale; closed beta of 50 with D7 measured and zero save-loss reports.
+- **MVP**: everything tagged MVP, backend (auth, cloud save, server summons, IAP, inbox, config), analytics, tutorial, EN shipped (with `ja` translated in the pipeline); closed beta of 50 with D7 measured and zero save-loss reports.
 - **Soft launch**: store checklist complete, staged rollout in two small markets; D1 >= 40%, D7 >= 15%, crash-free >= 99.5%, no P0 economy exploit.
 - **P1**: runes, research expansion, tower, guild, rewarded ads, events, leaderboards, coupons, auto merge; scheduled by soft-launch data.
 - **P2**: siege, raid, costumes; not scheduled.
 
-Sibling project: `/local/home/kjew/idle-rng-game/` is the earlier, narrower prototype whose validated constants and patterns (RNG streams, save migrations, bot harness, content pipeline) this project reuses under new names.
+Sibling project: `idle-rng-game` (a separate repo) is the earlier, narrower prototype whose validated constants and patterns (RNG streams, save migrations, bot harness, content pipeline) this project reuses under new names.

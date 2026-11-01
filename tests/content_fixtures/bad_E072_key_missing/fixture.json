@@ -1,0 +1,9 @@
+{
+  "edits": [
+    [
+      "weapons",
+      "weapon.r_01.name",
+      "weapon.r_99.name"
+    ]
+  ]
+}

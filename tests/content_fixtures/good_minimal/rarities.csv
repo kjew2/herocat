@@ -1,0 +1,6 @@
+id,code,color,shape_icon,weapon_atk_pct,weapon_passive_pct,skill_dps_pct,companion_dps_pct,rune_stat_pct,limit_break_cost,dupe_overflow_rock_candy,override_tolerance,name_key
+COMMON,C,#9E9E9E,icon_rarity_circle,20.0,1.0,10.0,16.0,2.0,10,1,0.1,rarity.common.name
+RARE,R,#42A5F5,icon_rarity_square,50.0,2.0,20.0,32.0,4.0,20,2,0.1,rarity.rare.name
+EPIC,E,#AB47BC,icon_rarity_diamond,120.0,4.0,40.0,64.0,8.0,40,5,0.1,rarity.epic.name
+LEGENDARY,L,#FFA726,icon_rarity_star,300.0,8.0,80.0,128.0,16.0,80,20,0.1,rarity.legendary.name
+MYTHIC,M,#EF5350,icon_rarity_crown,700.0,16.0,160.0,256.0,32.0,150,50,0.1,rarity.mythic.name

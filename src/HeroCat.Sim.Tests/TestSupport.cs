@@ -1,10 +1,9 @@
 using System;
-using System.Collections.Generic;
-using System.Text.Json;
-using HeroCat.Sim;
+using System.IO;
+using HeroCat.Runtime.Content;
+using HeroCat.Runtime.Profile;
+using HeroCat.Sim.Commands;
 using HeroCat.Sim.Content;
-using HeroCat.Sim.Events;
-using HeroCat.Sim.Rng;
 using HeroCat.Sim.State;
 using NUnit.Framework;
 
@@ -12,78 +11,33 @@ namespace HeroCat.Sim.Tests
 {
     internal static class TestContent
     {
-        static readonly Lazy<ContentDb> _db = new Lazy<ContentDb>(() =>
-        {
-            string dir = FileContentSource.FindContentDirectory(TestContext.CurrentContext.TestDirectory)
-                         ?? throw new InvalidOperationException("Content/manifest.json not found above the test directory");
-            return ContentDb.LoadFromDirectory(dir);
-        });
+        static readonly Lazy<string> _dir = new Lazy<string>(() =>
+            FileContentSource.FindContentDirectory(TestContext.CurrentContext.TestDirectory)
+            ?? throw new InvalidOperationException("content/manifest.json not found above the test directory"));
 
-        public static ContentDb Db => _db.Value;
+        static readonly Lazy<ContentDb> _m0 = new Lazy<ContentDb>(() => ContentLoader.LoadFromDirectory(_dir.Value, Tier.M0));
+        static readonly Lazy<ContentDb> _mvp = new Lazy<ContentDb>(() => ContentLoader.LoadFromDirectory(_dir.Value, Tier.MVP));
 
-        /// <summary>2026-01-01T00:00:00Z.</summary>
+        public static string Dir => _dir.Value;
+        public static string RepoRoot => Path.GetDirectoryName(_dir.Value);
+        public static ContentDb Db => _m0.Value;
+        public static ContentDb Mvp => _mvp.Value;
+
+        /// <summary>2026-01-01T00:00:00Z, a Thursday.</summary>
         public static readonly long T0 = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeSeconds();
 
-        public static GameState NewState(ulong seed = 7, long created = -1) =>
-            GameState.NewProfile(Db, new Guid(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11), seed, created < 0 ? T0 : created);
+        public static readonly Guid Root = new Guid("7e57a7e0-0000-4000-8000-000000000007");
 
-        public static Simulation NewSim(ulong seed = 7, IEventSink sink = null, long created = -1) =>
-            new Simulation(Db, NewState(seed, created), sink);
+        public static GameState NewState(long now = -1) =>
+            ProfileFactory.Create(Db, Guid.Empty, now < 0 ? T0 : now, new Guid("de71ce00-0000-4000-8000-000000000001"), Root);
 
-        public static string Dump(GameState s) => JsonSerializer.Serialize(s);
-    }
-
-    /// <summary>Returns a scripted sequence of doubles, repeating the pattern.</summary>
-    internal sealed class ScriptedRandom : IRandomSource
-    {
-        readonly double[] _pattern;
-        public int Draws;
-
-        public ScriptedRandom(params double[] pattern) { _pattern = pattern; }
-
-        public Func<int, double> Override;   // draw index -> value, or NaN to fall back to the pattern
-
-        public double NextDouble()
+        /// <summary>A sim on a fresh profile; when <paramref name="sync"/>, anchored at <paramref name="now"/> (rolls day 1).</summary>
+        public static Simulation NewSim(long now = -1, bool sync = true)
         {
-            int i = Draws++;
-            if (Override != null)
-            {
-                double v = Override(i);
-                if (!double.IsNaN(v)) return v;
-            }
-            return _pattern[i % _pattern.Length];
-        }
-    }
-
-    /// <summary>The reference spend policy (specs/04 section 9), one call per active minute.</summary>
-    internal static class GreedyBot
-    {
-        public static void Spend(Simulation sim)
-        {
-            sim.BuyStatLevelsMax();
-            int slot = sim.Query.WeakestGearSlot();
-            if (slot >= 0 && sim.State.Gear.Slots[slot].Enhance < sim.Content.Constants.EnhMax &&
-                sim.State.Currencies.Gold >= sim.Query.EnhanceCost)
-                sim.Enhance(slot);
-            if (sim.Query.IsChestReady) sim.ClaimIdleChest();
-            while (sim.Query.CanPull && sim.Pull().Ok) { }
-            if (sim.Query.IsWalled && sim.Query.BossClearable) sim.AttemptBoss();
-        }
-
-        /// <summary>One simulated day: activeMinutes of ticking + spending, the rest offline. Clock stays in step.</summary>
-        public static void PlayDay(Simulation sim, Time.FakeClock clock, int activeMinutes = 120)
-        {
-            int tpm = 60 * sim.Content.Constants.TickHz;
-            for (int m = 0; m < activeMinutes; m++)
-            {
-                sim.Advance(tpm);
-                clock.Advance(60);
-                sim.SyncWallClock(clock);
-                Spend(sim);
-            }
-            clock.Advance(86400 - activeMinutes * 60);
-            sim.SyncWallClock(clock);
-            Spend(sim);
+            long t = now < 0 ? T0 : now;
+            var sim = new Simulation(NewState(t), Db);
+            if (sync) sim.Apply(new ApplyServerTime(t));
+            return sim;
         }
     }
 }

@@ -1,7 +1,0 @@
-id,sort_order,name_key,icon_id
-weapon,0,gear_slot.weapon.name,icon_slot_weapon
-helm,1,gear_slot.helm.name,icon_slot_helm
-chest,2,gear_slot.chest.name,icon_slot_chest
-gloves,3,gear_slot.gloves.name,icon_slot_gloves
-boots,4,gear_slot.boots.name,icon_slot_boots
-ring,5,gear_slot.ring.name,icon_slot_ring

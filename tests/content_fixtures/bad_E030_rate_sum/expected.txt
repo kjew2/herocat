@@ -1,0 +1,1 @@
+CONTENT E030 banner_levels[WEAPON,1].rates: rates sum to 1.0099999999999998 (abs error 0.009999999999999787), expected 1 within 1e-9

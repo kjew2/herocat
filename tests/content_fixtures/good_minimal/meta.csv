@@ -1,0 +1,6 @@
+key,value
+content_version,2026.11.01
+min_client_version,0.1.0
+source_revision,content fixture baseline
+ship_locales,"en,ja"
+notes,tests/content_fixtures/good_minimal: the baseline every bad_* fixture edits (issue #124)

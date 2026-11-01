@@ -1,0 +1,1 @@
+CONTENT E021 stats[ATTACK].id: 'ATTACK' is not a valid Stat (allowed: ATK, HP, DEF, CRIT_RATE, CRIT_DMG, ATK_SPD, GOLD_GAIN, EXP_GAIN)
