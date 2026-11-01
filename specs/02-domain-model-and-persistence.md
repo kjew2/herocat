@@ -48,6 +48,7 @@ Engineering constants in `HeroCat.Runtime.SaveConfig` (code, not `ContentDb`; mi
 | `ANALYTICS_BATCH_MAX` | 100 | I | Events per upload batch. |
 | `ANALYTICS_QUEUE_MAX` | 10000 | I | Offline queue cap, oldest dropped. |
 | `CURRENCY_AGG_SEC` | 60 | I | `KILL` currency deltas are aggregated per minute before emission. |
+| `DUNGEON_RECENT_RUNS_MAX` | 30 | S | `Dungeons.RecentRuns` length (issue #52). Covers a day of seeds (`DUNGEON_SEEDS_PER_DAY` 10 x 3 kinds, 08) between uploads. A sim constant (`HeroCat.Sim`), since the run-end code trims the list. |
 
 ## 3. `GameState`
 
@@ -64,6 +65,7 @@ public sealed class GameState
 {
     public int    SchemaVersion   { get; set; } = SaveSchema.Current;   // SAVE_SCHEMA_VERSION; the only version field in the body
     public string ContentVersion  { get; set; } = "";                   // ContentDb.Version active at last write (09)
+    public string ContentHash     { get; set; } = "";                   // ContentDb.Hash (09 manifest sha256, lowercase hex) the save was last reconciled against; stamped with ContentVersion (issue #56)
     public Guid   PlayerId        { get; init; }                        // server playerId; Guid.Empty for an unlinked local guest (01 open question 7)
     public Guid   DeviceId        { get; set; }                         // install id of the device that wrote this save; cloud-save lineage only (9.3), never a seed input
     public Guid   RngRoot         { get; init; }                        // set once by ProfileFactory: PlayerId if known, else a fresh random Guid; the only seed input (3.4, issue #9)
@@ -138,7 +140,7 @@ public sealed class CollectionState
 {
     // key: content id (e.g. "wpn_017"). Absent key == not owned.
     public Dictionary<string, OwnedItem> Items { get; init; } = new();
-    // "New" badges are not sim state: they live in the local profile/UI store (07), so viewing a screen never changes StateHash (issue #7).
+    // "New" badges are not sim state: they live in Runtime's ClientPrefs (8.4), so viewing a screen never changes StateHash (issues #7, #47).
 }
 
 public sealed class OwnedItem
@@ -150,7 +152,7 @@ public sealed class OwnedItem
 
 public sealed class LoadoutState
 {
-    public string?  Weapon     { get; set; }                          // equipped weapon id; null only before the tutorial grants the first weapon (04)
+    public string?  Weapon     { get; set; }                          // equipped weapon id; TUTORIAL_WEAPON_ID from profile creation (issue #46), so null only in a damaged save (P8)
     public string?[] Skills    { get; set; } = new string?[6];        // SKILL_SLOTS; null = empty slot; order = auto-cast priority (04)
     public string?[] Companions { get; set; } = new string?[4];       // COMPANION_SLOTS
     public string?[] Runes     { get; set; } = new string?[6];        // RUNE_SLOTS, P1
@@ -186,7 +188,7 @@ public sealed class CombatState
     public int    KillsInStage      { get; set; }          // 0..KILLS_PER_STAGE-1
     public BossPhase Boss           { get; set; }          // None/Pending/Walled, so a wall survives a reload (issue #7)
     public int    BossFailsOnStage  { get; set; }          // reset on advance (03)
-    public int?   Selected          { get; set; }          // MVP SCR_STAGE_SELECT choice; null = frontier (03)
+    public int?   Selected          { get; set; }          // MVP SCR_STAGE_SELECT side-stage farm target <= HighestCleared; null = frontier. Stage, KillsInStage and Boss keep the frontier meanwhile (03; issue #35)
     public double Mp                { get; set; }          // shared MP pool (04); regen per tick from Research
     public int[]  SkillCooldowns    { get; set; } = new int[6];   // ticks left per skill slot
     public int[]  CompanionCooldowns { get; set; } = new int[4];  // ticks left per companion slot (03 section 2.4)
@@ -215,21 +217,21 @@ public sealed class FightState                              // in memory only; n
 
 public sealed record DotInstance(int TicksLeft, double DamagePerTick);
 
-public sealed class DungeonRunState
+public sealed class DungeonRunState                        // a ticked run in the main loop (06 section 6.2; issue #42)
 {
     public Dungeon Kind        { get; init; }
     public int     Floor       { get; init; }
-    public ulong   Seed        { get; init; }              // server-issued (MVP) or from the `dungeon` stream (M0)
+    public ulong   Seed        { get; init; }              // server-issued (MVP) or from the `dungeon` stream (M0); seeds the temporary `dungeon_run` stream (3.4)
+    public long    StreamCounter { get; set; }             // draws consumed from `dungeon_run`; the stream is Derive(Seed, StreamCounter) and is discarded with the run
     public string  GrantId     { get; init; } = "";        // server grant id (MVP) for plausibility correlation; "" in M0
-    public int     EnemyIndex  { get; set; }               // position in the floor's enemy sequence
+    public int     EnemyIndex  { get; set; }               // position in the floor's enemy sequence; always 0 in MVP (one boss per floor)
     public int     TicksLeft   { get; set; }
 }
 
 public sealed class ProgressState
 {
-    public int  HighestCleared     { get; set; }           // highest stage whose KILLS_PER_STAGE (or boss) was completed
-    public int  HighestFirstClearBoss { get; set; }        // highest boss stage that paid first-clear diamonds; first-clear set = multiples of BOSS_EVERY <= this
-    public HashSet<int> FirstClearExtra { get; init; } = new();   // boss stages cleared out of order via SelectStage (MVP SCR_STAGE_SELECT); normally empty
+    public int  HighestCleared     { get; set; }           // highest stage completed at the frontier (KILLS_PER_STAGE, or its boss); any stage, not only bosses (issue #35)
+    public int  HighestFirstClearBoss { get; set; }        // highest boss stage that paid first-clear diamonds (03); first-clear set = multiples of BOSS_EVERY <= this
     public int  StageCapReached    { get; set; }           // 0 or the tick at which STAGE_CAP was hit
 }
 
@@ -253,7 +255,10 @@ public sealed class DungeonState                             // daily counters r
     public int[] BestFloor     { get; set; } = new int[3];   // per Dungeon ordinal; 0 = never cleared
     public int[] EntriesToday  { get; set; } = new int[3];   // informational for the HUD; tickets are the real limiter
     public int[] SweepsToday   { get; set; } = new int[3];
+    public List<DungeonRunRecord> RecentRuns { get; init; } = new();   // newest last, at most DUNGEON_RECENT_RUNS_MAX; never reset by rollover (issue #52)
 }
+
+public sealed record DungeonRunRecord(string GrantId, Dungeon Kind, int Floor, bool Cleared);
 
 public sealed class ShopState                                 // 06; both reset by the daily rollover
 {
@@ -292,11 +297,11 @@ public sealed record PendingSummon(string RequestId, Banner Banner, int Count, s
 public sealed record PendingDungeonSeed(string RequestId, Dungeon Kind, int Floor, long RequestedServerTime);
 public sealed record PendingReceipt(string RequestId, string Platform, string Sku, string TransactionId, string Payload, long RequestedServerTime);
 
-public sealed class TutorialState
+public sealed class TutorialState                          // issue #46
 {
-    public int  Step      { get; set; }        // 0..TUTORIAL_DONE (07)
+    public int  Step      { get; set; }        // 0..TUTORIAL_DONE, where TUTORIAL_DONE = row count of tutorial_steps (09; 12 in MVP); advanced only by SetTutorialStep (01, 07)
     public bool Skipped   { get; set; }
-    public bool TutorialDiamondsGranted { get; set; }
+    public bool TutorialDiamondsGranted { get; set; }   // set when 09's tut_welcome grant (TUTORIAL_DIAMONDS with reason TUTORIAL, plus the starter weapon TUTORIAL_WEAPON_ID) is applied at profile creation; guards it to exactly once
 }
 
 public sealed class RngStreamState
@@ -330,10 +335,11 @@ public sealed class LifetimeStats
 - **Item and banner levels are derived, never stored** (issue #7). `OwnedItem` level comes from `Copies` via `DUPE_LVL_CUM` and banner level from `BannerState.Exp` via `BANNER_LVL_EXP` at read time, so retuning either table reflows every save without a migration (04).
 - **`Fish.Cells` is a flat `int[]`** of levels; the board is 20 cells and a cell is fully described by its level. Row-major: `index = y * FISH_BOARD_W + x`.
 - **`Banners[b].Pity` in MVP is a mirror.** The server holds the authoritative pity per banner (08 section 4). The client value is overwritten by every `SummonResultPayload` and exists for display and for the M0/bot path.
-- **`Combat.DungeonRun` is persisted** so a kill mid-run is detected at load and refunded (01 section 8.8 step 6), not so the run can resume.
+- **`Combat.DungeonRun` is persisted** so a kill mid-run is detected at load and abandoned (P16; 01 section 8.8 step 6), not so the run can resume. Abandoning costs nothing: the ticket is debited only by `DungeonCleared` (00 decision 16; issue #42). While `Mode == Dungeon` the stage fields (`Stage`, `KillsInStage`, `Boss`, `Selected`) are untouched, so the frontier resumes unchanged when the run ends.
+- **`Dungeons.RecentRuns`** is the correlation record for 08 (issue #52): every ended run (cleared or failed) appends `{GrantId, Kind, Floor, Cleared}`, keeping only the newest `DUNGEON_RECENT_RUNS_MAX`; the server matches `GrantId` to issued seeds. Sweeps use no seed and are not recorded.
 - **`Combat` persists the stage loop, not the fight** (issue #7). `Boss`, `BossFailsOnStage`, `Selected`, `Mp`, the skill and companion cooldowns and `MissileQueue` are saved; `Combat.Fight` (enemy HP, spawn timer, boss timer, attack progress, DOTs, buffs, taps) is in memory only, so `DeepClone` mid-boss continues identically (03 AC15) while a reload starts a fresh mob.
 - **Quest maps are keyed by id**, not positional (sibling open decision 2 resolved here): a content reorder is harmless; a removed quest id is dropped by the validator. Bonus rewards and achievement rungs are ordinary quest rows keyed by their own ids (06).
-- **`FirstClearExtra`** exists only because `SCR_STAGE_SELECT` (MVP) lets a player jump back and challenge a boss out of order. In the common case the first-clear set is `{BOSS_EVERY, 2*BOSS_EVERY, ..., HighestFirstClearBoss}`.
+- **Stage select is side-stage farming** (issue #35). `SelectStage(s)` sets `Combat.Selected`; kills there pay that stage's rewards and never advance, a selected stage never spawns a boss, and `Combat.Stage`, `KillsInStage`, `Boss` (including `Walled`) and `BossFailsOnStage` keep the frontier until `SelectStage(null)`. Bosses are only ever cleared at the frontier, in order, so the first-clear set is always `{BOSS_EVERY, 2*BOSS_EVERY, ..., HighestFirstClearBoss}` and no out-of-order set is stored.
 - **Timestamps** are `long` unix seconds UTC from `IClock`, named `*ServerTime`.
 - **`PlayerId == Guid.Empty`** marks a local guest that has never reached the server (01 open question 7). The first successful guest auth sets it and uploads; `RngRoot` and every seed stay as they were (issue #9).
 
@@ -342,8 +348,8 @@ public sealed class LifetimeStats
 - `Combat.Fight`: current enemy HP, spawn timer, boss timer, attack progress, DOTs, buffs and pending tap zaps. On load the player faces a fresh mob at `Combat.Stage`; a boss attempt in progress restarts (`Boss == Pending` respawns the boss with a full timer), and a `Walled` stage stays walled. Queued fish missiles are saved (`Combat.MissileQueue`).
 - The `Event` buffer and the `Snapshot`.
 - Derived values: DPS, kill time, board passive DPS%, weapon passive total, next training cost, `FISH_BOARD_DPS_PCT`, item and banner levels, and any live missile-DPS rolling average (view-model only, issue #15). All recomputed from `ContentDb`, so a retune reflows every save without a migration.
-- Collection "new" badges: local profile/UI store (07), not `GameState`.
-- Content tables; the save stores ids and counters plus `ContentVersion`.
+- Client-only flags: collection NEW badges, coach marks, sort/filter/step prefs and settings toggles live in Runtime's `ClientPrefs` (8.4), not in `GameState` or `Profile` (issue #47).
+- Content tables; the save stores ids and counters plus `ContentVersion` and `ContentHash`.
 - Auth tokens, device key, config cache: Runtime files outside the save (section 8.4).
 
 ### 3.4 RNG streams
@@ -354,6 +360,7 @@ public sealed class LifetimeStats
 | `crit` | crit roll per hero hit | 1 per hero hit | M0 | `Counter == Stats.HeroHits` |
 | `fish_spawn` | `ReleaseFish` cell pick | 1 per release | M0 | `Counter == Stats.FishReleased` |
 | `dungeon` | M0 dungeon seed derivation (`IDungeonSeedService` local implementation); MVP unused for new runs | 1 per M0 run | M0 | none |
+| `dungeon_run` | dungeon fight draws (hero crit) while `Combat.Mode == Dungeon` (03, 06; issue #42) | per 03 | MVP | Temporary: not in `Rng`; seed `DungeonRun.Seed`, counter `DungeonRun.StreamCounter`; discarded when the run ends |
 | `loot` | boss Rock Candy drop | 1 per boss kill | M0 | `Counter == Stats.BossKills` (P1 drop tables add their own invariant) |
 | `summon_weapon`, `summon_skill`, `summon_companion` | `LocalSummonService` (M0 and bots) draws on a clone; the `ApplySummonResult` payload carries the counter after the pull and `Apply` sets it (issue #6) | 3 per pull (rarity, item, guarantee reroll; 04) | M0 | `Counter == 3 * Banners[b].TotalPulls` in Local mode; ignored in Remote mode |
 
@@ -404,6 +411,7 @@ A real day-9 save, abbreviated only in repeated collection entries. 41 KB format
 {
   "SchemaVersion": 1,
   "ContentVersion": "2026.11.03",
+  "ContentHash": "5d41402abc4b2a76b9719d911017c592ae7f1e5c3b8a4d6e9f0a1b2c3d4e5f60",
   "PlayerId": "6b1f2c40-9d1e-4a7b-8f3e-2c1a9b7d5e01",
   "DeviceId": "0f9e8d7c-6b5a-4433-9211-aabbccddeeff",
   "RngRoot": "6b1f2c40-9d1e-4a7b-8f3e-2c1a9b7d5e01",
@@ -450,7 +458,7 @@ A real day-9 save, abbreviated only in repeated collection entries. 41 KB format
     "Mp": 84.0, "SkillCooldowns": [0, 31, 0, 0, 0, 0], "CompanionCooldowns": [12, 0, 0, 0], "MissileQueue": [],
     "DungeonRun": null
   },
-  "Progress": { "HighestCleared": 411, "HighestFirstClearBoss": 410, "FirstClearExtra": [], "StageCapReached": 0 },
+  "Progress": { "HighestCleared": 411, "HighestFirstClearBoss": 410, "StageCapReached": 0 },
   "Quests": {
     "Daily": {
       "dq_kill_500":   { "Progress": 731, "State": "CLAIMED" },
@@ -466,13 +474,15 @@ A real day-9 save, abbreviated only in repeated collection entries. 41 KB format
       "ach_merges_03": { "Progress": 2214, "State": "COMPLETED" }
     }
   },
-  "Dungeons": { "BestFloor": [9, 6, 8], "EntriesToday": [1, 1, 0], "SweepsToday": [0, 1, 0] },
+  "Dungeons": { "BestFloor": [9, 6, 8], "EntriesToday": [1, 1, 0], "SweepsToday": [0, 1, 0],
+                "RecentRuns": [ { "GrantId": "dgr_01HZX9", "Kind": "FISH_COIN", "Floor": 9, "Cleared": true },
+                                { "GrantId": "dgr_01HZXA", "Kind": "ROCK_CANDY", "Floor": 7, "Cleared": false } ] },
   "Shop": { "DailyGiftClaimed": true, "ExchangeCounts": { "ex_ticket_fish": 1 } },
   "Research": { "Level": { "res_mp_pool": 3, "res_mp_regen": 2, "res_tank_cap": 4, "res_tank_refill": 2, "res_fish_cap": 1 } },
   "Inbox": { "ClaimedIds": ["ibx_01HZX3K9Q8", "ibx_01HZY0A2M1"], "LastFetchedServerTime": 1793667100 },
   "Offline": { "Pending": null, "LifetimeOfflineSecCredited": 391200 },
   "Pending": { "Summon": null, "Dungeon": null, "Receipts": [] },
-  "Tutorial": { "Step": 14, "Skipped": false, "TutorialDiamondsGranted": true },
+  "Tutorial": { "Step": 12, "Skipped": false, "TutorialDiamondsGranted": true },
   "Rng": {
     "combat":           { "Seed": "9f86d081884c7d65", "Counter": 0 },
     "crit":             { "Seed": "3a1c0b8e55f2d7aa", "Counter": 1203944 },
@@ -547,7 +557,7 @@ public sealed record SaveFile(int SchemaVersion, JObject Body, bool HmacPresent,
 
 ### 6.4 Validation and repair
 
-Runs on the materialized `GameState` against the loaded `ContentDb` and `now`. Reject rules throw `SaveInvalidException` and the loader tries the next file. Repair rules fix the field, record the rule id, and emit `save_repaired{rule}`. More than `SAVE_REPAIR_MAX` distinct rule hits is a reject.
+Runs on the materialized `GameState` against the loaded `ContentDb` and `now`. This is the only content reconcile on load (issue #56): the content-dependent rules (P4, P8-P14, P21) are what 09's former `ContentReconcile` did, and nothing is refunded in MVP; 09 section 6.3 points here. Reject rules throw `SaveInvalidException` and the loader tries the next file. Repair rules fix the field, record the rule id, and emit `save_repaired{rule}`. More than `SAVE_REPAIR_MAX` distinct rule hits is a reject.
 
 Reject:
 
@@ -567,13 +577,13 @@ Repair:
 | P2 | Any wallet balance negative, NaN or infinite; `Hero.Exp` likewise | Set to 0. |
 | P3 | `Hero.Level < 1`; `AwakenRank` outside `[0, AWAKEN_STAGES.Length]` | Clamp. |
 | P4 | `Training.Level[i]` outside `[0, TRAIN_CAP[i]]` | Clamp. |
-| P5 | `Progress.HighestCleared < Combat.Stage - 1` | Set to `Stage - 1` (you cannot farm a stage you have not reached). |
+| P5 | `Progress.HighestCleared` outside `[Combat.Stage - 1, Combat.Stage]` | Set to `Stage - 1` (`Stage` is the frontier, issue #35; it equals `Stage` only once `STAGE_CAP` is cleared). |
 | P6 | `HighestFirstClearBoss` not a multiple of `BOSS_EVERY`, negative, or `> HighestCleared` | Floor to a multiple; clamp. |
 | P7 | `Loadout.Skills.Length != SKILL_SLOTS`, `Companions.Length != COMPANION_SLOTS`, `Runes.Length != RUNE_SLOTS` | Pad with `null` / truncate. |
 | P8 | Equipped id not owned, unknown to content, wrong kind, or duplicated across slots | Set slot to `null` (keep the first duplicate). `Loadout.Weapon` null -> auto-equip the highest-rarity owned weapon (04 rule). |
-| P9 | `Fish.Cells[i] < 0` or `> FISH_MAX_LVL` (current cap incl. Research) | Clamp to cap. `DiscoveredLevels` gains any level present on the board. `HighestLevel` recomputed. |
+| P9 | `Fish.Cells[i] < 0` or `> FISH_MAX_LVL_HARD` (the `fish_levels` row count, which 09 never shrinks) | Clamp to that range, never to the reachable cap (`FISH_MAX_LVL` incl. Research): a fish above a lowered cap stays and cannot merge (05), with no refund (issue #41). `DiscoveredLevels` gains any level present on the board. `HighestLevel` recomputed. |
 | P9b | `TankCount` outside `[0, TankCap]`; `TankRefillTick` outside `[0, refillTicks-1]`; `TankReleaseLevel < 1` or above its content max | Clamp. |
-| P10 | `Items` key unknown to content, or `Copies <= 0` | Remove the entry. Rock Candy refund per 04's dupe rule for removed items (04 decides). |
+| P10 | `Items` key unknown to content, or `Copies <= 0` | Remove the entry. No refund in MVP (issue #56); ids are never deleted (09 section 3.4), so this path is rare. |
 | P11 | `Banners[b].Pity` outside `[0, PITY_HARD-1]`; `Exp < 0` | Clamp. Missing banner for a banner the content defines -> add default. |
 | P12 | Quest id unknown to content; `Progress < 0` | Drop the entry; clamp to 0. A quest with no entry reads as `IN_PROGRESS` with progress 0. |
 | P13 | `Research.Level` key unknown or value `< 1` or `> maxLevel` | Remove / clamp. |
@@ -582,10 +592,11 @@ Repair:
 | P16 | `Combat.DungeonRun != null` on load | `Mode = Stage`, `DungeonRun = null`, emit `DungeonAbandoned`. No refund: tickets are debited on clear only (06 section 6), so an abandoned run never spent one. |
 | P17 | `Pending.Summon` or `Pending.Dungeon` older than `PENDING_STALE_DAYS = 7` | Clear it (the server's idempotency record is gone after 24 h anyway; a 7-day-old intent is dead). Receipts are never auto-cleared. |
 | P18 | `Offline.Pending != null` and `ComputedServerTime > now` | Clear it (clock went backwards after compute; nothing was credited). |
-| P19 | `ContentVersion` empty | Set to `db.Version`. |
+| P19 | `ContentVersion` or `ContentHash` empty | Set to `db.Version` / `db.Hash`. |
 | P20 | `SaveSeq < 0`; `DeviceId == Guid.Empty` | Set to 0; set to this install's id. |
+| P21 | `Tutorial.Step` outside `[0, TUTORIAL_DONE]` (a content change to `tutorial_steps`); `Dungeons.RecentRuns.Count > DUNGEON_RECENT_RUNS_MAX` | Clamp the step; keep the newest `DUNGEON_RECENT_RUNS_MAX` runs. |
 
-Left alone on purpose: `Time.DayKey > dayKey(now)` and `LastSavedServerTime > now` (backwards clock; section 11 handles them), `CreatedServerTime > now` (cosmetic), `HighestCleared > Stage` (jumped back via `SCR_STAGE_SELECT`; legitimate).
+Left alone on purpose: `Time.DayKey > dayKey(now)` and `LastSavedServerTime > now` (backwards clock; section 11 handles them), `CreatedServerTime > now` (cosmetic).
 
 ## 7. Migrations
 
@@ -694,7 +705,7 @@ public interface ISaveStore
 ```
 Save(state, trigger):
   SaveStamp.Apply(state, clock.NowServerSeconds, db.Version, installId)
-      // LastSavedServerTime = now; SaveSeq += 1; ContentVersion = db.Version; DeviceId = installId
+      // LastSavedServerTime = now; SaveSeq += 1; ContentVersion = db.Version; ContentHash = db.Hash; DeviceId = installId
       // if ticks are running: LastTickServerTime = now as well (the window up to now has been ticked, not idle)
   bytes = SaveSerializer.Encode(state, deviceKey)
   using fs = new FileStream(slot0.tmp, Create, Write, FileShare.None)
@@ -738,6 +749,7 @@ Recovery order, from best to worst outcome: (1) `slot0.sav`, (2) `slot0.prev.sav
 | `device_key` | 32 random bytes for HMAC (section 10) | Secure storage (Keychain / Android Keystore-wrapped), excluded from backup. |
 | `tokens.json` | JWTs | Secure storage. |
 | `profile.json` | `Profile` cache | Included; harmless. |
+| `client_prefs.json` | `ClientPrefs`: NEW badges, coach marks seen, sort/filter/step prefs, settings toggles (07; issue #47). Never cloud-synced, never in `GameState`; written atomically like the save (tmp + rename), and a missing or unreadable file means defaults | Included; harmless (losing it only resets NEW dots and coach marks). |
 | `config_cache.json` | last remote config | Included. |
 | `content/<version>/` | downloaded bundles | Excluded (re-downloadable). |
 | `saves/cmdlog.jsonl` | command log (01 section 2.6) | Excluded. |
@@ -845,7 +857,7 @@ The server runs these on every upload and attaches `flags[]` to the response. Th
 | `DPS_VS_STAGE` | DPS re-derived via `HeroCat.Sim` from the uploaded state cannot clear `HighestCleared`'s boss in `BOSS_TIME_TICKS`. |
 | `GOLD_DELTA_BOUND` | Gold gained since the previous upload exceeds the maximum the sim could produce in the elapsed time at `HighestCleared`. |
 | `DIAMOND_LEDGER_MISMATCH` | `Wallet.Diamond` exceeds the server ledger (grants - spends, after this upload's client-earnings credit; issue #49) by more than the per-day F2P cap times days. |
-| `ITEM_WITHOUT_PULL` | A collection copy count exceeds what `summon_log` plus `granted_items` account for. |
+| `ITEM_WITHOUT_PULL` | A collection copy count exceeds what `summon_log` plus `granted_items` account for (plus one copy of `TUTORIAL_WEAPON_ID`, granted at profile creation; issue #46). |
 | `PITY_MISMATCH` | Client `Banners[b].Pity` differs from server pity (informational; the server value is used regardless). |
 | `DUPLICATE_REQUEST_ID` | A `requestId` seen on a different player. |
 | `OFFLINE_WINDOW_OVERLAP` | Lifetime offline credited exceeds wall-clock gaps observable from upload timestamps. |
@@ -919,11 +931,11 @@ public sealed class FakeClock : IClock
 | Resync shows the server is *behind* | Nothing is taken back; `clock_anomaly{resync, negative}`; the save's `LastTickServerTime` keeps its larger value, which simply shortens the next window. |
 | Device clock set years ahead, then back (offline) | At most one `OFFLINE_CAP_H` window and one daily reset were gained while unauthoritative; the next authoritative upload carries `CLOCK_AHEAD` and the server's ledger reconciliation (08) corrects diamonds. |
 
-## 12. Server-side relational schema (PostgreSQL 15)
+## 12. Server-side relational schema (PostgreSQL 16)
 
 All timestamps `timestamptz`, all ids `uuid` unless noted. Money is never stored as float: prices are `integer` minor units plus `char(3)` currency. Row-level comments give the owning API (08). This section owns every server table, including the server-only ones 08 reads and writes, so the GDPR delete job (13.2) can enumerate them from here (issue #53).
 
-**Migration tooling** (issue #33): the schema ships as plain versioned SQL files, `server/db/migrations/NNNN_<name>.sql` (`0001_init.sql` is the DDL below, verbatim), applied in order by a small runner (DbUp or an in-house runner, at server startup and in CI) that records applied files in a `schema_migrations` table. No EF Core migrations; queries use Npgsql/Dapper, or EF Core for queries only, never to change the schema. A migration file is immutable once merged. CI applies the set to an empty PostgreSQL 15 container and runs AC 16; `check.sh` runs the same job behind a "Postgres available" guard and reports it as skipped, not passed, where no Postgres or Docker exists (cloud sessions).
+**Migration tooling** (issue #33): the schema ships as plain versioned SQL files, `server/db/migrations/NNNN_<name>.sql` (`0001_init.sql` is the DDL below, verbatim), applied in order by a small runner (DbUp or an in-house runner, at server startup and in CI) that records applied files in a `schema_migrations` table. No EF Core migrations; queries use Npgsql/Dapper, or EF Core for queries only, never to change the schema. A migration file is immutable once merged. CI applies the set to an empty PostgreSQL 16 container (`postgres:16`, as in 10) and runs AC 16; `check.sh` runs the same job behind a "Postgres available" guard and reports it as skipped, not passed, where no Postgres or Docker exists (cloud sessions).
 
 ```sql
 create table accounts (
@@ -1004,16 +1016,17 @@ create table save_history (                                -- last SAVE_HISTORY_
 );
 
 create table diamond_ledger (                              -- server-authoritative hard currency; the sum is the truth
-  id            bigserial primary key,
+  id            bigserial,
   player_id     uuid not null references accounts on delete restrict,   -- financial: the delete job re-points or deletes rows first (13.2; issue #32)
   delta         integer not null,
   reason        text not null,                             -- CurrencyReason enum name: IAP, MAIL, SUMMON, REFUND, ADMIN, or a client-side reason credited from the save (LOGIN, QUEST, SHOP_EXCHANGE, ...)
   ref_type      text, ref_id text,                         -- 'purchase' | 'inbox_item' | 'summon' | 'save_reconcile' (ref_id = save_seq; one row per reason per upload, issue #49)
   request_id    text,                                      -- client requestId when client-originated
-  created_at    timestamptz not null default now()
-);
+  created_at    timestamptz not null default now(),
+  primary key (id, created_at)                             -- a partitioned table's keys must include the partition column
+) partition by range (created_at);                         -- one partition per month (13.1)
 create index on diamond_ledger (player_id, created_at);
-create unique index on diamond_ledger (player_id, request_id) where request_id is not null;
+create index on diamond_ledger (player_id, request_id) where request_id is not null;   -- not unique: a unique index would have to include created_at. At-most-once per request is the idempotency row written in the same transaction (00 section 8.13)
 create index on diamond_ledger (player_id, reason) where ref_type = 'save_reconcile';   -- "already credited" per reason (3.2)
 
 create table ticket_ledger (                               -- server-authoritative summon tickets (00 decision 15; issues #34, #49); the sum per ticket is the balance
@@ -1095,7 +1108,7 @@ create index on inbox_items (player_id, available_at) where claimed_at is null;
 create unique index on inbox_items (source_ref, player_id) where kind = 'mail';   -- blast materialisation is idempotent per (mail_blast_id, player_id) (08; issue #53)
 
 create table summon_log (                                  -- one row per pull (not per batch): 08 audit requirement
-  id              bigserial primary key,
+  id              bigserial,
   player_id       uuid not null references accounts on delete restrict,   -- financial (13.2; issue #32)
   request_id      text not null,
   banner          text not null,                           -- WEAPON | SKILL | COMPANION | RUNE
@@ -1109,8 +1122,9 @@ create table summon_log (                                  -- one row per pull (
   u2              double precision not null,               -- all logged so 08 can reproduce the pull exactly
   u3              double precision not null,
   payment         text not null,                           -- DIAMOND | TICKET
-  created_at      timestamptz not null default now()
-);
+  created_at      timestamptz not null default now(),
+  primary key (id, created_at)
+) partition by range (created_at);                         -- one partition per month (13.1)
 create index on summon_log (player_id, created_at);
 create index on summon_log (request_id);
 
@@ -1186,7 +1200,7 @@ create materialized view currency_daily as                 -- rebuilt nightly fo
 -- P1 stubs: shape fixed so MVP foreign keys and the GDPR delete job already know about them.
 create table coupons (code text primary key, grants jsonb not null, max_redemptions integer, per_player_limit smallint not null default 1, redeemed_count integer not null default 0, expires_at timestamptz, created_by text not null, created_at timestamptz not null default now());
 create table coupon_redemptions (code text not null references coupons, player_id uuid not null references accounts on delete cascade, seq smallint not null default 1, inbox_item_id uuid not null, redeemed_at timestamptz not null default now(), primary key (code, player_id, seq));   -- seq <= coupons.per_player_limit (08 P1; issue #34)
-create table guilds (guild_id uuid primary key, name text not null unique, created_at timestamptz not null default now(), leader_id uuid references accounts);
+create table guilds (guild_id uuid primary key, name text not null unique, created_at timestamptz not null default now(), leader_id uuid references accounts on delete set null);   -- P1 guild logic transfers leadership when the leader leaves or is deleted
 create table guild_members (guild_id uuid references guilds on delete cascade, player_id uuid references accounts on delete cascade, role text not null, joined_at timestamptz not null default now(), primary key (guild_id, player_id));
 create table guild_chat (id bigserial primary key, guild_id uuid references guilds on delete cascade, player_id uuid references accounts on delete set null, body text not null, created_at timestamptz not null default now());
 ```
@@ -1301,7 +1315,7 @@ The backend `events` table and its nightly `currency_daily` materialized view (0
 
 ## Acceptance criteria
 
-1. Round trip: a `GameState` with every persisted field non-default (including `null` slots, empty collections, a non-null `Pending.Summon`, a non-null `Offline.Pending`, a non-null `Combat.DungeonRun`, `Combat.Boss == Walled`, a non-empty `Combat.MissileQueue`) encodes and decodes to a value-equal object (deep equality test) except `Combat.Fight`, which decodes as `null`. `DeepClone` of a state mid-boss (non-null `Fight`) continues tick-for-tick identically (03 AC15).
+1. Round trip: a `GameState` with every persisted field non-default (including `null` slots, empty collections, a non-null `Pending.Summon`, a non-null `Offline.Pending`, a non-null `Combat.DungeonRun`, a non-empty `Dungeons.RecentRuns`, `Combat.Boss == Walled`, a non-empty `Combat.MissileQueue`) encodes and decodes to a value-equal object (deep equality test) except `Combat.Fight`, which decodes as `null`. `DeepClone` of a state mid-boss (non-null `Fight`) continues tick-for-tick identically (03 AC15).
 2. Determinism after round trip: for each stream in 3.4, the next `Derive` after save/load equals the next draw of the un-restored copy.
 3. Byte stability: two encodes of value-equal states are byte-identical (sorted sets, round-trip doubles).
 4. Header: wrong CRC, `len` off by one in either direction, missing newline, truncated body each raise `SaveCorruptException`; an HMAC mismatch does **not** (loads with `HmacValid = false`).
@@ -1309,14 +1323,14 @@ The backend `events` table and its nightly `currency_daily` materialized view (0
 6. Fallback: a flipped body byte in `slot0.sav` loads `prev` and emits `save_fallback`; both corrupt yields a new profile with two quarantined files; quarantined files older than `CORRUPT_KEEP_DAYS` are deleted on the next load.
 7. Fault injection between the two renames: `slot0.sav` absent, `prev` present, load succeeds from `prev`.
 8. `SaveTooNewException` on `SchemaVersion = Current + 1`; no file renamed; `prev` not consulted.
-9. Every repair rule P1-P20 and reject rule R2-R5 has a table-driven test asserting the repaired value or the exception and the emitted rule id; `SAVE_REPAIR_MAX + 1` distinct rule hits is a reject.
+9. Every repair rule P1-P21 and reject rule R2-R5 has a table-driven test asserting the repaired value or the exception and the emitted rule id; `SAVE_REPAIR_MAX + 1` distinct rule hits is a reject.
 10. Migrations M1-M7 pass; in particular every `Fixtures/Saves/v{n}.json` migrates to `Current` with zero repairs.
 11. Catch-up mutates state only inside `Apply` (issue #6): applying `ComputeOfflineCatchup(now)` for a gap of at least `OFFLINE_MIN_S` leaves every field except `Offline.Pending` and `Time.LastTickServerTime` value-equal (a second gap sums into the pending record, latest `Stage` kept); for a shorter gap it changes only `Fish.TankCount`, `Fish.TankRefillTick` and `Time.LastTickServerTime` (issue #21). Then `ClaimOfflineReward` changes only `Wallet.Gold`, `Hero.Exp`/`Hero.Level`, `Fish.TankCount`/`TankRefillTick`, `Offline.*`, `Stats.*`. Replaying the command log from the pre-gap save reproduces the same `StateHash`.
 12. Conflict rules: a table of `(L, R)` metadata pairs covering each branch of 9.3 produces the expected winner and `Status`; a non-authoritative local stamp 1 h ahead loses to an authoritative remote stamp.
 13. Uploads are suspended while `Status == Conflict` is unresolved (no `PUT` observed by a fake API during that window).
 14. `ServerClock`: `Observe` makes `IsAuthoritative` true; a device clock change of +1 day between observations changes `NowServerSeconds` by the monotonic elapsed only; before any observation, `NowServerSeconds >= floor`.
 15. Backwards clock: `dayKey(now) < DayKey` resets nothing and emits `clock_anomaly`; `now < LastTickServerTime` credits zero.
-16. The SQL migration set (section 12; issue #33) applies to an empty PostgreSQL 15 database and creates every table in section 12, including `ticket_ledger`, `granted_items`, `store_notifications`, `account_exports`, `events` and the P1 stubs (issue #53). A GDPR hard delete of a player with purchases leaves no row in any table referencing the old `player_id`, and exactly the player's `purchases`, `summon_log` and `diamond_ledger` rows referencing the tombstone account (`status = 'deleted'`); for a player without purchases, nothing remains. Deleting an `accounts` row that still has financial rows fails (`on delete restrict`; issue #32). Runs in CI and in `check.sh` when Postgres is available.
+16. The SQL migration set (section 12; issue #33) applies to an empty PostgreSQL 16 database and creates every table in section 12, including `ticket_ledger`, `granted_items`, `store_notifications`, `account_exports`, `events` and the P1 stubs (issue #53). A GDPR hard delete of a player with purchases leaves no row in any table referencing the old `player_id`, and exactly the player's `purchases`, `summon_log` and `diamond_ledger` rows referencing the tombstone account (`status = 'deleted'`); for a player without purchases, nothing remains. Deleting an `accounts` row that still has financial rows fails (`on delete restrict`; issue #32). Runs in CI and in `check.sh` when Postgres is available.
 17. `currency_changed` events for one simulated hour with `KILL` reason number at most `60 / CURRENCY_AGG_SEC * 60 = 60` per currency, and the sum of their deltas equals the wallet delta.
 18. No `UnityEngine`, `DateTime*.Now`, `Stopwatch` in `HeroCat.Sim`; in `HeroCat.Runtime` only `ServerClock.cs` and `SessionRunner.cs` reference the clock APIs (CI grep).
 19. IL2CPP build: a save produced by the editor loads on an ARM64 device build and vice versa with zero repairs (device-farm test, 10).
@@ -1344,8 +1358,9 @@ The backend `events` table and its nightly `currency_daily` materialized view (0
 | `ANALYTICS_BATCH_MAX` | 100 | I | 14 |
 | `ANALYTICS_QUEUE_MAX` | 10000 | I | 14 |
 | `CURRENCY_AGG_SEC` | 60 | I | 14 |
+| `DUNGEON_RECENT_RUNS_MAX` | 30 | S | 2, 3.2 |
 | `progressScore` weights | 100 / 10 / 1 / 5 / 50 / 2000 / 20 | S | 9.1 |
 
 All are engineering constants (code-resident). None needs the tuning tool; 10's fault-injection, conflict-table and perf tests are the check.
 
-Used from 00 by name: `TICK_HZ`, `KILLS_PER_STAGE`, `BOSS_EVERY`, `BOSS_TIME_TICKS`, `STAGE_CAP`, `TAP_ZAP_MAX_PER_SEC`, `DAY_SECONDS`, `OFFLINE_RATE`, `OFFLINE_CAP_H`, `OFFLINE_MIN_S`, `LOGIN_DIAMONDS`, `TUTORIAL_DIAMONDS`, `DIAMONDS_PER_DAY_F2P`, `PULL_COST[*]`, `PITY_HARD`, `SKILL_SLOTS`, `COMPANION_SLOTS`, `RUNE_SLOTS`, `DUPE_LVL_CUM`, `LIMIT_BREAK_MAX`, `BANNER_LVL_EXP`, `SPAWN_DELAY_TICKS`, `FISH_BOARD_W`, `FISH_BOARD_H`, `FISH_MAX_LVL0`, `TANK_CAP0`, `TANK_REFILL_S0`, `AWAKEN_STAGES`. From 01: `AUTOSAVE_INTERVAL_SEC`, `CMDLOG_MAX_BYTES`, `WEEK_EPOCH_OFFSET`, `WALL_CLOCK_SYNC_SEC`. From 03 (declared there): `TRAIN_CAP[stat]`.
+Used from 00 by name: `TICK_HZ`, `KILLS_PER_STAGE`, `BOSS_EVERY`, `BOSS_TIME_TICKS`, `STAGE_CAP`, `TAP_ZAP_MAX_PER_SEC`, `DAY_SECONDS`, `OFFLINE_RATE`, `OFFLINE_CAP_H`, `OFFLINE_MIN_S`, `LOGIN_DIAMONDS`, `TUTORIAL_DIAMONDS`, `DIAMONDS_PER_DAY_F2P`, `PULL_COST[*]`, `PITY_HARD`, `SKILL_SLOTS`, `COMPANION_SLOTS`, `RUNE_SLOTS`, `DUPE_LVL_CUM`, `LIMIT_BREAK_MAX`, `BANNER_LVL_EXP`, `SPAWN_DELAY_TICKS`, `FISH_BOARD_W`, `FISH_BOARD_H`, `FISH_MAX_LVL0`, `TANK_CAP0`, `TANK_REFILL_S0`, `AWAKEN_STAGES`. From 01: `AUTOSAVE_INTERVAL_SEC`, `CMDLOG_MAX_BYTES`, `WEEK_EPOCH_OFFSET`, `WALL_CLOCK_SYNC_SEC`. From 03 (declared there): `TRAIN_CAP[stat]`. From 04: `TUTORIAL_WEAPON_ID`. From 05: `FISH_MAX_LVL_HARD`. From 09: `TUTORIAL_DONE` (row count of `tutorial_steps`).
