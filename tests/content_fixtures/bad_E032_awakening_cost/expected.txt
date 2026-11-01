@@ -1,0 +1,1 @@
+CONTENT E032 awakening[3].rock_candy_cost: rock_candy_cost must be strictly increasing; awakening[3] has 300 <= previous 300

@@ -25,6 +25,15 @@ namespace HeroCat.Sim.Commands
 
         /// <summary>NotAvailable: SelectStage while Combat.Mode == Dungeon (the stage fields are frozen during a run, 02 section 3.3).</summary>
         public const string DUNGEON_RUN_IN_PROGRESS = "DUNGEON_RUN_IN_PROGRESS";
+
+        /// <summary>Capped: Awaken at the last awakening row's rank (03 section 5.3; every rank in a tier without the rows).</summary>
+        public const string AWAKEN_MAX_RANK = "AWAKEN_MAX_RANK";
+
+        /// <summary>Locked: Awaken while Progress.HighestCleared is below the next rank's stage gate (AWAKEN_STAGES).</summary>
+        public const string AWAKEN_STAGE_NOT_REACHED = "AWAKEN_STAGE_NOT_REACHED";
+
+        /// <summary>CannotAfford: Awaken without the next rank's AWAKEN_COST_ROCK_CANDY (the same key as 04's limit breaks).</summary>
+        public const string NOT_ENOUGH_ROCK_CANDY = "NOT_ENOUGH_ROCK_CANDY";
     }
 
     /// <summary>
@@ -69,5 +78,16 @@ namespace HeroCat.Sim.Commands
     public sealed record SelectStage(int? Stage) : Command
     {
         internal override ApplyResult Execute(Simulation sim) => sim.HandleSelectStage(this);
+    }
+
+    /// <summary>
+    /// Buys the next Awakening rank (03 section 5.3, 00 decision 11; issue #157). Rejects, in this order:
+    /// Capped/AWAKEN_MAX_RANK (no next row), Locked/AWAKEN_STAGE_NOT_REACHED (Progress.HighestCleared below the next
+    /// rank's stage_gate), CannotAfford/NOT_ENOUGH_ROCK_CANDY. Charges rock_candy_cost with reason AWAKENING, raises
+    /// Hero.AwakenRank by one and publishes Awakened(rank).
+    /// </summary>
+    public sealed record Awaken : Command
+    {
+        internal override ApplyResult Execute(Simulation sim) => sim.HandleAwaken();
     }
 }
