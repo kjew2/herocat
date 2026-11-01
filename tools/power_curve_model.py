@@ -68,7 +68,7 @@ LIMIT_BREAK_DAILY_FROM_DAY, LIMIT_BREAK_CANDY_SHARE_MAX = 10, 0.60   # 04 sectio
 FISH_DUNGEON_SHARE_BAND, FISH_DUNGEON_DAYS = (0.25, 0.50), (1, 7, 30)  # 06 section 6.3 (a)
 
 # ---- MVP tables the M0 content does not ship yet. Each is the owning spec's row set, used only when content lacks it.
-RESEARCH_FALLBACK = [   # 03 section 6 / 09 section 5.18. TODO(#158): read content/research.json once it ships.
+RESEARCH_FALLBACK = [   # 03 section 6 / 09 section 5.18. Only for content without a research table (content/ ships it, #158).
     {"id": "res_atk", "effect": "ATK_PCT", "effect_per_level": 0.05, "effect_floor": None, "max_level": 50, "cost0": 150.0, "cost_g": 1.20, "unlock_awaken_rank": 1},
     {"id": "res_gold_gain", "effect": "GOLD_GAIN", "effect_per_level": 0.05, "effect_floor": None, "max_level": 20, "cost0": 250.0, "cost_g": 1.40, "unlock_awaken_rank": 1},
     {"id": "res_mp_pool", "effect": "MP_POOL", "effect_per_level": 20.0, "effect_floor": None, "max_level": 10, "cost0": 200.0, "cost_g": 1.50, "unlock_awaken_rank": 1},
@@ -136,7 +136,7 @@ class Params:
         research = db.table("research", None)
         if research is None and not m0:
             research = RESEARCH_FALLBACK
-            self.fallbacks.append("research: 03 section 6 rows (content has no research table, TODO(#158))")
+            self.fallbacks.append("research: 03 section 6 rows (content has no research table)")
         self.research = {} if m0 else {r["id"]: dict(r) for r in research if tier_ok(r) or "tier" not in r}
         for rid, r in self.research.items():
             c[f"RES_COST0[{rid}]"], c[f"RES_COST_G[{rid}]"] = r["cost0"], r["cost_g"]

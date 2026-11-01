@@ -255,7 +255,7 @@ namespace HeroCat.Sim.Content
                 foreach (var r in Rows(d.AwakeningTargets)) at.Add(new AwakeningTargetDef(r.Rank, r.MaxDaysAfterGate));
                 db.AwakeningTargets = at.AsReadOnly();
 
-                // research (optional until #158 ships the rows; tier-filtered like every tiered table)
+                // research (09 section 5.18; optional so minimal fixtures need not carry it; tier-filtered like every tiered table)
                 var research = Rows(d.Research);
                 Unique("research", research, r => r.Id);
                 var nodes = new Dictionary<string, ResearchDef>(StringComparer.Ordinal);

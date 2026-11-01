@@ -300,6 +300,24 @@ namespace HeroCat.Runtime.Tests
         }
 
         [Test]
+        public void P13_ResearchLevels_ClampedToMaxLevel_UnknownIdsDropped()   // 02 rule P13, 09 section 6.3 (issue #158)
+        {
+            var mvp = ContentLoader.LoadFromDirectory(TestContent.Dir, Tier.MVP);
+            var s = ProfileFactory.Create(mvp, Guid.Empty, TestContent.T0, TestContent.Device, TestContent.Root);
+            int fishMax = mvp.Research["res_fish_cap"].MaxLevel;
+            s.Research.Level["res_atk"] = 7;
+            s.Research.Level["res_fish_cap"] = fishMax + 4;   // content lowered the cap: clamp, nothing refunded
+            s.Research.Level["res_offline_cap"] = mvp.Research["res_offline_cap"].MaxLevel;
+            s.Research.Level["rs_mp_pool"] = 3;               // an id the content does not define
+            Assert.That(SaveValidator.Run(s, Now, mvp, Opt()), Is.EqualTo(new[] { "P13" }));
+            Assert.That(s.Research.Level.Keys.OrderBy(k => k, StringComparer.Ordinal),
+                        Is.EqualTo(new[] { "res_atk", "res_fish_cap", "res_offline_cap" }));
+            Assert.That(s.Research.Level["res_atk"], Is.EqualTo(7));
+            Assert.That(s.Research.Level["res_fish_cap"], Is.EqualTo(fishMax));
+            Assert.That(SaveValidator.Run(s, Now, mvp, Opt()), Is.Empty);
+        }
+
+        [Test]
         public void FreshProfile_HasZeroRepairs()   // #73 acceptance, 02 acceptance 10
         {
             Assert.That(SaveValidator.Run(Fresh(), Now, Db, Opt()), Is.Empty);
