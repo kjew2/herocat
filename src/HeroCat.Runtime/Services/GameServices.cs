@@ -14,6 +14,9 @@ namespace HeroCat.Runtime.Services
         public ISaveStore SaveStore { get; set; }
         public IAnalytics Analytics { get; set; }
 
+        /// <summary>The summon seam (04 section 12). Null: GameSession uses a LocalSummonService over its own state (M0).</summary>
+        public HeroCat.Runtime.Summons.ISummonService Summon { get; set; }
+
         /// <summary>Device build: device clock, saves under {dataDir}/saves.</summary>
         public static GameServices Local(string dataDir, IAnalytics analytics = null) => new GameServices
         {
