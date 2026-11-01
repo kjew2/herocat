@@ -53,12 +53,19 @@ namespace HeroCat.Bots.Tests
         [Test]
         public void IdleDays_RollTheDay_AndPayOneLoginPerDay()
         {
-            var run = new BotRunner(Content.Db).Run(new IdleBot(), 7, 3);
             var k = Content.Db.Constants;
+            var firstClears = new long[3];
+            var runner = new BotRunner(Content.Db)
+            {
+                AfterDay = (day, ctx) => firstClears[day - 1] = ctx.State.Progress.HighestFirstClearBoss / k.BossEvery * k.FirstClearDiamonds,
+            };
+            var run = runner.Run(new IdleBot(), 7, 3);
             Assert.That(run.Rows.Select(r => r.Day), Is.EqualTo(new[] { 1, 2, 3 }));
-            // tutorial grant + day 1 login at the start, then one login per night sync
-            Assert.That(run.Rows.Select(r => r.Diamonds), Is.EqualTo(new[] { 1500L + 2 * k.LoginDiamonds, 1500L + 3 * k.LoginDiamonds, 1500L + 4 * k.LoginDiamonds }));
-            Assert.That(run.Rows.All(r => r.Stage == 1), Is.True, "TODO(#81): no combat yet");
+            // tutorial grant + day 1 login at the start, then one login per night sync, plus boss first clears (03 section 2.6)
+            Assert.That(run.Rows.Select(r => r.Diamonds),
+                        Is.EqualTo(new[] { 1500L + 2 * k.LoginDiamonds + firstClears[0], 1500L + 3 * k.LoginDiamonds + firstClears[1],
+                                           1500L + 4 * k.LoginDiamonds + firstClears[2] }));
+            Assert.That(run.Rows[0].Stage, Is.GreaterThan(1), "the idle hero fights (03 section 2)");
         }
 
         [Test]
@@ -133,7 +140,7 @@ namespace HeroCat.Bots.Tests
             var sw = Sweep.Run(Content.Db, "idle", "1-2", 7, 2);
             var r = AcceptanceChecker.Check(sw, Content.Db, AcceptanceTargets.LoadDefault(), () => null);
             Assert.That(r.Select(x => x.Id), Is.EqualTo(new[] { "AC1", "AC1", "AC6" }));
-            Assert.That(r[0].Pass, Is.False, "the idle skeleton stays on stage 1 (TODO(#136))");
+            Assert.That(r[0].Pass, Is.False, "the idle bot (no Training) walls far below the day-1 target (TODO(#136))");
             Assert.That(r[2].Pass, Is.True);
         }
 
