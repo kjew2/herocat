@@ -64,7 +64,7 @@ namespace HeroCat.Runtime.Tests
         }
 
         [Test]
-        public void SaveStamp_StampsTimeSeqContentAndDevice_AndTheTickAnchorWhileTicking()
+        public void SaveStamp_StampsTimeSeqContentAndDevice_NeverTheTickAnchor()   // 02 section 8.2, 00 contract 5
         {
             var clock = new FakeClock(Now);
             var store = Opened(new MemorySaveStore(), clock);
@@ -74,17 +74,15 @@ namespace HeroCat.Runtime.Tests
             clock.Set(Now + 50);
             store.Save(s, SaveTrigger.Resume);
             Assert.That(s.Time.LastSavedServerTime, Is.EqualTo(Now + 50));
-            Assert.That(s.Time.LastTickServerTime, Is.EqualTo(TestContent.T0), "Resume follows a catch-up; the anchor is not moved");
+            Assert.That(s.Time.LastTickServerTime, Is.EqualTo(TestContent.T0), "the sim owns the anchor");
             Assert.That(s.SaveSeq, Is.EqualTo(1));
             Assert.That(s.ContentVersion, Is.EqualTo(TestContent.Db.Version));
             Assert.That(s.ContentHash, Is.EqualTo(TestContent.Db.ContentHash));
             Assert.That(s.DeviceId, Is.EqualTo(TestContent.Device));
             clock.Set(Now + 80);
             store.Save(s, SaveTrigger.Periodic);
-            Assert.That(s.Time.LastTickServerTime, Is.EqualTo(Now + 80), "ticks ran until this save");
-            clock.Set(Now + 10);
-            store.Save(s, SaveTrigger.Pause);
-            Assert.That(s.Time.LastTickServerTime, Is.EqualTo(Now + 80), "never moved backwards");
+            Assert.That(s.Time.LastTickServerTime, Is.EqualTo(TestContent.T0), "no trigger moves it, ticking or not");
+            Assert.That(s.SaveSeq, Is.EqualTo(2));
         }
 
         [Test]

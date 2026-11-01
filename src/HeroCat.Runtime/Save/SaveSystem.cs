@@ -47,8 +47,8 @@ namespace HeroCat.Runtime.Save
         public static void Validate(GameState s, ContentDb db) => SaveValidator.Reject(s, db);
 
         /// <summary>SaveStamp (02 section 8.2). Kept for callers outside the store (the bots' save fixture).</summary>
-        public static void Stamp(GameState state, long nowServerSec, ContentDb db, Guid installId, bool ticking) =>
-            SaveStamp.Apply(state, nowServerSec, db, installId, ticking);
+        public static void Stamp(GameState state, long nowServerSec, ContentDb db, Guid installId) =>
+            SaveStamp.Apply(state, nowServerSec, db, installId);
 
         sealed class AnalyticsMigrationLog : IMigrationLog
         {

@@ -31,7 +31,7 @@ namespace HeroCat.Bots.Golden
                 AfterDay = (day, ctx) =>
                 {
                     if (day != Days) return;
-                    SaveSystem.Stamp(ctx.State, ctx.Clock.NowServerSeconds, db, HarnessConstants.BotDeviceId, ticking: false);
+                    SaveSystem.Stamp(ctx.State, ctx.Clock.NowServerSeconds, db, HarnessConstants.BotDeviceId);
                     body = SaveSerializer.ToJson(ctx.State).ToString(Formatting.Indented).Replace("\r\n", "\n") + "\n";
                 },
             };

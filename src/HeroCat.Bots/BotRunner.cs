@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using HeroCat.Bots.Measure;
 using HeroCat.Bots.Policies;
 using HeroCat.Runtime.Profile;
@@ -49,22 +47,6 @@ namespace HeroCat.Bots
     }
 
     /// <summary>
-    /// The save seam for bots: writes nothing. A real store stamps <c>LastTickServerTime</c> and <c>SaveSeq</c> outside
-    /// Simulation.Apply on every save (02 section 8.2), which the command log cannot replay; with this store every state
-    /// change of a bot run is in the log, so the golden replay (10 section 2) reproduces the day hashes exactly. The save
-    /// round trip is exercised by <c>save-fixture</c> instead.
-    /// </summary>
-    public sealed class NullSaveStore : ISaveStore
-    {
-        public Task<LoadResult> LoadAsync(long nowServerSec, ContentDb db, CancellationToken ct) =>
-            throw new NotSupportedException("the bot harness creates profiles, it never loads one");
-
-        public void Save(GameState state, SaveTrigger trigger) { }
-
-        public Task ResolveConflictAsync(GameState chosen, GameState rejected, CancellationToken ct) => Task.CompletedTask;
-    }
-
-    /// <summary>
     /// Plays N bot days (10 section 3.3): per day two sessions, each a resume through Runtime's
     /// <see cref="SessionRunner"/> (logged ApplyServerTime + ComputeOfflineCatchup: rollover, catch-up), the policy's
     /// session start (which claims the offline reward), 60 decisions of DecisionIntervalSeconds of ticks, the session end, a suspend (OnPause), then the
@@ -98,17 +80,25 @@ namespace HeroCat.Bots
 
         /// <summary>
         /// The harness wiring for one profile (10 section 3.3): the seed's genesis at the epoch, a FakeClock, the Local
-        /// seams (LocalSummonService and friends, a save store that writes nothing), an EventBus with the sink attached,
+        /// seams (LocalSummonService and friends, a LocalSaveStore on memory slots), an EventBus with the sink attached,
         /// and the SessionRunner that owns the Simulation. Not started: <see cref="Run"/> (or a test) calls Start.
         /// </summary>
         public static BotContext CreateContext(ContentDb content, ulong seed, ICommandLog log = null)
         {
             var clock = new FakeClock(EpochSeconds);
             var sim = NewSimulation(content, seed);
+            // The real save path on a memory slot store: SaveStamp writes only bookkeeping that StateHash leaves out
+            // (02 section 8.2), so saving changes nothing a golden replay checks. Load on the empty store only hands the
+            // store its content; the run keeps the harness's genesis.
+            var saves = new LocalSaveStore(new MemorySaveStore(), clock, HarnessConstants.BotDeviceId)
+            {
+                NewProfileFactory = (db, now) => Genesis(db, seed),
+            };
+            saves.Load(EpochSeconds, content);
             var services = GameServices.Build(BackendMode.Local, new ServicesOptions
             {
                 Clock = clock,
-                Saves = new NullSaveStore(),
+                Saves = saves,
                 Analytics = NullAnalytics.Instance,
                 State = () => sim.State,
                 Content = content,
@@ -164,7 +154,7 @@ namespace HeroCat.Bots
                         sink.OnActiveMinute(sim.Query.Power);
                     }
                     policy.OnSessionEnd(ctx);
-                    runner.OnPause();   // suspend: drain, publish, save (a no-op store)
+                    runner.OnPause();   // suspend: drain, publish, save (memory slots)
                     clock.Advance(HarnessConstants.SessionGapSeconds(day, s));
                 }
                 rows[day - 1] = Snapshot(day, sim, sink, clock);

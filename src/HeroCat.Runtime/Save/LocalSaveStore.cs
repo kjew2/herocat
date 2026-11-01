@@ -114,12 +114,13 @@ namespace HeroCat.Runtime.Save
 
     /// <summary>
     /// SaveStamp (02 section 8.2), applied by every write before encoding: <c>LastSavedServerTime = now</c>,
-    /// <c>SaveSeq += 1</c>, <c>ContentVersion</c>/<c>ContentHash</c> from the content, <c>DeviceId = installId</c>, and
-    /// while ticking <c>LastTickServerTime = now</c> (the window up to now was ticked, not idle; never moved backwards).
+    /// <c>SaveSeq += 1</c>, <c>ContentVersion</c>/<c>ContentHash</c> from the content, <c>DeviceId = installId</c>. It never
+    /// writes <c>Time.LastTickServerTime</c>: the sim owns it inside Apply and every tick (00 contract 5), so the command log
+    /// replays it, and everything the stamp writes is bookkeeping that StateHash leaves out.
     /// </summary>
     public static class SaveStamp
     {
-        public static void Apply(GameState state, long nowServerSec, ContentDb db, Guid installId, bool ticking)
+        public static void Apply(GameState state, long nowServerSec, ContentDb db, Guid installId)
         {
             if (state == null) throw new ArgumentNullException(nameof(state));
             state.Time.LastSavedServerTime = nowServerSec;
@@ -127,15 +128,7 @@ namespace HeroCat.Runtime.Save
             state.ContentVersion = db.Version;
             state.ContentHash = db.ContentHash;
             if (installId != Guid.Empty) state.DeviceId = installId;
-            if (ticking && nowServerSec > state.Time.LastTickServerTime) state.Time.LastTickServerTime = nowServerSec;
         }
-
-        /// <summary>
-        /// Whether ticks ran up to this save. Every trigger fires while the session ticks (Pause and Quit stop it right
-        /// after), except Resume, which follows a catch-up that already stamped the anchor, and Conflict, which writes a
-        /// state that was not ticked here (decision in the #77 change).
-        /// </summary>
-        public static bool TicksRanUntil(SaveTrigger trigger) => trigger != SaveTrigger.Resume && trigger != SaveTrigger.Conflict;
     }
 
     /// <summary>
@@ -273,7 +266,7 @@ namespace HeroCat.Runtime.Save
 
         void Write(GameState state, SaveTrigger trigger)
         {
-            SaveStamp.Apply(state, _clock.NowServerSeconds, Content, InstallId, SaveStamp.TicksRanUntil(trigger));
+            SaveStamp.Apply(state, _clock.NowServerSeconds, Content, InstallId);
             byte[] bytes;
             try { bytes = SaveSerializer.Encode(state, _deviceKey); }
             catch (Exception e) { throw new SaveWriteException("encode failed: " + e.Message, e); }

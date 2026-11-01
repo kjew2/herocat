@@ -118,7 +118,7 @@ namespace HeroCat.Runtime.Tests
             var json = SaveSerializer.ToJson(guest);
             json["PlayerId"] = KnownPlayer.ToString();
             var linked = SaveSerializer.Materialize(json);
-            SaveStamp.Apply(linked, TestContent.T0 + 60, TestContent.Db, new Guid("0f9e8d7c-0000-4000-8000-000000000002"), ticking: false);
+            SaveStamp.Apply(linked, TestContent.T0 + 60, TestContent.Db, new Guid("0f9e8d7c-0000-4000-8000-000000000002"));
             var back = SaveSystem.DecodeFull(SaveSerializer.Encode(linked), TestContent.Db).state;
 
             Assert.That(back.PlayerId, Is.EqualTo(KnownPlayer));

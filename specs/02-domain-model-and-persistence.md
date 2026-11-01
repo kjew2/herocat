@@ -710,8 +710,9 @@ public interface ISaveStore
 Save(state, trigger):
   SaveStamp.Apply(state, clock.NowServerSeconds, db.Version, installId)
       // LastSavedServerTime = now; SaveSeq += 1; ContentVersion = db.Version; ContentHash = db.Hash; DeviceId = installId
-      // if ticks are running: LastTickServerTime = now as well (the window up to now has been ticked, not idle; never moved back)
-      // "ticks are running" = every trigger except Resume (follows a catch-up that stamped the anchor) and Conflict
+      // never Time.LastTickServerTime: the sim owns it inside Apply (every tick raises it to the virtual server now,
+      // ComputeOfflineCatchup stamps it; 00 contract 5), so a command-log replay reproduces it. Every field the stamp
+      // writes is bookkeeping that StateHash leaves out.
   bytes = SaveSerializer.Encode(state, deviceKey)
   using fs = new FileStream(slot0.tmp, Create, Write, FileShare.None)
       fs.Write(bytes); fs.Flush(flushToDisk: true)
