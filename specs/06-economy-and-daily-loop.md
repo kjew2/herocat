@@ -94,7 +94,7 @@ Every economy command rejects through 01's `ApplyResult.Reject(RejectCode, reaso
 | `DUNGEON_LOCKED` | `Locked` | `StartDungeon`, `SweepDungeon` |
 | `DUNGEON_FLOOR_NOT_UNLOCKED` | `Locked` | `StartDungeon` |
 | `DUNGEON_RUN_IN_PROGRESS` | `NotAvailable` | `StartDungeon`, `SweepDungeon` |
-| `BOSS_ATTEMPT_IN_PROGRESS` | `NotAvailable` | `StartDungeon`, `SweepDungeon` while a boss fight is active (issue #42) |
+| `BOSS_ATTEMPT_IN_PROGRESS` | `NotAvailable` | `StartDungeon` while a boss fight is active (issue #42); a sweep has no fight and is allowed |
 | `NOTHING_TO_SWEEP` | `NotAvailable` | `SweepDungeon` |
 | `DAILY_GIFT_ALREADY_CLAIMED` | `AlreadyClaimed` | `ClaimDailyGift` |
 | `EXCHANGE_LIMIT_REACHED` | `Capped` | `ExchangeItem` |
@@ -109,13 +109,15 @@ The target `DIAMONDS_PER_DAY_F2P` = 400 (S) is a steady-state floor for a player
 | Source | Rule | Amount on the reference day |
 |---|---|---|
 | Login | `LOGIN_DIAMONDS` once per day key, auto-granted on first tick of the day | 50 |
-| Daily missions | 10 paying missions x `QUEST_DAILY_DIAMONDS` (20); `d_login` pays nothing (section 5.2). Reference day: 8 of 10 completed (the Skill and Companion summon missions need diamond pulls and are skipped on a non-pull day) | 160 |
-| Daily progress bonus | `QUEST_DAILY_BONUS_5` (30) at 5 missions, `QUEST_DAILY_BONUS_8` (70) at 8 missions | 100 |
-| First clears | `FIRST_CLEAR_DIAMONDS` (10) per boss stage cleared for the first time; reference day assumes 4 new boss stages | 40 |
-| Weekly missions, amortised | 7 missions x `QUEST_WEEKLY_DIAMONDS` (50) = 350 per week = 50 per day | 50 |
+| Daily missions | 10 paying mission rows at 20 diamonds each (`reward_amount`); `d_login` pays nothing (section 5.2). Reference day: `REF_DAILIES_DONE` = 8 of 10 completed (the Skill and Companion summon missions need diamond pulls and are skipped on a non-pull day) | 160 |
+| Daily progress bonus | rows `d_bonus_5` (30) at 5 missions, `d_bonus_8` (70) at 8 missions | 100 |
+| First clears | `FIRST_CLEAR_DIAMONDS` (10) per boss stage cleared for the first time; reference day assumes `REF_NEW_BOSSES` = 4 new boss stages | 40 |
+| Weekly missions, amortised | 7 mission rows at 50 diamonds each = 350 per week = 50 per day | 50 |
 | **Total** | | **400** |
 
 `50 + 8 * 20 + (30 + 70) + 4 * 10 + 350 / 7 = 50 + 160 + 100 + 40 + 50 = 400`.
+
+Quest rows are the single source of quest diamond amounts: there are no per-mission or bonus constants (issues #55, #244). The 09 exporter rule `E039` recomputes this reference day from the quest rows, `LOGIN_DIAMONDS`, `FIRST_CLEAR_DIAMONDS` and the two reference constants `REF_DAILIES_DONE` and `REF_NEW_BOSSES` (formula in 09), and fails when it is more than 10% from `DIAMONDS_PER_DAY_F2P`.
 
 Realistic income by day for the greedy F2P bot, using the stage targets in 00 section 6.6 to count new boss stages (stage / `BOSS_EVERY`):
 
@@ -127,9 +129,9 @@ Realistic income by day for the greedy F2P bot, using the stage targets in 00 se
 | 14 | about 1.4 | 8 | 50 | 260 | 14 | 50 | about 40 | about 414 |
 | 30 | about 0.4 | 8 | 50 | 260 | 4 | 50 | about 20 | about 384 |
 
-Reading the table: diamonds are front-loaded on purpose (the first week is where the player learns that pulls feel good), and the steady state after day 14 lands within 5% of the target with achievements included and 9% under without them. Whether to accept that taper or raise `QUEST_WEEKLY_DIAMONDS` is Open question 1.
+Reading the table: diamonds are front-loaded on purpose (the first week is where the player learns that pulls feel good), and the steady state after day 14 lands within 5% of the target with achievements included and 9% under without them. Whether to accept that taper or raise the weekly rows' reward is Open question 1.
 
-What the tuning tool (`tools/power_curve_model.py`, spec 03) must check about `DIAMONDS_PER_DAY_F2P`: with the pull prices in 00 section 6.3 the F2P bot must afford at least one 10-pull on the Weapon banner every 2.5 days and one on each other banner every 5 to 7.5 days, so that every banner's pity counter (`PITY_HARD` 80) resolves within the 30-day window at least once. If it does not, the number is too low for the summon layer to carry its 03 share of log-power.
+What the tuning tool (`tools/power_curve_model.py`, spec 03) must check about `DIAMONDS_PER_DAY_F2P`: the tool computes each banner's F2P pull cadence from this section's income (diamonds plus the ticket sources in section 1.1) and 03's bot policy; no spec hand-enters a pulls-per-day figure, and 04's `BANNER_LVL_EXP` thresholds are retuned from that output (issue #38). With the pull prices in 00 section 6.3 the F2P bot must afford at least one 10-pull on the Weapon banner every 2.5 days and one on each other banner every 5 to 7.5 days, so that every banner's pity counter (`PITY_HARD` 80) resolves within the 30-day window at least once. If it does not, the number is too low for the summon layer to carry its 03 share of log-power.
 
 Diamond sinks on the reference day: the bot spends everything on pulls in the order Weapon 10-pull when `DIAMOND >= 1000`, else Skill 10-pull when `>= 2000` and Weapon banner level has reached its first threshold (04), else Companion 10-pull when `>= 3000`. It never holds diamonds across a day for a reason other than reaching a 10-pull. The exchange (section 8.4) is used only by the bot variant that is Fish Coin starved.
 
@@ -251,11 +253,13 @@ public sealed class QuestProgress   // one per QuestDef, in GameState.Quests.Dai
 
 `Quests.Progress(kind, goal, delta, filter = null)` is called by the sim at the emitting site (03 on `EnemyKilled`, 04 on each pull result, 05 on `FishReleased`/`FishMerged`, this spec on dungeon clears). It increments every matching `IN_PROGRESS` quest and flips it to `COMPLETED` when `Progress >= Target`, emitting `QuestCompleted(questId)`. Rewards are granted only by `ClaimQuest(questId)` or `ClaimAllQuests(kind)`, which emit `QuestClaimed(questId, currency, amount)` and apply the delta with `CurrencyReason.QUEST` (achievements use `CurrencyReason.ACHIEVEMENT`). A row with reward 0 (only `d_login` today) goes straight from `IN_PROGRESS` to `CLAIMED` when it completes: it emits `QuestCompleted`, pays nothing, raises no red dot and is never counted by `ClaimAllQuests`. Offline Catch-up advances no quest.
 
+Unlock: the `feature_unlocks` row `QUESTS` (`STAGE_HIGHEST >= 10`, 09; issue #45) gates `SCR_QUESTS` and the claim commands, which reject `(Locked, QUESTS_LOCKED)` before it is met. Progress counts from profile creation, so missions completed before the gate are claimable once it opens.
+
 Why a claim step rather than auto-grant: the reference game and the whole sub-genre use it, the Claim All button is the daily "pay-day" tap that `SCR_QUESTS` is built around (07), and the red dot it produces is the main reason players open the quests screen. The sibling prototype auto-granted and listed this as its open decision 7; this spec takes the claim step as the default.
 
 ### 5.2 Daily missions
 
-Reward per mission `QUEST_DAILY_DIAMONDS` = 20 diamonds. Order is display order on `SCR_QUESTS`.
+Each paying row's `reward_amount` is 20 diamonds; the rows are the only source of the amount (issue #55). Order is display order on `SCR_QUESTS`.
 
 | Id | Goal | Filter | Target | Why this target |
 |---|---|---|---|---|
@@ -275,16 +279,16 @@ That is 11 rows including login, which is why the budget in section 2 counts "10
 
 | Bonus row | Threshold | Reward |
 |---|---|---|
-| `d_bonus_5` | 5 missions `COMPLETED` or `CLAIMED` | `QUEST_DAILY_BONUS_5` = 30 diamonds |
-| `d_bonus_8` | 8 | `QUEST_DAILY_BONUS_8` = 70 diamonds |
+| `d_bonus_5` | 5 missions `COMPLETED` or `CLAIMED` | 30 diamonds (`reward_amount`) |
+| `d_bonus_8` | 8 | 70 diamonds |
 
-The two bonus rows are `QuestDef`s with goal `DAILIES_COMPLETED` so they reuse the claim path. F2P reaches 8 without any diamond spend: login, kills, boss, weapon summon (gift ticket), release, merge, three dungeons = 9.
+The two bonus rows are `QuestDef`s with goal `DAILIES_COMPLETED` so they reuse the claim path; their rows are the source of the bonus payouts (no constants), and the 09 validator checks both rows exist (issue #244). F2P reaches 8 without any diamond spend: login, kills, boss, weapon summon (gift ticket), release, merge, three dungeons = 9.
 
 P1: `d_watch_ad` (`WATCH_AD`, target 1, reward 20) is added as a twelfth row and the bonus thresholds stay at 5 and 8, so ad-watching never becomes required for the full bonus (pillar 4).
 
 ### 5.3 Weekly missions
 
-Reward per mission `QUEST_WEEKLY_DIAMONDS` = 50 diamonds. All seven complete-able by a player who does the dailies six days out of seven.
+Each row's `reward_amount` is 50 diamonds (issue #55). All seven complete-able by a player who does the dailies six days out of seven.
 
 | Id | Goal | Target | Per-day equivalent |
 |---|---|---|---|
@@ -306,15 +310,17 @@ One-time, never reset, claimable in any order once completed. Each ladder is a s
 |---|---|---|---|
 | Stage | `REACH_STAGE` | 10->20, 30->30, 50->50, 100->80, 150->100, 200->100, 300->150, 400->150, 500->200, 700->250, 1000->300 | 1,430 |
 | Hero Level | `REACH_HERO_LEVEL` | 10->20, 25->30, 50->50, 75->80, 100->100, 150->150, 200->200 | 630 |
-| Weapons owned | `OWN_WEAPONS` (distinct) | 5->30, 10->50, 20->100, 30->200 | 380 |
-| Skills owned | `OWN_SKILLS` | 5->30, 10->50, 20->100, 30->150, 40->250 | 580 |
-| Companions owned | `OWN_COMPANIONS` | 5->30, 10->50, 20->100, 35->150, 50->300 | 630 |
+| Weapons owned | `OWN_WEAPONS` (distinct) | 5->30, 10->50, 20->100, 25->200 | 380 |
+| Skills owned | `OWN_SKILLS` | 5->30, 10->50, 20->100, 30->150, 35->250 | 580 |
+| Companions owned | `OWN_COMPANIONS` | 5->30, 10->50, 20->100, 35->150, 45->300 | 630 |
 | Merges | `LIFETIME_MERGES` | 50->20, 200->30, 500->50, 1000->80, 3000->100, 10000->200 | 480 |
 | Fish level | `FISH_LEVEL` | 5->30, 8->50, 10->100, 12->150 (needs Research), 15->300 | 630 |
 | Awakening | `AWAKEN_RANK` | 1->50, 2->100, 3->150, 4->200, 5->300 | 800 |
 | Summons | `LIFETIME_SUMMONS` | 10->20, 50->50, 100->80, 300->100, 500->150, 1000->300 | 700 |
 
 Total ladder value 6,260 diamonds, of which a day-30 F2P player at stage 550, hero level about 120, 3 awakenings, fish level 11 and about 400 summons has claimed roughly 3,100. The by-day column in section 2 is this total spread by when the bot crosses each rung. Progress for `OWN_*`, `REACH_*`, `FISH_LEVEL` and `AWAKEN_RANK` is a max, not a sum: `Quests.SetMax(goal, value)` is called when the underlying value changes.
+
+Collection rungs pay for a count, never for a complete set (pillar 4): every `OWN_*` rung's `target` is strictly less than the current pool size of that kind (00 section 6.3: 30 weapons, 40 skills, 50 companions), so the top rungs are 25, 35 and 45. 09 validates this on every content build, so a pool shrink or a rung edit cannot turn a rung into a set-completion reward (issue #44).
 
 ### 5.5 Commands and rejections
 

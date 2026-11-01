@@ -404,7 +404,8 @@ public sealed class ApiClient
 public sealed record ApiRequest(HttpMethod Method, string Path, object? Body, bool Idempotent, string? RequestId = null, bool RequiresAuth = true);
 
 public sealed record ApiResponse<T>(bool Ok, int Status, T? Body, ApiError? Error, long ServerTimeSec);
-public sealed record ApiError(string Code, string Message, string? RetryAfter);
+public sealed record ApiError(string Code, string Message, int? RetryAfterSec);   // 08 body `retryAfterSec`, else the `Retry-After` header (issue #30)
+public enum ErrorClass { Ok, Offline, Timeout, ServerError, Retryable, AuthExpired, Rejected, Conflict, Maintenance, Fatal }
 ```
 
 Headers on every request:
@@ -422,15 +423,35 @@ Every response carries `X-Server-Time` (unix seconds). `ApiClient` forwards it t
 
 ### 5.2 Retry and backoff
 
-| Condition | Action |
-|---|---|
-| No connectivity (DNS failure, `HttpRequestException`) | `Offline`. Retry only if `Idempotent`. |
-| Timeout (`HTTP_TIMEOUT_S = 10`) | `Timeout`. Retry only if `Idempotent`. |
-| 401 | Refresh token once (`POST /v1/auth/refresh`), replay the request once. A second 401 -> `AuthExpired`, go to `SCR_TITLE`. |
-| 408, 425, 429, 502, 503, 504 | Retryable. Honour `Retry-After` if present, else backoff schedule. |
-| 500 | Retryable once, then `ServerError`. |
-| Other 4xx | `Rejected` with the body's `code`. Never retried. |
-| 409 on cloud save | `Conflict` (02 section 7). |
+Responses are classified by `(status, code)`, code first (issue #30). 08's wire codes are canonical. A known code decides the class, the retry and the client action; an unknown code falls back to its status rule. This one table (`ErrorClassifier.Table` in `HeroCat.Runtime`) drives `ApiClient` and the localization validator (acceptance 14); flows cite a code's row instead of re-deriving the rule.
+
+| Status | Code | Class | Retry | Client action |
+|---|---|---|---|---|
+| n/a | (DNS failure, `HttpRequestException`) | `Offline` | Only if `Idempotent` | `NET_OFFLINE`. |
+| n/a | (timeout, `HTTP_TIMEOUT_S = 10`) | `Timeout` | Only if `Idempotent` | `NET_TIMEOUT`. |
+| 401 | `TOKEN_EXPIRED` | `AuthExpired` | Refresh token once (`POST /v1/auth/refresh`), replay the request once | A second 401 -> `SCR_TITLE`. |
+| 401 | `UNAUTHENTICATED`, `TOKEN_REVOKED`, `TOKEN_REUSED` | `AuthExpired` | No | Clear tokens, `SCR_TITLE`. |
+| 402 | `INSUFFICIENT_FUNDS` | `Rejected` | No | Refresh balances; modal. |
+| 403 | `ACCOUNT_BANNED` | `Fatal` | No | Full screen with the appeal url from the body. |
+| 409 | `IDEMPOTENCY_IN_FLIGHT` | `Retryable` | After `retryAfterSec`, same `requestId` | None visible. |
+| 409 | `PAYMENT_MISMATCH` | `Rejected` (silent) | No | Refresh balances and re-quote (8.5.2 step 1); nothing charged. |
+| 409 | `SAVE_CONFLICT` | `Conflict` | No | Resolve per 02 section 7.3 (8.10). |
+| 409 | `SAVE_STALE` | `Rejected` (silent) | No | Drop that blob; the latest local save uploads at the next trigger. |
+| 409 | `SAVE_ROLLED_BACK` | `Conflict` | No | Download the server save (`GET /v1/save`), replace local, show the rollback notice (08 section 7). |
+| 409 | `CONTENT_TOO_OLD` | `Rejected` | No | Modal "Update ready, restart to continue"; the newer bundle applies at cold boot (8.12). |
+| 409 | `INBOX_ALREADY_CLAIMED` | `Ok` (success-equivalent) | No | Apply the carried grants if the id is not in `Inbox.ClaimedIds` (8.9 step 6). |
+| 409 | `PROVIDER_ALREADY_LINKED` | `Rejected` | No | Account choice flow (8.13 step 4). |
+| 409 | `BANNER_CLOSED`, `SKU_NOT_AVAILABLE` | `Rejected` | No | Modal. |
+| 426 | `CLIENT_TOO_OLD` | `Rejected` | No | Update-only block with store link. |
+| 429 | `RATE_LIMITED` | `Retryable` | Honour `retryAfterSec`, else backoff | None visible until retries are exhausted. |
+| 429 | `DUNGEON_SEED_CAP`, `EXPORT_RATE_LIMITED` | `Rejected` | No | Modal. |
+| 503 | `MAINTENANCE` | `Maintenance` | Poll `/config` every `MAINT_POLL_S` | Block screen (section 7). |
+| 503 | `SUMMON_DISABLED` | `Rejected` | No | Re-fetch config; the kill switch disables the button (8.12). |
+| 503 | `STORE_UNAVAILABLE` | `Retryable` | Keep the pending receipt; `RECEIPT_RETRY_S` | None visible (8.9 step 4). |
+| 400 | `RECEIPT_INVALID` | `Rejected` | No | 8.9 step 4. |
+| 408, 425, 429, 502, 503, 504 | any other | `Retryable` | Honour `retryAfterSec` / `Retry-After` if present, else backoff schedule | |
+| 500 | any | `ServerError` | Once | `SRV_5XX` modal. |
+| other 4xx | any other | `Rejected` | Never | Modal with the body's `code`. |
 
 Backoff: `HTTP_RETRY_BASE_MS = 1000`, doubling, full jitter (`delay = random(0, min(HTTP_RETRY_CAP_MS = 8000, base * 2^attempt))`), `HTTP_RETRY_MAX = 4` attempts. Total worst case about 15 s, which is also the summon "pending" threshold (section 8.5).
 
@@ -458,17 +479,17 @@ A mutating request is retried **only with the same `requestId`**. The server rep
 
 ## 7. Error taxonomy shown to the user
 
-Every user-visible failure maps to one of these classes. The class picks the presentation; the `code` picks the localization key.
+Every user-visible failure maps to one of these classes. The class picks the presentation; the `code` picks the localization key `err.<code>`, spelled exactly as listed here and in 5.2 (server codes are 08's wire codes, issue #30). Sim rejects use `reject.<reason>` (2.1).
 
 | Class | Presentation | Examples (`code`) | Retry |
 |---|---|---|---|
-| `Reject` (sim) | Inline: button shake + short toast under the button | `CannotAfford`, `BoardFull`, `TankEmpty`, `Cooldown`, `Locked`, `AlreadyClaimed` | Not applicable; the player changes something. |
-| `Offline` | Non-blocking banner at the top of the screen, auto-hides on reconnect | `NET_OFFLINE` | Automatic. |
-| `Timeout` / `ServerError` | Toast "Could not reach the server. Retrying..." then modal after retries exhausted with Retry / Later | `NET_TIMEOUT`, `SRV_5XX` | Button. |
-| `Rejected` (server 4xx) | Modal with a specific message | `SUMMON_INSUFFICIENT_FUNDS`, `IAP_RECEIPT_INVALID`, `AUTH_ACCOUNT_LINKED_ELSEWHERE`, `CLIENT_TOO_OLD` | Depends; `CLIENT_TOO_OLD` has only "Update". |
-| `Conflict` | Dedicated conflict modal (02 section 7.4) | `SAVE_CONFLICT` | Player chooses. |
+| `Reject` (sim) | Inline: button shake + short toast under the button (07 places it next to the button, not in the bottom toast slot) | `CannotAfford`, `BoardFull`, `TankEmpty`, `Cooldown`, `Locked`, `AlreadyClaimed` | Not applicable; the player changes something. |
+| `Offline` | Non-blocking card in the action-strip position (07), auto-hides on reconnect; keeps the combat viewport clear | `NET_OFFLINE` | Automatic. |
+| `Timeout` / `ServerError` | Toast "Could not reach the server. Retrying..." then modal after retries exhausted with Retry / Later | `NET_TIMEOUT` (a summon timeout uses it too; there is no `SUMMON_TIMEOUT`), `SRV_5XX` | Button. |
+| `Rejected` (server) | Modal with a specific message | `INSUFFICIENT_FUNDS`, `RECEIPT_INVALID`, `PROVIDER_ALREADY_LINKED`, `CLIENT_TOO_OLD`, `CONTENT_TOO_OLD`, `BANNER_CLOSED`, `SUMMON_DISABLED`; client-side `IAP_PENDING` (store reports a deferred payment; the pending receipt is kept, 8.9) | Depends; `CLIENT_TOO_OLD` has only "Update". |
+| `Conflict` | Dedicated choice modal: the conflict modal (02 section 7.4) for `SAVE_CONFLICT`; [Restore from cloud] / [Reset profile] for `SAVE_CORRUPT` (local save unreadable, a cloud or backup copy exists); a rollback notice for `SAVE_ROLLED_BACK` | `SAVE_CONFLICT`, `SAVE_CORRUPT`, `SAVE_ROLLED_BACK` | Player chooses (rollback: acknowledge). |
 | `Maintenance` | Full-screen block on `SCR_BOOT`/`SCR_TITLE` with the message from config and an ETA | `MAINTENANCE` | Automatic poll every `MAINT_POLL_S = 60`. |
-| `Fatal` | Full-screen with support id; app cannot continue | `SAVE_TOO_NEW`, `CONTENT_CORRUPT`, `SAVE_CORRUPT_ALL` | Reinstall / contact support. |
+| `Fatal` | Full-screen with support id; app cannot continue | `SAVE_TOO_NEW`, `CONTENT_CORRUPT`, `SAVE_CORRUPT_ALL` (no readable copy anywhere), `ACCOUNT_BANNED` (appeal url) | Reinstall / contact support. |
 
 Rules: never two modals at once (07); a `Reject` never produces a modal; a reject code is never shown raw, always through its key (`reject.<reason>`, 2.1); every modal has a support id (`sessionId` prefix + minute) in small print so a screenshot is actionable.
 
@@ -640,6 +661,9 @@ sequenceDiagram
     S->>F: Summon(WEAPON, 10)
     F->>F: Pending.Summon = {requestId,...}; Save
     F->>RS: open pre-roll (SUMMON_PREROLL_MS)
+    opt unsynced earnings (diamonds or tickets)
+        F->>API: PUT /v1/save now (server credits the earned delta, 08 section 3.1)
+    end
     F->>C: PullAsync(req)
     C->>API: {requestId, banner, count, payment, clientContentVersion}
     alt 200
@@ -657,12 +681,13 @@ sequenceDiagram
     end
 ```
 
-1. Steps 1-2 as M0. Payment quote: the client sends `payment: "DIAMOND" | "TICKET"` per the 06 priority rule; the server rejects a mismatch with `409 PAYMENT_MISMATCH` (client refreshes balances and re-quotes, no charge).
+1. Steps 1-2 as M0. Payment quote: the client sends `payment: "DIAMOND" | "TICKET"` per the 06 priority rule; the server rejects a mismatch with `409 PAYMENT_MISMATCH` (5.2: client refreshes balances and re-quotes, no charge).
+   **Sync before pull** (issue #49): diamonds and tickets earned client-side (login, quests, first clears, achievements, tutorial, daily gift) reach the server ledgers only through `PUT /v1/save`, which credits the per-reason delta since the last upload into `diamond_ledger` / `ticket_ledger` (`ref_type = save_reconcile`, clamped to the per-day allowance; 02, 08 section 3.1). The server charges only what has been uploaded, so when the save's per-reason earned counters (02 `Stats`) are ahead of the last acknowledged upload (`CloudSaveClient.HasUnsyncedEarnings`), `SummonFlow` uploads immediately and awaits the 200 before `PullAsync`. The round trip runs inside the pre-roll. If that upload fails, the pull is still sent; a `402 INSUFFICIENT_FUNDS` then follows step 6.
 2. `SummonClient.PullAsync` -> `POST /v1/summon/pull` (08 section 4). The reveal overlay opens immediately with the pre-roll loop (`SUMMON_PREROLL_MS = 800`). A result inside that window feels instant.
-3. On 200: `Apply(ApplySummonResult)` with the server's items, pity, banner level and **balances** (`BalancesAfter` replace the local values, 2.5). Clear pending, save, reveal.
-4. On retryable failure: retry with the same `requestId` per 5.2. After `SUMMON_SLOW_MS = 3000` the overlay adds "Taking longer than usual". After retries are exhausted (about 15 s): close the overlay, show toast `SUMMON_PENDING_SAVED` ("Your summon is saved and will be revealed when you are back online"), the button becomes "Pending..." and calls `Resolve()`.
+3. On 200: `Apply(ApplySummonResult)` with the server's items, pity, banner level and **balances** (`BalancesAfter` replace the local values, 2.5; safe because unsynced earnings were uploaded first). Clear pending, save, reveal.
+4. On retryable failure (5.2, including `409 IDEMPOTENCY_IN_FLIGHT`): retry with the same `requestId`. After `SUMMON_SLOW_MS = 3000` the overlay adds "Taking longer than usual". After retries are exhausted (about 15 s): close the overlay, show toast `SUMMON_PENDING_SAVED` ("Your summon is saved and will be revealed when you are back online"), the button becomes "Pending..." and calls `Resolve()`.
 5. `Resolve()`: at boot/resume or on the pending button, re-send with the saved `requestId`. The server either replays the stored result (it completed) or executes it (it never arrived). Both are a 200 and are applied identically.
-6. On 4xx: `INSUFFICIENT_FUNDS` (balances drifted) -> refresh balances, clear pending, modal; `BANNER_CLOSED` -> clear pending, modal; `CLIENT_TOO_OLD` -> update block. Nothing was charged, so nothing to undo.
+6. On a non-retryable error, clear pending and take the code's 5.2 row: `402 INSUFFICIENT_FUNDS` (balances drifted) -> refresh balances, modal; `BANNER_CLOSED`, `CONTENT_TOO_OLD`, `503 SUMMON_DISABLED` -> modal; `426 CLIENT_TOO_OLD` -> update block; `503 MAINTENANCE` -> maintenance block. Nothing was charged, so nothing to undo.
 7. Rules for the UI: never offer a second summon while one is pending; never show "Failed" without having asked the server by replay; balances display `diamonds - cost` provisionally while pending and snap to the server value on 200.
 8. Analytics `summon` event emitted on apply (04 schema), `summon_pending` when the pending path is entered, `summon_resolved` with `latencySec` when it closes.
 
@@ -784,9 +809,9 @@ sequenceDiagram
 1. Purchase through Unity IAP (StoreKit 2 on iOS, Play Billing 6 on Android). The store transaction is **not** finished/acknowledged until the server has confirmed the grant; an unacknowledged Play purchase is auto-refunded after 3 days, so step 4 must happen before then and the pending receipt list guarantees retries.
 2. Persist the receipt intent (`Pending.Receipts`, a list, not a single slot: a player can complete a second purchase while the first validation is in flight) and save before calling the server.
 3. `POST /v1/iap/validate` (08 section 6). Server verifies the signed payload with the store API, checks the `transactionId` has not been granted before, writes `purchases` and `inbox_items` in one transaction, returns `GRANTED` (or `ALREADY_GRANTED` with the same `inboxItemId`, which the client treats identically).
-4. On 200: finish/acknowledge the store transaction, remove the pending receipt, save. On retryable failure: keep the pending receipt, retry with the same `requestId` on resume and every `RECEIPT_RETRY_S = 60` while in the foreground. On `RECEIPT_INVALID` (4xx): remove pending, do **not** finish the transaction (let the store's own refund path handle it), show `IAP_RECEIPT_INVALID` with a support id, analytics `iap_invalid`.
+4. On 200: finish/acknowledge the store transaction, remove the pending receipt, save. On retryable failure: keep the pending receipt, retry with the same `requestId` on resume and every `RECEIPT_RETRY_S = 60` while in the foreground. On `400 RECEIPT_INVALID`: remove pending, do **not** finish the transaction (let the store's own refund path handle it), show `err.RECEIPT_INVALID` with a support id, analytics `iap_invalid`. A store-side deferred payment (Ask to Buy, pending card) shows `IAP_PENDING` and keeps the pending receipt.
 5. The grant lands in the Inbox, never directly in the wallet. `SCR_SHOP` shows a toast "Sent to your Inbox" and the inbox badge increments. First-purchase doubling is applied server-side when writing the inbox item (06).
-6. Claim: `POST /v1/inbox/claim {requestId, inboxItemId}` -> `Apply(ApplyInboxGrant(payload))` -> `Wallet.Apply(+diamonds, IAP)`; `Inbox.ClaimedIds += id`. Replay-safe by `requestId`; a double claim returns `ALREADY_CLAIMED` which the client treats as success if the id is already in `ClaimedIds`.
+6. Claim: `POST /v1/inbox/claim {requestId, inboxItemId}` -> `Apply(ApplyInboxGrant(payload))` -> `Wallet.Apply(+diamonds, IAP)`; `Inbox.ClaimedIds += id`. Replay-safe by `requestId`; a double claim returns `409 INBOX_ALREADY_CLAIMED` carrying the original grants, which the client treats as success (5.2): it applies them only if the id is not already in `ClaimedIds`.
 7. Restore purchases (`SCR_SETTINGS`): query the store for owned non-consumed transactions, run step 3 for each. Server deduplicates on `transactionId`.
 8. Refund/chargeback (08): server marks the purchase `REFUNDED`, writes a negative inbox item or applies a negative balance adjustment on next save upload with reason `REFUND`. The client shows "A purchase was refunded; N diamonds were removed" once.
 
@@ -805,7 +830,7 @@ sequenceDiagram
     CS->>API: PUT /v1/save {If-Match: etag, meta, hmac} + blob
     alt 200
         API-->>CS: {etag, saveSeq, serverTime, flags[]}
-    else 409 Conflict
+    else 409 SAVE_CONFLICT
         API-->>CS: {serverMeta}
         CS->>API: GET /v1/save (blob)
         CS->>CS: resolve per 02 section 7.3
@@ -822,7 +847,7 @@ sequenceDiagram
 
 1. Every `Save` writes locally first (02 section 6). Upload is coalesced to at most one per `CLOUD_UPLOAD_MIN_SEC = 60` except on `Pause`, `Quit`, after a summon apply and after an inbox claim, which upload immediately (the player saw something they must not lose).
 2. `PUT /v1/save` carries `If-Match: <etag>` of the last server version this device saw, the metadata (`saveSeq`, `lastSavedServerTime`, `deviceId`, `schemaVersion`, `contentVersion`, `progressScore`, `sha256`) and the HMAC envelope (02 section 8). The blob goes to S3 via the API (08). Response returns the new `etag` and any plausibility `flags`.
-3. 409 means another device wrote since. Download the server blob and resolve per 02 section 7.3: same device lineage -> higher `saveSeq` wins silently; different devices -> higher `lastSavedServerTime` wins unless the loser's `progressScore` is higher by more than `CONFLICT_PROGRESS_MARGIN` (02), in which case the conflict modal shows both. The modal never appears during a boss or a reveal; it waits for `SCR_MAIN` idle.
+3. `409 SAVE_CONFLICT` means another device wrote since (`SAVE_STALE` and `SAVE_ROLLED_BACK` follow their 5.2 rows). Download the server blob and resolve per 02 section 7.3: same device lineage -> higher `saveSeq` wins silently; different devices -> higher `lastSavedServerTime` wins unless the loser's `progressScore` is higher by more than `CONFLICT_PROGRESS_MARGIN` (02), in which case the conflict modal shows both. The modal never appears during a boss or a reveal; it waits for `SCR_MAIN` idle.
 4. Download at boot (8.1 step 4) uses the same resolution with `L` = local and `R` = server.
 5. Offline: the queue holds the latest blob only; a failed upload is retried at the next trigger. A device that stays offline for days uploads once on reconnect and may hit 409 then; the resolution is identical.
 
@@ -899,7 +924,7 @@ sequenceDiagram
 1. Logout requires the current save to be uploaded (await up to `LOGOUT_UPLOAD_TIMEOUT_S = 10`). If it fails, the modal `LOGOUT_UNSYNCED` warns that unsynced progress on this device will be unavailable on other devices and offers "Log out anyway" / "Cancel".
 2. Tokens are cleared from secure storage; the local save directory is archived under the old `playerId` (not deleted) for `ARCHIVE_KEEP_DAYS = 30` so a mistaken logout is recoverable from `SCR_TITLE` ("Found a local save for another account").
 3. `SCR_TITLE` sign-in: Apple / Google Play Games -> `POST /v1/auth/link-login`; the server returns the `playerId` for that platform account. Boot continues at 8.1 step 4 with no local save, so the cloud copy is downloaded.
-4. Linking a guest to a platform account that already owns a different `playerId` is the `AUTH_ACCOUNT_LINKED_ELSEWHERE` case: the modal shows both `SaveSummary` cards (this device's guest vs the account's cloud save) and the player picks which to keep. The loser is archived server-side (08).
+4. Linking a guest to a platform account that already owns a different `playerId` is the `409 PROVIDER_ALREADY_LINKED` case (`details.otherSummary`, 08): the modal shows both `SaveSummary` cards (this device's guest vs the account's cloud save) and the player picks which to keep. The loser is archived server-side (08).
 5. Delete account (`SCR_SETTINGS`): `POST /v1/account/delete` -> server starts the GDPR flow (02 section 11); the client wipes local saves and tokens and restarts.
 
 ## Open questions
@@ -927,7 +952,7 @@ sequenceDiagram
 11. Kill switch `summonEnabled[WEAPON] = false` disables the summon button within one config refresh without a restart; a new content bundle never changes `ContentDb` mid-session (assert the `ContentDb` instance identity is stable across a config refresh).
 12. `EventBus` handlers calling `runner.Enqueue` never cause a nested `Apply` (assert `Apply` re-entrancy guard is never hit in the PlayMode smoke test).
 13. Logout with a failed upload shows `LOGOUT_UNSYNCED` and does not clear tokens unless confirmed; the archived save directory exists after logout.
-14. Every error code in section 7 has a localization key in `localization` (09 validator rule).
+14. Every code in the 5.2 table and section 7 that shows a message has an `err.<code>` key in `localization` (09 validator rule; the validator reads `ErrorClassifier.Table`, issue #30).
 15. Boot to `SCR_MAIN` under 4 s with warm content cache on the reference low device, under 6 s with a 3 s config timeout and offline (10 perf test).
 
 ## Constants introduced

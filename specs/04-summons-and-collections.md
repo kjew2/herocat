@@ -144,7 +144,7 @@ static double PityRate(BannerDef d, int n) =>
 | 13 | Monte Carlo 1,000,000 pulls, seed 7, level 1 | L+ frequency within 0.1 pp of 3.657%; M within 0.03 pp of 0.609%; C/R/E split within 0.3 pp of 0.60/0.28/0.09 of non-L+ |
 | 14 | Monte Carlo 1,000,000 pulls at banner level 10 | C/R/E split within 0.3 pp of 0.42/0.388/0.162 of non-L+; L+ unchanged |
 | 15 | Same seed and counter on two `BannerState`s | identical 1,000-pull sequences; after a save/load round-trip the next pull equals the un-restored copy's |
-| 16 | Banner level thresholds | `Exp` 0, `BANNER_LVL_EXP[2] - 1`, `BANNER_LVL_EXP[2]`, `BANNER_LVL_EXP[10] - 1`, `BANNER_LVL_EXP[10]`, `10 * BANNER_LVL_EXP[10]` give levels 1, 1, 2, 9, 10, 10 (values read from content; with today's placeholder thresholds: 0, 49, 50, 2999, 3000, 30000; issue #38) |
+| 16 | Banner level thresholds | `Exp` 0, `BANNER_LVL_EXP[2] - 1`, `BANNER_LVL_EXP[2]`, `BANNER_LVL_EXP[10] - 1`, `BANNER_LVL_EXP[10]` and a value above it give levels 1, 1, 2, 9, 10, 10 (values read from content; with today's placeholder thresholds: 0, 49, 50, 2999, 3000, 10000; issue #38) |
 
 ## 4. Banner level
 
@@ -256,17 +256,17 @@ A weapon's `weapons` table row (09): `id`, `rarity`, `name_key`, `icon`, `atk_pc
 
 ### 6.2 Why the passive exists and what it is worth
 
-The equipped pct is a step function of luck: the player's best weapon. The passive is a sum over everything they have ever pulled, so every weapon pull moves it. Worked numbers:
+The equipped pct is a step function of luck: the player's best weapon. The passive is a sum over everything they have ever pulled, so every weapon pull moves it. Worked numbers, by weapon pulls made (which day the F2P bot reaches each row comes from `gacha_model.py`'s computed cadence, issue #38):
 
 | Collection state | equipped | passive | `weaponMult` |
 |---|---|---|---|
 | Day 1 after the tutorial 10-pull (typical: 6 C, 3 R, 1 E) | 120 (E) | 6 + 6 + 4 = 16 | x2.36 |
-| Day 7 bot (36 pulls: all 10 C owned at level 2-3, 6 R, 3 E, 1 L) | 300 (L) | ~24 + 16 + 12 + 8 = 60 | x4.6 |
-| Day 30 bot (94 pulls, 1 M at level 1 plus 3 limit breaks, full C and R sets at level 3-4) | 700 x 1.6 = 1120 | ~40 + 25 + 20 + 16 + 16 = 117 | x13.4 |
+| After 36 weapon pulls (all 10 C owned at level 2-3, 6 R, 3 E, 1 L) | 300 (L) | ~24 + 16 + 12 + 8 = 60 | x4.6 |
+| After 94 weapon pulls (1 M at level 1 plus 3 limit breaks, full C and R sets at level 3-4) | 700 x 1.6 = 1120 | ~40 + 25 + 20 + 16 + 16 = 117 | x13.4 |
 | Complete collection, every weapon level 10 | 700 x 2.8 = 1960 | 319 | x23.8 |
 | Complete collection, every weapon level 15 | 700 x 3.8 = 2660 | 433 | x31.9 |
 
-The passive is 10-25% of the weapon layer for most of the first month and it is the part that moves every day. A pull that lands a duplicate level-3 Common still adds 0.2% ATK, which `SCR_SUMMON_RESULT` shows as "+0.2% ATK (collection)". Low rarities also matter because the C and R sets are the bulk of the passive at level 4+: the 10 Commons at level 10 are 28% ATK, more than a level-1 Legendary.
+The passive is 10-25% of the weapon layer in the middle rows and it is the part that moves every day. A pull that lands a duplicate level-3 Common still adds 0.2% ATK, which `SCR_SUMMON_RESULT` shows as "+0.2% ATK (collection)". Low rarities also matter because the C and R sets are the bulk of the passive at level 4+: the 10 Commons at level 10 are 28% ATK, more than a level-1 Legendary.
 
 ### 6.3 Equip
 

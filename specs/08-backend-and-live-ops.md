@@ -8,15 +8,15 @@ Depends on: 00 (sections 3, 4, 6.3, 8), 01 (flows, `ApiClient`, error taxonomy),
 
 ## 1. Service inventory
 
-One ASP.NET Core 8 deployable (`HeroCat.Server`), organised as feature folders; "service" below is a code boundary, not a separate process. Splitting into processes is a P2 question that nothing here forecloses because services share no in-memory state.
+One ASP.NET Core 8 deployable (`HeroCat.Server`), organised as feature folders; "service" below is a code boundary, not a separate process. Splitting into processes is a P2 question that nothing here forecloses because services share no in-memory state. Every table and column this spec reads or writes is defined in 02 section 12, which owns the server schema (issue #53).
 
 | Service | Owns | Tables (02 section 12) | Tier | M0 local implementation |
 |---|---|---|---|---|
 | Auth | guest creation, JWT issue/refresh, platform linking, logout, recovery, device registration, server time | `accounts`, `account_links`, `devices`, `refresh_tokens` | MVP | none needed; `PlayerId = Guid.Empty`, `ServerClock(api: null)` |
 | Profile | display name, avatar, age gate, account delete/export | `accounts` | MVP | `profile.json` cache only |
-| Save | upload/download, metadata, history, plausibility hook | `saves`, `save_history`, S3 | MVP | `LocalSaveStore` |
-| Summon | pull, pity state, rate table, history | `banner_pity`, `summon_log`, `diamond_ledger`, `idempotency` | MVP | `LocalSummonService` (same algorithm, 04 section 3.2, `summon_*` streams) |
-| Inbox | list, claim, claim-all, expiry | `inbox_items`, `diamond_ledger` | MVP | `LocalInboxService` (empty) |
+| Save | upload/download, metadata, history, plausibility hook, crediting client-earned currency (issue #49) | `saves`, `save_history`, `diamond_ledger`, `ticket_ledger`, S3 | MVP | `LocalSaveStore` |
+| Summon | pull, pity state, rate table, history | `banner_pity`, `summon_log`, `diamond_ledger`, `ticket_ledger`, `granted_items`, `idempotency` | MVP | `LocalSummonService` (same algorithm, 04 section 3.2, `summon_*` streams) |
+| Inbox | list, claim, claim-all, expiry | `inbox_items`, `diamond_ledger`, `ticket_ledger`, `granted_items` | MVP | `LocalInboxService` (empty) |
 | IAP / Receipt | catalog, validate, restore, store webhooks, refunds | `purchases`, `inbox_items`, `diamond_ledger` | MVP | `DisabledReceiptValidator`; `FakeReceiptValidator` in debug builds |
 | Config / Content | remote config, kill switches, content manifest pointer, min versions, maintenance | `config_versions` | MVP | `LocalConfigService` (bundled content, all flags on) |
 | Dungeon seed | seed issue, result correlation | `dungeon_seeds` | MVP | `LocalDungeonSeedService : IDungeonSeedService` (one draw from `dungeon`; issue #25) |
@@ -38,6 +38,8 @@ One ASP.NET Core 8 deployable (`HeroCat.Server`), organised as feature folders; 
 ```
 
 `code` is from a closed list per endpoint below plus the global set: `UNAUTHENTICATED` (401), `TOKEN_EXPIRED` (401), `FORBIDDEN` (403), `CLIENT_TOO_OLD` (426), `CONTENT_TOO_OLD` (409), `RATE_LIMITED` (429), `MAINTENANCE` (503), `VALIDATION` (400), `IDEMPOTENCY_IN_FLIGHT` (409), `INTERNAL` (500).
+
+The codes and statuses in this spec are the canonical wire contract. Several statuses carry codes of different classes (409 is retryable `IDEMPOTENCY_IN_FLIGHT`, re-quote `PAYMENT_MISMATCH`, must-download `SAVE_ROLLED_BACK` or success-equivalent `INBOX_ALREADY_CLAIMED`; 503 is `MAINTENANCE` or the non-retryable `SUMMON_DISABLED`), so the client classifies by `(status, code)` through 01 section 5.2's table, and an unknown code falls back to that table's status rule (issue #30).
 
 - **Idempotency** (00 section 8.13): every mutating endpoint requires `X-Request-Id` (32 hex chars). The handler does `INSERT ... ON CONFLICT DO NOTHING` into `idempotency` with status `in_flight` first; if the row existed with a final status, the stored response is replayed with header `X-Idempotent-Replay: true`; if it existed as `in_flight`, `409 IDEMPOTENCY_IN_FLIGHT` with `retryAfterSec: 1`. Rows live `IDEMPOTENCY_TTL_H = 24`. A `requestId` seen under a different `playerId` is rejected `403` and flagged `DUPLICATE_REQUEST_ID` (section 7).
 - **Rate limits** are per `playerId` (per IP for unauthenticated routes), sliding window in Redis (`rl:{route}:{playerId}`), reported with `RATE_LIMITED` and `Retry-After`. Values below are per minute unless stated.
@@ -129,6 +131,8 @@ Errors: `PROVIDER_TOKEN_INVALID` (400), `PROVIDER_ALREADY_LINKED` (409; this pla
 
 **`PUT /save`** -- `jwt+device` -- idempotent -- 6/min, 400/day (a 2 h session at one upload per minute is 120).
 
+The save routes, headers and statuses in this section are the canonical cloud-save wire contract; 02 section 9 follows them (issue #34).
+
 Request: headers `If-Match: <etag>` (or `*` for first upload), `X-Save-Meta: <json>` (02 section 9.1), `Content-Type: application/octet-stream`, body = the save file (max `SAVE_BLOB_MAX_BYTES`).
 
 ```json
@@ -140,7 +144,9 @@ Request: headers `If-Match: <etag>` (or `*` for first upload), `X-Save-Meta: <js
 { "code": "SAVE_CONFLICT", "details": { "serverMeta": { ...02 section 9.1... } } }
 ```
 
-Server steps, in order: (1) parse header, verify `len`/CRC (`SAVE_MALFORMED` 400); (2) verify HMAC against `devices.hmac_key_enc` for `X-Device-Id` (record `hmac_valid`; not a rejection); (3) `If-Match` vs `saves.etag` (`SAVE_CONFLICT` 409 unless `*` and no row); (4) `saveSeq` must exceed the stored one for the same `deviceId` (`SEQ_REGRESSION` flag, accepted but flagged; a lower seq from the *same* device is rejected `SAVE_STALE` 409 because the device itself knows better); (5) `lastSavedServerTime <= now + CLOCK_MAX_SKEW_ACCEPT_S` (`CLOCK_AHEAD` flag); (6) plausibility checks (section 7) asynchronously *except* `DIAMOND_LEDGER_MISMATCH`, which runs inline because its reconciliation is in the response; (7) write blob to S3 `saves/{playerId}/{saveSeq}.sav`, upsert `saves`, insert `save_history`, trim to `SAVE_HISTORY_KEEP`; (8) P1: update leaderboard ZSETs from `summary`.
+Server steps, in order: (1) parse header, verify `len`/CRC (`SAVE_MALFORMED` 400); (2) verify HMAC against `devices.hmac_key_enc` for `X-Device-Id` (record `hmac_valid`; not a rejection); (3) `If-Match` vs `saves.etag` (`SAVE_CONFLICT` 409 unless `*` and no row); (4) `saveSeq` must exceed the stored one for the same `deviceId` (`SEQ_REGRESSION` flag, accepted but flagged; a lower seq from the *same* device is rejected `SAVE_STALE` 409 because the device itself knows better); (5) `lastSavedServerTime <= now + CLOCK_MAX_SKEW_ACCEPT_S` (`CLOCK_AHEAD` flag); (5a) credit client-earned currency (issue #49, below); (6) plausibility checks (section 7) asynchronously *except* `DIAMOND_LEDGER_MISMATCH`, which runs inline because its reconciliation is in the response; (7) write blob to S3 `saves/{playerId}/{saveSeq}.sav`, upsert `saves`, insert `save_history`, trim to `SAVE_HISTORY_KEEP`; (8) P1: update leaderboard ZSETs from `summary`.
+
+**Crediting client-earned currency** (step 5a, issue #49). Diamonds and summon tickets earned in the client sim (login, quests, first clears, achievements, tutorial, daily gift, weekly grants) and diamonds spent client-side (`SHOP_EXCHANGE`) reach the server ledgers only through this step. The save carries cumulative per-reason counters (02 `Stats`): `Stats.DiamondsEarned[reason]`, `Stats.DiamondsSpent[reason]` and `Stats.TicketsEarned[ticket][reason]`, counting only client-originated reasons (server-originated reasons such as `IAP`, `MAIL`, `ADMIN`, `REFUND` and `SUMMON` are written by the server and excluded). For each `(currency, reason)` the server takes `delta = counter - sum(ledger rows with ref_type = save_reconcile for that reason)` and writes one ledger row per non-zero delta (`diamond_ledger` or `ticket_ledger`, that reason, `ref_type = save_reconcile`, `ref_id = saveSeq`), in the same transaction as step 7. Earned diamond credits for one upload are clamped to `clientSideAllowance` (section 7.2); a clamped excess is not credited and raises `DIAMOND_LEDGER_MISMATCH`. Summon ticket credits are clamped the same way to `TICKETS_PER_DAY_MAX * daysSinceLastUpload` per ticket. Dungeon tickets stay client-side and are not credited. A pull can spend only what has been credited, so the client uploads before a summon when it holds unsynced earnings (01 summon flow).
 
 **`GET /save/history`** -- `jwt` -- 10/min -> `[{ "saveSeq", "deviceId", "uploadedAt", "summary" }]` (last 10). Restoring one is a support action (`POST /admin/save/restore`), not self-service, because a self-service rollback is a free re-roll of anything client-side.
 
@@ -159,7 +165,7 @@ Server steps, in order: (1) parse header, verify `len`/CRC (`SAVE_MALFORMED` 400
   "serverTime": 1793670900 }
 ```
 
-Unclaimed items only; expired items are excluded and purged nightly. Inbox items never contain diamonds that were not first written to `diamond_ledger` with `ref_type = inbox_item` at claim time (not at creation), so an unclaimed item is not a balance.
+Unclaimed items only; expired items are excluded and purged nightly. Rows whose `available_at` is in the future (scheduled package portions, section 5.2; issue #51) are hidden, except the earliest future portion of each package, which is returned with `availableAt` set so the client can show the next delivery (07 shows at most one); claiming it early returns `INBOX_NOT_AVAILABLE` 409. Inbox items never contain diamonds that were not first written to `diamond_ledger` with `ref_type = inbox_item` at claim time (not at creation), so an unclaimed item is not a balance.
 
 **`POST /inbox/claim`** -- `jwt` -- idempotent -- 30/min. `{ "inboxItemId" }` ->
 
@@ -167,7 +173,7 @@ Unclaimed items only; expired items are excluded and purged nightly. Inbox items
 { "inboxItemId": "…", "grants": [ ... ], "balances": { "DIAMOND": 3640 }, "reason": "IAP", "serverTime": … }
 ```
 
-Writes `diamond_ledger` (`+amount`, reason `IAP`/`MAIL`/`ADMIN`, `ref_type = inbox_item`), sets `claimed_at`, in one transaction. Errors: `INBOX_NOT_FOUND` 404, `INBOX_ALREADY_CLAIMED` 409 (response still carries the original `grants` so the client can reconcile `Inbox.ClaimedIds`), `INBOX_EXPIRED` 410. Item grants (`kind: item`) are returned for the client to apply through `ApplyInboxGrant`; the server also appends them to a per-player `granted_items` ledger used by `ITEM_WITHOUT_PULL` (section 7).
+Writes `diamond_ledger` (`+amount`, reason `IAP`/`MAIL`/`ADMIN`, `ref_type = inbox_item`) and, for summon ticket grants, `ticket_ledger` with the same reason and ref (issue #49), sets `claimed_at`, in one transaction. Errors: `INBOX_NOT_FOUND` 404, `INBOX_NOT_AVAILABLE` 409 (`available_at` in the future), `INBOX_ALREADY_CLAIMED` 409 (response still carries the original `grants` so the client can reconcile `Inbox.ClaimedIds`), `INBOX_EXPIRED` 410. Item grants (`kind: item`) are returned for the client to apply through `ApplyInboxGrant`; the server also appends them to a per-player `granted_items` ledger used by `ITEM_WITHOUT_PULL` (section 7).
 
 **`POST /inbox/claim-all`** -- `jwt` -- idempotent -- 10/min. `{}` -> `{ "claimed": [ ...per-item results... ], "balances": {...} }`. Claims up to 50 items oldest-first; a partial failure (an item expiring between list and claim) is skipped and reported, not an error.
 
@@ -181,11 +187,11 @@ Writes `diamond_ledger` (`+amount`, reason `IAP`/`MAIL`/`ADMIN`, `ref_type = inb
 { "grantId": "a4d1…", "seed": "9f86d081884c7d65", "expiresAt": 1793671500, "serverTime": 1793670900 }
 ```
 
-Checks: `floor` in `[1, maxFloor(kind)]` (`VALIDATION`); the player's last uploaded save has `BestFloor[kind] >= floor - 1` (`DUNGEON_LOCKED` 403; the client's state may be ahead of the last upload, so a mismatch by one floor is tolerated: `floor <= BestFloor + 2`); outstanding unexpired seeds for the same `(kind, dayKey)` count against a daily cap of `DUNGEON_SEEDS_PER_DAY = 10` per kind (`DUNGEON_SEED_CAP` 429). Seed = 64 random bits from the server CSPRNG, stored in `dungeon_seeds` with `expires_at = now + DUNGEON_SEED_TTL_S`. The result is filled from the next save upload (section 7.3 correlates `Stats.DungeonClears` and `BestFloor` with issued grants).
+Checks: `floor` in `[1, maxFloor(kind)]` (`VALIDATION`); the player's last uploaded save has `BestFloor[kind] >= floor - 1` (`DUNGEON_LOCKED` 403; the client's state may be ahead of the last upload, so a mismatch by one floor is tolerated: `floor <= BestFloor + 2`); outstanding unexpired seeds for the same `(kind, dayKey)` count against a daily cap of `DUNGEON_SEEDS_PER_DAY = 10` per kind (`DUNGEON_SEED_CAP` 429). Seed = 64 random bits from the server CSPRNG, stored in `dungeon_seeds` with `expires_at = now + DUNGEON_SEED_TTL_S`. The result is filled from the next save upload: the save keeps a short `Dungeon.RecentRuns[{grantId, kind, floor, cleared}]` list (02), and section 7.3 matches it, `Stats.DungeonClears` and `BestFloor` to issued grants. The server only correlates; it does not replay dungeon runs in MVP (issue #52).
 
 ### 3.4 Config
 
-**`GET /config`** -- `none` (optionally `jwt`, which enables the rollout bucket) -- 30/min per IP. Section 6 gives the body. Served with `Cache-Control: max-age=60`; the client caches for `CONFIG_CACHE_MAX_AGE_S` (01).
+**`GET /config`** -- `none` (optionally `jwt`, which enables the rollout bucket) -- 30/min per IP. The rollout bucket is computed server-side only (issue #31): without a valid JWT the response carries the non-rollout default content, and the client re-fetches config once after auth at boot (01 section 8.1). Section 6 gives the body. Served with `Cache-Control: max-age=60`; the client caches for `CONFIG_CACHE_MAX_AGE_S` (01).
 
 Content bundles are **not** served by the API; `config.content.url` points to the CDN (`https://cdn.whiskerhero.example/content/{version}/manifest.json`), immutable per version, `Cache-Control: public, max-age=31536000`.
 
@@ -251,21 +257,21 @@ Handle(player, req):
     pity = select ... from banner_pity for update (insert default if absent)
     cost  = payment == DIAMOND ? PULL_COST[banner] * count : count tickets
     if payment == DIAMOND: balance = sum(diamond_ledger) ; if balance < cost: 402 INSUFFICIENT_FUNDS {need, have}
-    else: tickets = server ticket ledger (06 keeps summon tickets server-side from MVP); if tickets < count: 402 INSUFFICIENT_FUNDS
+    else: tickets = sum(ticket_ledger) for the banner's ticket (credited at PUT /save step 5a and inbox claim; issue #49); if tickets < count: 402 INSUFFICIENT_FUNDS
     if payment == DIAMOND and tickets >= count: 409 PAYMENT_MISMATCH {expected: "TICKET"}   // 06 rule: tickets first; client out of date
     st  = BannerState { Pity = pity.pity, TotalPulls = pity.total_pulls, Exp = pity.exp }      // cumulative exp; level derived
     col = CollectionState from the player's item ledger (granted_items + summon_log aggregates)
     results = count == 10 ? Pull10(content.Banner(banner), st, col, csprng)                                  // 04 section 3.2; banner level and
                           : [Pull(content.Banner(banner), st, col, csprng, forceEplus: false)]               // rate table evaluated per pull
     insert count rows into summon_log (one per pull, with that pull's u1/u2/u3, pity_before/after, banner level, guarantee, rate_table_hash of that pull's table)
-    insert diamond_ledger (-cost, SUMMON, ref summon, request_id) or decrement ticket ledger
+    insert diamond_ledger (-cost, SUMMON, ref summon, request_id) or ticket_ledger (-count, SUMMON, ref summon, request_id)
     update banner_pity: pity = st.Pity, exp = st.Exp, level = levelFor(exp) (04 section 4 thresholds), total_pulls = st.TotalPulls
     isNew/levelBefore/levelAfter/copiesAfter/overflowRockCandy come from the Pull results; append items to the ledger
     insert idempotency(final, response)
   release lock; return response
 ```
 
-Latency target p99 under 150 ms. The response is the `SummonResultPayload` of 01 section 2.5, with per-pull `copiesAfter` and `overflowRockCandy` (issue #13); the client applies it with `ApplySummonResult`, the only summon mutator in both modes, replacing `DIAMOND` with `balances.DIAMOND` (server wins).
+Latency target p99 under 150 ms. The response is the `SummonResultPayload` of 01 section 2.5, with per-pull `copiesAfter` and `overflowRockCandy` (issue #13); the client applies it with `ApplySummonResult`, the only summon mutator in both modes, replacing `DIAMOND` with `balances.DIAMOND` (server wins). Replacing is safe because the client uploads its save before the pull whenever it holds unsynced client-earned diamonds or tickets (issue #49).
 
 Errors: `INSUFFICIENT_FUNDS` 402, `PAYMENT_MISMATCH` 409, `BANNER_CLOSED` 409, `CONTENT_TOO_OLD` 409, `IDEMPOTENCY_IN_FLIGHT` 409, `SUMMON_DISABLED` 503 (kill switch).
 
@@ -298,7 +304,7 @@ One `summon_log` row per pull, never per batch, so a regulator or support agent 
 
 ### 5.1 Catalog
 
-**`GET /shop/catalog`** -- `jwt` -- 30/min -> the `shop_products` and `shop_packages` rows (09) filtered by region, age gate and kill switches, with per-player state (`firstPurchaseDoubleAvailable`, `dailyFreeClaimed`, package purchase counts). Prices shown in the client come from the store SDK, not from this endpoint; the endpoint carries `appleProductId`, `googleProductId` and the grant.
+**`GET /shop/catalog`** -- `jwt` -- 30/min -> the `shop_products` and `shop_packages` rows (09) filtered by region, age gate and kill switches, with per-player state (`firstPurchaseDoubleAvailable`, a per-SKU map over diamond packs such as `{ "diamonds_3": true }`; `dailyFreeClaimed`; package purchase counts). Prices shown in the client come from the store SDK, not from this endpoint; the endpoint carries `appleProductId`, `googleProductId` and the grant.
 
 ### 5.2 Validate
 
@@ -319,7 +325,7 @@ One `summon_log` row per pull, never per batch, so a regulator or support agent 
 
 **Google (Play Developer API + RTDN).** Server calls `purchases.products.get(packageName, sku, purchaseToken)` with a service account; requires `purchaseState == 0` (purchased), `consumptionState == 0`, `obfuscatedExternalAccountId == sha256(playerId)` (mismatch -> `RECEIPT_ACCOUNT_MISMATCH`), `orderId` matches. Then the server itself calls `purchases.products.acknowledge` after the grant (client-side acknowledge is also allowed; whichever first). Diamonds are consumables, so the client consumes after the 200 (01 section 8.9 step 4).
 
-**Grant** (one transaction): insert `purchases(status = granted)`, insert `inbox_items(kind = iap, grants = product.grant * (firstPurchase ? 2 : 1))`, set `accounts.first_purchase_done`, insert `idempotency`. Diamonds are **not** written to `diamond_ledger` here; that happens at `/inbox/claim`, so an unclaimed purchase is visible in the inbox and not spendable. Raw receipt payload to S3 `receipts/{playerId}/{purchaseId}.json` (7-year retention).
+**Grant** (one transaction): `firstPurchase` = the SKU is a diamond pack and no `purchases` row with `status = granted` exists for this player and SKU (per SKU, derived, no column; packages are never doubled; issue #50); insert `purchases(status = granted)`; insert `inbox_items(kind = iap, grants = product.grant * (firstPurchase ? 2 : 1))` for a diamond pack, or for a package one `inbox_items` row per scheduled portion, all created now, each with its `available_at` (the first portion `now`; issue #51); insert `idempotency`. Diamonds are **not** written to `diamond_ledger` here; that happens at `/inbox/claim`, so an unclaimed purchase is visible in the inbox and not spendable. Raw receipt payload to S3 `receipts/{playerId}/{purchaseId}.json` (7-year retention).
 
 Errors: `RECEIPT_INVALID` 400 (signature/fields), `RECEIPT_ACCOUNT_MISMATCH` 403, `RECEIPT_REVOKED` 410, `SKU_UNKNOWN` 400, `SKU_NOT_AVAILABLE` 409 (region/age/kill switch), `STORE_UNAVAILABLE` 503.
 
@@ -339,8 +345,9 @@ On refund of purchase `P` granting `N` diamonds:
 ```
 tx:
   purchases.status = refunded; refunded_at = now
-  if inbox item unclaimed: inbox_items.expires_at = now (vanishes)          // nothing to claw back
-  else:
+  unclaimed inbox items of P (incl. future package portions): expires_at = now (vanish)   // nothing to claw back (issue #51)
+  N = diamonds in the claimed inbox items of P
+  if N > 0:
     insert diamond_ledger(-N, REFUND, ref purchase P)
     balance = sum(ledger)
     if balance < 0: insert diamond_ledger(+(-balance), ADMIN, ref "refund_debt_clamp"); accounts.refund_debt += -balance
@@ -358,7 +365,7 @@ The client learns on the next `PUT /save` response (`diamondReconcile`) or `GET 
 
 ### 6.1 Config body
 
-**`GET /config`** returns the active `config_versions.payload` for the environment, with the rollout bucket applied when a JWT is present:
+**`GET /config`** returns the active `config_versions.payload` for the environment, with the rollout bucket applied when a JWT is present (without one, `content` is the non-rollout default and `inBucket` is omitted; issue #31):
 
 ```json
 {
@@ -387,8 +394,8 @@ The client learns on the next `PUT /save` response (`diamondReconcile`) or `GET 
 }
 ```
 
-- `inBucket = hash(playerId || content.version) % 100 < rolloutPct`. Stable per version; raising `rolloutPct` adds players, never removes them.
-- Content bundles apply only at next cold boot except `hotApplyTables` (01 section 8.12).
+- `inBucket = hash(playerId || content.version) % 100 < rolloutPct`, computed by the server only (the client never hashes; issue #31). Stable per version; raising `rolloutPct` adds players, never removes them.
+- Content bundles apply only at next cold boot unless the manifest's `hot_apply` bool is set (01 section 8.12, 09); the exporter computes it from the four-table allowlist of 00 contract 3, which is the single source. `hotApplyTables` only echoes that exporter constant for diagnostics; the client does not read it to decide (issue #54).
 - `minContentVersionByClient` lets the server refuse sim-sensitive requests from a client running stale content (`CONTENT_TOO_OLD`) without blocking the client entirely.
 - Kill switches are read by view-models at every config refresh; none touches `GameState`.
 
@@ -413,10 +420,10 @@ Each check yields `(flag, severity, evidence)`; severity `info | suspicious | ce
 | `HMAC_INVALID` | Envelope fails against the device key. | `suspicious` (a restored OS backup from another device also fails; two in a row from the same device is `certain`) |
 | `SEQ_REGRESSION` | `saveSeq` below the stored value for another device of the same player. | `info` (normal with two devices) |
 | `CLOCK_AHEAD` | `lastSavedServerTime > now + CLOCK_MAX_SKEW_ACCEPT_S`. | `suspicious` |
-| `STAGE_VS_TIME` | `HighestCleared > botStage(daysSinceCreated) * STAGE_BOUND_MULT` where `botStage` is the whale-policy curve from the 10 acceptance table (the fastest legitimate path), `STAGE_BOUND_MULT = 1.5`. | `suspicious`; `certain` above `3x` |
-| `DPS_VS_STAGE` | Re-derive the rated DPS with `Query.RatedDps` (03 section 7.1) from the uploaded state: skills, companions and fish missiles (05's closed form) are in it, transient buffs and tap zap are not (issues #10, #15). If `DPS * BOSS_TIME_TICKS / TICK_HZ < BossHp(HighestCleared) * DPS_BOUND_MARGIN` with `DPS_BOUND_MARGIN = 0.5` (allowing for tap zap, buffs and crit variance the rated value leaves out), the player could not have cleared it. | `certain` |
+| `STAGE_VS_TIME` | `HighestCleared > botStage(daysSinceCreated) * STAGE_BOUND_MULT`, `STAGE_BOUND_MULT = 1.5`. `HighestCleared` is 02's highest stage completed, boss or not (issue #35). `botStage(day)` is the `stage` of the `plausibility_stage_bound (day, stage)` content table (09), the p95 over seeds of `Bots compare --bots whale --seeds 1-20 --days 60` (10), shipped in the bundle and regenerated with any sim-affecting content change (issue #60); past the table's last day the check does not run. | `suspicious`; `certain` above `3x` |
+| `DPS_VS_STAGE` | Re-derive the rated DPS with `Query.RatedDps` (03 section 7.1) from the uploaded state: skills, companions and fish missiles (05's closed form) are in it, transient buffs and tap zap are not (issues #10, #15). If `DPS * BOSS_TIME_TICKS / TICK_HZ < BossHp(HighestFirstClearBoss) * DPS_BOUND_MARGIN` (the highest boss killed, 02; issue #35) with `DPS_BOUND_MARGIN = 0.5` (allowing for tap zap, buffs and crit variance the rated value leaves out), the player could not have cleared it. | `certain` |
 | `GOLD_DELTA_BOUND` | `Stats.GoldEarned - prev.GoldEarned > maxGoldRate(HighestCleared, DPS) * elapsedSec * GOLD_BOUND_MULT`, `GOLD_BOUND_MULT = 2` (covers `GOLD_GAIN` training and boss multipliers). | `suspicious`; `certain` above `10x` |
-| `DIAMOND_LEDGER_MISMATCH` | `Wallet.Diamond > serverLedgerBalance + clientSideAllowance` where `clientSideAllowance = DIAMONDS_PER_DAY_F2P * daysSinceLastUpload + TUTORIAL_DIAMONDS (once) + firstClearDiamondsPossible(HighestCleared)`. Client-side diamond sources (quests, login, first clears) are bounded per day; anything above is impossible. | `certain` |
+| `DIAMOND_LEDGER_MISMATCH` | Step 5a's earned-diamond credit for this upload exceeds `clientSideAllowance = DIAMONDS_PER_DAY_F2P * daysSinceLastUpload + TUTORIAL_DIAMONDS (once) + firstClearDiamondsPossible(HighestFirstClearBoss)`, or, after step 5a, `Wallet.Diamond > serverLedgerBalance` (issue #49). Client-side diamond sources (quests, login, first clears) are bounded per day; anything above is impossible. | `certain` |
 | `ITEM_WITHOUT_PULL` | Any collection `Copies` exceeds `summon_log` count + `granted_items` for that id. | `certain` |
 | `PITY_MISMATCH` | Client pity differs from `banner_pity`. | `info` |
 | `DUPLICATE_REQUEST_ID` | `X-Request-Id` previously used by another player. | `certain` |
@@ -430,7 +437,7 @@ Each check yields `(flag, severity, evidence)`; severity `info | suspicious | ce
 
 The server references `HeroCat.Sim`, so it can replay. Sampling: 1% of uploads at random plus 100% of uploads carrying any `suspicious` flag. The server requests the command log (`GET` is impossible server-side; the next `PUT /save` response carries `"requestCmdLog": true` and the client includes `saves/cmdlog.jsonl` in its next upload as a second part). Replay: load previous blob, apply `Advance` and the logged commands in log order. Runtime-originated changes are logged system commands (`ApplyServerTime` at sync points, `ComputeOfflineCatchup`, `ApplySummonResult` with its recorded payload; issues #5, #6), and `ApplySummonResult` itself performs the debit and, in Local mode, sets the summon stream counter, so the replay needs no service and no special records. Compare the resulting SHA-256 `StateHash` to the uploaded one (issue #28). Divergence -> `REPLAY_DIVERGENCE`. Cost: one replay of a 2 h session is ~72,000 ticks, under 2 s on one core; at 1% sampling and 100k DAU that is ~2,000 replays a day, negligible.
 
-Dungeon correlation: for every `dungeon_seeds` row with `result null` older than its TTL, compare `BestFloor[kind]` and `Stats.DungeonClears` between the two uploads bracketing the issue time; a `BestFloor` increase with no issued seed for that floor is `DUNGEON_WITHOUT_SEED` (`certain`).
+Dungeon correlation (issue #52): each upload's `Dungeon.RecentRuns` entries fill `dungeon_seeds.result` for their `grantId`; an entry whose `grantId` was not issued to this player for that `(kind, floor)` is `DUNGEON_WITHOUT_SEED`. For every `dungeon_seeds` row with `result null` older than its TTL, compare `BestFloor[kind]` and `Stats.DungeonClears` between the two uploads bracketing the issue time; a `BestFloor` increase with no issued seed for that floor is also `DUNGEON_WITHOUT_SEED` (`certain`). Dungeon rewards are soft currencies already bounded by `GOLD_DELTA_BOUND` and `RESEARCH_WITHOUT_COINS`, so there is no replay check in MVP; replaying sampled runs from a power snapshot in `RecentRuns` is a P1 follow-up if soft-launch data shows dungeon reward abuse.
 
 ### 7.4 Action matrix
 
@@ -510,7 +517,7 @@ flowchart LR
 ```
 
 - One container image, two roles by command-line flag: `api` (stateless, horizontally scaled on CPU + request latency) and `worker` (mail blasts, plausibility replays, purges, refund polls; one instance, leader lock in Redis).
-- PostgreSQL via Npgsql with connection pooling (RDS Proxy at 100k DAU). Migrations are SQL files applied by the deploy pipeline before the new image receives traffic (expand/contract pattern: never drop a column in the same release that stops writing it).
+- PostgreSQL via Npgsql with connection pooling (RDS Proxy at 100k DAU). Migrations are plain versioned SQL files (`server/db/migrations/NNNN_<name>.sql`, 02 section 12's DDL verbatim; no EF Core migrations, EF Core at most for queries) applied by a small runner in the deploy pipeline before the new image receives traffic and in CI against an empty PostgreSQL 15 (issue #33) (expand/contract pattern: never drop a column in the same release that stops writing it).
 - S3 buckets per environment: `herocat-saves-{env}` (versioning on, SSE-KMS, lifecycle: non-current versions expire after 7 days), `herocat-receipts-{env}` (object lock, 7 years), `herocat-content-{env}` (public read via CloudFront OAC only).
 - Redis is a cache and a lock service only; losing it loses rate-limit counters and in-flight summon locks (the idempotency table in Postgres still prevents double rolls).
 

@@ -312,6 +312,12 @@ public sealed class LifetimeStats
     public long ActiveSeconds;                    // ticked time; analytics only
     public double GoldEarned, GoldSpent, FishCoinEarned;
     public long DiamondsEarned, DiamondsSpent, DiamondsPurchased;
+    // Client-side ledger feed (issue #49): cumulative amounts the sim itself credited or debited, per reason, never reset.
+    // Only reasons applied locally (LOGIN, TUTORIAL, FIRST_CLEAR, QUEST, ACHIEVEMENT, DAILY_GIFT, SHOP_EXCHANGE, ...);
+    // never IAP, MAIL, ADMIN, REFUND (inbox grants) or SUMMON (server debit). Reported on every upload (9.2).
+    public Dictionary<CurrencyReason, long> ClientDiamondsEarned { get; init; } = new();   // positive amounts
+    public Dictionary<CurrencyReason, long> ClientDiamondsSpent  { get; init; } = new();   // positive amounts, e.g. SHOP_EXCHANGE
+    public Dictionary<Banner, Dictionary<CurrencyReason, long>> ClientTicketsEarned { get; init; } = new();   // summon tickets by ticket kind (Banner ordinal = SummonTicket index)
 }
 ```
 
@@ -320,6 +326,7 @@ public sealed class LifetimeStats
 - **`Training.Level` is an array indexed by `Stat` ordinal**, not a dictionary, so the hot path (DPS evaluation every tick) has no hashing. The `Stat` enum order is fixed in 00 section 5.1 and a reorder is a schema change.
 - **`Wallet` uses `long` for `DIAMOND` and `ROCK_CANDY`** (server-reconciled integers) and `double` for `GOLD` and `FISH_COIN` (exponential soft currencies). `HERO_EXP` is `Hero.Exp`, not a wallet balance; `CurrencyDelta` still names it so `CurrencyChanged` events and analytics are uniform. A debit larger than the balance is rejected, not clamped (06; issue #7).
 - **`Wallet.SummonTicket` in Remote mode is a mirror** of the server ticket ledger (00 decision 15), overwritten from each `SummonResultPayload` and inbox grant, like `Banners[b].Pity`. In Local mode (M0, bots) it is the balance.
+- **Client-earned diamonds and tickets reach the server ledgers on upload** (issue #49). `Stats.ClientDiamondsEarned`, `ClientDiamondsSpent` and `ClientTicketsEarned` are cumulative per reason; each `PUT /save` reports them and the server credits the positive delta over what it already credited (rows with `ref_type = 'save_reconcile'` in `diamond_ledger` / `ticket_ledger`, section 12), clamped to the per-day allowance (08 section 3.1). A summon can spend only what has been credited, so the client uploads before a pull when these counters changed since the last acknowledged upload (9.2; 01).
 - **Item and banner levels are derived, never stored** (issue #7). `OwnedItem` level comes from `Copies` via `DUPE_LVL_CUM` and banner level from `BannerState.Exp` via `BANNER_LVL_EXP` at read time, so retuning either table reflows every save without a migration (04).
 - **`Fish.Cells` is a flat `int[]`** of levels; the board is 20 cells and a cell is fully described by its level. Row-major: `index = y * FISH_BOARD_W + x`.
 - **`Banners[b].Pity` in MVP is a mirror.** The server holds the authoritative pity per banner (08 section 4). The client value is overwritten by every `SummonResultPayload` and exists for display and for the M0/bot path.
@@ -480,7 +487,10 @@ A real day-9 save, abbreviated only in repeated collection entries. 41 KB format
     "Kills": 184502, "BossKills": 41, "BossFails": 9, "HeroHits": 1203944, "Taps": 8120, "Pulls": 632, "Merges": 2214,
     "FishReleased": 4460, "FishDiscards": 12, "FirstWallStage": 120, "DungeonClears": 23, "TrainingLevelsBought": 907, "ActiveSeconds": 61420,
     "GoldEarned": 9.12e12, "GoldSpent": 7.28e12, "FishCoinEarned": 61200.0,
-    "DiamondsEarned": 5020, "DiamondsSpent": 4980, "DiamondsPurchased": 1200
+    "DiamondsEarned": 5020, "DiamondsSpent": 4980, "DiamondsPurchased": 1200,
+    "ClientDiamondsEarned": { "ACHIEVEMENT": 300, "FIRST_CLEAR": 820, "LOGIN": 1150, "QUEST": 1250, "TUTORIAL": 1500 },
+    "ClientDiamondsSpent": { "SHOP_EXCHANGE": 200 },
+    "ClientTicketsEarned": { "WEAPON": { "DAILY_GIFT": 23 }, "SKILL": { "QUEST": 3 }, "COMPANION": { "QUEST": 3 } }
   },
   "DebugTainted": false
 }
@@ -506,6 +516,7 @@ Newtonsoft.Json 13.x (`com.unity.nuget.newtonsoft-json` in Unity; the NuGet pack
 | Enums | `StringEnumConverter` | `"Mode": "Stage"`, `"WEAPON"` keys. Integers accepted on read. A saved member is never renamed in place; a rename is a migration. |
 | `Guid` | Default 36-char lowercase string | |
 | `Dictionary<Banner, BannerState>` | Keys as enum names via the converter | |
+| `Stats.ClientDiamondsEarned`, `ClientDiamondsSpent`, `ClientTicketsEarned` | Keys as enum names, written sorted by key | Byte stability (AC 3); issue #49. |
 | `HashSet<int>` / `HashSet<string>` | JSON arrays, written sorted | Sorted so two saves with equal state are byte-equal (determinism test, 10). |
 | `Formatting` | `None` release, `Indented` development | |
 | Encoding | UTF-8 without BOM | |
@@ -740,7 +751,7 @@ If the `Save` after `ComputeOfflineCatchup` fails (disk full) and the app then d
 
 ### 9.1 Metadata
 
-Sent with every upload and returned by `GET /v1/save/meta`:
+Sent with every upload in the `X-Save-Meta` header and returned by `GET /save/meta` (08 section 3.1 owns the wire; paths are relative to 08's `/v1` base URL; issue #34):
 
 ```json
 {
@@ -772,16 +783,16 @@ It deliberately excludes currency balances (spending lowers them) and includes o
 | Trigger | Behaviour |
 |---|---|
 | `Periodic` | Coalesced: at most one upload per `CLOUD_UPLOAD_MIN_SEC`; the queue holds one item (the latest bytes). |
-| `Pause`, `Quit`, `Summon`, `Inbox`, `Dungeon`, `Conflict` | Immediate. `Quit` and `Pause` get a 3 s budget then abandon (the local write already succeeded; the upload retries at next launch). |
+| `Pause`, `Quit`, `Summon`, `Inbox`, `Dungeon`, `Conflict` | Immediate. `Quit` and `Pause` get a 3 s budget then abandon (the local write already succeeded; the upload retries at next launch). `Summon` uploads **before** `POST /summon/pull` when the client-earnings counters (3.2) changed since the last acknowledged upload, and the pull waits for it (issue #49). |
 | Offline | Latest bytes stay queued; retried on reconnect, resume, and next trigger. |
 
-Request: `PUT /v1/save` with `If-Match: <etag>` of the last server version this device observed (empty on first upload), JSON metadata, the raw file bytes (header + body) as the body (08 section 5). Server validates header, CRC, HMAC against the device's registered key, `sizeBytes <= SAVE_BLOB_MAX_BYTES`, `lastSavedServerTime <= serverNow + CLOCK_MAX_SKEW_ACCEPT_S`, runs plausibility checks (08), stores the blob in S3 keyed `saves/{playerId}/{saveSeq}.sav`, updates `saves` row, returns `{etag, serverTime, flags[]}`.
+Request: `PUT /save` with `If-Match: <etag>` of the last server version this device observed (`If-Match: *` on first upload and on guest adoption), the 9.1 metadata as JSON in `X-Save-Meta`, `Content-Type: application/octet-stream`, and the raw file bytes (header + body) as the body (08 section 3.1; issue #34). Server validates header, CRC, HMAC against the device's registered key, `sizeBytes <= SAVE_BLOB_MAX_BYTES`, rejects a `saveSeq` not above the stored one for the same `deviceId` with `409 SAVE_STALE`, checks `lastSavedServerTime <= serverNow + CLOCK_MAX_SKEW_ACCEPT_S`, credits the client-earnings delta to the ledgers (3.2; issue #49), runs plausibility checks (08), stores the blob in S3 keyed `saves/{playerId}/{saveSeq}.sav`, updates `saves` row, returns `{etag, saveSeq, serverTime, flags[], diamondReconcile}`.
 
 Keep the last `SAVE_HISTORY_KEEP = 10` blobs per player server-side for support rollback.
 
 ### 9.3 Conflict rules
 
-Inputs: `L` local candidate (8.3), `R` remote candidate (`GET /v1/save` blob, fetched when `GET /v1/save/meta` differs from the last etag seen or at boot). Applied at boot, at resume (meta only, blob on demand), and on a `409` from `PUT`.
+Inputs: `L` local candidate (8.3), `R` remote candidate (`GET /save` blob, fetched when `GET /save/meta` differs from the last etag seen or at boot). Applied at boot, at resume (meta only, blob on demand), and on a `409` from `PUT` (`SAVE_CONFLICT` or `SAVE_STALE`).
 
 ```
 Resolve(L, R):
@@ -828,13 +839,13 @@ The server runs these on every upload and attaches `flags[]` to the response. Th
 | Check name | What it tests |
 |---|---|
 | `HMAC_INVALID` | Envelope does not verify against the device's key. |
-| `SEQ_REGRESSION` | `saveSeq` lower than the stored one for the same `deviceId`. |
+| `SEQ_REGRESSION` | `saveSeq` not above the stored one for the same `deviceId`; flagged and the upload rejected `409 SAVE_STALE` (08 section 3.1; issue #34). |
 | `CLOCK_AHEAD` | `lastSavedServerTime > serverNow + CLOCK_MAX_SKEW_ACCEPT_S`. |
 | `STAGE_VS_TIME` | `HighestCleared` exceeds the bot-curve stage for `(now - CreatedServerTime)` by more than the 08 bound. |
 | `DPS_VS_STAGE` | DPS re-derived via `HeroCat.Sim` from the uploaded state cannot clear `HighestCleared`'s boss in `BOSS_TIME_TICKS`. |
 | `GOLD_DELTA_BOUND` | Gold gained since the previous upload exceeds the maximum the sim could produce in the elapsed time at `HighestCleared`. |
-| `DIAMOND_LEDGER_MISMATCH` | `Wallet.Diamond` exceeds the server ledger (grants - spends) by more than the per-day F2P cap times days. |
-| `ITEM_WITHOUT_PULL` | A collection copy count exceeds what `summon_log` plus inbox grants account for. |
+| `DIAMOND_LEDGER_MISMATCH` | `Wallet.Diamond` exceeds the server ledger (grants - spends, after this upload's client-earnings credit; issue #49) by more than the per-day F2P cap times days. |
+| `ITEM_WITHOUT_PULL` | A collection copy count exceeds what `summon_log` plus `granted_items` account for. |
 | `PITY_MISMATCH` | Client `Banners[b].Pity` differs from server pity (informational; the server value is used regardless). |
 | `DUPLICATE_REQUEST_ID` | A `requestId` seen on a different player. |
 | `OFFLINE_WINDOW_OVERLAP` | Lifetime offline credited exceeds wall-clock gaps observable from upload timestamps. |

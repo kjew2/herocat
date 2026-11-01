@@ -219,15 +219,28 @@ BossFail():
   publish BossFailed(s, Combat.BossFailsOnStage, Combat.EnemyHp / Combat.EnemyMaxHp)   # remaining fraction drives the "so close" UI
   Combat.Phase = Spawning; Combat.SpawnTimer = SPAWN_DELAY_TICKS; Combat.ActiveDots.Clear()
 
-AttemptBoss():                                              # command
-  if Combat.Boss == Pending:                                  return Reject(NotAvailable, "BOSS_ALREADY_PENDING")
-  if Combat.Stage % BOSS_EVERY != 0 or Combat.Boss != Walled: return Reject(NotAvailable, "NO_BOSS_TO_ATTEMPT")
+AttemptBoss():                                              # command; always the frontier boss (issue #35)
+  if Combat.Boss == Pending and Combat.Selected == null:      return Reject(NotAvailable, "BOSS_ALREADY_PENDING")
+  if Combat.Stage % BOSS_EVERY != 0 or Combat.Boss == None:   return Reject(NotAvailable, "NO_BOSS_TO_ATTEMPT")
+  if Combat.Selected != null:
+    Combat.Selected = null; publish StageChanged(Combat.Stage)  # the boss challenge returns to the frontier
   Combat.Boss = Pending
   Combat.Phase = Spawning; Combat.SpawnTimer = SPAWN_DELAY_TICKS   # current mob despawns: no gold, no EXP, no kill credit
   return Ok
+
+SelectStage(stage?):                                        # command, MVP (SCR_STAGE_SELECT); issue #35
+  if stage != null and stage < 1:                             return Reject(BadArgument, "STAGE_OUT_OF_RANGE")
+  if stage != null and stage > max(Progress.HighestCleared, Combat.Stage):
+                                                              return Reject(Locked, "STAGE_NOT_CLEARED")
+  target = (stage == null or stage == Combat.Stage) ? null : stage   # null = the frontier
+  if target == Combat.Selected: return Ok                     # no-op, no event
+  Combat.Selected = target                                    # Combat.Stage, KillsInStage, Boss and BossFailsOnStage are untouched
+  Combat.Phase = Spawning; Combat.SpawnTimer = SPAWN_DELAY_TICKS; Combat.ActiveDots.Clear()   # current enemy despawns, no rewards
+  publish StageChanged(FoughtStage)
+  return Ok
 ```
 
-While `Walled`, mobs of stage `s` spawn and pay `Gold(s)` and `Exp(s)`; `KillsInStage` stays at `KILLS_PER_STAGE - 1`. The first boss attempt on a boss stage is automatic. Retries are manual in MVP (`AttemptBoss` from `SCR_MAIN`); P1 adds `BOSS_AUTO_RETRY_S = 60` as a content constant and a timer in `CombatState`. `SCR_STAGE_SELECT` (MVP, 07) sends `SelectStage(stage?)` to jump back to any stage `<= Progress.HighestCleared` (null returns to the frontier); `Kill()` uses the stage actually fought for gold and EXP, so farming a lower stage is always worse than the frontier.
+While `Walled`, mobs of stage `s` spawn and pay `Gold(s)` and `Exp(s)`; `KillsInStage` stays at `KILLS_PER_STAGE - 1`. The first boss attempt on a boss stage is automatic. Retries are manual in MVP (`AttemptBoss` from `SCR_MAIN`); P1 adds `BOSS_AUTO_RETRY_S = 60` as a content constant and a timer in `CombatState`. `SCR_STAGE_SELECT` (MVP, 07) sends `SelectStage(stage?)` to farm any stage `<= Progress.HighestCleared` as a side stage (issue #35): `Combat.Stage` stays the frontier, and the frontier's `KillsInStage`, `Boss` (including `Walled` and `Pending`) and `BossFailsOnStage` are kept unchanged until the player returns with `SelectStage(null)`. Kills on a selected stage pay that stage's `Gold(s)` and `Exp(s)`, count for `Stats.Kills` and quests, and never advance anything or spawn a boss, so farming a lower stage is always worse than the frontier. The only boss challenge is the frontier boss: `AttemptBoss` (from `SCR_MAIN` or the list) returns to the frontier first. First-clear diamonds therefore only ever pay through `Progress.HighestFirstClearBoss` on the frontier.
 
 ### 2.8 Wall condition
 
@@ -244,13 +257,13 @@ In words: **if a normal mob on this stage takes more than three seconds of hero 
 
 | Field | Type | Meaning |
 |---|---|---|
-| `Combat.Stage` | `int` | Current stage `s >= 1`. |
+| `Combat.Stage` | `int` | Frontier stage `s >= 1`; only `AdvanceStage` moves it. |
 | `Combat.KillsInStage` | `int` | `0 .. KILLS_PER_STAGE-1`. |
 | `Combat.Boss` | `BossPhase` | `None`, `Pending` (next spawn is the boss), `Walled` (boss failed, farming mobs). 02's type; a bool could not represent `Walled` (issue #7). |
 | `Combat.BossFailsOnStage` | `int` | Reset on advance. |
-| `Combat.Selected` | `int?` | MVP: stage chosen with `SelectStage` in `SCR_STAGE_SELECT`; null = frontier. |
-| `Progress.HighestCleared` | `int` | Highest stage completed (all kills, or the boss); the Awakening gate reads it. |
-| `Progress.HighestFirstClearBoss` | `int` | Highest boss stage that paid first-clear diamonds (06). |
+| `Combat.Selected` | `int?` | MVP: side stage being farmed, chosen with `SelectStage` in `SCR_STAGE_SELECT`; null = frontier (issue #35). |
+| `Progress.HighestCleared` | `int` | Highest stage completed on the frontier (all kills, or the boss), any stage, 02's meaning (issue #35); bounds `SelectStage` and the Awakening gate reads it. |
+| `Progress.HighestFirstClearBoss` | `int` | Highest boss stage that paid first-clear diamonds (06); the only first-clear key (issue #35). |
 
 All of these are saved (02 section 3.1; issue #7).
 
@@ -359,7 +372,7 @@ Awaken():                                                   # command, from SCR_
   publish Awakened(Hero.AwakenRank)
 ```
 
-Awakening is a button, not automatic, because it costs a currency. The gate reads `Progress.HighestCleared`, not `Combat.Stage`, so a player who jumped back in `SCR_STAGE_SELECT` can still awaken. Companion slot unlocks are the reference game's class-change feel without a second mechanic; slot 1 is open from the start so the companion banner is never useless. The bot (section 8.3) pays each rank as soon as both gates pass; with the recommended curve rank 1 lands on day 1, rank 2 on day 2, rank 3 around day 5, rank 4 around day 31. Rock Candy income is 06's problem: this spec needs at least `100 + 300 = 400` Rock Candy available by day 2 and `800` more by day 5, which is the `ROCK_CANDY_PER_DAY_ASSUMED = 100` input the bot takes (section 8.3). Boss drops alone (`BOSS_ROCK_CANDY_P = 0.5`, one candy) give about 12 per day early and cannot carry it.
+Awakening is a button, not automatic, because it costs a currency. The gate reads `Progress.HighestCleared`; farming a side stage in `SCR_STAGE_SELECT` never lowers it. Companion slot unlocks are the reference game's class-change feel without a second mechanic; slot 1 is open from the start so the companion banner is never useless. The bot (section 8.3) pays each rank as soon as both gates pass. Cadence target (issue #43): every rank is affordable within `max_days_after_gate` days of the day the bot first reaches its stage gate, read from the `awakening_targets` content table (09; columns `rank`, `max_days_after_gate`, value 2 for every rank). That table is the one source both this spec's tool check (section 8.6, acceptance 21) and 06's acceptance read: the stage gate is the pacing lever, Rock Candy is a check. Rock Candy income is 06's (the Rock Candy Dungeon, 06 section 6.5), which the bot reads from content (section 8.3). Boss drops alone (`BOSS_ROCK_CANDY_P = 0.5`, one candy) give about 12 per day early and cannot carry it.
 
 ## 6. Research (MVP, Fish Coin sink)
 
@@ -378,7 +391,7 @@ Cost of level `k -> k+1` of node `x` is `RES_COST0[x] * RES_COST_G[x]^k` Fish Co
 | `res_fish_cap` | `FishMaxLvl += 1` | 10 | 2500 | 2.00 | 1.3e6 | Opens the next fish level and its discovery payout; the Fish Board's growth engine (05 section 8). |
 | `res_offline_cap` | `OfflineCapH += 2` | 6 | 500 | 1.50 | 3.8e3 | Only matters to players who skip a day; cheap on purpose. |
 
-Research effects are read by the sim through `Query` (`MpPoolMax`, `MpRegenPerTick`, `TankCap`, `TankRefillTicks`, `FishMaxLvl`, `OfflineCapH`, `GoldMult`, `ResearchPct`). Node ids are the `research` table's lowercase `res_*` ids (09; issue #11). `Research(nodeId)` buys one level: rejects `Capped`/`RESEARCH_MAXED`, `Locked`/`RESEARCH_LOCKED` (before Awakening rank 1), `CannotAfford`/`NOT_ENOUGH_FISH_COIN`; charges with reason `RESEARCH`; publishes `ResearchLeveled(nodeId, newLevel, cost)`; marks DPS dirty when the node affects it.
+Research effects are read by the sim through `Query` (`MpPoolMax`, `MpRegenPerTick`, `TankCap`, `TankRefillTicks`, `FishMaxLvl`, `OfflineCapH`, `GoldMult`, `ResearchPct`). Node ids are the `research` table's lowercase `res_*` ids (09; issue #11). `Research(nodeId)` buys one level: rejects `Capped`/`RESEARCH_MAXED`, `Locked`/`RESEARCH_LOCKED` (before Research's `feature_unlocks` gate (09), seeded at Awakening rank 1 per 00 decision 11; issue #45), `CannotAfford`/`NOT_ENOUGH_FISH_COIN`; charges with reason `RESEARCH`; publishes `ResearchLeveled(nodeId, newLevel, cost)`; marks DPS dirty when the node affects it.
 
 `res_offline_cap` extends the 24 h base cap from 00 decision 3; it does not change the base. Catch-up (06) and 08's `OFFLINE_WINDOW_OVERLAP` check use the effective cap `OFFLINE_CAP_H + 2 h * res_offline_cap level` (issue #21).
 
@@ -404,7 +417,7 @@ DPS = BASE_ATK
     * critFactor * speedFactor                                       # Training, crit and speed stats
 ```
 
-`mpSufficiency = min(1, mpRegenPerSecond / sum_equipped(mpCost / cooldownSeconds))` is the fraction of rated companion uptime the MP pool can sustain (section 2.4). `missileDpsPct` is 05's closed form (05 section 5.1) and is **rated-only** (issue #15): it never enters the tick loop, which deals missile damage as discrete hits. The sim keeps no trailing average; if `SCR_HERO` wants a live number, the runtime/view-model keeps a 60 s rolling sum of `FishMissileHit`, outside the save and `StateHash`. Skills' `skillDpsPct` are rated averages over their cooldown (04 section 7), so the formula is the expected steady-state DPS.
+`mpSufficiency = min(1, (mpRegenPerSecond + sum_equipped MP_REGEN (mpRestored - mpCost) / cooldownSeconds) / sum_equipped other (mpCost / cooldownSeconds))` is the fraction of rated companion uptime the MP pool can sustain (section 2.4). The net MP an `MP_REGEN` companion restores counts as regen, and its own cost is not in the demand (04 section 8.2; issue #39); with no other companion equipped it is 1. `missileDpsPct` is 05's closed form (05 section 5.1) and is **rated-only** (issue #15): it never enters the tick loop, which deals missile damage as discrete hits. The sim keeps no trailing average; if `SCR_HERO` wants a live number, the runtime/view-model keeps a 60 s rolling sum of `FishMissileHit`, outside the save and `StateHash`. Skills' `skillDpsPct` are rated averages over their cooldown (04 section 7), so the formula is the expected steady-state DPS.
 
 The tick loop realises that value without counting any layer twice (issue #10). A hero hit carries only the layers that have no discrete event; every discrete source deals a multiple of a unit built from it:
 
@@ -419,7 +432,7 @@ missile       = HeroHit * f                                          # 05; rated
 tap           = HeroHit * TAP_ZAP_DMG_PCT                            # not in the rated DPS; the bot never taps
 ```
 
-At speed 1 with no crit `SkillUnit == HeroHit`, which is the unit 04's per-cast derivation states. `CompanionUnit` carries the skill factor so that hero + skills + companions multiply as the rated formula does instead of adding. TODO(#243): whether companion damage should scale with the equipped skills is an open design question. A `BUFF` skill or `BUFF_ATK` companion is rated through its informational `dps_pct` (04) and realised as the hero-attack buff; buff uptime overlap, MP-gating and missiles are the only parts of the rated value that are approximations. Test (acceptance 20): measured DPS over a long fight equals `RatedDps` within 1%.
+At speed 1 with no crit `SkillUnit == HeroHit`, which is the unit 04's per-cast derivation states. `CompanionUnit` carries the skill factor so that hero + skills + companions multiply as the rated formula does instead of adding. Rule (issue #243): companion damage scales with the equipped skills. It may be revisited (an additive skills + companions term) once `tools/power_curve_model.py` reports layer shares. A `BUFF` skill or `BUFF_ATK` companion is rated through its informational `dps_pct` (04) and realised as the hero-attack buff; buff uptime overlap, MP-gating and missiles are the only parts of the rated value that are approximations. Test (acceptance 20): measured DPS over a long fight equals `RatedDps` within 1%.
 
 ### 7.2 Units
 
@@ -455,7 +468,7 @@ These constants are re-tagged `S` in section 13 and the tool in section 8.6 is t
 
 ### 8.2 Worked numbers (scratch model, seed 7, recommended constants)
 
-Day-stage output and the share of `ln(DPS / BASE_ATK)` carried by each factor. The model is the Python sketch section 8.6 specifies, run with the recommended constants and the 06 income assumptions listed in 8.3. Treat the stage numbers as +/-15% until `tools/power_curve_model.py` in this repo replaces them.
+Day-stage output and the share of `ln(DPS / BASE_ATK)` carried by each factor. The model is the Python sketch section 8.6 specifies, run with the recommended constants and hand-entered ticket and Rock Candy income figures that predate 06's tables; the tool replaces them with 06's content income (section 8.3, issue #38). Treat the stage numbers as +/-15% until `tools/power_curve_model.py` in this repo replaces them.
 
 | Day | Stage | DPS | Train | Hero | Weapons | Skills | Companions | Fish | Research | Awaken | Crit | Speed |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
@@ -470,8 +483,8 @@ Five other seeds land at 530-550 on day 30. Multipliers at day 30 (seed 7): Trai
 Reading the table:
 
 - **The 40% cap holds.** Hero Level is the largest layer at 26-28% throughout, by design (section 5.2). Nothing else passes 20%.
-- **The 5% floor is missed by Research (3-5%), Companions on days 1-3, Skills on day 1, and speed on day 30.** Research needs `res_atk` to be roughly twice as strong or half as expensive; Companions are MVP and the bot gets slot 2 only at Awakening rank 1, so days 1-3 are expected to be low; `ATK_SPD` is capped at x2 and its share can only fall as the others grow. Section 9 lists the levers. These are the first things the tool must retune. The day-1 misses are unlock timing and are not checked (the floor applies on days 7 and 30 only); Research, Companions and speed are M0 floor exemptions that report `WARN` (section 8.5, issue #12).
-- **Pace.** Day 1 ends at stage 240 with the first wall at stage 70 in the first hour and Awakening rank 1 bought in the first session. Days 2-7 average 27 stages a day; days 7-14 average 7; days 14-30 average 4.4. The longest wall inside 30 days is 460 active minutes (about four sessions) starting around day 20. The sibling's criterion of no wall over 48 h wall-clock in the first 14 days holds; the day-20 wall does not and is the open balance problem for MVP (section 10, question 2).
+- **The 5% floor is missed by Research (3-5%), Companions on days 1-3, Skills on day 1, and speed on day 30.** Research needs `res_atk` to be roughly twice as strong or half as expensive; Companions are MVP and the bot gets slot 2 only at Awakening rank 1, so days 1-3 are expected to be low; `ATK_SPD` is capped at x2 and its share can only fall as the others grow, so speed is permanently exempt from the floor (issue #36). The MVP fix is chosen from section 9's levers using `tools/power_curve_model.py` output, run first (issue #36); candidates are `res_atk` at 0.08 per level and limit-break repricing (04 section 5), and the lever choice and any new values are pending the tool. The day-1 misses are unlock timing and are not checked (the floor applies on days 7 and 30 only); Research and Companions are M0 floor exemptions that report `WARN` (section 8.5, issue #12).
+- **Pace.** Day 1 ends at stage 240 with the first wall at stage 70 in the first hour and Awakening rank 1 bought in the first session. Days 2-7 average 27 stages a day; days 7-14 average 7; days 14-30 average 4.4. The longest wall inside 30 days is 460 active minutes (about four sessions) starting around day 20. The sibling's criterion of no wall over 48 h wall-clock in the first 14 days holds; the day-20 wall does not, and MVP acceptance 18 now bounds walls on days 14-30 too (issue #36; fix pending the tool, section 11 question 2).
 
 ### 8.3 The greedy F2P bot policy
 
