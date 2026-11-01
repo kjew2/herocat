@@ -18,12 +18,27 @@ public static class RedisKeys
     /// <summary>Display name + avatar for leaderboard rows (P1), STRING.</summary>
     public static string BoardName(Guid playerId) => "lb:name:" + Id(playerId);
 
-    /// <summary>Sliding-window rate-limit counter for one route and player (08 section 1.1), STRING. TTL is the window length.</summary>
-    public static string RateLimit(string route, Guid playerId)
+    /// <summary>
+    /// Sliding-window rate-limit log for one route and player (08 section 1.1), ZSET of the accepted requests' timestamps
+    /// (all of the route's windows share it). TTL is the route's longest window.
+    /// </summary>
+    public static string RateLimit(string route, Guid playerId) => "rl:" + RouteSegment(route) + ":" + Id(playerId);
+
+    /// <summary>
+    /// The same log for an unauthenticated route, per client IP (08 section 1.1). The address's colons (IPv6) are written
+    /// as <c>-</c> so the key keeps one segment per part.
+    /// </summary>
+    public static string RateLimitByIp(string route, string ip)
     {
-        if (string.IsNullOrEmpty(route) || route.Contains(' ') || route.Contains('{') || route.Contains('}'))
+        if (string.IsNullOrWhiteSpace(ip) || ip.Contains(' ')) throw new ArgumentException("ip must be an address", nameof(ip));
+        return "rl:" + RouteSegment(route) + ":ip:" + ip.Replace(':', '-');
+    }
+
+    static string RouteSegment(string route)
+    {
+        if (string.IsNullOrEmpty(route) || route.Contains(' ') || route.Contains(':') || route.Contains('{') || route.Contains('}'))
             throw new ArgumentException("route must be a non-empty key segment", nameof(route));
-        return "rl:" + route + ":" + Id(playerId);
+        return route;
     }
 
     /// <summary>Session HASH: last device, last ip hash, last activity.</summary>
@@ -40,7 +55,7 @@ public static class RedisKeys
     public static readonly TimeSpan SessionTtl = TimeSpan.FromHours(1);
     public static readonly TimeSpan SummonLockTtl = TimeSpan.FromSeconds(10);
 
-    /// <summary>The TTL of a rate-limit counter: its window.</summary>
+    /// <summary>The TTL of a rate-limit log: the route's longest window.</summary>
     public static TimeSpan RateLimitTtl(TimeSpan window) => window;
 
     /// <summary>Every key pattern in spec order, with its type and TTL.</summary>
@@ -49,7 +64,8 @@ public static class RedisKeys
         new("lb:stage:{weekKey}", "ZSET", BoardTtl),
         new("lb:fish:{weekKey}", "ZSET", BoardTtl),
         new("lb:name:{playerId}", "STRING", BoardNameTtl),
-        new("rl:{route}:{playerId}", "STRING", null, TtlIsWindow: true),
+        new("rl:{route}:{playerId}", "ZSET", null, TtlIsWindow: true),
+        new("rl:{route}:ip:{ip}", "ZSET", null, TtlIsWindow: true),
         new("sess:{playerId}", "HASH", SessionTtl),
         new("summon:lock:{playerId}", "STRING", SummonLockTtl),
         new("maint", "STRING", null),

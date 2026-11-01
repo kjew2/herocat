@@ -1239,7 +1239,8 @@ Redis structures (P1 leaderboards, MVP rate limits and sessions):
 | `lb:stage:{weekKey}` | ZSET | member `playerId`, score `HighestCleared * 1e6 + (1e6 - secondsIntoWeek/60)` so ties favour the earlier clear | 14 days |
 | `lb:fish:{weekKey}` | ZSET | score `HighestFish` | 14 days |
 | `lb:name:{playerId}` | STRING | display name + avatar for leaderboard rows | 1 day |
-| `rl:{route}:{playerId}` | STRING (counter) | sliding-window rate limit (08 per-endpoint limits) | window length |
+| `rl:{route}:{playerId}` | ZSET (accepted-request timestamps) | sliding-window rate-limit log (08 per-endpoint limits); `{route}` is the lowercase method and path below `/v1` (`put/save`), and all of a route's windows share the set, so the TTL is the longest of them | window length |
+| `rl:{route}:ip:{ip}` | ZSET (accepted-request timestamps) | the same log per client IP for `auth none` routes (08 section 1.1); an IPv6 address's colons are written `-` | window length |
 | `sess:{playerId}` | HASH | last device, last ip hash, last activity | 1 h |
 | `summon:lock:{playerId}` | STRING | per-player mutex for the summon handler | 10 s |
 | `maint` | STRING | maintenance JSON | none |

@@ -11,6 +11,7 @@ using HeroCat.Server.Infrastructure.Blobs;
 using HeroCat.Server.Infrastructure.Db;
 using HeroCat.Server.Infrastructure.Db.Migrations;
 using HeroCat.Server.Infrastructure.Redis;
+using HeroCat.Server.Pipeline;
 using HeroCat.Server.Worker;
 using Microsoft.Extensions.Options;
 
@@ -66,8 +67,10 @@ public static class ServerHost
             .AddConfigFeature()
             .AddDungeonFeature()
             .AddAdminFeature();
+        builder.Services.AddRequestPipeline();
 
         var app = builder.Build();
+        app.UseRequestPipeline();
         app.MapControllers();
         return app;
     }

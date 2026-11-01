@@ -15,6 +15,8 @@
 # Postgres steps (--pr and --server): the SQL migration set applies from empty to a scratch database on the server
 # named by $HEROCAT_TEST_POSTGRES (an Npgsql connection string that may create databases). Without it they print
 # "SKIP db-migrations: no Postgres" and the run is a partial check.
+# Redis step (--pr and --server): the Redis rate-limit store and maint key against the Redis named by
+# $HEROCAT_TEST_REDIS (a StackExchange.Redis configuration string). Without it it prints "SKIP redis-pipeline".
 #
 # Outputs (acceptance table, shares, diffs, TRX, sweep CSV) land in $CHECK_OUT_DIR (default build/check/).
 # Exits non-zero on the first hard failure; report-only steps print a warning and the summary says so.
@@ -148,6 +150,8 @@ BUILT=0
 GOLDEN_DONE=0
 DB_DONE=0
 DB_SKIPPED=0
+REDIS_DONE=0
+REDIS_SKIPPED=0
 
 need_dotnet() {
   if ! command -v dotnet >/dev/null 2>&1; then
@@ -204,6 +208,20 @@ db_checks() {
   dotnet test src/HeroCat.Server.Tests/HeroCat.Server.Tests.csproj -c Release --no-build --filter "TestCategory=Postgres"
 }
 
+# specs/08 section 1.1 (issue #193): the Redis rate-limit script and the maintenance key against a real Redis.
+# Guarded on Redis like the Postgres steps.
+redis_checks() {
+  if [ "$REDIS_DONE" -eq 1 ]; then return 0; fi
+  REDIS_DONE=1
+  step "Server: Redis sliding-window rate limits and the maint key against a real Redis (specs/08 section 1.1, issue #193)"
+  if [ -z "${HEROCAT_TEST_REDIS:-}" ]; then
+    echo "SKIP redis-pipeline: no Redis (set HEROCAT_TEST_REDIS, e.g. localhost:6379, to run this step). Partial check."
+    REDIS_SKIPPED=1
+    return 0
+  fi
+  dotnet test src/HeroCat.Server.Tests/HeroCat.Server.Tests.csproj -c Release --no-build --filter "TestCategory=Redis"
+}
+
 pr_dotnet() {
   build
 
@@ -243,6 +261,7 @@ pr_dotnet() {
 
   golden_check
   db_checks
+  redis_checks
 }
 
 # pr.yml's server job (specs/10 section 6.2): the server tests on their own, then the Postgres steps. The tests also
@@ -250,8 +269,9 @@ pr_dotnet() {
 server_dotnet() {
   build
   step "Server: HeroCat.Server.Tests (specs/10 section 1.3)"
-  dotnet test src/HeroCat.Server.Tests/HeroCat.Server.Tests.csproj -c Release --no-build --filter "TestCategory!=Postgres"
+  dotnet test src/HeroCat.Server.Tests/HeroCat.Server.Tests.csproj -c Release --no-build --filter "TestCategory!=Postgres&TestCategory!=Redis"
   db_checks
+  redis_checks
 }
 
 content_dotnet() {
@@ -332,4 +352,7 @@ else
 fi
 if [ "$DB_SKIPPED" -eq 1 ]; then
   printf 'Partial check, not a full pass: SKIP db-migrations, no Postgres (set HEROCAT_TEST_POSTGRES to run the Postgres steps).\n'
+fi
+if [ "$REDIS_SKIPPED" -eq 1 ]; then
+  printf 'Partial check, not a full pass: SKIP redis-pipeline, no Redis (set HEROCAT_TEST_REDIS to run the Redis step).\n'
 fi
