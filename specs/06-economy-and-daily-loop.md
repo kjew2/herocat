@@ -64,6 +64,7 @@ public sealed partial class Wallet
 | `TICKET_SUMMON_WEAPON` | MVP | Daily free gift (`DAILY_GIFT`), quests, weekly bonus, events, mail | One pull (`SUMMON`) | 1 per day from the gift |
 | `TICKET_SUMMON_SKILL`, `TICKET_SUMMON_COMPANION` | MVP | Weekly complete-all bonus, achievements, events, mail | One pull (`SUMMON`) | about 0.15 per day each |
 | `GUILD_COIN` | P1 | Guild activity | Guild shop | 0 before P1 |
+| `TICKET_SUMMON_RUNE` | P1 | Events, mail (P1) | One Rune banner pull (`SUMMON`) | 0 before P1 (issue #26) |
 
 Rules that hold for every row:
 
@@ -326,7 +327,7 @@ Total ladder value 6,260 diamonds, of which a day-30 F2P player at stage 550, he
 
 Three dungeons, each a ladder of floors. Floor `f` is one fixed fight: a single boss enemy with `HP = HP0 * HP_G^(DUNGEON_FLOOR_STAGE_STEP * f) * BOSS_HP_MULT` and a time limit of `BOSS_TIME_TICKS`, fought with the player's current loadout, skills, companions and the passive Fish Board DPS (no fish missiles, no Tap Zap, no fish merging: the board is hidden during a run, 07). `DUNGEON_FLOOR_STAGE_STEP` = 20, so floor `f` is as hard as the stage-`20f` boss. A player at stage `s` can clear about floor `floor(s / 20)`.
 
-The fight is a deterministic sim run: `Simulation.RunDungeon(state, dungeon, floor, seed)` advances a private combat sub-state for at most `BOSS_TIME_TICKS` ticks on the `dungeon` RNG stream seeded with `seed`, and returns `Cleared` or `Failed(remainingHpPct)`. In MVP `seed` is issued by the server per run request (08 `POST /dungeon/seed`); in M0 it is `Rng.Derive(state.Streams.dungeon, dayKey, dungeon, floor)` locally. Because crit is the only randomness in the run, the server can replay it from the save and the seed to validate the reward (08 plausibility check `dungeon_replay`).
+The fight is a deterministic sim run: `Simulation.RunDungeon(state, dungeon, floor, seed)` advances a private combat sub-state for at most `BOSS_TIME_TICKS` ticks on the `dungeon` RNG stream seeded with `seed`, and returns `Cleared` or `Failed(remainingHpPct)`. `seed` comes from the `IDungeonSeedService` seam (00 contract 11, issue #25): in MVP `RemoteDungeonSeedService` gets it from the server per run request (08 `POST /dungeon/seed`); in M0 and bots `LocalDungeonSeedService` derives it from one `dungeon` stream draw, `Rng.Derive(state.Streams.dungeon, dayKey, dungeon, floor)`. Because crit is the only randomness in the run, the server can replay it from the save and the seed to validate the reward (08 plausibility check `dungeon_replay`).
 
 Unlock: `DUNGEON_UNLOCK_STAGE` = 30 for all three; `SCR_DUNGEONS` is visible but locked before that. The Tower (P1) later gates floor ranges: Tower floor 10 unlocks dungeon floors 11 to 20, and so on; in MVP all floors are open to whoever can clear the previous one.
 
@@ -342,15 +343,15 @@ Unlock: `DUNGEON_UNLOCK_STAGE` = 30 for all three; `SCR_DUNGEONS` is visible but
 DungeonRunResult StartDungeon(Dungeon d, int floor, ulong seed)
 {
     EnsureDay(now);
-    var st = State.Dungeons[d];
-    if (State.Stage.Highest < DUNGEON_UNLOCK_STAGE) return Rejected(DUNGEON_LOCKED);
-    if (floor < 1 || floor > st.BestFloor + 1)       return Rejected(DUNGEON_FLOOR_NOT_UNLOCKED);
-    if (!Wallet.CanAfford(TicketOf(d), 1))           return Rejected(NO_TICKETS);
+    int best = State.Dungeons.BestFloor[(int)d];                     // 02 arrays by Dungeon ordinal (issue #7)
+    if (State.Progress.HighestCleared < DUNGEON_UNLOCK_STAGE) return Reject(Locked, "DUNGEON_LOCKED");
+    if (floor < 1 || floor > best + 1)               return Reject(Locked, "DUNGEON_FLOOR_NOT_UNLOCKED");
+    if (!Wallet.CanAfford(TicketOf(d), 1))           return Reject(CannotAfford, "NO_TICKETS");
     var outcome = RunDungeon(State, d, floor, seed);                 // pure; BOSS_TIME_TICKS at most
     if (!outcome.Cleared) { Sink.Emit(new DungeonFailed(d, floor, outcome.RemainingHpPct)); return outcome; }
-    Wallet.Apply(new(TicketOf(d), -1), Reason.DUNGEON, Sink);
-    Wallet.Apply(RewardOf(d, floor), Reason.DUNGEON, Sink);
-    if (floor > st.BestFloor) { st.BestFloor = floor; Sink.Emit(new DungeonFloorFirstCleared(d, floor)); }
+    Wallet.Apply(new(TicketOf(d), -1), CurrencyReason.DUNGEON, Sink);
+    Wallet.Apply(RewardOf(d, floor), CurrencyReason.DUNGEON, Sink);
+    if (floor > best) { State.Dungeons.BestFloor[(int)d] = floor; Sink.Emit(new DungeonFloorFirstCleared(d, floor)); }
     Quests.Progress(QuestKind.DAILY, QuestGoal.CLEAR_DUNGEON, 1, filter: d.ToString());
     Quests.Progress(QuestKind.WEEKLY, QuestGoal.CLEAR_DUNGEON, 1);
     Sink.Emit(new DungeonCleared(d, floor, RewardOf(d, floor), seed));
@@ -384,7 +385,7 @@ Awakening rules (gates, multiplier) are 03's; this section checks that the Rock 
 | 4 | 500 | day 14 to 16 | 2,000 | 3,200 | about 1,140 + 10 x 440 = 5,540 | about 830 | about 6,370, rank 4 lands on the gate day |
 | 5 | 800 | beyond day 30 | 5,000 | 8,200 | about 5,540 + 16 x 540 = 14,200 | about 2,100 | surplus; limit breaks (04) absorb it |
 
-Reading: ranks 1 to 3 land one day after their stage gate, which is the intended "I can see it, I will have it tomorrow" feel; rank 4 is affordable the day it unlocks. From day 15 Rock Candy accumulates, and 04's limit breaks are the sink for the surplus. `Awaken` command: validation `AWAKEN_STAGE_NOT_REACHED`, `NOT_ENOUGH_ROCK_CANDY`, `AWAKEN_MAX_RANK`; effect in 03; emits `Awakened(rank)`; progress `AWAKEN_RANK` ladder.
+Reading: ranks 1 to 3 land one day after their stage gate, which is the intended "I can see it, I will have it tomorrow" feel; rank 4 is affordable the day it unlocks. From day 15 Rock Candy accumulates, and 04's limit breaks are the sink for the surplus. `Awaken` command: validation, reject reasons and effect in 03; debits Rock Candy with `CurrencyReason.AWAKENING`; emits `Awakened(rank)`; progress `AWAKEN_RANK` ladder.
 
 ### 6.6 Tower (P1 outline)
 
@@ -394,46 +395,61 @@ A fourth card on `SCR_DUNGEONS`. One ladder of 100 fixed boss fights with `TOWER
 
 ### 7.1 Algorithm
 
-Runs in `HeroCat.Sim.Catchup` on session open and on resume from background, called by `SessionRunner` (01) with the trusted server time. Nothing else calls it.
+Runs in `HeroCat.Sim.Catchup`, only inside `Simulation.Apply(ComputeOfflineCatchup(serverNow))`: a logged system command that `SessionRunner` (01) issues on session open and on resume from background, right after the `ApplyServerTime` that carries the same trusted server time (issue #6). Nothing else calls `Compute`, and `SessionRunner` never writes `Offline.Pending` or `LastTickServerTime` itself, so a replay of the command log reproduces catch-up exactly.
 
 ```csharp
-public sealed record OfflineReward(long ElapsedSec, long CreditedSec, bool Capped, double Gold, double Exp,
-                                   int TankFishAdded, int Stage, double KillTimeSec);
+public sealed record CatchupResult(long ElapsedSec, long CreditedSec, bool Capped, double Gold, double Exp,
+                                   int TankFill, int Stage, double KillTimeSec, long ComputedServerTime);   // 02
 
-public static OfflineReward? Compute(GameState s, ContentDb db, long serverNow)
+public static CatchupResult? Compute(GameState s, ContentDb db, long serverNow)
 {
     long gap = serverNow - s.Time.LastTickServerTime;
     if (gap < 0) { s.Sink.Emit(new ClockWentBackwards(-gap)); return null; }    // grants nothing; LastTick unchanged
-    long credited = Math.Min(gap, db.OFFLINE_CAP_H * 3600);
-    if (gap < db.OFFLINE_MIN_S) { s.Time.LastTickServerTime = serverNow; return null; }   // no modal, no grant
+    if (gap < db.OFFLINE_MIN_S)                                          // no modal, no gold or EXP
+    {
+        FishBoard.CatchUpTank(s, db, gap * TICK_HZ);                     // 05: short gaps still refill the tank, applied directly (issue #21)
+        s.Time.LastTickServerTime = serverNow;
+        return null;
+    }
 
-    int    stage    = s.Stage.Current;                                   // the stage being farmed, walled or not
+    var  prev     = s.Offline.Pending;                                   // non-null when a reward from an earlier gap is unclaimed
+    long capSec   = Economy.OfflineCapSeconds(s, db);                    // (OFFLINE_CAP_H + 2 h per RES_OFFLINE_CAP level) * 3600: 24 h to 36 h (00 decision 12, issue #21)
+    long credited = Math.Max(0, Math.Min(gap, capSec - (prev?.CreditedSec ?? 0)));   // the cap applies to the stacked sum
+
+    int    stage    = s.Combat.Stage;                                    // the stage being farmed, walled or not
     double killTime = Combat.KillTimeSeconds(s, db, stage, isBoss: false); // 03: hits-to-kill * attack interval + SPAWN_DELAY
     double killsPerSec = 1.0 / killTime;
     double gold = credited * db.OFFLINE_RATE * Economy.GoldPerKill(s, db, stage) * killsPerSec;   // GoldPerKill includes GOLD_GAIN training
     double exp  = credited * db.OFFLINE_RATE * Economy.ExpPerKill(s, db, stage)  * killsPerSec;   // includes EXP_GAIN training
-    int tankAdded = s.Fish.Tank.Fill(gap);                               // 05: uses the FULL gap, not the capped one; capacity-bounded anyway
+    int tankFill = FishBoard.CatchUpTankCount(s, db, credited * TICK_HZ, alreadyPending: prev?.TankFill ?? 0);
+                                                                         // 05 CatchUpTank arithmetic over credited ticks; read-only here, applied at claim
 
-    s.Offline.Pending = new OfflineReward(gap, credited, credited < gap, gold, exp, tankAdded, stage, killTime);
+    long elapsedSum  = gap + (prev?.ElapsedSec ?? 0);
+    long creditedSum = credited + (prev?.CreditedSec ?? 0);
+    s.Offline.Pending = new CatchupResult(elapsedSum, creditedSum, creditedSum < elapsedSum,
+                                          (prev?.Gold ?? 0) + gold, (prev?.Exp ?? 0) + exp, (prev?.TankFill ?? 0) + tankFill,
+                                          stage, killTime, serverNow);   // Stage and KillTimeSec: latest gap, display only (issue #21)
     s.Time.LastTickServerTime = serverNow;                               // moved now, so a crash before claim cannot double-credit
     s.Sink.Emit(new OfflineRewardComputed(s.Offline.Pending));
     return s.Offline.Pending;
 }
 
-public static bool ClaimOfflineReward(GameState s)
+public static ApplyResult ClaimOfflineReward(GameState s, ContentDb db)
 {
-    var r = s.Offline.Pending; if (r is null) return false;              // Rejected(NO_PENDING_OFFLINE_REWARD)
-    s.Wallet.Apply(new(Currency.GOLD, r.Gold), Reason.OFFLINE, s.Sink);
-    s.Wallet.Apply(new(Currency.HERO_EXP, r.Exp), Reason.OFFLINE, s.Sink);   // 03 converts EXP to levels on the next tick
+    var r = s.Offline.Pending;
+    if (r is null) return Reject(NotAvailable, "NO_PENDING_OFFLINE_REWARD");
+    s.Wallet.Apply(new(Currency.GOLD, r.Gold), CurrencyReason.OFFLINE, s.Sink);
+    s.Wallet.Apply(new(Currency.HERO_EXP, r.Exp), CurrencyReason.OFFLINE, s.Sink);   // writes Hero.Exp; 03 converts EXP to levels on the next tick
+    FishBoard.AddTankFish(s, db, r.TankFill);                            // 05: TankCount = min(TankCap, TankCount + TankFill), refill progress per 05
     s.Offline.Pending = null;
     s.Sink.Emit(new OfflineRewardClaimed(r));
-    return true;
+    return Accepted;
 }
 ```
 
-What it does not do, by design: no stage progress, no kills counted, no drops, no Rock Candy, no quest progress, no RNG stream advanced, no boss attempts. Offline time is a rate multiplied by a duration and nothing else, so it is cheap to re-derive on the server (08 plausibility check `offline_bound`: credited gold <= `OFFLINE_CAP_H * 3600 * OFFLINE_RATE * GoldPerKill(stage) / KillTimeSeconds(stage)` with a 2% tolerance).
+What it does not do, by design: no stage progress, no kills counted, no drops, no Rock Candy, no quest progress, no RNG stream advanced, no boss attempts. Offline time is a rate multiplied by a duration and nothing else, so it is cheap to re-derive on the server (08 plausibility check `offline_bound`: credited gold <= `OfflineCapSeconds * OFFLINE_RATE * GoldPerKill(stage) / KillTimeSeconds(stage)` with a 2% tolerance, where `OfflineCapSeconds` includes the `RES_OFFLINE_CAP` extension).
 
-Pending-reward persistence: `Offline.Pending` is in the save. If the app dies between compute and claim, the next launch finds the pending reward and shows the modal again rather than recomputing from a moved `LastTickServerTime`. If a second gap occurs while a reward is pending (user backgrounds the app on the modal), the new gap is computed against the already-moved `LastTickServerTime` and added into the pending record (`Gold += ...`, `ElapsedSec += ...`, `Capped` recomputed against the sum).
+Pending-reward persistence: `Offline.Pending` is in the save. If the app dies between compute and claim, the next launch finds the pending reward and shows the modal again rather than recomputing from a moved `LastTickServerTime`. If a second gap occurs while a reward is pending (user backgrounds the app on the modal), the new gap is computed against the already-moved `LastTickServerTime` and added into the pending record (`Gold += ...`, `ElapsedSec += ...`, `TankFill += ...`; the cap applies to the summed `CreditedSec` and `Capped` is recomputed against the sum). `Stage` and `KillTimeSec` are the latest gap's and serve the display only (issue #21).
 
 ### 7.2 Worked numbers
 
@@ -444,26 +460,26 @@ Stage 90 (day 1 end), ATK high enough for a 3-hit kill: `killTime = 3 * ATTACK_I
 | 45 s | 0 | 0 | below `OFFLINE_MIN_S`, no modal |
 | 2 h | 7,200 s | 7200 x 0.5 x 161.5 / 3.5 = 166K | the between-sessions case |
 | 12 h | 43,200 s | 997K | overnight |
-| 30 h | 86,400 s (capped) | 1.99M | modal shows "capped at 24 h" |
+| 30 h | 86,400 s (capped, Research 0) | 1.99M | modal shows "capped at 24 h"; with `RES_OFFLINE_CAP` at 6 levels the cap is 36 h and all 30 h are credited |
 
 The in-app rate at the same state is 161.5 / 3.5 = 46 gold/s = 332K over 2 h, so offline earns exactly half of in-app farming, as `OFFLINE_RATE` says.
 
 ### 7.3 `SCR_OFFLINE_REWARD` content
 
-The modal (layout in 07) shows, from the `OfflineReward` record only:
+The modal (layout in 07) shows, from the `CatchupResult` record only:
 
 | Line | Source | Format |
 |---|---|---|
 | "Welcome back! Away for {elapsed}" | `ElapsedSec` | 07 `TimeText.Duration` |
-| "Rewards for {credited} (capped at {OFFLINE_CAP_H} h)" | `CreditedSec`, `Capped` | the parenthetical only when `Capped` |
+| "Rewards for {credited} (capped at {cap} h)" | `CreditedSec`, `Capped`; `{cap}` is the effective cap including `RES_OFFLINE_CAP` | the parenthetical only when `Capped` |
 | Gold `+{gold}` with icon | `Gold` | 07 suffix ladder |
 | EXP `+{exp}` with icon | `Exp` | suffix ladder |
-| "Magic Tank refilled (+{n} fish)" | `TankFishAdded` | integer; hidden when 0 |
+| "Magic Tank refilled (+{n} fish)" | `TankFill` | integer; hidden when 0 |
 | "Farmed stage {stage} at {rate}/s" | `Stage`, `Gold / CreditedSec` | muted caption |
 | `[ Claim ]` | | sends `ClaimOfflineReward` |
 | `[ Claim x2 ]` (P1) | | rewarded ad or `OFFLINE_X2_DIAMONDS` = 100 diamonds; doubles `Gold` and `Exp` only, not tank fish. Hidden in MVP |
 
-The modal cannot be dismissed without claiming (there is no reason to refuse free gold) and the Android back button is ignored on it. Combat is running behind it on the stage shown.
+The modal cannot be dismissed without claiming (there is no reason to refuse free gold) and the Android back button is ignored on it. Ticks are paused while it is open (01 section 8.7), so the numbers shown are exactly what is credited; combat resumes on the stage shown after Claim (issue #21).
 
 ## 8. Shop (MVP)
 
@@ -496,7 +512,7 @@ The monthly card is the best value in the shop by a factor of 2.7 over the large
 
 ### 8.3 Daily free gift
 
-`ClaimDailyGift`: once per day key, grants 1 `TICKET_SUMMON_WEAPON` (`DAILY_GIFT_WEAPON_TICKETS` = 1) with `Reason.DAILY_GIFT`. Rejection `DAILY_GIFT_ALREADY_CLAIMED`. This is what makes `d_summon_weapon` free and feeds the Weapon banner level (04) by one EXP per day. The bot claims it first thing.
+`ClaimDailyGift`: once per day key, grants 1 `TICKET_SUMMON_WEAPON` (`DAILY_GIFT_WEAPON_TICKETS` = 1) with `CurrencyReason.DAILY_GIFT`. Rejection `(AlreadyClaimed, DAILY_GIFT_ALREADY_CLAIMED)`. This is what makes `d_summon_weapon` free and feeds the Weapon banner level (04) by one EXP per day. The bot claims it first thing.
 
 ### 8.4 Exchange
 
@@ -508,7 +524,7 @@ Diamonds for tickets, with daily limits, so a player who wants more dungeon runs
 | `ex_ticket_candy` | 50 diamonds | 1 `TICKET_ROCK_CANDY` | 2 |
 | `ex_ticket_exp` | 50 diamonds | 1 `TICKET_EXP` | 2 |
 
-`ExchangeItem(offerId, qty)`: `qty` in 1..remaining limit; rejections `EXCHANGE_LIMIT_REACHED`, `NOT_ENOUGH_DIAMOND`. Summon tickets are not sold here; a pull is already priced in diamonds on `SCR_SUMMON`. Fish Coins, Rock Candy and gold are not sold for diamonds either; see 8.5.
+`ExchangeItem(offerId, qty)`: `qty` in 1..remaining limit; rejections `UNKNOWN_ID`, `BAD_QUANTITY`, `EXCHANGE_LIMIT_REACHED`, `NOT_ENOUGH_DIAMOND` (section 1.3). The count lives in `Shop.ExchangeCounts[offerId]` (02 `ShopState`). Summon tickets are not sold here; a pull is already priced in diamonds on `SCR_SUMMON`. Fish Coins, Rock Candy and gold are not sold for diamonds either; see 8.5.
 
 ### 8.5 Never sold
 
@@ -580,7 +596,7 @@ Observations the tool must confirm: (1) gold is always 100% spent, so Training a
 
 ## 13. Analytics events
 
-All carry `playerId`, `serverTime`, `dayKey`, `stage`, `clientVersion`, `contentVersion`. Economy events also carry the `Reason`.
+All carry `playerId`, `serverTime`, `dayKey`, `stage`, `clientVersion`, `contentVersion`. Economy events also carry the `CurrencyReason`.
 
 | Event | Fields | Emitted on |
 |---|---|---|
@@ -608,7 +624,7 @@ All carry `playerId`, `serverTime`, `dayKey`, `stage`, `clientVersion`, `content
 5. **Dungeon floor difficulty step.** `DUNGEON_FLOOR_STAGE_STEP` = 20 ties floor progress to stage progress 1:20. Owner: 03. Default: keep; the tool checks that the bot's best floor at day 30 is 25 to 29.
 6. **Ticket consumed on clear only.** Removes all risk from dungeon runs. Owner: product. Default: keep (anti-frustration rule 1); if runs feel weightless in playtest, add a cosmetic "attempt" counter, not a ticket cost.
 7. **Package daily portions as Inbox items.** 30 inbox rows for a monthly card is noisy. Owner: 08. Default: one row per day created lazily by the server on login, so the Inbox shows at most one unclaimed portion plus any missed ones.
-8. **Reason enum additions.** `LOGIN`, `FIRST_CLEAR`, `ACHIEVEMENT`, `SHOP_EXCHANGE`, `DAILY_GIFT`, `AWAKENING`, `DAILY_RESET` are added here. Owner: 00. Default: lift into 00 section 8 item 6.
+8. **Reason enum additions.** Resolved: `CurrencyReason` is 00 section 8 item 6's list, which includes `LOGIN`, `FIRST_CLEAR`, `ACHIEVEMENT`, `SHOP_EXCHANGE`, `DAILY_GIFT`, `AWAKENING`, `DAILY_RESET` (issue #11).
 
 ## Acceptance criteria
 
@@ -620,23 +636,27 @@ All carry `playerId`, `serverTime`, `dayKey`, `stage`, `clientVersion`, `content
 6. `d_boss` completes after three `AttemptBoss` commands on a walled stage with zero boss kills.
 7. `d_bonus_8` becomes `COMPLETED` when the eighth daily row (login counted) completes, regardless of claim state of the others.
 8. 100 `MergeFish` events advance `d_merge` to 100 (past target 15), `w_merges` to 100, `LIFETIME_MERGES` rung 50 to `COMPLETED`, and `d_merge` rewards exactly once on claim.
-9. Offline: elapsed 45 s grants nothing and leaves `Offline.Pending` null; elapsed 7,200 s at a state with `KillTimeSeconds` = 3.5 and `GoldPerKill` = 161.5 yields `Gold` = 166,114 within 1e-6 relative; elapsed 30 h yields `CreditedSec` = 86,400 and `Capped` = true.
+9. Offline (Research 0): elapsed 45 s grants no gold or EXP, leaves `Offline.Pending` null and refills the tank by 05's `CatchUpTank` over 450 ticks; elapsed 7,200 s at a state with `KillTimeSeconds` = 3.5 and `GoldPerKill` = 161.5 yields `Gold` = 166,114 within 1e-6 relative; elapsed 30 h yields `CreditedSec` = 86,400 and `Capped` = true.
 10. Offline compute followed by a crash (state saved) and reload shows the same pending reward; claiming grants it once; a second compute with a 2 h gap while pending sums into the record.
 11. `Compute` with `serverNow < LastTickServerTime` emits `ClockWentBackwards`, grants nothing and leaves `LastTickServerTime` unchanged.
-12. Offline catch-up advances no RNG stream counter, no quest progress, no `Stage.Current`, no `Dungeons[*].BestFloor`.
+12. Offline catch-up advances no RNG stream counter, no quest progress, no `Combat.Stage`, no `Progress.HighestCleared`, no `Dungeons.BestFloor[*]`.
 13. `StartDungeon` on a `Failed` preview outcome leaves the ticket balance unchanged and emits `DungeonFailed`; on `Cleared` debits exactly one ticket and grants `RewardOf(d, floor)`.
-14. `StartDungeon(d, bestFloor + 2)` is rejected with `DUNGEON_FLOOR_NOT_UNLOCKED`; `StartDungeon` at `Stage.Highest` = 29 is rejected with `DUNGEON_LOCKED`.
+14. `StartDungeon(d, bestFloor + 2)` is rejected `(Locked, DUNGEON_FLOOR_NOT_UNLOCKED)`; `StartDungeon` at `Progress.HighestCleared` = 29 is rejected `(Locked, DUNGEON_LOCKED)`.
 15. Same save, same seed, same floor: `RunDungeon` returns identical outcomes and identical `dungeon` stream counters on x64 and ARM64 (golden test, 10).
-16. `SweepDungeon` grants exactly `RewardOf(d, bestFloor)` and is rejected with `NOTHING_TO_SWEEP` when `bestFloor` = 0.
+16. `SweepDungeon` grants exactly `RewardOf(d, bestFloor)` and is rejected `(NotAvailable, NOTHING_TO_SWEEP)` when `bestFloor` = 0.
 17. `ROCK_CANDY_FLOOR(f)` = 10 f and `FISH_COIN_FLOOR(f)` = 50 f for f in {1, 4, 12, 27}; `EXP_FLOOR(4)` = 300 x 5 x 1.04^80 within 1e-9 relative.
 18. Awakening cadence: the bot run (10) reaches rank 3 no later than day 6 and rank 4 no later than day 17.
-19. `ClaimDailyGift` twice in one day key: second is rejected `DAILY_GIFT_ALREADY_CLAIMED`; after rollover it succeeds.
-20. `ExchangeItem(ex_ticket_fish, 3)` is rejected `EXCHANGE_LIMIT_REACHED`; `(ex_ticket_fish, 2)` debits 100 diamonds and grants 2 tickets; a further `(ex_ticket_fish, 1)` the same day is rejected.
+19. `ClaimDailyGift` twice in one day key: second is rejected `(AlreadyClaimed, DAILY_GIFT_ALREADY_CLAIMED)`; after rollover it succeeds.
+20. `ExchangeItem(ex_ticket_fish, 3)` is rejected `(Capped, EXCHANGE_LIMIT_REACHED)`; `(ex_ticket_fish, 2)` debits 100 diamonds and grants 2 tickets; a further `(ex_ticket_fish, 1)` the same day is rejected.
 21. Every shop row: `Total` = `Base * (1 + Bonus)` exactly; first purchase grants `2 * Total`; `pkg_monthly` creates 31 inbox grants summing to 4,000.
-22. Every `Wallet.Apply` emits exactly one `CurrencyChanged` with a `Reason`; a debit below zero returns false and emits nothing.
+22. Every `Wallet.Apply` emits exactly one `CurrencyChanged` with a `CurrencyReason`; a debit below zero returns false, leaves the balance unchanged (no clamp) and emits nothing.
 23. Inbox claim with a replayed `requestId` returns the original result and grants nothing twice (08 contract, exercised from the client).
-24. `ClaimAllQuests(DAILY)` with nothing completed is rejected `NOTHING_TO_CLAIM`; with three completed emits three `QuestClaimed` and one `QuestsBulkClaimed`.
+24. `ClaimAllQuests(DAILY)` with nothing completed is rejected `(NotAvailable, NOTHING_TO_CLAIM)`; with three completed emits three `QuestClaimed` and one `QuestsBulkClaimed`.
 25. Analytics: a scripted day produces one `currency_changed` row per non-`KILL` apply and at most one `KILL` row per tick.
+26. Day rollover grants exactly `LOGIN_DIAMONDS` once with `CurrencyReason.LOGIN`; `d_login` reaches `CLAIMED` with no `CurrencyChanged` and counts toward `d_bonus_5`/`d_bonus_8`; a second `ApplyServerTime` on the same day key grants nothing (issue #20).
+27. Offline: a 2 h gap stores `TankFill` in `Offline.Pending` and leaves `Fish.TankCount` unchanged until `ClaimOfflineReward`, which adds it bounded by `TankCap`; with `RES_OFFLINE_CAP` at 6 levels a 40 h gap yields `CreditedSec` = 129,600; two stacked gaps of 20 h each at Research 0 yield `CreditedSec` = 86,400, `ElapsedSec` = 144,000, `Capped` = true and the second gap's `Stage` (issue #21).
+28. Replaying the command log (`ApplyServerTime`, `ComputeOfflineCatchup`, `Advance`, commands) from the prior save reproduces the same `Offline.Pending`, day keys and `StateHash` as the live session (issues #5, #6).
+29. Every economy rejection returns the `RejectCode` and `Detail` reason listed in section 1.3, changes no state and emits no event (issue #11).
 
 ## Constants introduced
 
@@ -659,5 +679,6 @@ All carry `playerId`, `serverTime`, `dayKey`, `stage`, `clientVersion`, `content
 | `DAILY_GIFT_WEAPON_TICKETS` | 1 | S | Open question 3; Weapon banner pulls per day in 04's model |
 | `INBOX_EXPIRY_DAYS` | 30 | S | |
 | Shop rows (8.1, 8.2, 8.4) | as tabled | S | Conversion KPIs in 10 |
-| `Reason` additions | `LOGIN`, `FIRST_CLEAR`, `ACHIEVEMENT`, `SHOP_EXCHANGE`, `DAILY_GIFT`, `AWAKENING`, `DAILY_RESET` | | Lift into 00 section 8 item 6 |
+| `CurrencyReason` | 00 section 8 item 6's list (section 1) | | Resolved, issue #11 |
+| Reject reasons | section 1.3 | | |
 | `QuestGoal` enum, `WEEKLIES_COMPLETED` | section 5.1 | | |

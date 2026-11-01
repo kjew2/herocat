@@ -2,7 +2,7 @@
 
 This spec owns the per-tick combat loop in `HeroCat.Sim`, the stage and boss rules, the eight `Stat`s and their Training curves, Hero Level, Awakening, Research, and the power formula that ties every layer together. It also specifies `tools/power_curve_model.py`, the greedy F2P bot that validates every `S` constant below and produces the day-stage table in 00 section 6.6. Where this spec and `00-overview.md` disagree, 00 wins; section 10 lists the places where this spec proposes that 00 change.
 
-Tiers covered: M0 (combat, stages, Tap Zap, Training, Hero Level), MVP (Awakening, Research, companions and fish missiles in the tick loop), P1 (Runes term, auto boss retry, Tower survival fights).
+Tiers covered: M0 (combat, stages, Tap Zap, fish missiles in the tick loop, Training, Hero Level), MVP (Awakening, Research, companions in the tick loop), P1 (Runes term, auto boss retry, Tower survival fights).
 
 Depends on: 00 (all constants and names), 02 (`GameState` fields this spec reads and writes), 04 (weapon/skill/companion data the tick loop consumes), 05 (fish missile queue and `FISH_BOARD_DPS_PCT`), 06 (Rock Candy and Fish Coin income the bot assumes).
 
@@ -30,8 +30,8 @@ Order inside one tick. The order is a contract: tests in 10 assert it, and the s
 
 ```
 Tick():
-  State.Tick += 1
-  Combat.MpPool = min(MpPoolMax, Combat.MpPool + MpRegenPerTick)           # 1. MP regen (MVP)
+  Time.Tick += 1
+  Combat.Mp = min(MpPoolMax, Combat.Mp + MpRegenPerTick)                   # 1. MP regen (MVP)
   TickCooldowns()                                                          # 2. skill and companion cooldowns -= 1
   switch Combat.Phase:
     Spawning:
@@ -51,10 +51,12 @@ Tick():
       ApplyTapZaps()                                                       # 7. taps received since last tick, capped
       if Combat.EnemyHp <= 0: Kill(); break
       if Combat.EnemyIsBoss:
-        Combat.BossTimer -= 1
-        if Combat.BossTimer == 0: BossFail()                               # 8. timer check last, so a hit on the final tick counts
+        Combat.BossTicksLeft -= 1
+        if Combat.BossTicksLeft == 0: BossFail()                               # 8. timer check last, so a hit on the final tick counts
   TickBuffs()                                                              # 9. ATK/gold buffs from companions and skills -= 1
 ```
+
+State field names and shapes are 02's (section 3.1, issue #7): `Time.Tick`, `Combat.*`, `Progress.*`, `Loadout.*`, `Stats.*`. Everything this loop reads or writes lives in the in-memory `GameState`, so `DeepClone` and replay are exact. The save drops only the transient fight state 02 section 3.3 lists (enemy HP, `Phase`, `SpawnTimer`, `AttackProgress`, `ActiveDots`, buffs, `PendingTaps`, `TapWindowTick`); it keeps `Combat.Boss`, `Combat.BossFailsOnStage`, `Combat.SelectedStage`, `Combat.Mp`, the skill and companion cooldowns and `Combat.MissileQueue`. On load the player faces a fresh mob and a `Pending` boss respawns as the boss.
 
 `ATTACK_PROGRESS_UNIT = 100` (integer fixed point). At `ATK_SPD` level 0 the hero gains 100 units per tick and hits every `ATTACK_INTERVAL_TICKS = 10` ticks, one hit per second. At `ATK_SPD` level `n` the gain is `100 * (1 + TRAIN_PER_LVL[ATK_SPD] * n)` rounded to an integer, so level 100 (cap, +100%) is 200 units per tick and one hit every 5 ticks. Integer arithmetic keeps the hit schedule identical on every platform; a `double` accumulator would not (00 section 3, determinism row).
 
@@ -62,8 +64,9 @@ Tick():
 
 ```
 HeroHit():
-  dmg = Query.HitDamage                                     # cached, section 7.3
+  dmg = Query.HeroHit * (1 + Combat.AtkBuffPct / 100)       # HeroHit cached, section 7.3; the ATK buff applies here only
   u = crit.NextDouble()                                     # exactly one draw per hero hit, always
+  Stats.HeroHits += 1
   isCrit = u < CritRate
   if isCrit: dmg *= CritDmg
   Combat.EnemyHp -= dmg
@@ -73,7 +76,7 @@ CritRate = min(TRAIN_CAP[CRIT_RATE] * TRAIN_PER_LVL[CRIT_RATE], TRAIN_PER_LVL[CR
 CritDmg  = CRIT_DMG_BASE + TRAIN_PER_LVL[CRIT_DMG] * trainLvl[CRIT_DMG]                                       # 1.5 at level 0
 ```
 
-The `crit` stream is consumed once per hero hit, including hits at `CritRate == 0`, so `crit.Counter == Lifetime.HeroHits` holds for the server audit (02, 08). Fish missiles, skills, companion abilities and Tap Zap do not crit and consume no `crit` draws.
+The `crit` stream is consumed once per hero hit, including hits at `CritRate == 0`, so `crit.Counter == Stats.HeroHits` holds for the validator and the server audit (02, 08; issue #8). Fish missiles, skills, companion abilities and Tap Zap do not crit and consume no `crit` draws.
 
 ### 2.3 Skills (auto-cast)
 
@@ -82,16 +85,16 @@ Skill data comes from 04: `dpsPct` (rated average DPS as % of hero DPS), `castTy
 ```
 AutoCastSkills():
   for slot in 0 .. SKILL_SLOTS-1 in order:                  # slot order is the priority order (04 section 6)
-    s = Hero.EquippedSkills[slot]; if s == null: continue
-    if Combat.SkillCooldown[slot] > 0: continue
-    Cast(s); Combat.SkillCooldown[slot] = s.CooldownTicks
+    s = Skill(Loadout.Skills[slot]); if s == null: continue
+    if Combat.SkillCooldowns[slot] > 0: continue
+    Cast(s); Combat.SkillCooldowns[slot] = s.CooldownTicks
     publish SkillCast(slot, s.Id)
     return                                                  # at most one cast per tick
 ```
 
-- `INSTANT`: `EnemyHp -= HitDamage * s.DamagePctPerCast / 100`.
-- `DOT`: adds a `DotInstance(ticksLeft, damagePerTick)` to `Combat.ActiveDots` (max 6 entries, oldest replaced); `ApplyDots()` runs inside step 4 before casting.
-- `BUFF`: sets `Combat.AtkBuffPct = max(current, s.BuffPct)` with `Combat.AtkBuffTicksLeft = s.DurationTicks`. Buffs do not stack; the strongest active one applies.
+- `INSTANT`: `EnemyHp -= Query.SkillUnit * s.DamagePctPerCast / 100` (`SkillUnit`, section 7.1).
+- `DOT`: adds a `DotInstance(ticksLeft, damagePerTick)` (`damagePerTick` in `SkillUnit`s) to `Combat.ActiveDots` (max 6 entries, oldest replaced); `ApplyDots()` runs inside step 4 before casting.
+- `BUFF`: sets `Combat.AtkBuffPct = max(current, s.BuffPct)` with `Combat.AtkBuffTicksLeft = s.DurationTicks`. Buffs do not stack; the strongest active one applies. The buff multiplies the hero's auto-attack only, not casts, missiles or taps (section 7.1).
 
 Casting requires a live enemy (`Phase == Fighting`). During `Spawning` cooldowns still tick down, so a skill that comes off cooldown between enemies fires on the first tick of the next fight. This is why skills feel like a burst at spawn and why the boss timer check is last in the tick.
 
@@ -102,29 +105,31 @@ Companions (04 section 7) have `abilityType` in `DAMAGE`, `BUFF_ATK`, `BUFF_GOLD
 ```
 CastCompanionAbilities():
   for slot in 0 .. COMPANION_SLOTS-1 in order:
-    c = Hero.EquippedCompanions[slot]; if c == null: continue
-    if Combat.CompanionCooldown[slot] > 0: continue
-    if Combat.MpPool < c.MpCost: continue                   # MP-gated: the ability waits, cooldown does not restart
-    Combat.MpPool -= c.MpCost
-    Apply(c); Combat.CompanionCooldown[slot] = c.CooldownTicks
-    publish CompanionAbilityUsed(slot, c.Id, Combat.MpPool)
+    c = Companion(Loadout.Companions[slot]); if c == null: continue
+    if Combat.CompanionCooldowns[slot] > 0: continue
+    if Combat.Mp < c.MpCost: continue                       # MP-gated: the ability waits, cooldown does not restart
+    Combat.Mp -= c.MpCost
+    Apply(c); Combat.CompanionCooldowns[slot] = c.CooldownTicks
+    publish CompanionAbilityUsed(slot, c.Id, Combat.Mp)
     return                                                  # at most one cast per tick
 
-MpPoolMax     = MP_POOL0 + RES_MP_POOL_PER_LVL * research[RES_MP_POOL]
-MpRegenPerTick = (MP_REGEN0 + RES_MP_REGEN_PER_LVL * research[RES_MP_REGEN]) / TICK_HZ
+MpPoolMax     = MP_POOL0 + RES_MP_POOL_PER_LVL * research[res_mp_pool]
+MpRegenPerTick = (MP_REGEN0 + RES_MP_REGEN_PER_LVL * research[res_mp_regen]) / TICK_HZ
 ```
 
-With the defaults (`MP_POOL0 = 100`, `MP_REGEN0 = 2.0` per second, every companion ability costing 10 MP on a 10 s cooldown) four companions want 4 MP/s and get 2, so they fire at half their rated uptime until Research raises regen. That gap is the reason Research matters to a player who never touches the Fish Board; section 6 prices it. The MP pool is in `GameState.Combat` and is saved; it is not refilled by offline catch-up (06).
+`Apply(c)`: `DAMAGE` deals `Query.CompanionUnit * c.DamagePctPerCast / 100` (section 7.1); `BUFF_ATK` sets the shared ATK buff exactly as a `BUFF` skill does; `BUFF_GOLD` and `MP_REGEN` as 04 section 8.
+
+With the defaults (`MP_POOL0 = 100`, `MP_REGEN0 = 2.0` per second, every companion ability costing 10 MP on a 10 s cooldown) four companions want 4 MP/s and get 2, so they fire at half their rated uptime until Research raises regen. That gap is the reason Research matters to a player who never touches the Fish Board; section 6 prices it. The MP pool is `Combat.Mp` and is saved; it is not refilled by offline catch-up (06).
 
 ### 2.5 Fish missiles and Tap Zap
 
-Fish missiles arrive as damage events queued by the Fish Board (05 section 5): `FishMissileQueue.Enqueue(hitFraction)` where `hitFraction = FISH_MISSILE_PCT[level] / 100`. The queue lives in `GameState.Combat` so a save mid-queue loses nothing.
+Fish missiles arrive as damage events queued by the Fish Board (05 section 5): `FishMissileQueue.Enqueue(hitFraction)` where `hitFraction = FISH_MISSILE_PCT[level] / 100`. The queue is `Combat.MissileQueue` and is persisted in the save (02), so a save taken while `Spawning` with missiles queued resumes and re-simulates identically (issue #7).
 
 ```
 ApplyQueuedFishMissiles():
   while Combat.MissileQueue.Count > 0:
     f = Combat.MissileQueue.Dequeue()
-    Combat.EnemyHp -= Query.HitDamage * f                   # no crit, no draw
+    Combat.EnemyHp -= Query.HeroHit * f                     # no crit, no draw, no buff
     publish FishMissileHit(f)
 ```
 
@@ -134,7 +139,7 @@ Tap Zap (M0): the client sends `TapZap(count)` once per frame with the number of
 
 ```
 TapZap(count):                                              # command, validated like any other
-  if State.Tick - Combat.TapWindowTick >= TICK_HZ: Combat.TapWindowTick = State.Tick; Combat.TapsThisSecond = 0
+  if Time.Tick - Combat.TapWindowTick >= TICK_HZ: Combat.TapWindowTick = Time.Tick; Combat.TapsThisSecond = 0
   allowed = max(0, TAP_ZAP_MAX_PER_SEC - Combat.TapsThisSecond)
   used = min(count, allowed); Combat.TapsThisSecond += used
   Combat.PendingTaps += used
@@ -142,7 +147,7 @@ TapZap(count):                                              # command, validated
 
 ApplyTapZaps():
   if Combat.PendingTaps == 0: return
-  Combat.EnemyHp -= Query.HitDamage * TAP_ZAP_DMG_PCT * Combat.PendingTaps
+  Combat.EnemyHp -= Query.HeroHit * TAP_ZAP_DMG_PCT * Combat.PendingTaps
   publish TapZapped(Combat.PendingTaps); Combat.PendingTaps = 0
 ```
 
@@ -152,93 +157,99 @@ At the cap, taps add `6 * 0.5 = 3` hero hits per second on top of the hero's 1 t
 
 ```
 Spawn():
-  isBoss = Stage.Boss == Pending
+  isBoss = Combat.Boss == Pending
   Combat.EnemyIsBoss = isBoss
-  Combat.EnemyMaxHp = Combat.EnemyHp = isBoss ? BOSS_HP_MULT * Hp(Stage.Stage) : Hp(Stage.Stage)
+  Combat.EnemyMaxHp = Combat.EnemyHp = isBoss ? BOSS_HP_MULT * Hp(Combat.Stage) : Hp(Combat.Stage)
   Combat.AttackProgress = 0
-  Combat.BossTimer = isBoss ? BOSS_TIME_TICKS : 0
+  Combat.BossTicksLeft = isBoss ? BOSS_TIME_TICKS : 0
   Combat.Phase = Fighting
-  publish EnemySpawned(Stage.Stage, isBoss, Combat.EnemyMaxHp)
+  publish EnemySpawned(Combat.Stage, isBoss, Combat.EnemyMaxHp)
 
 Kill():
-  s = Stage.Stage; isBoss = Combat.EnemyIsBoss
+  s = Combat.Stage; isBoss = Combat.EnemyIsBoss
   gold = Gold(s) * GoldMult * (isBoss ? BOSS_GOLD_MULT : 1)
   exp  = Exp(s)  * ExpMult
   Wallet.Apply(+gold GOLD, isBoss ? BOSS : KILL)
   Wallet.Apply(+exp HERO_EXP, isBoss ? BOSS : KILL)
   GrantHeroExp(exp)                                         # section 5.1, may publish LevelUp
-  Lifetime.Kills += 1; if isBoss: Lifetime.BossKills += 1
+  Stats.Kills += 1; if isBoss: Stats.BossKills += 1
   publish EnemyKilled(s, isBoss, gold, exp)
   Quests.OnKill(s, isBoss)                                  # 06
   if isBoss:
     if loot.NextDouble() < BOSS_ROCK_CANDY_P:               # exactly one `loot` draw per boss kill
-      Wallet.Apply(+1 ROCK_CANDY, BOSS); publish ItemAcquired(ROCK_CANDY, 1, BOSS)
+      Wallet.Apply(+1 ROCK_CANDY, BOSS)                     # CurrencyChanged is the only event (issue #11)
     publish BossCleared(s)
-    if s > Stage.HighestCleared:
-      Stage.HighestCleared = s; Wallet.Apply(+FIRST_CLEAR_DIAMONDS DIAMOND, QUEST)   # value owned by 06
+    if s > Progress.HighestFirstClearBoss:
+      Progress.HighestFirstClearBoss = s; Wallet.Apply(+FIRST_CLEAR_DIAMONDS DIAMOND, FIRST_CLEAR)   # value owned by 06
       publish StageFirstCleared(s, FIRST_CLEAR_DIAMONDS)
     AdvanceStage(viaBoss: true)
-  else if Stage.Boss == Walled:
+  else if Combat.Boss == Walled:
     pass                                                    # farming a walled stage: no credit toward advance
   else:
-    Stage.KillsInStage += 1
-    if Stage.KillsInStage == KILLS_PER_STAGE - 1 and s % BOSS_EVERY == 0:
-      Stage.Boss = Pending                                  # the 10th enemy of a boss stage is the boss
-    else if Stage.KillsInStage >= KILLS_PER_STAGE:
+    Combat.KillsInStage += 1
+    if Combat.KillsInStage == KILLS_PER_STAGE - 1 and s % BOSS_EVERY == 0:
+      Combat.Boss = Pending                                 # the 10th enemy of a boss stage is the boss
+    else if Combat.KillsInStage >= KILLS_PER_STAGE:
       AdvanceStage(viaBoss: false)
   Combat.Phase = Spawning; Combat.SpawnTimer = SPAWN_DELAY_TICKS; Combat.ActiveDots.Clear()
 
 AdvanceStage(viaBoss):
-  from = Stage.Stage
-  if from >= STAGE_CAP: publish StageCapReached(from); Stage.Boss = None; return
-  Stage.Stage = from + 1; Stage.KillsInStage = 0; Stage.Boss = None; Stage.BossFailsOnStage = 0
+  from = Combat.Stage
+  Progress.HighestCleared = max(Progress.HighestCleared, from)
+  if from >= STAGE_CAP:
+    if Progress.StageCapReached == 0: Progress.StageCapReached = Time.Tick
+    publish StageCapReached(from); Combat.Boss = None; return
+  Combat.Stage = from + 1; Combat.KillsInStage = 0; Combat.Boss = None; Combat.BossFailsOnStage = 0
   publish StageCleared(from, from + 1, viaBoss)
   if (from + 1 - 1) % CHAPTER_WIDTH == 0: publish ChapterEntered(Chapter(from + 1))
 ```
 
-Normal kills on a non-boss stage never pay Rock Candy; `loot` is consumed only on boss kills, so `loot.Counter == Lifetime.BossKills` in MVP (P1 adds drop tables and a second invariant).
+Normal kills on a non-boss stage never pay Rock Candy; `loot` is consumed only on boss kills, so `loot.Counter == Stats.BossKills` in MVP (issue #8; P1 adds drop tables and a second invariant).
 
 ### 2.7 Boss fail, the wall, and `AttemptBoss`
 
 ```
 BossFail():
-  s = Stage.Stage
-  Stage.Boss = Walled; Stage.BossFailsOnStage += 1; Lifetime.BossFails += 1
-  if Lifetime.FirstWallStage == 0: Lifetime.FirstWallStage = s
-  publish BossFailed(s, Stage.BossFailsOnStage, Combat.EnemyHp / Combat.EnemyMaxHp)   # remaining fraction drives the "so close" UI
+  s = Combat.Stage
+  Combat.Boss = Walled; Combat.BossFailsOnStage += 1; Stats.BossFails += 1
+  if Stats.FirstWallStage == 0: Stats.FirstWallStage = s
+  publish BossFailed(s, Combat.BossFailsOnStage, Combat.EnemyHp / Combat.EnemyMaxHp)   # remaining fraction drives the "so close" UI
   Combat.Phase = Spawning; Combat.SpawnTimer = SPAWN_DELAY_TICKS; Combat.ActiveDots.Clear()
 
 AttemptBoss():                                              # command
-  if Stage.Boss == Pending:                                 return Rejected(BossAlreadyPending)
-  if Stage.Stage % BOSS_EVERY != 0 or Stage.Boss != Walled: return Rejected(NoBossToAttempt)
-  Stage.Boss = Pending
+  if Combat.Boss == Pending:                                  return Reject(NotAvailable, "BOSS_ALREADY_PENDING")
+  if Combat.Stage % BOSS_EVERY != 0 or Combat.Boss != Walled: return Reject(NotAvailable, "NO_BOSS_TO_ATTEMPT")
+  Combat.Boss = Pending
   Combat.Phase = Spawning; Combat.SpawnTimer = SPAWN_DELAY_TICKS   # current mob despawns: no gold, no EXP, no kill credit
   return Ok
 ```
 
-While `Walled`, mobs of stage `s` spawn and pay `Gold(s)` and `Exp(s)`; `KillsInStage` stays at `KILLS_PER_STAGE - 1`. The first boss attempt on a boss stage is automatic. Retries are manual in MVP (`AttemptBoss` from `SCR_MAIN`); P1 adds `BOSS_AUTO_RETRY_S = 60` as a content constant and a timer in `StageState`. `SCR_STAGE_SELECT` (MVP, 07) lets the player jump back to any stage `<= HighestCleared`; `Kill()` uses the stage actually fought for gold and EXP, so farming a lower stage is always worse than the frontier.
+While `Walled`, mobs of stage `s` spawn and pay `Gold(s)` and `Exp(s)`; `KillsInStage` stays at `KILLS_PER_STAGE - 1`. The first boss attempt on a boss stage is automatic. Retries are manual in MVP (`AttemptBoss` from `SCR_MAIN`); P1 adds `BOSS_AUTO_RETRY_S = 60` as a content constant and a timer in `CombatState`. `SCR_STAGE_SELECT` (MVP, 07) sends `SelectStage(stage?)` to jump back to any stage `<= Progress.HighestCleared` (null returns to the frontier); `Kill()` uses the stage actually fought for gold and EXP, so farming a lower stage is always worse than the frontier.
 
 ### 2.8 Wall condition
 
 A boss is cleared iff the damage dealt inside `BOSS_TIME_TICKS` reaches `BOSS_HP_MULT * Hp(s)`. Ignoring skills, companions, missiles and crit variance, the hero lands `BOSS_TIME_TICKS / ATTACK_INTERVAL_TICKS * speedFactor = 30 * speedFactor` hits in 30 s, so:
 
 ```
-clearable(s)  <=>  BOSS_HP_MULT * Hp(s) <= 30 * speedFactor * HitDamage * critFactor
-              <=>  Hp(s) / (HitDamage * critFactor * speedFactor) <= 3 s
+clearable(s)  <=>  BOSS_HP_MULT * Hp(s) <= 30 * speedFactor * HeroHit * critFactor
+              <=>  Hp(s) / (HeroHit * critFactor * speedFactor) <= 3 s
 ```
 
-In words: **if a normal mob on this stage takes more than three seconds of hero DPS, the boss cannot be cleared by the hero alone.** Skills (rated `+sum skillDpsPct`), companions and missiles are already inside `DPS(s)` in section 7, so the full condition is `Hp(s) / DPS(s) <= 3 s` with `DPS` from the power formula. The sibling project's condition was 2 s with a 20 s timer; the 30 s timer (00 decision 4) buys one extra hit per mob, which is what lets the burst layers matter.
+In words: **if a normal mob on this stage takes more than three seconds of hero DPS, the boss cannot be cleared by the hero alone.** Skills (rated `+sum skillDpsPct`), companions and missiles are already inside the rated `DPS(s)` in section 7, so the full condition is `Hp(s) / DPS(s) <= 3 s` with `DPS` from the power formula. The sibling project's condition was 2 s with a 20 s timer; the 30 s timer (00 decision 4) buys one extra hit per mob, which is what lets the burst layers matter.
 
 ## 3. Stages and chapters
 
 | Field | Type | Meaning |
 |---|---|---|
-| `Stage.Stage` | `int` | Current stage `s >= 1`. |
-| `Stage.KillsInStage` | `int` | `0 .. KILLS_PER_STAGE-1`. |
-| `Stage.Boss` | `BossPhase` | `None`, `Pending` (next spawn is the boss), `Walled` (boss failed, farming mobs). |
-| `Stage.BossFailsOnStage` | `int` | Reset on advance. |
-| `Stage.HighestCleared` | `int` | Highest boss stage ever killed; first-clear diamonds key off it (06). |
-| `Stage.Selected` | `int?` | MVP: stage chosen in `SCR_STAGE_SELECT`; null = frontier. |
+| `Combat.Stage` | `int` | Current stage `s >= 1`. |
+| `Combat.KillsInStage` | `int` | `0 .. KILLS_PER_STAGE-1`. |
+| `Combat.Boss` | `BossPhase` | `None`, `Pending` (next spawn is the boss), `Walled` (boss failed, farming mobs). Replaces 02's `BossActive` bool, which cannot represent `Walled` (issue #7). |
+| `Combat.BossFailsOnStage` | `int` | Reset on advance. |
+| `Combat.SelectedStage` | `int?` | MVP: stage chosen with `SelectStage` in `SCR_STAGE_SELECT`; null = frontier. |
+| `Progress.HighestCleared` | `int` | Highest stage completed (all kills, or the boss); the Awakening gate reads it. |
+| `Progress.HighestFirstClearBoss` | `int` | Highest boss stage that paid first-clear diamonds (06). |
+
+All of these are saved (02 section 3.1; issue #7).
 
 Enemy data per stage is derived, not stored: `Hp(s) = HP0 * HP_G^s`, `Gold(s) = GOLD0 * GOLD_G^s`, `Exp(s) = EXP0 * EXP_G^s`, all evaluated by repeated multiplication from `GeometricTable`s (00 section 8 item 1). Chapter `= floor((s-1) / CHAPTER_WIDTH) + 1` and is cosmetic: the `chapters` table (09) carries background, enemy skin set and chapter name per chapter; `ChapterEntered` lets 07 play the transition. Bosses use the chapter's boss skin.
 

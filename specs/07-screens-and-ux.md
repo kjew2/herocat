@@ -926,6 +926,150 @@ No artist in M0. Everything is a coloured `Image` with a TMP label, so the slice
 - **Localization**: `TextKeyLabel` component holds the key; a locale change re-resolves every live label through an event. Fonts: one TMP font asset with fallback chain `latin -> ja -> ko -> zh-Hans`.
 - **Dev tooling**: `Debug` section in `SCR_SETTINGS` compiled under `HEROCAT_CHEATS` (section 17.3); a `UiStateCatalog` scene that instantiates every screen in every state (empty, loading, error, locked, first-time) for screenshot review and pseudo-localization builds.
 
+## 17. Unity project setup, builds and device QA
+
+The engine-level setup of `unity/HeroCatClient`, carried over from the retired client prototype spec and adapted to this design (issue #3). 01 owns `SessionRunner` and the lifecycle mapping; this section adds only what is client-side.
+
+### 17.1 Unity version and project settings
+
+**Unity `6000.6.7f1`**, pinned in `ProjectSettings/ProjectVersion.txt` (00 section 3). Everyone opens the project in exactly this version; the pin is bumped only between playtest rounds, in its own PR. Why Unity 6 and not 2022.3 or 6.0:
+
+- 2022.3 is out of support and 6.0 LTS support ends October 2026; a client that becomes the product should not start on a stream that is ending.
+- Google Play's current requirements (target API 35 or newer, 16 KB page size support for apps targeting Android 15 and newer) are met by Unity 6 out of the box; on 2022.3 they depend on late patch releases.
+- Build Profiles (17.4) replace per-platform define juggling for the Dev versus Release split.
+- C# 9 is the compiler default, matching the sim's `LangVersion 9.0` and netstandard2.1.
+
+UI stack: **uGUI + TextMeshPro** (00 section 3, issue #2). The UI Toolkit screens in the repo are old design and are rewritten as uGUI prefabs, not ported.
+
+Template: **Universal 2D** (URP with the 2D Renderer). Configure the URP asset for the floor device (00 section 3: 2 GB, Android 8):
+
+| URP setting | Value | Why |
+|---|---|---|
+| Renderer | 2D Renderer; no 2D lights in M0 | flat sprites and UI; lights only if the MVP art asks for them |
+| HDR | off | memory and bandwidth on low-end GPUs |
+| MSAA | off | sprites and UI do not need it |
+| Render Scale | 1.0 | |
+| Post-processing | off | rarity flashes and vignettes are sprites (section 6), not post effects |
+| Depth Texture, Opaque Texture | off | |
+| SRP Batcher | on (default) | |
+
+Other project settings: Color Space Linear, Active Input Handling **Input System Package (New)**, Scripting Backend IL2CPP, API Compatibility Level **.NET Standard 2.1** (the sim's surface is the same in dotnet and Unity), Default Orientation **Portrait** with every other auto-rotation orientation off, incremental GC on.
+
+Packages and assemblies:
+
+- `HeroCat.Sim`, `HeroCat.Runtime` and `HeroCat.Remote` enter Unity as local `file:` packages pointing at `src/` (`Packages/manifest.json`), not copied DLLs, so edits and breakpoints work in both hosts.
+- `src/Directory.Build.props` redirects dotnet `obj/` and `bin/` out of the package folders; Unity imports every file in a package folder, so a generated `AssemblyInfo.cs` there would compile twice. Commit the `.meta` files Unity writes into `src/`.
+- C# level: C# 9 only in code Unity compiles; no file-scoped types, `required` members or raw string literals.
+
+| asmdef | Location | References | Flags |
+|---|---|---|---|
+| `HeroCat.Client.Core` | `Assets/HeroCat.Client/Core/` | `HeroCat.Sim`, `HeroCat.Runtime` | `noEngineReferences: true`; also compiled by `src/HeroCat.Runtime.Tests` (section 16) |
+| `HeroCat.Client` | `Assets/HeroCat.Client/` | `HeroCat.Client.Core`, `HeroCat.Sim`, `HeroCat.Runtime`, `HeroCat.Remote`, `Unity.InputSystem`, `Unity.TextMeshPro`, Addressables | engine references on; `HEROCAT_CHEATS` is a define in Dev build profiles only (17.4) |
+| `HeroCat.Client.Editor` | `Assets/HeroCat.Client/Editor/` | `HeroCat.Client` | `includePlatforms: ["Editor"]`; holds `ContentPreBuild` (copies and hash-checks `content/` into the build, 09) and the build-profile menu (17.4) |
+
+Rules: only `Boot/` and `Screens/` hold `MonoBehaviour`s; nothing outside `Boot/GameRoot.cs`, `SessionRunner` and `GameViewModel` holds a `Simulation` reference.
+
+### 17.2 Safe area and screen fit
+
+`SafeAreaFitter` reads `Screen.safeArea` on `Start` and on any frame where the safe area or screen size changed, converts it with `Core/SafeAreaMath` (engine-free, unit-tested) and applies it as anchors on the root `RectTransform`. Every band in section 2 is a child of that root; only the background and the camera clear colour draw into the notch and home-indicator bands. Tablets get the same portrait layout stretched to width (tablet layout is P2).
+
+### 17.3 Frame loop and sim bridge rules
+
+`SessionRunner` (01 section 3) is the only `Update()` that touches the sim. The client adds these rules:
+
+1. **Frame rate and sleep.** At boot: `Application.targetFrameRate = Prefs.TargetFps` (60, or 30 with Battery saver), `QualitySettings.vSyncCount = 0`, `Screen.sleepTimeout = SleepTimeout.NeverSleep` (the phone-on-the-desk idle mode depends on it).
+2. **Unscaled time only.** The tick accumulator uses `Time.unscaledDeltaTime`; `Time.timeScale` is never changed. `MAX_TICKS_PER_FRAME`, `TICK_BUDGET_MS` and `AUTOSAVE_INTERVAL_SEC` are 01's; the client does not redefine them.
+3. **Commands between frames.** Commands come only from UI callbacks on the main thread, which never interleave with `Advance`. `OnEvent` never sends a command; anything a feedback item wants from the sim is queued to the next frame.
+4. **Time enters through logged commands.** The client never reads `DateTime.Now`. Server time reaches the sim only as the logged `ApplyServerTime` system command at boot, resume, gap recovery and every `WALL_CLOCK_SYNC_SEC` (60 s) while open; between syncs the sim's tick-driven clock rolls the day (issue #5). Offline catch-up also runs through `Simulation.Apply`, never by writing state (issue #6).
+5. **Lifecycle.** `OnApplicationPause(true)`: save synchronously, stop ticking. `OnApplicationPause(false)`: reset the accumulator, resync time, run catch-up; `SCR_OFFLINE_REWARD` follows if the gap reached `OFFLINE_MIN_S`. `Application.lowMemory`: save, then unload non-visible screens. `OnApplicationFocus` is deliberately unused: on Android both focus and pause fire on backgrounding, and on split-screen focus loss an idle game should keep running. Full table in 01 section 3.3.
+6. **Dev clock.** Dev builds wrap the clock in `OffsetClock` so the Debug section can move time; the offset is not persisted, so a relaunch after a `+8h` cheat looks like the clock going back, which is the case to test.
+7. **Debug compile-out.** The Debug section of `SCR_SETTINGS`, the time-scale control, the clock offset and the perf overlay are compiled only under `UNITY_EDITOR || DEVELOPMENT_BUILD || HEROCAT_CHEATS`. A Release build contains no cheat UI and no code path that changes time scale or moves the clock.
+
+### 17.4 Build profiles and platform settings
+
+Four Build Profiles (`Assets/Settings/BuildProfiles/`): `Android-Dev`, `Android-Release`, `iOS-Dev`, `iOS-Release`. Dev profiles define `HEROCAT_CHEATS` and enable Development Build, Autoconnect Profiler and Script Debugging; Release profiles have none of these. Build Profile assets are generated by Unity, so the repo does not hand-write them: `Editor/BuildProfiles.cs` adds **Tools > HeroCat > Build Profiles > Create Dev + Release From Selected**, which copies a platform profile into `<Platform>-Dev` and `<Platform>-Release`, sets `HEROCAT_CHEATS` on `*-Dev` only and removes it from the Player Settings defines. A pre-build check fails any `*-Release` build marked Development and any non-development build that still defines `HEROCAT_CHEATS`.
+
+Common Player Settings:
+
+| Setting | Value |
+|---|---|
+| Product name | `Whisker Hero` (working title); company and bundle id `com.<studio>.herocat` are placeholders |
+| Version / bundle code | semantic version / increment per build |
+| Default orientation | Portrait, auto-rotate off |
+| Scripting backend | IL2CPP |
+| API compatibility | .NET Standard 2.1 |
+| Managed stripping | Low (safe with Newtonsoft); raised later if size matters |
+| Incremental GC | on |
+| Active Input Handling | Input System Package (New) |
+| Color space | Linear |
+| Status bar | hidden |
+
+Android:
+
+| Setting | Value | Why |
+|---|---|---|
+| Minimum API level | 26 (Android 8) | 00 section 3 minimum |
+| Target API level | highest installed (35 or newer) | Google Play requirement |
+| Target architectures | ARM64; ARMv7 only if the device farm needs it (10) | Play requires 64-bit |
+| Graphics APIs | OpenGLES3 in M0; Vulkan evaluated on the device set before MVP | low-end Vulkan drivers are uneven |
+| Build type | APK for Dev, AAB for Release | sideload for playtests, Play for release |
+| Keystore | debug keystore for Dev; project keystore kept outside the repo for Release | |
+| 16 KB page sizes | on (Unity 6 default) | Play requirement for apps targeting Android 15+ |
+| Internet permission | off in M0 (no network code); on from MVP (08) | |
+| Optimized frame pacing | on | smoother frame pacing on GLES3 |
+
+CI build command: `Unity -batchmode -quit -projectPath unity/HeroCatClient -executeMethod HeroCat.Client.Editor.Builds.AndroidDev -logFile -`, where `Builds.cs` wraps `BuildPipeline.BuildPlayer` with the profile (runner per 10).
+
+iOS:
+
+| Setting | Value | Why |
+|---|---|---|
+| Target minimum iOS | 15.0 | 00 section 3 minimum |
+| Architecture | ARM64 | |
+| Graphics API | Metal | only option |
+| Requires full screen | on | portrait-only, no multitasking layouts |
+| Signing | automatic with the team ID; Dev uses a development provisioning profile | |
+| Strip engine code | on | |
+
+Xcode: the newest release that supports the installed iOS SDK, building the Unity-generated project with no manual edits. Playtests install directly on registered devices; TestFlight from MVP.
+
+### 17.5 Device QA checklist (lifecycle, clock, save, touch)
+
+The checks only a real phone catches. Run with an `Android-Dev` build on the floor device (2 GB, Android 8) and an iPhone on iOS 15, then repeat items 1, 3, 9 and 18 with the Release profiles. Record pass/fail and the build number.
+
+Install and layout
+
+1. Fresh install, cold start: first `SCR_MAIN` frame within 4 s (section 13).
+2. Rotate the device: layout stays portrait.
+3. Notch, Dynamic Island and gesture bar never cover the HUD wallet chips, the Fish Board or the tab bar.
+4. Every tab, modal and overlay opens and closes; Android back follows section 1 stack rules.
+
+Touch
+
+5. Tap Zap at full speed: taps beyond `TAP_ZAP_MAX_PER_SEC` play the VFX and send nothing.
+6. Fish Board: drag-merge, tap-select merge, drop on empty cell, invalid drop, long-press info with discard; a drag never starts below `UI_DRAG_START_PX` and long-press fires at `UI_LONG_PRESS_MS`.
+7. Background the app mid-drag: on resume the fish is back in its cell and nothing was sent.
+8. Every tappable is at least `UI_MIN_TOUCH` on the floor device; no mis-taps between adjacent tab bar items.
+
+Lifecycle, clock and save
+
+9. Background for 2 minutes, resume: `SCR_OFFLINE_REWARD` shows about 2 m; combat stays paused behind it and the claimed amounts equal the modal's.
+10. Background for less than `OFFLINE_MIN_S`, resume: no modal; the Magic Tank still advanced.
+11. Swipe-kill mid-boss, relaunch: stage, wallet, collections, board, tank, pity and the boss timer are restored (02).
+12. Debug clock `+8 h` then `+1 day`: the first is capped at the effective offline cap; the second also rolls the day (quests reset, login diamonds granted once, dungeon tickets refilled).
+13. Move the device clock back one hour in system settings and return: no crash, no currency change, the session follows server time (08).
+14. Day boundary while open: the rollover happens within `WALL_CLOCK_SYNC_SEC` of midnight without a relaunch.
+15. Low memory (Android developer options, background process limit): the save is written and the app relaunches to the same state.
+16. Debug Export, Reset profile, Import: the profile returns with the same id and pity counters.
+
+Performance
+
+17. Perf overlay on `SCR_MAIN`, full board, boss on screen: at or above 30 fps on the floor device, 60 fps on 2019 mid-range; 30 minutes on the desk without thermal throttling.
+
+Release build
+
+18. No Debug section in `SCR_SETTINGS`; time scale and clock offset cannot be changed; the perf overlay cannot be enabled.
+
 ## Open questions
 
 1. **Tab bar membership.** Six tabs (Hero, Collection, Summon, Dungeons, Quests, Shop) with Research and Settings off the bar. Owner: UX. Default: keep six; P1 adds "More" for Guild / Ranking / Events.

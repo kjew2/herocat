@@ -470,7 +470,7 @@ Every user-visible failure maps to one of these classes. The class picks the pre
 | `Maintenance` | Full-screen block on `SCR_BOOT`/`SCR_TITLE` with the message from config and an ETA | `MAINTENANCE` | Automatic poll every `MAINT_POLL_S = 60`. |
 | `Fatal` | Full-screen with support id; app cannot continue | `SAVE_TOO_NEW`, `CONTENT_CORRUPT`, `SAVE_CORRUPT_ALL` | Reinstall / contact support. |
 
-Rules: never two modals at once (07); a `Reject` never produces a modal; a reject code is never shown raw, always through its key; every modal has a support id (`sessionId` prefix + minute) in small print so a screenshot is actionable.
+Rules: never two modals at once (07); a `Reject` never produces a modal; a reject code is never shown raw, always through its key (`reject.<reason>`, 2.1); every modal has a support id (`sessionId` prefix + minute) in small print so a screenshot is actionable.
 
 ## 8. End-to-end flows
 
@@ -612,18 +612,18 @@ sequenceDiagram
     S->>F: Summon(WEAPON, 10)
     F->>F: requestId = Guid; state.Pending.Summon = {requestId, WEAPON, 10}; Save
     F->>L: PullAsync(req)
-    L->>Sim: read pity/bannerLevel, roll on summon algorithm (04), charge wallet
-    L-->>F: SummonResultPayload
-    F->>Sim: Apply(ApplySummonResult(payload))
+    L->>Sim: read wallet/pity/bannerLevel/stream; roll on a clone (04); no write
+    L-->>F: SummonResultPayload (Debits, StreamCounterAfter)
+    F->>Sim: Apply(ApplySummonResult(payload)): debit, items, pity, stream counter
     F->>F: state.Pending.Summon = null; Save
     F->>RS: show reveal
 ```
 
 1. `SCR_SUMMON` shows cost (`PULL_COST[banner] * count` diamonds, or a ticket if `TICKET_SUMMON_<banner> >= count`; tickets are spent first, 06), pity progress (`pity / PITY_HARD`), banner level and the rate table for the current level. The button is disabled when neither tickets nor diamonds cover the cost.
 2. `SummonFlow.Summon` (Runtime): refuse if `state.Pending.Summon != null` (one in flight). Generate `requestId`, persist the intent in `state.Pending.Summon`, save synchronously. The intent is on disk before any roll.
-3. `LocalSummonService.PullAsync`: validates affordability, charges `Wallet.Apply(-cost, SUMMON)` via a *system-only* internal path, runs the 04 pull algorithm on a local `summon_<banner>` stream (M0 only; 00 section 8.2), updates pity and banner EXP, returns the payload. Completes synchronously inside a finished `Task`.
-4. `Apply(ApplySummonResult)`: adds items (dupe -> level per `DUPE_LVL_CUM`), emits `ItemAcquired` x N and `CurrencyChanged`, bumps quest counters (`summon weapon`). Clears pending, saves. Reveal opens.
-5. Kill mid-flow: either the save with the pending intent exists and nothing was charged (step 3 not reached, local service re-runs on resume and the stream counter is where it was), or the post-apply save exists. The local service keeps a one-deep replay cache keyed by `requestId` for the in-process case.
+3. `LocalSummonService.PullAsync`: checks affordability before drawing, then runs the 04 pull algorithm on cloned banner, collection and `summon_<banner>` stream state (M0 only; 00 section 8.2) and returns the payload with `Debits` and `StreamCounterAfter`. It reads `GameState` but never writes it (issues #6, #13). Completes synchronously inside a finished `Task`.
+4. `Apply(ApplySummonResult)` (logged like any command): debits `Wallet.Apply(-cost, SUMMON)`, adds items (dupe -> level per `DUPE_LVL_CUM`, copies past the cap -> Rock Candy), sets pity, banner level/EXP and the stream counter (2.5), emits `ItemAcquired` x N and `CurrencyChanged`, bumps quest counters (`summon weapon`). Clears pending, saves. Reveal opens.
+5. Kill mid-flow: either the save with the pending intent exists and nothing was charged (step 4 not reached; the local service is pure, so it re-runs on resume from the same state and stream counter), or the post-apply save exists. The local service keeps a one-deep replay cache keyed by `requestId` for the in-process case.
 
 #### 8.5.2 MVP server path
 
@@ -659,7 +659,7 @@ sequenceDiagram
 
 1. Steps 1-2 as M0. Payment quote: the client sends `payment: "DIAMOND" | "TICKET"` per the 06 priority rule; the server rejects a mismatch with `409 PAYMENT_MISMATCH` (client refreshes balances and re-quotes, no charge).
 2. `SummonClient.PullAsync` -> `POST /v1/summon/pull` (08 section 4). The reveal overlay opens immediately with the pre-roll loop (`SUMMON_PREROLL_MS = 800`). A result inside that window feels instant.
-3. On 200: `Apply(ApplySummonResult)` with the server's items, pity, banner level and **balances** (replace, not subtract). Clear pending, save, reveal.
+3. On 200: `Apply(ApplySummonResult)` with the server's items, pity, banner level and **balances** (`BalancesAfter` replace the local values, 2.5). Clear pending, save, reveal.
 4. On retryable failure: retry with the same `requestId` per 5.2. After `SUMMON_SLOW_MS = 3000` the overlay adds "Taking longer than usual". After retries are exhausted (about 15 s): close the overlay, show toast `SUMMON_PENDING_SAVED` ("Your summon is saved and will be revealed when you are back online"), the button becomes "Pending..." and calls `Resolve()`.
 5. `Resolve()`: at boot/resume or on the pending button, re-send with the saved `requestId`. The server either replays the stored result (it completed) or executes it (it never arrived). Both are a 200 and are applied identically.
 6. On 4xx: `INSUFFICIENT_FUNDS` (balances drifted) -> refresh balances, clear pending, modal; `BANNER_CLOSED` -> clear pending, modal; `CLIENT_TOO_OLD` -> update block. Nothing was charged, so nothing to undo.
@@ -682,19 +682,19 @@ sequenceDiagram
     VM->>R: Enqueue(ReleaseFish)
     R->>Sim: Apply
     Sim-->>R: Accepted / Reject(BoardFull | TankEmpty)
-    Sim->>R: FishReleased{cell, level 1}, FishDiscovered?, FishMissileFired?
+    Sim->>R: FishReleased{cell, level 1}, FishDiscovered?
     U->>B: drag fish A onto fish B
     B->>VM: Merge(fromCell, toCell)
     VM->>R: Enqueue(MergeFish)
     R->>Sim: Apply
-    Sim-->>R: Accepted / Reject(LevelMismatch | InvalidTarget | Capped)
-    Sim->>R: FishMerged{toCell, newLevel}, FishDiscovered?, FishMissileFired, CurrencyChanged(FISH_COIN, FISH_MERGE|FISH_DISCOVERY)
+    Sim-->>R: Accepted / Reject(LevelMismatch | InvalidTarget | Capped | BadArgument)
+    Sim->>R: FishMerged{toCell, newLevel, missilePct}, FishDiscovered?, CurrencyChanged(FISH_COIN, FISH_MERGE|FISH_DISCOVERY)
 ```
 
-1. `ReleaseFish`: reject `TankEmpty` if `MagicTank.Count == 0`, `BoardFull` if no empty cell. Else pick the cell with one draw from `fish_spawn` (`cell = emptyCells[draw % emptyCells.Count]`, 05 fixes the exact rule), decrement tank, place level 1. Emits `FishReleased`. Level 1 is never a discovery after the first fish ever.
-2. `MergeFish(from, to)`: reject `InvalidTarget` if either cell empty or `from == to`; `LevelMismatch` if levels differ; `Capped` if `level == FISH_MAX_LVL` (current cap incl. Research). Else `to.level++`, `from` empties, `FishMerged`. If `to.level` not in `Fish.DiscoveredLevels`: add, `Wallet.Apply(FISH_DISCOVERY_COINS[n], FISH_DISCOVERY)`, `FishDiscovered`. Else `Wallet.Apply(FISH_DISCOVERY_COINS[n] * FISH_MERGE_COINS_PCT, FISH_MERGE)`. Queue a missile of `FISH_MISSILE_PCT[n]` for the next tick (`FishMissileFired`), recompute board passive DPS.
+1. `ReleaseFish`: reject `TankEmpty` if `Fish.TankCount == 0`, `BoardFull` if no empty cell. Else pick the cell with one `fish_spawn` draw by 05's rule (`k = (int)(u * empties)`, `u = NextDouble()`), decrement tank, place level 1. Emits `FishReleased`. Level 1 is never a discovery after the first fish ever.
+2. `MergeFish(from, to)`: reject `BadArgument` if `from == to` or a cell is out of range (never a throw, issue #11); `InvalidTarget` (reason `EmptyCell`) if either cell is empty; `LevelMismatch` if levels differ; `Capped` (reason `FishAtLevelCap`) if `level == FISH_MAX_LVL` (current cap incl. Research). 05 owns the reason list. Else `to.level++`, `from` empties, `FishMerged`. If `to.level` not in `Fish.DiscoveredLevels`: add, `Wallet.Apply(FISH_DISCOVERY_COINS[n], FISH_DISCOVERY)`, `FishDiscovered`. Else `Wallet.Apply(FISH_DISCOVERY_COINS[n] * FISH_MERGE_COINS_PCT, FISH_MERGE)`. Queue a missile of `FISH_MISSILE_PCT[n]` for the next tick (no separate event: the client animates from `FishMerged`, damage lands as 03's `FishMissileHit`), recompute board passive DPS. `ReleaseMax` and `MergeAll` are sim commands with 05's deterministic order, one log entry each.
 3. The drag is client-side only until drop; the sim sees one command. An invalid drop snaps back with a haptic (07). A drop that arrives after the source cell changed (merge-all raced) is rejected with `InvalidTarget` and the board re-renders from the next snapshot.
-4. Quest counters: `release fish`, `merge fish`. Analytics: `fish_merged{level, discovered}` once per merge; `fish_released` is counted, not emitted per fish (06 analytics).
+4. Quest counters: `release fish`, `merge fish`. Analytics: 05 section 13's set (`fish_release`, `fish_merge` batched per bulk command, `fish_discovered`, `fish_discard`, `fish_board_snapshot`).
 5. Determinism: the only RNG is `fish_spawn`; merges are pure. The bot's fish policy (05) issues the same commands.
 
 ### 8.7 Offline reward claim
@@ -705,21 +705,21 @@ sequenceDiagram
     participant Sim
     participant M as SCR_OFFLINE_REWARD
     participant U
-    R->>Sim: Catchup.Compute -> Offline.Pending{elapsed, credited, capped, gold, exp, tankFill}
+    R->>Sim: Apply ComputeOfflineCatchup(now) -> Offline.Pending{elapsed, credited, capped, gold, exp, tankFill}
     R->>M: open (gold, EXP, duration, "capped at 24 h")
     U->>M: tap Claim
     M->>R: Enqueue(ClaimOfflineReward)
-    R->>Sim: Apply: Wallet.Apply(GOLD, OFFLINE), Wallet.Apply(HERO_EXP, OFFLINE), MagicTank += tankFill; Pending = null
+    R->>Sim: Apply: Wallet.Apply(GOLD, OFFLINE), Wallet.Apply(HERO_EXP, OFFLINE), TankCount = min(TankCap, TankCount + TankFill); Pending = null
     Sim->>R: OfflineRewardClaimed, CurrencyChanged x2, LevelUp?
     R->>R: Save
     M->>M: close; ticks begin
 ```
 
-1. `Catchup.Compute` (sim, 06 section on offline): `elapsed = clamp(now - LastTickServerTime, 0, OFFLINE_CAP_H * 3600)`; gold and EXP at `OFFLINE_RATE` of the current stage's kill rate; `tankFill = min(TankCap - TankCount, floor(elapsed / TankRefillS))`. Pure function of state and `now`. No stage, drop, quest or stream change.
-2. The result is stored in `state.Offline.Pending` **and** `LastTickServerTime` is stamped immediately, so the window cannot be computed twice. If the app dies before the claim, the pending reward is still in the save and the modal reopens at next boot. The modal is the only way to claim; there is no auto-claim in MVP (the P1 2x option needs the modal open).
-3. `ClaimOfflineReward`: reject `NotAvailable` if `Pending == null`. Else credit and clear. Emits `OfflineRewardClaimed(elapsedSec, creditedSec, capped, gold, exp)`.
-4. Gaps under `OFFLINE_MIN_S` produce no pending and no modal; the time is simply consumed.
-5. Ticks do not run while the modal is open (`SCR_MAIN` pauses the runner's tick loop via `runner.TicksEnabled = false`, saves and events continue), so the numbers on the modal are exactly what is credited.
+1. `ComputeOfflineCatchup(now)` runs `Catchup.Compute` (sim, 06 section 7) inside `Apply`: `credited = clamp(now - LastTickServerTime, 0, effectiveCap)` with `effectiveCap = OFFLINE_CAP_H * 3600` plus the Research `RES_OFFLINE_CAP` extension (00 decision 12); gold and EXP at `OFFLINE_RATE` of the current stage's kill rate; `TankFill` from 05's `CatchUpTank(credited * TICK_HZ)`, which carries the refill progress. No stage, drop, quest or stream change (issues #6, #21).
+2. The result is stored in `state.Offline.Pending` **and** `LastTickServerTime` is stamped immediately, so the window cannot be computed twice. A second gap while a reward is pending sums into the same record (amounts and seconds summed, the effective cap applied to the summed credited time, `Stage` and `KillTimeSec` from the latest gap for display; issue #21). If the app dies before the claim, the pending reward is still in the save and the modal reopens at next boot. The modal is the only way to claim; there is no auto-claim in MVP (the P1 2x option needs the modal open).
+3. `ClaimOfflineReward`: reject `NotAvailable` (reason `NO_PENDING_OFFLINE_REWARD`) if `Pending == null`. Else credit, add the tank fill (`TankCount = min(TankCap, TankCount + TankFill)`; the live tank kept ticking since compute) and clear. Emits `OfflineRewardClaimed(elapsedSec, creditedSec, capped, gold, exp)`.
+4. Gaps under `OFFLINE_MIN_S` produce no pending and no modal; `ComputeOfflineCatchup` credits only the tank refill for the gap (`CatchUpTank`) and stamps `LastTickServerTime` (issue #21).
+5. Ticks do not run while the modal is open (`SCR_MAIN` pauses the runner's tick loop via `runner.TicksEnabled = false`, saves and events continue), so the numbers on the modal are exactly what is credited (confirmed by issue #21).
 
 ### 8.8 Dungeon run (server-issued seed, MVP)
 
@@ -743,10 +743,10 @@ sequenceDiagram
     F->>API: (next save upload carries grantId + result for plausibility, 08)
 ```
 
-1. Precondition in the view-model: ticket available (`Wallet[TICKET_<kind>] >= 1`), floor unlocked (`floor <= BestFloor + 1`), no boss attempt active (`RetreatFromBoss` is implied; the sim rejects `StartDungeon` with `NotAvailable` during a boss and the screen asks first).
-2. MVP: `POST /v1/dungeon/seed` returns a server seed bound to `(playerId, kind, floor, dayKey)` with `expiresAt = now + DUNGEON_SEED_TTL_S = 600`. The server records the issue in `dungeon_seeds` so the save upload can be checked (08). M0: `LocalDungeonSeedService` derives the seed from the `dungeon` stream (one draw) so bots and M0 work without a server.
-3. `StartDungeon` (sim): reject `CannotAfford` without a ticket, `Locked` for an unlocked floor, `StaleRequest` if a run is already active. Else spend the ticket (`Wallet.Apply(-1, DUNGEON)`), swap the combat context to the dungeon fight (`Combat.Mode = Dungeon`), reseed a *temporary* `dungeon_run` stream with the server seed (the persistent `dungeon` stream is untouched in MVP). `SCR_DUNGEON_RUN` replaces the combat viewport.
-4. The fight is a fixed enemy sequence from `dungeon_floors` (09) run by the normal tick loop with the dungeon's time limit. Outcome `DungeonCleared` grants the floor's reward table through `Wallet.Apply(..., DUNGEON)` and updates `BestFloor`; `DungeonFailed` grants nothing (ticket is consumed, matching the reference game; 06 may soften this). Either way `Combat.Mode = Stage` resumes at the same stage and kills.
+1. Precondition in the view-model: ticket available (`Wallet.DungeonTicket[kind] >= 1`), floor unlocked (`floor <= Dungeons.BestFloor[kind] + 1`), no boss attempt active (the sim rejects `StartDungeon` with `NotAvailable` during a boss and the screen asks the player to finish the fight first; there is no `RetreatFromBoss` in MVP, issue #11).
+2. Seeds come from the `IDungeonSeedService` seam (issue #25). MVP (`DungeonSeedClient`): `POST /v1/dungeon/seed` returns a server seed bound to `(playerId, kind, floor, dayKey)` with `expiresAt = now + DUNGEON_SEED_TTL_S = 600`. The server records the issue in `dungeon_seeds` so the save upload can be checked (08). M0: `LocalDungeonSeedService` reads the next `dungeon` stream draw without advancing it and returns it with `localSeed = true`; `Apply(StartDungeon)` then consumes that one draw, so the service never writes state (as for summons, issue #6) and bots and M0 work without a server.
+3. `StartDungeon` (sim): reject `CannotAfford` without a ticket, `Locked` for a floor not yet unlocked, `NotAvailable` if a run is already active (06's reasons `NO_TICKETS`, `DUNGEON_FLOOR_NOT_UNLOCKED`, `DUNGEON_RUN_IN_PROGRESS`). Else spend the ticket (`Wallet.Apply(-1, DUNGEON)`), swap the combat context to the dungeon fight (`Combat.Mode = Dungeon`), reseed a *temporary* `dungeon_run` stream with the server seed (the persistent `dungeon` stream is untouched in MVP). `SCR_DUNGEON_RUN` replaces the combat viewport.
+4. The fight is a fixed enemy sequence from `dungeon_floors` (09) run by the normal tick loop with the dungeon's time limit. Outcome `DungeonCleared` grants the floor's reward table through `Wallet.Apply(..., DUNGEON)` and updates `Dungeons.BestFloor[kind]`; `DungeonFailed` grants nothing (ticket is consumed, matching the reference game; 06 may soften this). Either way `Combat.Mode = Stage` resumes at the same stage and kills.
 5. Sweep: `SweepDungeon(kind)` reruns the best cleared floor with no fight: rewards of `BestFloor` instantly, one ticket, no seed needed (deterministic by content). Works offline.
 6. Failure: seed request offline -> `NET_OFFLINE` banner, nothing spent. Seed request times out -> retry same `requestId`; the server replays the same seed. App dies mid-run -> on load `Combat.Mode == Dungeon` with a run in progress is abandoned: ticket refunded (`Wallet.Apply(+1, REFUND)`), mode reset. The server sees a seed issued with no result and ignores it (expiry).
 
@@ -834,18 +834,18 @@ sequenceDiagram
     participant Clock as ServerClock
     participant Sim
     participant VM as QuestsViewModel
-    R->>Clock: NowServerSeconds (every frame)
-    R->>Sim: ApplyServerTime(now)
-    Note over Sim: dayKey(now) > Time.DayKey ?
-    Sim->>Sim: Quests.ResetDaily(newDayKey); Dungeon tickets reset; LoginDiamonds grant; Time.DayKey = newDayKey
+    R->>Clock: NowServerSeconds (every WALL_CLOCK_SYNC_SEC, and at boot/resume/gap)
+    R->>Sim: ApplyServerTime(now) (logged; re-anchors the virtual clock)
+    Note over Sim: each tick: virtual now = anchor + ticks / TICK_HZ; dayKey(now) > Time.DayKey ?
+    Sim->>Sim: EnsureDay: Quests.ResetDaily(newDayKey); Dungeon tickets reset; login grant if LoginDayKey < newDayKey; Time.DayKey = newDayKey
     Sim->>Sim: weekKey(now) > Time.WeekKey ? Quests.ResetWeekly
-    Sim->>R: DayRolledOver{oldKey, newKey}, CurrencyChanged(DIAMOND, +LOGIN_DIAMONDS, QUEST)
+    Sim->>R: DayRolledOver{oldKey, newKey}, CurrencyChanged(DIAMOND, +LOGIN_DIAMONDS, LOGIN)
     R->>VM: publish; red dots update; SCR_QUESTS re-renders if open
 ```
 
-1. `ApplyServerTime` is applied every frame; it is a two-integer comparison when nothing changes. `dayKey = floor(now / DAY_SECONDS)`, `weekKey = floor((now - WEEK_EPOCH_OFFSET) / (7 * DAY_SECONDS))` (06 fixes the week start; default Monday 00:00 UTC, `WEEK_EPOCH_OFFSET = 4 * DAY_SECONDS` because 1970-01-01 was a Thursday).
+1. Rollover is tick-driven (06): the tick whose virtual server time crosses a day key runs `EnsureDay`. `ApplyServerTime` is issued and logged only at sync points (3.1; issue #5); it re-anchors the virtual clock and runs the same key check, which handles a jump. Between syncs the check is a two-integer comparison per tick. `dayKey = floor(now / DAY_SECONDS)`, `weekKey = floor((now - WEEK_EPOCH_OFFSET) / (7 * DAY_SECONDS))` (06 fixes the week start; default Monday 00:00 UTC, `WEEK_EPOCH_OFFSET = 4 * DAY_SECONDS` because 1970-01-01 was a Thursday).
 2. Rollover is forward-only: `if newKey <= Time.DayKey return`. A backwards clock never resets the day (02 section 8.3).
-3. What resets: daily quest progress and claimed flags, dungeon tickets to the daily grant, daily free gift, login diamonds granted once (`LOGIN_DIAMONDS`). What persists: everything else. A boss attempt or dungeon run in progress is not interrupted; the quest it would complete counts toward the new day.
+3. What resets: daily quest progress and claimed flags, dungeon tickets to the daily grant, daily free gift, login diamonds granted once per day key (`LOGIN_DIAMONDS` auto-granted with reason `LOGIN`, guarded by `Time.LoginDayKey`; `d_login` is a counting row that pays nothing, issue #20). What persists: everything else. A boss attempt or dungeon run in progress is not interrupted; the quest it would complete counts toward the new day.
 4. A rollover during `SCR_QUESTS` re-renders the list in place with a toast `NEW_DAY`. A `ClaimQuest` for a stale quest id returns `StaleRequest` and the UI refreshes.
 5. Skipped days: a 3-day absence rolls once (the day key jumps); daily quests are not retroactively granted. Login diamonds are once per *key change*, not per day skipped.
 
@@ -905,7 +905,7 @@ sequenceDiagram
 ## Open questions
 
 1. **Ticks paused behind modals.** 8.7 pauses the tick loop while `SCR_OFFLINE_REWARD` is open. Should the tutorial overlay also pause ticks? Owner: 07. Default: yes for steps that point at the combat viewport, no otherwise.
-2. **Second catch-up window after clock correction** (8.2 step 2). Credits extra time when the real gap was longer than the extrapolation. Owner: 06. Default: credit it, capped by the same 24 h sum, because the alternative punishes a player whose device clock drifted.
+2. **Second catch-up window after clock correction** (8.2 step 2). Credits extra time when the real gap was longer than the extrapolation. Owner: 06. Default: credit it into the same pending record, capped by the effective cap on the sum (8.7, issue #21), because the alternative punishes a player whose device clock drifted.
 3. **Command log upload policy.** 2.6 uploads only on server request. Should MVP upload the last 1 MiB with every save so plausibility checks can replay without a round trip? Owner: 08. Default: no; bandwidth at 100k DAU is not worth it until flags exceed 1%.
 4. **Hot-apply allowlist for content tables** (8.12 step 2). Owner: 09. Default: `localization`, `shop_products`, `shop_packages`, `inbox_templates` only.
 5. **`TICK_BUDGET_MS` on high-end devices.** A fixed 8 ms is conservative on flagships. Owner: 10. Default: fixed; revisit if catch-up after a hitch is visibly slow.
@@ -915,11 +915,11 @@ sequenceDiagram
 ## Acceptance criteria
 
 1. `HeroCat.Sim.dll` built in Release references only `netstandard`; the CI identifier grep for `UnityEngine`, `System.IO`, `Newtonsoft`, `DateTime.Now`, `DateTime.UtcNow`, `Stopwatch`, `Math.Pow`, `Math.Exp`, `Math.Log`, `System.Reflection` finds zero hits in `src/HeroCat.Sim/`.
-2. Every `Command` in table 2.1 has an `Apply` branch that returns a `RejectCode` for each listed invalid input without mutating state (unit test per command: state hash before == after on reject, no events emitted).
+2. Every `Command` in table 2.1 has an `Apply` branch that returns a `RejectCode` (and the owning spec's `Reason`) for each listed invalid input without mutating state (unit test per command: state hash before == after on reject, no events emitted).
 3. `Simulation.Apply` never throws for any command constructed from fuzzed field values (property-based test, 10,000 cases per command type).
-4. A frame gap of 25 s produces `25 * TICK_HZ` ticks over at most 3 frames with `TICK_BUDGET_MS` disabled; a gap of 31 s produces 0 ticks and one `Catchup.Compute` for 31 s.
+4. A frame gap of 25 s produces `25 * TICK_HZ` ticks over at most 3 frames with `TICK_BUDGET_MS` disabled; a gap of 31 s produces 0 ticks and one logged `ComputeOfflineCatchup` covering 31 s.
 5. `SessionRunner.OnPause` completes a save synchronously in under 50 ms on the reference low device with a 40 KB state (perf test, 10).
-6. Golden determinism: the same seed and command log (including `ApplySummonResult` and `ApplyServerTime` system commands) produce byte-identical `GameState` hashes on x64 .NET, ARM64 IL2CPP and the bot harness (10).
+6. Golden determinism: the same seed and command log (including the `ApplySummonResult`, `ApplyServerTime` and `ComputeOfflineCatchup` system commands; replaying a Local-mode summon reproduces the debit and the `summon_<banner>` counter) produce byte-identical `GameState` hashes on x64 .NET, ARM64 IL2CPP and the bot harness (10).
 7. Summon idempotency: a `POST /v1/summon/pull` that times out after the server committed, then is retried with the same `requestId`, yields exactly one debit, one audit row and the identical payload (server test, 08; client test with a fault-injecting `ApiClient`).
 8. Killing the process at any point of the summon flow (before save, after intent save, after server 200, after apply) and relaunching results in exactly one of: no charge and no items, or one charge and the items. Never partial (fault-injection test over the five points).
 9. Offline reward: `Catchup.Compute` then kill before claim, relaunch: the modal shows the same numbers and the window is not credited twice (`LastTickServerTime` is stamped at compute time).
@@ -965,4 +965,4 @@ Engineering constants, code-resident in `HeroCat.Runtime.RuntimeConfig` (not bal
 | `ARCHIVE_KEEP_DAYS` | 30 | S | 8.13 |
 | `WEEK_EPOCH_OFFSET` | `4 * DAY_SECONDS` | S | 8.11 (06 owns the week-start decision) |
 
-Used from 00 by name: `TICK_HZ`, `ATTACK_INTERVAL_TICKS`, `KILLS_PER_STAGE`, `BOSS_EVERY`, `BOSS_HP_MULT`, `HP0`, `HP_G`, `STAGE_CAP`, `TAP_ZAP_MAX_PER_SEC`, `TRAIN_COST0`, `TRAIN_COST_G`, `PULL_COST[*]`, `PITY_HARD`, `DUPE_LVL_CUM`, `DAY_SECONDS`, `OFFLINE_RATE`, `OFFLINE_CAP_H`, `OFFLINE_MIN_S`, `TUTORIAL_DIAMONDS`, `LOGIN_DIAMONDS`, `DIAMONDS_PER_DAY_F2P`, `FISH_MAX_LVL0`, `FISH_DISCOVERY_COINS`, `FISH_MERGE_COINS_PCT`, `FISH_MISSILE_PCT`, `FISH_BOARD_DPS_PCT`.
+Used from 00 by name: `TICK_HZ`, `ATTACK_INTERVAL_TICKS`, `KILLS_PER_STAGE`, `BOSS_EVERY`, `BOSS_HP_MULT`, `HP0`, `HP_G`, `STAGE_CAP`, `TAP_ZAP_MAX_PER_SEC`, `TRAIN_COST0`, `TRAIN_COST_G`, `PULL_COST[*]`, `PITY_HARD`, `DUPE_LVL_CUM`, `DAY_SECONDS`, `OFFLINE_RATE`, `OFFLINE_CAP_H`, `RES_OFFLINE_CAP`, `OFFLINE_MIN_S`, `TUTORIAL_DIAMONDS`, `LOGIN_DIAMONDS`, `DIAMONDS_PER_DAY_F2P`, `FISH_MAX_LVL0`, `FISH_DISCOVERY_COINS`, `FISH_MERGE_COINS_PCT`, `FISH_MISSILE_PCT`, `FISH_BOARD_DPS_PCT`.

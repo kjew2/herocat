@@ -235,7 +235,7 @@ public sealed class QuestState                                          // reset
 {
     public Dictionary<string, QuestProgress> Daily       { get; init; } = new();   // key: quest id from quests_daily (09), bonus rows (d_bonus_5, d_bonus_8) included; reset on rollover
     public Dictionary<string, QuestProgress> Weekly      { get; init; } = new();   // w_bonus_all included
-    public Dictionary<string, QuestProgress> Achievement { get; init; } = new();   // key: rung id (ach_<ladder>_<rung>, 09), one entry per rung; never reset
+    public Dictionary<string, QuestProgress> Achievement { get; init; } = new();   // key: rung id (`ach_<ladder>_<rung>`, 09), one entry per rung; never reset
 }
 
 public enum QuestStatus { IN_PROGRESS, COMPLETED, CLAIMED }              // 00 decision 17
@@ -256,7 +256,7 @@ public sealed class DungeonState                             // daily counters r
 public sealed class ShopState                                 // 06; both reset by the daily rollover
 {
     public bool DailyGiftClaimed { get; set; }
-    public Dictionary<string, int> ExchangeCounts { get; init; } = new();   // key: exchange row id (09), value: purchases today
+    public Dictionary<string, int> ExchangeCounts { get; init; } = new();   // key: exchange offer id (06 section 8.4), value: purchases today
 }
 
 public sealed class ResearchState
@@ -397,6 +397,7 @@ A real day-9 save, abbreviated only in repeated collection entries. 41 KB format
   "ContentVersion": "2026.11.03",
   "PlayerId": "6b1f2c40-9d1e-4a7b-8f3e-2c1a9b7d5e01",
   "DeviceId": "0f9e8d7c-6b5a-4433-9211-aabbccddeeff",
+  "RngRoot": "6b1f2c40-9d1e-4a7b-8f3e-2c1a9b7d5e01",
   "SaveSeq": 1874,
   "Time": {
     "Tick": 7842110, "LastSavedServerTime": 1793667200, "LastTickServerTime": 1793667200,
@@ -410,15 +411,14 @@ A real day-9 save, abbreviated only in repeated collection entries. 41 KB format
   },
   "Weapons": {
     "Items": {
-      "wpn_003": { "Copies": 41, "Level": 7, "Overflow": 0, "FirstAcquiredServerTime": 1792890400 },
-      "wpn_017": { "Copies": 2,  "Level": 1, "Overflow": 0, "FirstAcquiredServerTime": 1793001200 },
-      "wpn_028": { "Copies": 1,  "Level": 1, "Overflow": 0, "FirstAcquiredServerTime": 1793402210 }
-    },
-    "NewBadges": ["wpn_028"]
+      "wpn_003": { "Copies": 41, "LimitBreaks": 1, "FirstAcquiredServerTime": 1792890400 },
+      "wpn_017": { "Copies": 2,  "LimitBreaks": 0, "FirstAcquiredServerTime": 1793001200 },
+      "wpn_028": { "Copies": 1,  "LimitBreaks": 0, "FirstAcquiredServerTime": 1793402210 }
+    }
   },
-  "Skills": { "Items": { "skl_001": { "Copies": 18, "Level": 6, "Overflow": 0, "FirstAcquiredServerTime": 1792890500 } }, "NewBadges": [] },
-  "Companions": { "Items": { "cmp_012": { "Copies": 4, "Level": 2, "Overflow": 0, "FirstAcquiredServerTime": 1793100000 } }, "NewBadges": [] },
-  "Runes": { "Items": {}, "NewBadges": [] },
+  "Skills": { "Items": { "skl_001": { "Copies": 18, "LimitBreaks": 0, "FirstAcquiredServerTime": 1792890500 } } },
+  "Companions": { "Items": { "cmp_012": { "Copies": 4, "LimitBreaks": 0, "FirstAcquiredServerTime": 1793100000 } } },
+  "Runes": { "Items": {} },
   "Loadout": {
     "Weapon": "wpn_028",
     "Skills": ["skl_001", "skl_014", "skl_022", null, null, null],
@@ -427,53 +427,55 @@ A real day-9 save, abbreviated only in repeated collection entries. 41 KB format
   },
   "Fish": {
     "Cells": [3, 0, 1, 1, 0,  5, 2, 0, 0, 1,  0, 0, 7, 0, 0,  1, 0, 0, 2, 0],
-    "TankCount": 4, "TankRefillTick": 23,
+    "TankCount": 4, "TankRefillTick": 23, "TankReleaseLevel": 1,
     "DiscoveredLevels": [1, 2, 3, 4, 5, 6, 7, 8], "HighestLevel": 8, "TotalMerges": 2214, "AutoMergeEnabled": false
   },
   "Banners": {
-    "WEAPON":    { "Pity": 23, "Level": 4, "Exp": 12, "TotalPulls": 412, "TenPullsSinceEplus": 0 },
-    "SKILL":     { "Pity": 61, "Level": 3, "Exp": 7,  "TotalPulls": 180, "TenPullsSinceEplus": 0 },
-    "COMPANION": { "Pity": 4,  "Level": 1, "Exp": 40, "TotalPulls": 40,  "TenPullsSinceEplus": 0 }
+    "WEAPON":    { "Pity": 23, "Exp": 412, "TotalPulls": 412 },
+    "SKILL":     { "Pity": 61, "Exp": 180, "TotalPulls": 180 },
+    "COMPANION": { "Pity": 4,  "Exp": 40,  "TotalPulls": 40 }
   },
   "Combat": {
-    "Mode": "Stage", "Stage": 412, "KillsInStage": 6, "BossActive": false, "BossTicksLeft": 0,
-    "Mp": 84.0, "TapsThisSecond": 0, "SkillCooldowns": [0, 31, 0, 0, 0, 0], "DungeonRun": null
+    "Mode": "Stage", "Stage": 412, "KillsInStage": 6, "Boss": "None", "BossFailsOnStage": 0, "Selected": null,
+    "Mp": 84.0, "SkillCooldowns": [0, 31, 0, 0, 0, 0], "CompanionCooldowns": [12, 0, 0, 0], "MissileQueue": [],
+    "DungeonRun": null
   },
   "Progress": { "HighestCleared": 411, "HighestFirstClearBoss": 410, "FirstClearExtra": [], "StageCapReached": 0 },
   "Quests": {
-    "DayKey": 20760, "WeekKey": 2965,
     "Daily": {
-      "dq_kill_500":   { "Progress": 500, "Tier": 0, "Claimed": true },
-      "dq_clear_10":   { "Progress": 7,   "Tier": 0, "Claimed": false },
-      "dq_summon_wpn": { "Progress": 10,  "Tier": 0, "Claimed": true },
-      "dq_merge_30":   { "Progress": 30,  "Tier": 0, "Claimed": false }
+      "dq_kill_500":   { "Progress": 731, "State": "CLAIMED" },
+      "dq_clear_10":   { "Progress": 7,   "State": "IN_PROGRESS" },
+      "dq_summon_wpn": { "Progress": 10,  "State": "CLAIMED" },
+      "dq_merge_30":   { "Progress": 42,  "State": "COMPLETED" },
+      "d_bonus_5":     { "Progress": 2,   "State": "IN_PROGRESS" }
     },
-    "Weekly": { "wq_kill_5000": { "Progress": 3120, "Tier": 0, "Claimed": false } },
+    "Weekly": { "wq_kill_5000": { "Progress": 3120, "State": "IN_PROGRESS" } },
     "Achievement": {
-      "ach_stage": { "Progress": 412, "Tier": 5, "Claimed": true },
-      "ach_merges": { "Progress": 2214, "Tier": 3, "Claimed": false }
-    },
-    "DailyAllBonusClaimed": false, "WeeklyAllBonusClaimed": false
+      "ach_stage_05": { "Progress": 412,  "State": "CLAIMED" },
+      "ach_stage_06": { "Progress": 412,  "State": "IN_PROGRESS" },
+      "ach_merges_03": { "Progress": 2214, "State": "COMPLETED" }
+    }
   },
-  "Dungeons": { "TicketDayKey": 20760, "BestFloor": [9, 6, 8], "EntriesToday": [1, 1, 0], "SweepsToday": [0, 1, 0] },
-  "Research": { "Level": { "rs_mp_pool": 3, "rs_mp_regen": 2, "rs_tank_cap": 4, "rs_tank_refill": 2, "rs_fish_cap": 1 } },
+  "Dungeons": { "BestFloor": [9, 6, 8], "EntriesToday": [1, 1, 0], "SweepsToday": [0, 1, 0] },
+  "Shop": { "DailyGiftClaimed": true, "ExchangeCounts": { "ex_ticket_fish": 1 } },
+  "Research": { "Level": { "res_mp_pool": 3, "res_mp_regen": 2, "res_tank_cap": 4, "res_tank_refill": 2, "res_fish_cap": 1 } },
   "Inbox": { "ClaimedIds": ["ibx_01HZX3K9Q8", "ibx_01HZY0A2M1"], "LastFetchedServerTime": 1793667100 },
   "Offline": { "Pending": null, "LifetimeOfflineSecCredited": 391200 },
   "Pending": { "Summon": null, "Dungeon": null, "Receipts": [] },
   "Tutorial": { "Step": 14, "Skipped": false, "TutorialDiamondsGranted": true },
   "Rng": {
-    "combat":           { "Seed": "9f86d081884c7d65", "Counter": 7842110 },
+    "combat":           { "Seed": "9f86d081884c7d65", "Counter": 0 },
     "crit":             { "Seed": "3a1c0b8e55f2d7aa", "Counter": 1203944 },
     "fish_spawn":       { "Seed": "0c7e2b9d4411fa63", "Counter": 4460 },
     "dungeon":          { "Seed": "d41d8cd98f00b204", "Counter": 0 },
-    "loot":             { "Seed": "e3b0c44298fc1c14", "Counter": 184502 },
+    "loot":             { "Seed": "e3b0c44298fc1c14", "Counter": 41 },
     "summon_weapon":    { "Seed": "7b2e4f1a9c3d5e60", "Counter": 0 },
     "summon_skill":     { "Seed": "1d9c8b7a6f5e4d30", "Counter": 0 },
     "summon_companion": { "Seed": "a5b4c3d2e1f00918", "Counter": 0 }
   },
   "Stats": {
-    "Kills": 184502, "BossKills": 41, "BossFails": 9, "Taps": 8120, "Pulls": 632, "Merges": 2214, "FishReleased": 4460,
-    "DungeonClears": 23, "TrainingLevelsBought": 907, "ActiveSeconds": 61420,
+    "Kills": 184502, "BossKills": 41, "BossFails": 9, "HeroHits": 1203944, "Taps": 8120, "Pulls": 632, "Merges": 2214,
+    "FishReleased": 4460, "FishDiscards": 12, "FirstWallStage": 120, "DungeonClears": 23, "TrainingLevelsBought": 907, "ActiveSeconds": 61420,
     "GoldEarned": 9.12e12, "GoldSpent": 7.28e12, "FishCoinEarned": 61200.0,
     "DiamondsEarned": 5020, "DiamondsSpent": 4980, "DiamondsPurchased": 1200
   },
@@ -506,6 +508,7 @@ Newtonsoft.Json 13.x (`com.unity.nuget.newtonsoft-json` in Unity; the NuGet pack
 | Encoding | UTF-8 without BOM | |
 | `TypeNameHandling` | `None` | Never emit `$type`. |
 | `ReferenceLoopHandling` | `Error` | The tree has no cycles; a cycle is a bug. |
+| `Combat.Fight` | Skipped (`ShouldSerializeFight() => false`, Json.NET's convention; no attribute) | Transient fight state (3.3); absent on read, so it loads as `null`. |
 
 IL2CPP: every record in section 3 is referenced from a `[Preserve]`d `SaveTypes.Touch()` method and `link.xml` preserves `HeroCat.Sim.State` so stripping cannot remove a setter.
 
@@ -539,29 +542,29 @@ Reject:
 | R1 | Header, length or CRC mismatch, or JSON parse failure (from `Decode`). |
 | R2 | `SchemaVersion` missing or `< 1`. |
 | R3 | Any root section `null` after migration. |
-| R4 | `Rng` lacks any of `combat`, `crit`, `fish_spawn`, `dungeon`, `loot`, or any `Seed` is not 16 hex chars, or any `Counter < 0`. Summon streams may be absent (Remote-mode save) and are re-derived if so. |
+| R4 | `Rng` lacks any of the eight streams in 3.4 (`combat`, `crit`, `fish_spawn`, `dungeon`, `loot`, `summon_weapon`, `summon_skill`, `summon_companion`; 00 decision 14, every mode), or any `Seed` is not 16 hex chars, or any `Counter < 0`; or `RngRoot == Guid.Empty`. No stream is exempt: a migration step that adds a stream writes its seed (7.2 rule 6; issue #9). |
 | R5 | `Training.Level.Length != 8`, `Fish.Cells.Length != FISH_BOARD_W * FISH_BOARD_H`, `Wallet.DungeonTicket.Length != 3`, `Wallet.SummonTicket.Length != 4`. These are structural, not content-driven, so a mismatch means a corrupted or foreign file. |
 
 Repair:
 
 | Id | Condition | Repair |
 |---|---|---|
-| P1 | `Combat.Stage < 1` or `> STAGE_CAP`; `KillsInStage` outside `[0, KILLS_PER_STAGE-1]`; `BossTicksLeft` outside `[0, BOSS_TIME_TICKS]` | Clamp. `BossActive = false`. |
+| P1 | `Combat.Stage < 1` or `> STAGE_CAP`; `KillsInStage` outside `[0, KILLS_PER_STAGE-1]`; `Boss != None` on a stage that is not a multiple of `BOSS_EVERY`; `BossFailsOnStage < 0`; `Selected` outside `[1, HighestCleared]`; any cooldown negative; `MissileQueue` entry negative or non-finite | Clamp; `Boss = None`; `Selected = null`; drop the bad missile entries. |
 | P2 | Any wallet balance negative, NaN or infinite; `Hero.Exp` likewise | Set to 0. |
 | P3 | `Hero.Level < 1`; `AwakenRank` outside `[0, AWAKEN_STAGES.Length]` | Clamp. |
-| P4 | `Training.Level[i]` outside `[0, TRAIN_MAX_LVL[i]]` | Clamp. |
+| P4 | `Training.Level[i]` outside `[0, TRAIN_CAP[i]]` | Clamp. |
 | P5 | `Progress.HighestCleared < Combat.Stage - 1` | Set to `Stage - 1` (you cannot farm a stage you have not reached). |
 | P6 | `HighestFirstClearBoss` not a multiple of `BOSS_EVERY`, negative, or `> HighestCleared` | Floor to a multiple; clamp. |
 | P7 | `Loadout.Skills.Length != SKILL_SLOTS`, `Companions.Length != COMPANION_SLOTS`, `Runes.Length != RUNE_SLOTS` | Pad with `null` / truncate. |
 | P8 | Equipped id not owned, unknown to content, wrong kind, or duplicated across slots | Set slot to `null` (keep the first duplicate). `Loadout.Weapon` null -> auto-equip the highest-rarity owned weapon (04 rule). |
 | P9 | `Fish.Cells[i] < 0` or `> FISH_MAX_LVL` (current cap incl. Research) | Clamp to cap. `DiscoveredLevels` gains any level present on the board. `HighestLevel` recomputed. |
-| P9b | `TankCount` outside `[0, TankCap]`; `TankRefillTick` outside `[0, refillTicks-1]` | Clamp. |
+| P9b | `TankCount` outside `[0, TankCap]`; `TankRefillTick` outside `[0, refillTicks-1]`; `TankReleaseLevel < 1` or above its content max | Clamp. |
 | P10 | `Items` key unknown to content, or `Copies <= 0` | Remove the entry. Rock Candy refund per 04's dupe rule for removed items (04 decides). |
-| P11 | `Banners[b].Pity` outside `[0, PITY_HARD-1]`; `Level < 1`; `Exp < 0` | Clamp. Missing banner for a banner the content defines -> add default. |
-| P12 | Quest id unknown to content; `Quests.DayKey != Time.DayKey` | Drop the entry; if the day key mismatches, clear `Daily` (the rollover rebuilds it). |
+| P11 | `Banners[b].Pity` outside `[0, PITY_HARD-1]`; `Exp < 0` | Clamp. Missing banner for a banner the content defines -> add default. |
+| P12 | Quest id unknown to content; `Progress < 0` | Drop the entry; clamp to 0. A quest with no entry reads as `IN_PROGRESS` with progress 0. |
 | P13 | `Research.Level` key unknown or value `< 1` or `> maxLevel` | Remove / clamp. |
-| P14 | `OwnedItem.Level != levelFor(Copies)` per `DUPE_LVL_CUM` | Recompute from `Copies`. Emitted so a table change is visible. |
-| P15 | Stream counter invariants (3.4): `loot.Counter != Stats.Kills`, `fish_spawn.Counter != Stats.FishReleased`, Local mode `summon_x.Counter != 3 * TotalPulls` | Set the counter from the stat. The player-visible count is the source of truth for "which draw is next". |
+| P14 | `OwnedItem.Copies > DUPE_LVL_CUM[10]` (160); `LimitBreaks` outside `[0, LIMIT_BREAK_MAX]` | Clamp (no Rock Candy is granted on load; conversion happens only at pull time, 04). |
+| P15 | Stream counter invariants (3.4): `combat.Counter != 0` (MVP), `crit.Counter != Stats.HeroHits`, `loot.Counter != Stats.BossKills`, `fish_spawn.Counter != Stats.FishReleased`, Local mode `summon_x.Counter != 3 * TotalPulls` | Set the counter from the stat. The player-visible count is the source of truth for "which draw is next". |
 | P16 | `Combat.DungeonRun != null` on load | `Mode = Stage`, `DungeonRun = null`, emit `DungeonAbandoned`. No refund: tickets are debited on clear only (06 section 6), so an abandoned run never spent one. |
 | P17 | `Pending.Summon` or `Pending.Dungeon` older than `PENDING_STALE_DAYS = 7` | Clear it (the server's idempotency record is gone after 24 h anyway; a 7-day-old intent is dead). Receipts are never auto-cleared. |
 | P18 | `Offline.Pending != null` and `ComputedServerTime > now` | Clear it (clock went backwards after compute; nothing was credited). |
@@ -609,7 +612,7 @@ public static class SaveMigrations
 3. A step does not set `SchemaVersion`; the driver does.
 4. Forward only. No down-migration; a newer save is refused.
 5. Renames are expressed as a rename, never drop-and-add. A field may be dropped only when nothing in current code can use it.
-6. A new RNG stream is inserted as `{ "Seed": "", "Counter": 0 }`; the step cannot hash (rule 1), so R4 is relaxed for that name and the loader re-derives the seed from `PlayerId`/`DeviceId` on first load. Record the exemption in the step's comment.
+6. A new RNG stream is inserted with its seed already derived inside the step from the body's `RngRoot` (`seed(name)` of 3.4, with the SHA-256 formula and the stream name as literals in the step) and `Counter: 0`. This is pure (rule 1) because `RngRoot` is in the body and never changes, so the same save gets the same seed on every device and R4 needs no exemption (issue #9).
 7. What is a schema change: adding, removing, renaming or retyping a serialized property; renaming an enum member; changing a dictionary key format; changing the required stream set; changing a field's meaning (seconds -> ticks, remaining -> used). What is not: content changes, new keys in `Banners`/`Rng`/`Items`, new values in existing fields.
 
 ### 7.3 Fixtures and the test
@@ -644,7 +647,8 @@ static JObject V1ToV2(JObject j)
 {
     foreach (var item in j["Weapons"]!["Items"]!.Children<JProperty>())
         ((JObject)item.Value)["Sockets"] ??= new JArray(null, null);           // literal 2, not RUNE_SOCKETS (rule 1)
-    ((JObject)j["Rng"]!)["rune_roll"] ??= new JObject { ["Seed"] = "", ["Counter"] = 0 };   // rule 6 exemption
+    var root = Guid.Parse((string)j["RngRoot"]!);
+    ((JObject)j["Rng"]!)["rune_roll"] ??= new JObject { ["Seed"] = V1ToV2Seed(root, "rune_roll"), ["Counter"] = 0 };   // rule 6: frozen copy of seed(name)
     return j;
 }
 ```
@@ -727,7 +731,7 @@ Recovery order, from best to worst outcome: (1) `slot0.sav`, (2) `slot0.prev.sav
 
 ### 8.5 Known double-credit window
 
-If the `Save` after `Catchup.Compute` fails (disk full) and the app then dies, disk holds the old `LastTickServerTime` and the next load computes the same window again, bounded by `OFFLINE_CAP_H` of gold and EXP at `OFFLINE_RATE`. Accepted in M0; in MVP the server copy carries the newer anchor and the plausibility check `OFFLINE_WINDOW_OVERLAP` (08) flags a save whose credited windows overlap.
+If the `Save` after `ComputeOfflineCatchup` fails (disk full) and the app then dies, disk holds the old `LastTickServerTime` and the next load computes the same window again, bounded by the effective offline cap (`OFFLINE_CAP_H` plus the `RES_OFFLINE_CAP` extension, 06; issue #21) of gold and EXP at `OFFLINE_RATE`. Accepted in M0; in MVP the server copy carries the newer anchor and the plausibility check `OFFLINE_WINDOW_OVERLAP` (08) flags a save whose credited windows overlap.
 
 ## 9. `CloudSaveClient` (MVP)
 
@@ -831,7 +835,7 @@ The server runs these on every upload and attaches `flags[]` to the response. Th
 | `PITY_MISMATCH` | Client `Banners[b].Pity` differs from server pity (informational; the server value is used regardless). |
 | `DUPLICATE_REQUEST_ID` | A `requestId` seen on a different player. |
 | `OFFLINE_WINDOW_OVERLAP` | Lifetime offline credited exceeds wall-clock gaps observable from upload timestamps. |
-| `STREAM_COUNTER_MISMATCH` | `loot.Counter != Stats.Kills` etc. after the client's own validator should have repaired them. |
+| `STREAM_COUNTER_MISMATCH` | Any P15 invariant (`crit.Counter != Stats.HeroHits`, `loot.Counter != Stats.BossKills`, ...) fails after the client's own validator should have repaired them. |
 | `TAINTED` | `DebugTainted == true` on a release build. |
 
 ## 11. The clock seam
@@ -884,8 +888,8 @@ public sealed class FakeClock : IClock
 
 ### 11.2 Rules
 
-1. Nothing in `HeroCat.Sim` reads a clock. The sim receives `now` through `ApplyServerTime` and `Catchup.Compute(state, now, db)`. In `HeroCat.Runtime`, only `ServerClock.cs` and `SessionRunner.cs` may touch `DateTimeOffset.UtcNow` or `Stopwatch`. CI grep (10).
-2. Consumers of `IClock`: `SaveStamp`, `ApplyServerTime` (day/week keys, login grant), `Catchup.Compute`, `Pending*` timestamps, analytics timestamps, cloud-save metadata. Combat ticks never read the clock; the monotonic accumulator in `SessionRunner` drives them.
+1. Nothing in `HeroCat.Sim` reads a clock. The sim receives `now` only through the logged system commands `ApplyServerTime(nowServerSeconds)` and `ComputeOfflineCatchup(nowServerSeconds)` (which calls `Catchup.Compute` inside `Apply`; issue #6). Between them the sim advances a virtual server time per tick and rolls the day on the tick that crosses midnight (06; issue #5). In `HeroCat.Runtime`, only `ServerClock.cs` and `SessionRunner.cs` may touch `DateTimeOffset.UtcNow` or `Stopwatch`. CI grep (10).
+2. Consumers of `IClock`: `SaveStamp`, the `ApplyServerTime` command (re-anchors virtual time; issued only at boot, resume, gap recovery and every `WALL_CLOCK_SYNC_SEC = 60`, never per frame; issue #5), the `ComputeOfflineCatchup` command, `Pending*` timestamps, analytics timestamps, cloud-save metadata. Combat ticks never read the clock; the monotonic accumulator in `SessionRunner` drives them.
 3. Between observations time advances by the monotonic clock, so a device clock change mid-session has no effect once `IsAuthoritative`.
 4. Until the first observation (offline launch), the device clock is served floored at `LastSavedServerTime`, so time cannot run backwards past the last save. `IsAuthoritative = false` flows into the save metadata and into the conflict rule (9.3 step 4).
 
@@ -893,7 +897,7 @@ public sealed class FakeClock : IClock
 
 | Situation | Behaviour |
 |---|---|
-| `now < Time.LastTickServerTime` at resume | `Catchup.Compute` returns `ElapsedSec = 0`; nothing credited; `clock_anomaly{backwards}` once per session. |
+| `now < Time.LastTickServerTime` at resume | `ComputeOfflineCatchup` credits `ElapsedSec = 0`; nothing credited; `clock_anomaly{backwards}` once per session. |
 | `dayKey(now) < Time.DayKey` | `ApplyServerTime` does nothing (`if newKey <= DayKey return`). Dailies are not reset; login diamonds not re-granted. |
 | `now < Offline.Pending.ComputedServerTime` at load | P18 clears the pending reward (it was never credited). |
 | `now < Pending.Summon.RequestedServerTime` | Irrelevant; the server's idempotency store decides. |
@@ -1048,8 +1052,8 @@ create index on summon_log (request_id);
 create table banner_pity (                                 -- server-held pity, authoritative in MVP
   player_id  uuid not null references accounts on delete cascade,
   banner     text not null,
-  pity       smallint not null default 0,
-  level      smallint not null default 1, exp integer not null default 0,
+  pity       smallint not null default 0,                  -- pulls since last L+ (issue #24)
+  exp        bigint not null default 0,                    -- cumulative banner EXP; level derived via BANNER_LVL_EXP (04)
   total_pulls bigint not null default 0,
   updated_at timestamptz not null default now(),
   primary key (player_id, banner)
@@ -1157,7 +1161,8 @@ Names snake_case; properties camelCase. Economy events go to the backend `events
 | `session_end` | `durationSec`, `stageStart`, `stageEnd`, `kills`, `ticks`, `trigger` (pause/quit/gap) | Runtime on pause/quit | |
 | `currency_changed` | `currency` (code from 00 section 5.2), `delta` (double), `balanceAfter`, `reason` (closed enum, 00 section 8.6), `refId` (item/quest/banner id when applicable) | Sim `Wallet.Apply` -> sink | `KILL` and `BOSS` reasons are summed per currency over `CURRENCY_AGG_SEC` and emitted once; all other reasons per occurrence. |
 | `item_acquired` | `kind` (WEAPON/SKILL/COMPANION/RUNE), `itemId`, `rarity`, `isNew`, `copiesAfter`, `levelBefore`, `levelAfter`, `source` (SUMMON/MAIL/QUEST/ADMIN), `requestId` | Sim on `ItemAcquired` | One per item. |
-| `summon` | `banner`, `count`, `payment`, `costDiamonds`, `ticketsUsed`, `rarities[]`, `lplusCount`, `pityBefore`, `pityAfter`, `bannerLevel`, `guaranteeApplied`, `requestId`, `latencyMs` | Runtime after `ApplySummonResult` | One per batch; per-pull detail is in `item_acquired` and `summon_log`. |
+| `summon` | `requestId`, `banner`, `count`, `payment` (DIAMOND/TICKET), `diamondsSpent`, `ticketsSpent`, `pityBefore`, `pityAfter`, `bannerLevelBefore`, `bannerLevelAfter`, `results[]` of `{itemId, rarity, isNew, levelBefore, levelAfter, overflowRockCandy, guaranteeApplied}`, `lplusCount`, `guaranteeApplied` (bool, any slot), `source` (LOCAL/SERVER), `latencyMs` | Runtime after `ApplySummonResult` | One per batch, one schema shared with 04 section 13 (issue #13); per-pull audit detail is also in `summon_log`. |
+| `summon_reconciled` | `requestId`, `banner`, `currency`, `localDelta`, `serverDelta` | Runtime | Remote mode only: the server balance replaced a local delta that disagreed (issue #13). |
 | `summon_pending` / `summon_resolved` | `requestId`, `banner`, `count`; resolved adds `latencySec`, `outcome` (replayed/executed/rejected) | Runtime | |
 | `stage_cleared` | `stage`, `isBoss`, `firstClear`, `diamondsGranted`, `attempts` (for a boss), `ticksOnStage`, `dps` | Sim | Feeds the 00 section 6.6 day table. |
 | `boss_failed` | `stage`, `bossHpLeftPct`, `attempt`, `voluntary` | Sim | Wall detection: first `boss_failed` on a stage = `wall_hit`. |
@@ -1166,8 +1171,8 @@ Names snake_case; properties camelCase. Economy events go to the backend `events
 | `level_up` | `heroLevel` | Sim | |
 | `awakened` | `rank`, `stage`, `rockCandyCost` | Sim | |
 | `research_bought` | `researchId`, `level`, `fishCoinCost` | Sim | |
-| `fish_merged` | `level`, `discovered`, `coinsEarned`, `missilePct` | Sim | Per merge. |
-| `fish_session` | `releases`, `merges`, `discoveries`, `coinsEarned`, `activeSec` | Runtime, per session | Throughput for 05's model. |
+| `fish_release`, `fish_merge`, `fish_discovered`, `fish_discard` | 05 section 13 | Sim | Per command; `ReleaseMax` and `MergeAll` emit one batched event (issue #11). |
+| `fish_board_snapshot` | 05 section 13, plus session totals `releases`, `merges`, `discoveries`, `coinsEarned`, `activeSec` | Runtime, at session end | Replaces the former `fish_session`; throughput for 05's model. |
 | `quest_completed` / `quest_claimed` | `questId`, `kind`, `tier`, `rewards[]` | Sim | |
 | `dungeon_run` | `kind`, `floor`, `outcome` (cleared/failed/swept/abandoned), `ticksUsed`, `rewards[]`, `grantId` | Sim/Runtime | |
 | `offline_catchup` | `elapsedSec`, `creditedSec`, `capped`, `gold`, `exp`, `tankFill`, `stage`, `claimed` (bool, false if cleared by P18) | Runtime | |
@@ -1184,10 +1189,10 @@ The warehouse `events` table: `(ts timestamptz, name text, player_id_hash bytea,
 
 ## Open questions
 
-1. **Summon streams in Remote-mode saves.** Keep `summon_*` in every save (uniform schema, bots and re-simulator share it) or drop them from Remote-mode saves and re-derive in Local mode. Owner: 04/08. Default: keep; the validator ignores their counters in Remote mode.
+1. **Summon streams in Remote-mode saves.** Resolved: kept in every save in every mode (00 decision 14); R4 requires them and the validator ignores their counters in Remote mode (issue #9).
 2. **`progressScore` weights** (9.1). Owner: 06. Default: as written; revisit after closed beta conflict telemetry.
 3. **Conflict modal replacing a running sim** (9.4). Alternative: defer applying the other device's save to the next cold boot. Owner: 07. Default: replace immediately with the warning line, because deferring makes the modal's choice feel ignored.
-4. **`OwnedItem.Overflow` semantics** past level 10. Owner: 04. Default: field exists, 04 decides shards vs Rock Candy conversion; whichever it is, the conversion happens in `ApplySummonResult`, not on load.
+4. **`OwnedItem.Overflow` semantics** past level 10. Resolved: no field; a copy past 160 converts to Rock Candy at pull time in `ApplySummonResult` and `Copies` stays at 160 (04 section 5.3, issue #7).
 5. **OS backup exclusion** (8.4). Excluding saves means a player who loses a phone before linking an account loses progress unless cloud save (guest accounts upload too). Owner: 08. Default: exclude; guest cloud save covers it.
 6. **`PENDING_STALE_DAYS = 7` vs `IDEMPOTENCY_TTL_H = 24`.** A pending summon older than 24 h cannot be replayed; the server will execute it fresh. Is that acceptable (the player did intend it) or should the client ask first. Owner: 08. Default: execute fresh silently up to 7 days, since the diamonds were never charged.
 7. **Week start** (`WEEK_EPOCH_OFFSET`). Monday 00:00 UTC assumed. Owner: 06.
@@ -1195,7 +1200,7 @@ The warehouse `events` table: `(ts timestamptz, name text, player_id_hash bytea,
 
 ## Acceptance criteria
 
-1. Round trip: a `GameState` with every field non-default (including `null` slots, empty collections, a non-null `Pending.Summon`, a non-null `Offline.Pending`, a non-null `Combat.DungeonRun`) encodes and decodes to a value-equal object (deep equality test).
+1. Round trip: a `GameState` with every persisted field non-default (including `null` slots, empty collections, a non-null `Pending.Summon`, a non-null `Offline.Pending`, a non-null `Combat.DungeonRun`, `Combat.Boss == Walled`, a non-empty `Combat.MissileQueue`) encodes and decodes to a value-equal object (deep equality test) except `Combat.Fight`, which decodes as `null`. `DeepClone` of a state mid-boss (non-null `Fight`) continues tick-for-tick identically (03 AC15).
 2. Determinism after round trip: for each stream in 3.4, the next `Derive` after save/load equals the next draw of the un-restored copy.
 3. Byte stability: two encodes of value-equal states are byte-identical (sorted sets, round-trip doubles).
 4. Header: wrong CRC, `len` off by one in either direction, missing newline, truncated body each raise `SaveCorruptException`; an HMAC mismatch does **not** (loads with `HmacValid = false`).
@@ -1205,7 +1210,7 @@ The warehouse `events` table: `(ts timestamptz, name text, player_id_hash bytea,
 8. `SaveTooNewException` on `SchemaVersion = Current + 1`; no file renamed; `prev` not consulted.
 9. Every repair rule P1-P20 and reject rule R2-R5 has a table-driven test asserting the repaired value or the exception and the emitted rule id; `SAVE_REPAIR_MAX + 1` distinct rule hits is a reject.
 10. Migrations M1-M7 pass; in particular every `Fixtures/Saves/v{n}.json` migrates to `Current` with zero repairs.
-11. `Catchup.Compute` leaves every field except `Offline.Pending` and `Time.LastTickServerTime` value-equal; then `ClaimOfflineReward` changes only `Wallet.Gold`, `Hero.Exp`/`Hero.Level`, `Fish.TankCount`, `Offline.*`, `Stats.*`.
+11. Catch-up mutates state only inside `Apply` (issue #6): applying `ComputeOfflineCatchup(now)` for a gap of at least `OFFLINE_MIN_S` leaves every field except `Offline.Pending` and `Time.LastTickServerTime` value-equal (a second gap sums into the pending record, latest `Stage` kept); for a shorter gap it changes only `Fish.TankCount`, `Fish.TankRefillTick` and `Time.LastTickServerTime` (issue #21). Then `ClaimOfflineReward` changes only `Wallet.Gold`, `Hero.Exp`/`Hero.Level`, `Fish.TankCount`/`TankRefillTick`, `Offline.*`, `Stats.*`. Replaying the command log from the pre-gap save reproduces the same `StateHash`.
 12. Conflict rules: a table of `(L, R)` metadata pairs covering each branch of 9.3 produces the expected winner and `Status`; a non-authoritative local stamp 1 h ahead loses to an authoritative remote stamp.
 13. Uploads are suspended while `Status == Conflict` is unresolved (no `PUT` observed by a fake API during that window).
 14. `ServerClock`: `Observe` makes `IsAuthoritative` true; a device clock change of +1 day between observations changes `NowServerSeconds` by the monotonic elapsed only; before any observation, `NowServerSeconds >= floor`.
@@ -1242,4 +1247,4 @@ The warehouse `events` table: `(ts timestamptz, name text, player_id_hash bytea,
 
 All are engineering constants (code-resident). None needs the tuning tool; 10's fault-injection, conflict-table and perf tests are the check.
 
-Used from 00 by name: `TICK_HZ`, `KILLS_PER_STAGE`, `BOSS_EVERY`, `BOSS_TIME_TICKS`, `STAGE_CAP`, `TAP_ZAP_MAX_PER_SEC`, `DAY_SECONDS`, `OFFLINE_RATE`, `OFFLINE_CAP_H`, `OFFLINE_MIN_S`, `LOGIN_DIAMONDS`, `TUTORIAL_DIAMONDS`, `DIAMONDS_PER_DAY_F2P`, `PULL_COST[*]`, `PITY_HARD`, `SKILL_SLOTS`, `COMPANION_SLOTS`, `RUNE_SLOTS`, `DUPE_LVL_CUM`, `FISH_BOARD_W`, `FISH_BOARD_H`, `FISH_MAX_LVL0`, `TANK_CAP0`, `TANK_REFILL_S0`, `AWAKEN_STAGES`. From 01: `AUTOSAVE_INTERVAL_SEC`, `CMDLOG_MAX_BYTES`, `WEEK_EPOCH_OFFSET`. From 03 (declared there): `TRAIN_MAX_LVL[stat]`.
+Used from 00 by name: `TICK_HZ`, `KILLS_PER_STAGE`, `BOSS_EVERY`, `BOSS_TIME_TICKS`, `STAGE_CAP`, `TAP_ZAP_MAX_PER_SEC`, `DAY_SECONDS`, `OFFLINE_RATE`, `OFFLINE_CAP_H`, `OFFLINE_MIN_S`, `LOGIN_DIAMONDS`, `TUTORIAL_DIAMONDS`, `DIAMONDS_PER_DAY_F2P`, `PULL_COST[*]`, `PITY_HARD`, `SKILL_SLOTS`, `COMPANION_SLOTS`, `RUNE_SLOTS`, `DUPE_LVL_CUM`, `LIMIT_BREAK_MAX`, `BANNER_LVL_EXP`, `SPAWN_DELAY_TICKS`, `FISH_BOARD_W`, `FISH_BOARD_H`, `FISH_MAX_LVL0`, `TANK_CAP0`, `TANK_REFILL_S0`, `AWAKEN_STAGES`. From 01: `AUTOSAVE_INTERVAL_SEC`, `CMDLOG_MAX_BYTES`, `WEEK_EPOCH_OFFSET`, `WALL_CLOCK_SYNC_SEC`. From 03 (declared there): `TRAIN_CAP[stat]`.
