@@ -460,7 +460,7 @@ namespace HeroCat.Client.Screens
                 icon.text = tab.ToString().Substring(0, 1);   // placeholder icon (07 section 15.1)
                 var lockGlyph = UiKit.Text("Lock", rt, UiKit.Caption, Palette.Muted, TextAlignmentOptions.Center);
                 UiKit.Place(lockGlyph.rectTransform, 120, 8, 48, 40);
-                lockGlyph.text = "\U0001F512";
+                lockGlyph.text = "\u2298";   // ⊘ placeholder lock: the M0 font has no emoji (07 section 15.1)
                 m.TabLocked[i].Bind(new ActiveSink(lockGlyph.gameObject));
                 var dot = UiKit.CirclePanel("Dot", rt, UiKit.C(Palette.Bad));
                 UiKit.Place(dot.rectTransform, 116, 12, 28, 28);
