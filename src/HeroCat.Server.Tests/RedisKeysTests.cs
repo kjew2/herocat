@@ -52,6 +52,8 @@ public sealed class RedisKeysTests
         Assert.That(RedisKeys.FishBoard(-1), Is.EqualTo("lb:fish:-1"));
         Assert.That(RedisKeys.BoardName(Player), Is.EqualTo("lb:name:" + id));
         Assert.That(RedisKeys.RateLimit("summon/pull", Player), Is.EqualTo("rl:summon/pull:" + id));
+        Assert.That(RedisKeys.RateLimitByIp("post/auth/guest", "203.0.113.7"), Is.EqualTo("rl:post/auth/guest:ip:203.0.113.7"));
+        Assert.That(RedisKeys.RateLimitByIp("post/auth/guest", "2001:db8::1"), Is.EqualTo("rl:post/auth/guest:ip:2001-db8--1"));
         Assert.That(RedisKeys.Session(Player), Is.EqualTo("sess:" + id));
         Assert.That(RedisKeys.SummonLock(Player), Is.EqualTo("summon:lock:" + id));
         Assert.That(RedisKeys.Maintenance, Is.EqualTo("maint"));
@@ -64,7 +66,7 @@ public sealed class RedisKeysTests
         string[] built =
         {
             RedisKeys.StageBoard(1), RedisKeys.FishBoard(1), RedisKeys.BoardName(Player), RedisKeys.RateLimit("save", Player),
-            RedisKeys.Session(Player), RedisKeys.SummonLock(Player), RedisKeys.Maintenance,
+            RedisKeys.RateLimitByIp("auth/guest", "2001:db8::1"), RedisKeys.Session(Player), RedisKeys.SummonLock(Player), RedisKeys.Maintenance,
         };
         for (int i = 0; i < built.Length; i++)
         {
@@ -77,6 +79,7 @@ public sealed class RedisKeysTests
     [TestCase("")]
     [TestCase("a b")]
     [TestCase("{route}")]
+    [TestCase("a:b")]
     public void A_route_that_is_not_a_key_segment_is_rejected(string route) =>
         Assert.Throws<ArgumentException>(() => RedisKeys.RateLimit(route, Player));
 }
