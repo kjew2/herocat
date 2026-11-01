@@ -15,6 +15,8 @@ import content_fixtures as fx  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(REPO, "content_src")
+# The shipped content_version (meta.csv), read rather than hard-coded so a version bump does not break these tests.
+VERSION = re.search(r"^content_version,([^\s,]+)", open(os.path.join(SRC, "meta.csv"), encoding="utf-8").read(), re.M).group(1)
 
 # 09 section 4: where every 00 section 6 entry lives, as (table, column). A constants row is ("constants", KEY).
 SECTION_4 = [
@@ -100,10 +102,10 @@ class ErrorCodeTests(unittest.TestCase):
 
     def test_content_version_formats(self):
         for ok in ("2026.11.03", "2026.11.03.2"):
-            self.edit("meta", "2026.11.01", ok)
+            self.edit("meta", "content_version," + VERSION + "\n", "content_version," + ok + "\n")
             self.assertEqual(self.codes(), [])
-            self.edit("meta", ok, "2026.11.01")
-        self.edit("meta", "2026.11.01", "1.0")
+            self.edit("meta", "content_version," + ok + "\n", "content_version," + VERSION + "\n")
+        self.edit("meta", "content_version," + VERSION + "\n", "content_version,1.0\n")
         _, errs = build(self.src)
         self.assertEqual(errs, ["CONTENT E094 meta[content_version]: content_version '1.0' must be YYYY.MM.DD or YYYY.MM.DD.N"])
 

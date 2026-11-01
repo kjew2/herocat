@@ -32,6 +32,15 @@ namespace HeroCat.Sim.Commands
         internal override ApplyResult Execute(Simulation sim) => sim.HandleAutoEquipBestSkills(this);
     }
 
+    /// <summary>
+    /// Spends Rock Candy for one limit-break rank on an owned weapon or skill (04 section 5.2): +1 effective level, up to
+    /// LIMIT_BREAK_RANKS ranks, at LIMIT_BREAK_COST[rarity] * (rank + 1). TODO(#161): companions, once their content lands.
+    /// </summary>
+    public sealed record LimitBreak(string ItemId) : Command
+    {
+        internal override ApplyResult Execute(Simulation sim) => sim.HandleLimitBreak(this);
+    }
+
     /// <summary>Reject reasons of the summon and collection commands (04; 00 section 5.1 conventions).</summary>
     public static class CollectionRejectReasons
     {
@@ -48,6 +57,9 @@ namespace HeroCat.Sim.Commands
         public const string SUMMON_BAD_PAYLOAD = "SUMMON_BAD_PAYLOAD";
         public const string SUMMON_ALREADY_APPLIED = "SUMMON_ALREADY_APPLIED";
         public const string SUMMON_STREAM_MISMATCH = "SUMMON_STREAM_MISMATCH";
+
+        /// <summary>LimitBreak on an item already at LIMIT_BREAK_RANKS (04 section 5.2).</summary>
+        public const string LIMIT_BREAK_CAPPED = "LIMIT_BREAK_CAPPED";
 
         /// <summary>NOT_ENOUGH_&lt;CURRENCY&gt; (00 decision 95), e.g. NOT_ENOUGH_DIAMOND, NOT_ENOUGH_TICKET_SUMMON_WEAPON.</summary>
         public static string NotEnough(Content.Currency c) => "NOT_ENOUGH_" + c;
