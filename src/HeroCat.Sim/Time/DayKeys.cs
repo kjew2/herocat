@@ -9,9 +9,9 @@ namespace HeroCat.Sim
     public static class DayKeys
     {
         /// <summary>Day 4 (1970-01-05) was the first Monday.</summary>
-        public const int FirstMondayDayKey = 4;
+        public const int FirstMondayDayKey = 4;   // literal-ok: calendar (00 contract 7)
 
-        public const int DaysPerWeek = 7;
+        public const int DaysPerWeek = 7;   // literal-ok: calendar (00 contract 7)
 
         public static int DayKey(long serverSeconds, int daySeconds) => (int)FloorDiv(serverSeconds, daySeconds);
 

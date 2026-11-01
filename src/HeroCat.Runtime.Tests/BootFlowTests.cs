@@ -145,11 +145,13 @@ namespace HeroCat.Runtime.Tests
             Assert.That(r.Sim.Tick, Is.EqualTo(tick), "no tick between boot and the first SCR_MAIN frame");
             Assert.That(TestContent.Store(store, clock).Load(clock.NowServerSeconds, TestContent.Db).State.Time.LastTickServerTime,
                         Is.EqualTo(clock.NowServerSeconds), "the stamp is saved before handoff");
-            // TODO(#108): with the catch-up compute in place, also assert Offline.Pending covers 3 h (credited >= OFFLINE_MIN_S).
+            var pending = r.Sim.State.Offline.Pending;   // 06 section 7.1: the 3 h window is stored, not yet credited
+            Assert.That((pending.ElapsedSec, pending.CreditedSec, pending.Capped), Is.EqualTo((3 * 3600L, 3 * 3600L, false)));
+            Assert.That(r.OpenOfflineReward, Is.True);
         }
 
         [Test]
-        public void PendingOfflineReward_OpensTheModal_AndKeepsTicksOff()   // 01 section 8.1 step 6, 8.7 step 5
+        public void PendingOfflineReward_OpensTheModal_AndHoldsTicksUntilTheClaim()   // 01 section 8.1 step 6, 8.7 step 5, decision 53
         {
             var store = new MemorySaveStore();
             var clock = new FakeClock(TestContent.T0);
@@ -160,11 +162,21 @@ namespace HeroCat.Runtime.Tests
             var o = Options(clock, store);
             var r = BootFlow.Run(o);
             Assert.That(r.OpenOfflineReward, Is.True);
-            Assert.That(r.Runner.TicksEnabled, Is.False);
+            Assert.That(r.Runner.TicksHeldForOfflineReward, Is.True);
+            Assert.That(r.Runner.TicksRunning, Is.False);
             long tick = r.Sim.Tick;
-            ((FakeMonoClock)o.Runner.Mono).Advance(1.0);
+            var mono = (FakeMonoClock)o.Runner.Mono;
+            mono.Advance(1.0);
             r.Runner.OnFrame();
-            Assert.That(r.Sim.Tick, Is.EqualTo(tick));
+            Assert.That(r.Sim.Tick, Is.EqualTo(tick), "no ticks while the reward is pending");
+
+            r.Runner.Enqueue(new ClaimOfflineReward());   // SCR_OFFLINE_REWARD's Claim
+            mono.Advance(1.0);
+            r.Runner.OnFrame();
+            Assert.That(r.Sim.State.Offline.Pending, Is.Null);
+            Assert.That(r.Runner.TicksRunning, Is.True);
+            mono.Advance(1.0);
+            Assert.That(r.Runner.OnFrame(), Is.EqualTo(TestContent.Db.Constants.TickHz), "ticks resume after the claim");
         }
 
         [Test]

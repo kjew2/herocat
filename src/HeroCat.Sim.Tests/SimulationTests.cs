@@ -168,7 +168,7 @@ namespace HeroCat.Sim.Tests
             Assert.That(sim.State.Time.LastTickServerTime, Is.EqualTo(T0 + 3600));
             sim.Apply(new ComputeOfflineCatchup(T0));
             Assert.That(sim.State.Time.LastTickServerTime, Is.EqualTo(T0 + 3600));
-            Assert.That(sim.State.Offline.Pending, Is.Null, "TODO(#108)");
+            Assert.That(sim.State.Offline.Pending.ElapsedSec, Is.EqualTo(3600), "the backwards call added nothing (06 AC 11)");
         }
 
         [Test]

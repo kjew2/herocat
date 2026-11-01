@@ -73,7 +73,7 @@ namespace HeroCat.Sim.State
     public sealed class TrainingState
     {
         // Index by Stat ordinal: ATK, HP, DEF, CRIT_RATE, CRIT_DMG, ATK_SPD, GOLD_GAIN, EXP_GAIN. Length always 8.
-        public int[] Level { get; set; } = new int[8];        // each 0..TRAIN_CAP[stat] (03)
+        public int[] Level { get; set; } = new int[8];        // each 0..TRAIN_CAP[stat] (03)   // literal-ok: 02 default size
     }
 
     /// <summary>
@@ -88,8 +88,8 @@ namespace HeroCat.Sim.State
         public double FishCoin      { get; set; }             // FISH_COIN
         public long   RockCandy     { get; set; }             // ROCK_CANDY
         public double HeroExp       => 0;                     // HERO_EXP is not a balance; it is Hero.Exp. Present in CurrencyDelta only.
-        public int[]  DungeonTicket { get; set; } = new int[3];      // by Dungeon ordinal: FISH_COIN, ROCK_CANDY, EXP
-        public int[]  SummonTicket  { get; set; } = new int[4];      // by Banner ordinal: WEAPON, SKILL, COMPANION, RUNE (issue #26); Remote mode mirrors the server ledger
+        public int[]  DungeonTicket { get; set; } = new int[3];      // by Dungeon ordinal: FISH_COIN, ROCK_CANDY, EXP   // literal-ok: 02 default size
+        public int[]  SummonTicket  { get; set; } = new int[4];      // by Banner ordinal: WEAPON, SKILL, COMPANION, RUNE (issue #26); Remote mode mirrors the server ledger   // literal-ok: 02 default size
         public long   GuildCoin     { get; set; }             // P1
 
         public bool ShouldSerializeHeroExp() => false;        // Json.NET convention, no attribute: HeroExp is never written
@@ -181,14 +181,14 @@ namespace HeroCat.Sim.State
     public sealed class LoadoutState
     {
         public string   Weapon     { get; set; }                         // equipped weapon id; TUTORIAL_WEAPON_ID from profile creation (issue #46)
-        public string[] Skills     { get; set; } = new string[6];        // SKILL_SLOTS; null = empty slot; order = auto-cast priority (04)
-        public string[] Companions { get; set; } = new string[4];        // COMPANION_SLOTS
-        public string[] Runes      { get; set; } = new string[6];        // RUNE_SLOTS, P1
+        public string[] Skills     { get; set; } = new string[6];        // SKILL_SLOTS; null = empty slot; order = auto-cast priority (04)   // literal-ok: 02 default size
+        public string[] Companions { get; set; } = new string[4];        // COMPANION_SLOTS   // literal-ok: 02 default size
+        public string[] Runes      { get; set; } = new string[6];        // RUNE_SLOTS, P1   // literal-ok: 02 default size
     }
 
     public sealed class FishBoardState
     {
-        public int[] Cells            { get; set; } = new int[20];   // FISH_BOARD_W * FISH_BOARD_H, row-major; 0 = empty, n >= 1 = fish level
+        public int[] Cells            { get; set; } = new int[20];   // FISH_BOARD_W * FISH_BOARD_H, row-major; 0 = empty, n >= 1 = fish level   // literal-ok: 02 default size
         public int   TankCount        { get; set; }                  // fish in the Magic Tank, 0..TankCap
         public int   TankRefillTick   { get; set; }                  // ticks toward the next tank fish; 0..refillTicks-1
         public int   TankReleaseLevel { get; set; } = 1;             // P1 upgrade level bought (05, 09 tank.release_level is the base)
@@ -218,8 +218,8 @@ namespace HeroCat.Sim.State
         public int    BossFailsOnStage  { get; set; }          // reset on advance (03)
         public int?   Selected          { get; set; }          // MVP side-stage farm target <= HighestCleared; null = frontier (issue #35)
         public double Mp                { get; set; }          // shared MP pool (04)
-        public int[]  SkillCooldowns    { get; set; } = new int[6];   // ticks left per skill slot
-        public int[]  CompanionCooldowns { get; set; } = new int[4];  // ticks left per companion slot (03 section 2.4)
+        public int[]  SkillCooldowns    { get; set; } = new int[6];   // ticks left per skill slot   // literal-ok: 02 default size
+        public int[]  CompanionCooldowns { get; set; } = new int[4];  // ticks left per companion slot (03 section 2.4)   // literal-ok: 02 default size
         public List<double> MissileQueue { get; init; } = new List<double>();   // queued fish-missile hit fractions, FIFO (issue #7)
         public DungeonRunState DungeonRun { get; set; }        // non-null only while Mode == Dungeon
         public FightState Fight         { get; set; }          // transient fight state; never saved (3.3)
@@ -285,9 +285,9 @@ namespace HeroCat.Sim.State
     /// <summary>Daily counters reset off Time.DayKey (06).</summary>
     public sealed class DungeonState
     {
-        public int[] BestFloor    { get; set; } = new int[3];   // per Dungeon ordinal; 0 = never cleared
-        public int[] EntriesToday { get; set; } = new int[3];
-        public int[] SweepsToday  { get; set; } = new int[3];
+        public int[] BestFloor    { get; set; } = new int[3];   // per Dungeon ordinal; 0 = never cleared   // literal-ok: 02 default size
+        public int[] EntriesToday { get; set; } = new int[3];   // literal-ok: 02 default size
+        public int[] SweepsToday  { get; set; } = new int[3];   // literal-ok: 02 default size
         public List<DungeonRunRecord> RecentRuns { get; init; } = new List<DungeonRunRecord>();   // newest last, at most DUNGEON_RECENT_RUNS_MAX (issue #52)
     }
 

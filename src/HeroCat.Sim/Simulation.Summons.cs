@@ -23,7 +23,7 @@ namespace HeroCat.Sim
         /// </summary>
         readonly HashSet<string> _appliedRequests = new HashSet<string>(StringComparer.Ordinal);
         readonly Queue<string> _appliedOrder = new Queue<string>();
-        internal const int AppliedRequestsMax = 256;
+        internal const int AppliedRequestsMax = 256;   // literal-ok: bookkeeping bound, not balance
 
         // ================================================================================================ ApplySummonResult
 
@@ -140,8 +140,8 @@ namespace HeroCat.Sim
             while (_appliedOrder.Count > AppliedRequestsMax) _appliedRequests.Remove(_appliedOrder.Dequeue());
         }
 
-        /// <summary>TODO(merge #85): call the Power layer's MarkDpsDirty() (03 section 7) once it lands.</summary>
-        void SummonsMarkDpsDirty() { }
+        /// <summary>Equips and copy gains invalidate the Power layer's DPS cache (03 section 7.3).</summary>
+        void SummonsMarkDpsDirty() => MarkDpsDirty();
 
         // ================================================================================================ weapons (04 6.3)
 
@@ -235,12 +235,24 @@ namespace HeroCat.Sim
             return r;
         }
 
+        /// <summary>
+        /// A skill put into a slot starts on its full cooldown; an emptied slot has none (the integration track's decision
+        /// for 04 section 7.2: re-slotting can never be used to skip a cooldown, and a fresh loadout bursts once the
+        /// cooldowns run out). Combat.SkillCooldowns is sized SKILL_SLOTS by ProfileFactory and the save validator.
+        /// </summary>
+        void StartSlotCooldown(int slot, string id)
+        {
+            var cds = State.Combat.SkillCooldowns;
+            if (cds == null || slot < 0 || slot >= cds.Length) return;
+            cds[slot] = id != null && Db.Skills.TryGetValue(id, out var def) ? def.CooldownTicks : 0;
+        }
+
         void SetSkill(string[] slots, int slot, string id)
         {
             string prev = slots[slot];
             slots[slot] = id;
             State.Loadout.Skills = slots;
-            // TODO(#86): the tick loop owns Combat.SkillCooldowns; a newly slotted skill starts on its full cooldown there.
+            StartSlotCooldown(slot, id);
             SummonsMarkDpsDirty();
             Emit(new ItemEquipped(Banner.SKILL, slot, id, prev, false));
         }

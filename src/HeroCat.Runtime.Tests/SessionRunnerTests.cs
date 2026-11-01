@@ -92,7 +92,7 @@ namespace HeroCat.Runtime.Tests
             var after = s.Log.Records.Skip(logged).ToList();
             var catchup = after.OfType<ComputeOfflineCatchup>().Single();
             Assert.That(after.Select(c => c.GetType().Name), Is.EqualTo(new[] { "ApplyServerTime", "ComputeOfflineCatchup" }));
-            Assert.That(catchup.NowServerSeconds - lastTick, Is.EqualTo(32), "the 1 s frame plus the 31 s gap since the boot stamp");
+            Assert.That(catchup.NowServerSeconds - lastTick, Is.EqualTo(31), "the 31 s gap; the ticked 1 s frame moved the anchor");
             Assert.That(s.Frame(0.1), Is.EqualTo(1), "ticking resumes from a clean accumulator");
         }
 
@@ -182,6 +182,11 @@ namespace HeroCat.Runtime.Tests
             Assert.That(s.Sim.State.Wallet.Diamond, Is.EqualTo(d0 + TestContent.Db.Constants.LoginDiamonds), "lazy single reset");
             Assert.That(s.Sim.State.Time.LastTickServerTime, Is.EqualTo(s.Clock.NowServerSeconds), "ComputeOfflineCatchup stamped it");
             Assert.That(store.WriteCount, Is.EqualTo(w + 2), "resume saves");
+            Assert.That(s.Sim.State.Offline.Pending, Is.Not.Null, "the 3-day gap is a pending reward (06 section 7.1)");
+            Assert.That(s.Frame(1.0), Is.EqualTo(0), "ticks are held while the reward is pending (decision 53)");
+            s.Runner.Enqueue(new ClaimOfflineReward());
+            s.Frame(1.0);
+            Assert.That(s.Sim.State.Offline.Pending, Is.Null);
             Assert.That(s.Frame(1.0), Is.EqualTo(Hz));
         }
 

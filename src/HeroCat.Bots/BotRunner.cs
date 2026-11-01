@@ -23,7 +23,7 @@ namespace HeroCat.Bots
 
     /// <summary>
     /// Plays N bot days: 120 active minutes in 60 s decisions, then one night sync (ApplyServerTime and
-    /// ComputeOfflineCatchup). Every mutation goes through Simulation.Apply / Advance. TODO(#134): 10 section 3.3's
+    /// ComputeOfflineCatchup, then ClaimOfflineReward). Every mutation goes through Simulation.Apply / Advance. TODO(#134): 10 section 3.3's
     /// two-session day with alternating gaps.
     /// </summary>
     public sealed class BotRunner
@@ -69,9 +69,11 @@ namespace HeroCat.Bots
                     sim.DrainEvents();
                 }
 
+                // The ticks kept Time.LastTickServerTime at the session end, so the gap below is the idle time only.
                 clock.Set(dayStart + k.DaySeconds);
                 sim.Apply(new ApplyServerTime(clock.NowServerSeconds));     // re-anchors after the gap; rolls the day
                 sim.Apply(new ComputeOfflineCatchup(clock.NowServerSeconds));
+                sim.Apply(new ClaimOfflineReward());                       // the bot claims at once (06 section 7.1); rejects if nothing is pending
                 sim.DrainEvents();
                 rows[day - 1] = Snapshot(day, sim);
                 AfterDay?.Invoke(day, ctx);

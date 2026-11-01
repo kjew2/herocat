@@ -23,9 +23,9 @@ namespace HeroCat.Client.Core
             Boot = boot;
             Clock = clock;
             if (boot.Outcome != BootOutcome.Ready) return;
-            // TODO(#118, #108): SCR_OFFLINE_REWARD and ClaimOfflineReward. Until that screen exists nothing could turn the
-            // ticks back on, so the session keeps ticking (the M0 sim stores no Offline.Pending yet).
-            boot.Runner.TicksEnabled = true;
+            // The runner holds ticks while Offline.Pending is set (decision 53) and resumes on ClaimOfflineReward.
+            // TODO(#118): SCR_OFFLINE_REWARD shows Offline.Pending and sends ClaimOfflineReward; until that screen lands a
+            // pending reward (any gap of OFFLINE_MIN_S or more) holds the Unity session's ticks.
             Vm = new GameViewModel(boot.Runner, clock, "runtime save (" + (boot.IsNewProfile ? "new profile, " : "") + boot.LoadStatus + ")");
         }
 

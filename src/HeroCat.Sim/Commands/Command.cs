@@ -73,7 +73,7 @@ namespace HeroCat.Sim.Commands
 
     /// <summary>
     /// Offline catch-up compute (01 section 8.7, 06 section 7). Stores or sums into Offline.Pending and stamps
-    /// Time.LastTickServerTime. TODO(#108): the skeleton only stamps the anchor; nothing is credited yet.
+    /// Time.LastTickServerTime; ClaimOfflineReward credits it. The body is Simulation.Offline.cs.
     /// </summary>
     public sealed record ComputeOfflineCatchup(long NowServerSeconds) : Command
     {

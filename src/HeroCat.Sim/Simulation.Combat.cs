@@ -147,7 +147,7 @@ namespace HeroCat.Sim
         void HeroHit(FightState f)
         {
             var q = Query;
-            double dmg = q.HeroHit * (1.0 + f.AtkBuffPct / 100.0);
+            double dmg = q.HeroHit * (1.0 + f.AtkBuffPct / Units.Percent);
             double u = RngStreams.NextUnit(State.Rng[RngStreams.Crit]);
             State.Stats.HeroHits += 1;
             bool isCrit = u < q.CritRate;
@@ -230,7 +230,7 @@ namespace HeroCat.Sim
             {
                 case CastType.INSTANT:
                 {
-                    double dmg = Query.SkillUnit * def.DamagePctPerCast * levelMult / 100.0;
+                    double dmg = Query.SkillUnit * def.DamagePctPerCast * levelMult / Units.Percent;
                     f.EnemyHp -= dmg;
                     AddDamage(dmg, false);
                     return;
@@ -241,7 +241,7 @@ namespace HeroCat.Sim
                     if (dur <= 0) return;
                     var dots = f.ActiveDots;
                     if (dots.Count >= Db.Constants.SkillSlots) dots.RemoveAt(0);   // max SKILL_SLOTS (6) entries, oldest replaced
-                    dots.Add(new DotInstance(dur, def.DamagePctPerTick * levelMult / 100.0));
+                    dots.Add(new DotInstance(dur, def.DamagePctPerTick * levelMult / Units.Percent));
                     return;
                 }
                 case CastType.BUFF:

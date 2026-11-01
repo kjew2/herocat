@@ -51,6 +51,14 @@ step "Clock purity: no clock reads in HeroCat.Sim, only ServerClock.cs/SessionRu
 python3 tools/check_clock_apis.py --self-test
 python3 tools/check_clock_apis.py
 
+step "Sim purity: no banned APIs in HeroCat.Sim, no Sim dependency, no Unity in Runtime/Remote (specs/01 AC 1, issue #63)"
+python3 tools/check_sim_purity.py --self-test
+python3 tools/check_sim_purity.py
+
+step "Sim literals: no balance literal in HeroCat.Sim (specs/09 acceptance 1, issue #131)"
+python3 tools/check_sim_literals.py --self-test
+python3 tools/check_sim_literals.py
+
 step "Summons: tools/gacha_model.py matches content/, Fixtures/Summon/stream.json and vectors.json (04, decision 46)"
 python3 tools/gacha_model.py --check
 

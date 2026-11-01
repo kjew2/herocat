@@ -2,6 +2,7 @@ using System.Linq;
 using HeroCat.Sim.Commands;
 using HeroCat.Sim.Content;
 using HeroCat.Sim.Events;
+using HeroCat.Sim.Power;
 using HeroCat.Sim.State;
 using HeroCat.Sim.Summons;
 using NUnit.Framework;
@@ -87,7 +88,64 @@ namespace HeroCat.Sim.Tests
             Assert.That(sim.DrainEvents().OfType<ItemEquipped>(), Is.Empty);
         }
 
+        [Test]
+        public void AutoEquip_RanksByRatedValue_NotRarity()   // #93, 04 section 6.3: highest WEAPON_ATK_PCT * LevelMult
+        {
+            var sim = Sim();
+            string epic = Db.Pool(Banner.WEAPON, Rarity.EPIC)[0];
+            string rare = Db.Pool(Banner.WEAPON, Rarity.RARE)[0];
+            Own(sim.State.Weapons, epic, copies: 1);
+            int max = Db.DupeLevels[Db.DupeLevels.Count - 1];
+            Own(sim.State.Weapons, rare, copies: max);   // level 10
+            double ev = CollectionRules.RatedValue(Db, Banner.WEAPON, sim.State.Weapons, epic);
+            double rv = CollectionRules.RatedValue(Db, Banner.WEAPON, sim.State.Weapons, rare);
+            Assert.That(ev, Is.EqualTo(Db.Weapons[epic].AtkPct));
+            Assert.That(rv, Is.EqualTo(Db.Weapons[rare].AtkPct * Db.LevelMult(Db.DupeLevels.Count)));
+            Assume.That(rv, Is.GreaterThan(ev), "content: a level-10 Rare out-values a level-1 Epic");
+            sim.Apply(new AutoEquipBestWeapon());
+            Assert.That(sim.State.Loadout.Weapon, Is.EqualTo(rare));
+            Assert.That(Db.LevelMult(Db.DupeLevels.Count), Is.EqualTo(2.8).Within(1e-12), "04 criterion 5: LevelMult 2.8 at level 10");
+        }
+
+        [Test]
+        public void EquipAndCopyGain_MarkDpsDirty()   // #93: checked through the 03 cache
+        {
+            var sim = Sim();
+            string e = Db.Pool(Banner.WEAPON, Rarity.EPIC)[0];
+            double before = sim.Query.RatedDps;
+            Own(sim.State.Weapons, e);   // a copy gain outside Apply does not reach the cache ...
+            Assert.That(sim.Query.RatedDps, Is.EqualTo(before));
+            Assert.That(sim.Apply(new EquipWeapon(e)).Ok, Is.True);   // ... the equip marks it dirty
+            double after = sim.Query.RatedDps;
+            Assert.That(after, Is.GreaterThan(before));
+            Assert.That(sim.Query.Power.Weapons,
+                        Is.EqualTo(1 + (PowerFormula.EquippedWeaponPct(Db, sim.State) + PowerFormula.WeaponPassivePct(Db, sim.State)) / 100));
+            Assert.That(SummonQuery.LayerMult(Db, sim.State, Banner.WEAPON), Is.EqualTo(sim.Query.Power.Weapons));
+
+            string sk = Db.Pool(Banner.SKILL, Rarity.EPIC)[0];
+            Own(sim.State.Skills, sk);
+            Assert.That(sim.Apply(new EquipSkill(0, sk)).Ok, Is.True);
+            Assert.That(sim.Query.Power.Skills, Is.EqualTo(1 + Db.Skills[sk].DpsPct / 100));
+            Assert.That(SummonQuery.LayerMult(Db, sim.State, Banner.SKILL), Is.EqualTo(sim.Query.Power.Skills));
+        }
+
         // ------------------------------------------------------------------------------------------------ skills (7.2)
+
+        [Test]
+        public void SlottingASkill_StartsItsFullCooldown_UnequipClearsIt()   // #94 (TODO(#86) decision): no cooldown skip by re-slotting
+        {
+            var sim = Sim();
+            string a = Db.Pool(Banner.SKILL, Rarity.COMMON)[0];
+            Own(sim.State.Skills, a);
+            sim.Apply(new EquipSkill(1, a));
+            Assert.That(sim.State.Combat.SkillCooldowns[1], Is.EqualTo(Db.Skills[a].CooldownTicks));
+            sim.Advance(5);
+            Assert.That(sim.State.Combat.SkillCooldowns[1], Is.EqualTo(Db.Skills[a].CooldownTicks - 5));
+            sim.Apply(new UnequipSkill(1));
+            Assert.That(sim.State.Combat.SkillCooldowns[1], Is.Zero);
+            sim.Apply(new EquipSkill(1, a));
+            Assert.That(sim.State.Combat.SkillCooldowns[1], Is.EqualTo(Db.Skills[a].CooldownTicks), "re-slotting restarts it");
+        }
 
         [Test]
         public void EquipSkill_RejectsUnownedBadSlotAndOtherSlot_AndReplacesTheOccupant()   // #94
@@ -174,6 +232,36 @@ namespace HeroCat.Sim.Tests
             Assert.That((tut.Equipped, tut.Slot), Is.EqualTo((true, (int?)0)));
             var unowned = vm.Items.First(i => !i.Owned);
             Assert.That((unowned.Copies, unowned.Level, unowned.EffectiveLevel, unowned.CopiesToNextLevel), Is.EqualTo((0, 0, 0, Db.DupeLevels[0])));
+        }
+
+        [Test]
+        public void Collection_HeadlineValues_PassiveAndLayer_FromThePowerLayer()   // #95, 04 section 11
+        {
+            var sim = Sim();
+            string w = Db.Pool(Banner.WEAPON, Rarity.RARE)[0];
+            Own(sim.State.Weapons, w, copies: Db.DupeLevels[1]);   // level 2
+            var vm = SummonQuery.Collection(sim, Banner.WEAPON);
+            var item = vm.Items.Single(i => i.Id == w);
+            var def = Db.Weapons[w];
+            Assert.That(item.ValueNow, Is.EqualTo(def.AtkPct * Db.LevelMult(2)));
+            Assert.That(item.ValueNextLevel, Is.EqualTo(def.AtkPct * Db.LevelMult(3)));
+            Assert.That(item.PassiveNow, Is.EqualTo(def.PassivePct * Db.LevelMult(2)));
+            Assert.That(vm.PassiveTotal, Is.EqualTo(PowerFormula.WeaponPassivePct(Db, sim.State)));
+            Assert.That(vm.LayerMult, Is.EqualTo(PowerFormula.Compute(Db, sim.State).Weapons));
+            Assert.That(vm.Items.All(i => !double.IsNaN(i.ValueNow) && !double.IsNaN(i.ValueNextLevel) && !double.IsNaN(i.PassiveNow)));
+
+            var unowned = vm.Items.First(i => !i.Owned);
+            Assert.That((unowned.ValueNow, unowned.PassiveNow), Is.EqualTo((0.0, 0.0)));
+            Assert.That(unowned.ValueNextLevel, Is.EqualTo(Db.Weapons[unowned.Id].AtkPct), "what the first copy gives");
+
+            string sk = Db.Pool(Banner.SKILL, Rarity.EPIC)[0];
+            int max = Db.DupeLevels[Db.DupeLevels.Count - 1];
+            Own(sim.State.Skills, sk, copies: max);
+            var svm = SummonQuery.Collection(sim, Banner.SKILL);
+            var s = svm.Items.Single(i => i.Id == sk);
+            Assert.That(s.ValueNow, Is.EqualTo(Db.Skills[sk].DpsPct * 2.8).Within(1e-9));
+            Assert.That(s.ValueNextLevel, Is.EqualTo(s.ValueNow), "no next level at level 10");
+            Assert.That((s.PassiveNow, svm.PassiveTotal, svm.LayerMult), Is.EqualTo((0.0, 0.0, 1.0)), "nothing equipped, no passive");
         }
 
         [Test]

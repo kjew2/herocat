@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using HeroCat.Sim.Content;
+using HeroCat.Sim.Power;
 using HeroCat.Sim.State;
 
 namespace HeroCat.Sim.Summons
@@ -11,8 +12,8 @@ namespace HeroCat.Sim.Summons
         bool Owned, int Copies, int Level, int LimitBreaks, int EffectiveLevel,
         int CopiesToNextLevel,                    // 0 at level 10
         int NextLimitBreakCost,                   // Rock Candy; 0 until limit breaks land (MVP), when maxed or unowned
-        double ValueNow, double ValueNextLevel,   // weapons: equipped pct; skills: dps_pct; after LevelMult. NaN until merge #85
-        double PassiveNow,                        // weapons only; NaN until merge #85
+        double ValueNow, double ValueNextLevel,   // weapons: equipped pct; skills: dps_pct; after LevelMult (0 / level-1 value when unowned)
+        double PassiveNow,                        // weapons only: passive pct after LevelMult; 0 otherwise
         bool Equipped, int? Slot,
         bool IsNew);                              // from the client's NEW badge store (ClientPrefs), never sim state
 
@@ -20,8 +21,8 @@ namespace HeroCat.Sim.Summons
     public sealed record CollectionVm(
         Banner Banner, IReadOnlyList<CollectibleVm> Items,
         int OwnedCount, int PoolCount,
-        double LayerMult,                         // weaponMult / skillMult; NaN until the Power layer's Query lands (TODO merge #85)
-        double PassiveTotal,                      // weapons: weaponPassivePct; NaN until merge #85
+        double LayerMult,                         // weaponMult / skillMult from the Power layer; 1 for kinds without a layer yet
+        double PassiveTotal,                      // weapons: weaponPassivePct (percentage points); 0 otherwise
         int NewCount,
         int BannerLevel, int PullsToNextLevel);
 
@@ -126,10 +127,24 @@ namespace HeroCat.Sim.Summons
                 if (vm.Owned) owned++;
                 if (vm.IsNew) newCount++;
             }
-            // TODO(merge #85): LayerMult and PassiveTotal from the Power layer's per-layer Query breakdown.
-            return new CollectionVm(b, items, owned, items.Count, double.NaN, b == Banner.WEAPON ? double.NaN : 0.0, newCount,
+            return new CollectionVm(b, items, owned, items.Count, LayerMult(db, s, b), PassiveTotal(db, s, b), newCount,
                                     BannerLevel(db, s, b), PullsToNextLevel(db, s, b));
         }
+
+        /// <summary>The collection's power-formula layer (03 section 7.1): weaponMult, skillMult; 1 for companions and runes until #161/#227.</summary>
+        public static double LayerMult(ContentDb db, GameState s, Banner b)
+        {
+            switch (b)
+            {
+                case Banner.WEAPON: return 1.0 + (PowerFormula.EquippedWeaponPct(db, s) + PowerFormula.WeaponPassivePct(db, s)) / Units.Percent;
+                case Banner.SKILL: return 1.0 + PowerFormula.SkillDpsPct(db, s) / Units.Percent;
+                default: return 1.0;
+            }
+        }
+
+        /// <summary>weaponPassivePct for weapons (04 section 6.1), 0 for every other kind.</summary>
+        public static double PassiveTotal(ContentDb db, GameState s, Banner b) =>
+            b == Banner.WEAPON ? PowerFormula.WeaponPassivePct(db, s) : 0.0;
 
         static CollectibleVm Item(ContentDb db, GameState s, Banner b, CollectionState col, string id, bool isNew)
         {
@@ -160,11 +175,13 @@ namespace HeroCat.Sim.Summons
                         if (slots[i] == id) { equipped = true; slot = i; break; }
             }
 
-            // TODO(merge #85): ValueNow / ValueNextLevel / PassiveNow (equipped pct, dps_pct, passive after LevelMult) from the
-            // Power layer's per-item Query; the combat track owns that math. NaN until then (0 for an unowned item's now/passive).
-            double now = owned ? double.NaN : 0.0;
-            double next = double.NaN;
-            double passiveNow = owned && b == Banner.WEAPON ? double.NaN : 0.0;
+            // Headline numbers after LevelMult (04 section 11), the Power layer's per-item math: ValueNow at the effective level
+            // (0 when unowned), ValueNextLevel one copies-level up (the level-1 value when unowned; ValueNow at level 10).
+            double baseValue = CollectionRules.BaseValue(db, b, id);
+            double now = owned ? baseValue * PowerFormula.ItemLevelMult(db, item) : 0.0;
+            double next = !owned ? baseValue * db.LevelMult(1) : level >= maxLevel ? now : baseValue * db.LevelMult(eff + 1);
+            double passiveNow = owned && b == Banner.WEAPON && db.Weapons.TryGetValue(id, out var pw)
+                ? pw.PassivePct * PowerFormula.ItemLevelMult(db, item) : 0.0;
             // TODO(#36): NextLimitBreakCost = LIMIT_BREAK_COST[r] * (LimitBreaks + 1) when the MVP LimitBreak command lands.
             return new CollectibleVm(id, rarity, nameKey, icon, owned, copies, level, lb, eff, toNext, 0, now, next, passiveNow,
                                      equipped, slot, isNew);

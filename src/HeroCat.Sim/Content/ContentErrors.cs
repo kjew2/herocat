@@ -53,6 +53,7 @@ namespace HeroCat.Sim.Content
         {
             if (!TryParse(a, out var pa)) throw new FormatException("bad content_version '" + a + "'");
             if (!TryParse(b, out var pb)) throw new FormatException("bad content_version '" + b + "'");
+            // literal-ok-begin: content_version format YYYY.MM.DD[.N] (00 contract 3), not balance
             for (int i = 0; i < 4; i++)
                 if (pa[i] != pb[i]) return pa[i] < pb[i] ? -1 : 1;
             return 0;
@@ -78,6 +79,7 @@ namespace HeroCat.Sim.Content
                 if (i == 3 && (n < 1 || s[0] == '0')) return false;
                 parts[i] = n;
             }
+            // literal-ok-end
             return true;
         }
     }

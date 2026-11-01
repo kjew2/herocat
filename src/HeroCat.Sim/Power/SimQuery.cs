@@ -58,7 +58,7 @@ namespace HeroCat.Sim.Power
 
         /// <summary>The rated DPS with a modelled <paramref name="missileDpsPct"/> (05 section 5.1; issue #15).</summary>
         public double RatedDpsWithMissiles(double missileDpsPct) =>
-            RatedDps / Power.Fish * (1.0 + (Power.FishBoardDpsPct + missileDpsPct) / 100.0);
+            RatedDps / Power.Fish * (1.0 + (Power.FishBoardDpsPct + missileDpsPct) / Units.Percent);
 
         // ------------------------------------------------------------------------------------------- stages (03 3)
 
@@ -78,6 +78,15 @@ namespace HeroCat.Sim.Power
             var k = _db.Constants;
             return k.BossHpMult * EnemyHp(stage) <= RatedDps * k.BossTimeTicks / k.TickHz;
         }
+
+        /// <summary>Rated kill time of a normal enemy of <paramref name="stage"/> in seconds (PowerFormula.KillTimeSeconds).</summary>
+        public double KillTimeSeconds(int stage) => PowerFormula.KillTimeSeconds(_db, Power, EnemyHp(stage));
+
+        /// <summary>The effective offline cap in hours, OFFLINE_CAP_H plus RES_OFFLINE_CAP (00 decision 12).</summary>
+        public double OfflineCapH => PowerFormula.OfflineCapH(_db, _s);
+
+        /// <summary>Bought level of the Research node with <paramref name="effect"/> (0 in M0 content).</summary>
+        public int ResearchLevel(ResearchEffect effect) => PowerFormula.ResearchLevel(_db, _s, effect);
 
         // ------------------------------------------------------------------------------------------- training (03 5.1)
 

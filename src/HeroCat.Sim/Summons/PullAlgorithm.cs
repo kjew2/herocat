@@ -75,7 +75,7 @@ namespace HeroCat.Sim.Summons
             OverflowRockCandy == o.OverflowRockCandy && PityAfter == o.PityAfter && BannerLevelAfter == o.BannerLevelAfter;
 
         public override bool Equals(object obj) => obj is PullResult o && Equals(o);
-        public override int GetHashCode() => ((ItemId?.GetHashCode() ?? 0) * 31 + (int)Rarity) * 31 + PityAfter;
+        public override int GetHashCode() => ((ItemId?.GetHashCode() ?? 0) * 31 + (int)Rarity) * 31 + PityAfter;   // literal-ok: hash mixing
         public override string ToString() =>
             $"{Rarity} {ItemId} (copies {CopiesAfter}, lv {LevelBefore}->{LevelAfter}, pity {PityAfter}, banner lv {BannerLevelAfter}" +
             (IsNew ? ", new" : "") + (GuaranteeApplied ? ", guarantee" : "") + (OverflowRockCandy > 0 ? $", +{OverflowRockCandy} rock candy" : "") + ")";
@@ -89,7 +89,7 @@ namespace HeroCat.Sim.Summons
     /// </summary>
     public static class PullAlgorithm
     {
-        public const int DrawsPerPull = 3;
+        public const int DrawsPerPull = 3;   // literal-ok: protocol (00 contract 2), not balance
 
         /// <summary>One pull. <paramref name="forceEplus"/>: the 10-pull guarantee slot (the L+ check still runs first).</summary>
         public static PullResult Pull(ContentDb db, BannerDef def, BannerState st, CollectionState col, IUniformSource rng, bool forceEplus)

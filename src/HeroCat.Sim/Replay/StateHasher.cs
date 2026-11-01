@@ -32,7 +32,7 @@ namespace HeroCat.Sim.Replay
         public static byte[] Encode(GameState s, bool includeBookkeeping)
         {
             if (s == null) throw new ArgumentNullException(nameof(s));
-            var w = new CanonicalWriter(2048);
+            var w = new CanonicalWriter(2048);   // literal-ok: initial buffer capacity, not balance
             w.Bytes(Magic);
             if (includeBookkeeping)
             {
@@ -242,6 +242,7 @@ namespace HeroCat.Sim.Replay
     }
 
     /// <summary>Growable little-endian byte writer shared by StateHasher and CommandLogCodec.</summary>
+    // literal-ok-begin: little-endian byte encoding (widths and shifts), not balance
     internal sealed class CanonicalWriter
     {
         byte[] _b;
@@ -331,11 +332,13 @@ namespace HeroCat.Sim.Replay
             return r;
         }
     }
+    // literal-ok-end
 
     /// <summary>
     /// FIPS 180-4 SHA-256, hand-rolled so the hash has no platform crypto dependency (Unity IL2CPP stripping,
     /// browser WebAssembly). Integer-only, so it is bit-exact everywhere.
     /// </summary>
+    // literal-ok-begin: FIPS 180-4 SHA-256 constants and bit operations, not balance
     public static class Sha256
     {
         static readonly uint[] K =
@@ -419,4 +422,5 @@ namespace HeroCat.Sim.Replay
 
         static uint Rotr(uint x, int n) => (x >> n) | (x << (32 - n));
     }
+    // literal-ok-end
 }

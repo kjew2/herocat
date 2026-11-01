@@ -103,7 +103,7 @@ public sealed class TimeState
 {
     public long Tick                 { get; set; }        // sim ticks since profile creation; monotone
     public long LastSavedServerTime  { get; set; }        // unix s; stamped by SaveStamp on every write
-    public long LastTickServerTime   { get; set; }        // unix s; catch-up anchor; stamped when ticking stops and when ComputeOfflineCatchup runs (01 section 8.7)
+    public long LastTickServerTime   { get; set; }        // unix s; catch-up anchor; every tick raises it to the virtual server now (never back), so ticked time is never offline and a replay reproduces it; also stamped when ComputeOfflineCatchup runs (01 section 8.7; issue #108)
     public long AnchorServerTime     { get; set; }        // unix s; set by each ApplyServerTime. Virtual server now = AnchorServerTime + (Tick - AnchorTick) / TICK_HZ (01 section 3.1; issue #5)
     public long AnchorTick           { get; set; }        // Tick at that ApplyServerTime
     public long CreatedServerTime    { get; init; }       // unix s

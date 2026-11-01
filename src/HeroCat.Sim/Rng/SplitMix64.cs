@@ -4,6 +4,7 @@ using HeroCat.Sim.State;
 namespace HeroCat.Sim.Rng
 {
     /// <summary>SplitMix64 as a stateless derive (02 section 3.4; same generator as the sibling project).</summary>
+    // literal-ok-begin: SplitMix64 reference constants and shifts, not balance
     public static class SplitMix64
     {
         public const ulong Gamma = 0x9E3779B97F4A7C15UL;
@@ -24,6 +25,7 @@ namespace HeroCat.Sim.Rng
         /// <summary>Uniform in [0, 1) with 53 bits of precision.</summary>
         public static double ToUnit(ulong x) => (x >> 11) * (1.0 / (1UL << 53));
     }
+    // literal-ok-end
 
     /// <summary>
     /// The eight persisted streams of 02 section 3.4 (00 contract 2). Every save holds all of them in every mode
@@ -50,12 +52,12 @@ namespace HeroCat.Sim.Rng
         public static bool TryParseSeed(string hex, out ulong seed)
         {
             seed = 0;
-            if (hex == null || hex.Length != 16) return false;
+            if (hex == null || hex.Length != 16) return false;   // literal-ok: hex seed format (16 hex digits), not balance
             foreach (char ch in hex)
             {
-                int v = ch >= '0' && ch <= '9' ? ch - '0' : ch >= 'a' && ch <= 'f' ? ch - 'a' + 10 : ch >= 'A' && ch <= 'F' ? ch - 'A' + 10 : -1;
+                int v = ch >= '0' && ch <= '9' ? ch - '0' : ch >= 'a' && ch <= 'f' ? ch - 'a' + 10 : ch >= 'A' && ch <= 'F' ? ch - 'A' + 10 : -1;   // literal-ok: hex seed format (16 hex digits), not balance
                 if (v < 0) { seed = 0; return false; }
-                seed = (seed << 4) | (uint)v;
+                seed = (seed << 4) | (uint)v;   // literal-ok: hex seed format (16 hex digits), not balance
             }
             return true;
         }

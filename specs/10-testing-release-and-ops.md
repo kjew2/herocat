@@ -385,7 +385,9 @@ dotnet run -c Release --no-build --project src/HeroCat.Bots -- golden --check --
 python3 tools/export_content.py check                                             # committed JSON matches CSVs
 python3 -m pytest tools/tests -q                                                  # exporter fixtures
 python3 tools/ci/test_counts.py --min-ratio 0.9                                   # section 1 count guard
-python3 tools/ci/no_literals.py src/HeroCat.Sim                                   # 09 acceptance 1
+python3 tools/check_sim_literals.py                                               # 09 acceptance 1 (issue #131)
+python3 tools/check_sim_purity.py                                                 # 01 AC 1 banned APIs and assembly refs (issue #63)
+python3 tools/check_clock_apis.py                                                 # 02 AC 18
 ```
 
 `./check.sh --server` applies the plain versioned SQL migration set (02 section 12; no EF Core migrations, issue #33) to an empty Postgres container and runs 02 AC16 on it, then runs `dotnet test src/HeroCat.Server.Tests -c Release` against the Postgres and Redis containers. Plain `./check.sh` includes the migration step behind a "Postgres available" guard: without Docker or Postgres (cloud sessions) it prints `SKIP db-migrations: no Postgres`, and the run must be reported as a partial check.

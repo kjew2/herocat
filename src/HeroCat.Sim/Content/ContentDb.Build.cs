@@ -247,6 +247,17 @@ namespace HeroCat.Sim.Content
                 var at = new List<AwakeningTargetDef>();
                 foreach (var r in Rows(d.AwakeningTargets)) at.Add(new AwakeningTargetDef(r.Rank, r.MaxDaysAfterGate));
                 db.AwakeningTargets = at.AsReadOnly();
+
+                // research (optional until #158 ships the rows; tier-filtered like every tiered table)
+                var research = Rows(d.Research);
+                Unique("research", research, r => r.Id);
+                var nodes = new Dictionary<string, ResearchDef>(StringComparer.Ordinal);
+                foreach (var r in research)
+                    if (Keep("research", r.Id, r.Tier))
+                        nodes[r.Id] = new ResearchDef(r.Id, Enum<ResearchEffect>(r.Effect, $"research[{r.Id}].effect"), r.EffectPerLevel,
+                                                      r.EffectFloor, r.MaxLevel, r.Cost0, r.CostG, r.UnlockAwakenRank,
+                                                      Enum<Tier>(r.Tier, $"research[{r.Id}].tier"));
+                db.Research = new ReadOnlyDictionary<string, ResearchDef>(nodes);
                 return db;
             }
 

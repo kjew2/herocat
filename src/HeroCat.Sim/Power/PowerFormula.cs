@@ -161,8 +161,8 @@ namespace HeroCat.Sim.Power
             double sum = 0.0, share = 1.0;
             for (int n = 2; n <= cap; n++)
             {
-                share *= 0.5;   // each level-n merge is shared by 2^(n-1) released fish
-                sum += levels[n - 1].MissilePct / 100.0 * share;
+                share /= 2;   // each level-n merge is shared by 2^(n-1) released fish
+                sum += levels[n - 1].MissilePct / Units.Percent * share;
             }
             return sum;
         }
@@ -174,7 +174,7 @@ namespace HeroCat.Sim.Power
         /// SCR_HERO) pass it to <see cref="SimQuery.RatedDpsWithMissiles"/>.
         /// </summary>
         public static double MissileDpsPct(ContentDb db, double fishPerMinute, int cap, double speedFactor) =>
-            100.0 * fishPerMinute * MissileHitsPerFish(db, cap) / (60.0 * speedFactor);
+            Units.Percent * fishPerMinute * MissileHitsPerFish(db, cap) / (Units.SecondsPerMinute * speedFactor);
 
         // ================================================================================================ Research, Runes, Awakening
 
@@ -193,6 +193,51 @@ namespace HeroCat.Sim.Power
             for (int i = 0; i < rows.Count; i++)
                 if (rows[i].Rank <= rank) m *= rows[i].Mult;
             return m;
+        }
+
+        /// <summary>
+        /// The bought level of the content's node with <paramref name="effect"/>, clamped to 0..max_level; 0 when the content
+        /// has no such node (M0) or the node was never bought (03 section 6).
+        /// </summary>
+        public static int ResearchLevel(ContentDb db, GameState s, ResearchEffect effect)
+        {
+            var node = db.ResearchFor(effect);
+            if (node == null || !s.Research.Level.TryGetValue(node.Id, out int lv) || lv <= 0) return 0;
+            return lv > node.MaxLevel ? node.MaxLevel : lv;
+        }
+
+        /// <summary>The summed effect of that node: effect_per_level * ResearchLevel (0 without the node).</summary>
+        public static double ResearchEffectTotal(ContentDb db, GameState s, ResearchEffect effect)
+        {
+            int lv = ResearchLevel(db, s, effect);
+            return lv == 0 ? 0.0 : db.ResearchFor(effect).EffectPerLevel * lv;
+        }
+
+        // ================================================================================================ offline and kill time
+
+        /// <summary>
+        /// The effective offline cap in hours: OFFLINE_CAP_H plus res_offline_cap's hours per level (00 decision 12, 03
+        /// section 6; issue #21). 24 h to 36 h with the shipped rows.
+        /// </summary>
+        public static double OfflineCapH(ContentDb db, GameState s) =>
+            db.Constants.OfflineCapH + ResearchEffectTotal(db, s, ResearchEffect.OFFLINE_CAP);
+
+        /// <summary>
+        /// Rated time to kill one enemy of <paramref name="hp"/> (03 section 7.1, 06 section 7.1): whole attacks at the rated
+        /// per-attack damage, <c>ceil(hp / (RatedDps * attackSec)) * attackSec + SPAWN_DELAY_TICKS / TICK_HZ</c>, where
+        /// <c>attackSec = ATTACK_INTERVAL_TICKS / TICK_HZ / speedFactor</c>. Skills, companions and crits enter through the
+        /// rated DPS (their expected share per attack). Positive infinity when the rated DPS is not positive.
+        /// </summary>
+        public static double KillTimeSeconds(ContentDb db, in PowerBreakdown p, double hp)
+        {
+            var k = db.Constants;
+            double hz = k.TickHz;
+            double attackSec = k.AttackIntervalTicks / hz / (p.Speed > 0 ? p.Speed : 1.0);
+            double perAttack = p.RatedDps * attackSec;
+            if (!(perAttack > 0) || double.IsInfinity(perAttack)) return double.PositiveInfinity;
+            double hits = Math.Ceiling(hp / perAttack);
+            if (hits < 1) hits = 1;
+            return hits * attackSec + k.SpawnDelayTicks / hz;
         }
 
         // ================================================================================================ the formula (03 7.1)
@@ -222,15 +267,15 @@ namespace HeroCat.Sim.Power
                 GoldMult = GoldMult(db, s),
                 ExpMult = ExpMult(db, s),
             };
-            p.Weapons = 1.0 + (p.EquippedWeaponPct + p.WeaponPassivePct) / 100.0;
-            p.Skills = 1.0 + p.SkillDpsPct / 100.0;
-            p.Companions = 1.0 + p.MpSufficiency * p.CompanionDpsPct / 100.0;
-            p.Fish = 1.0 + (p.FishBoardDpsPct + p.MissileDpsPct) / 100.0;
+            p.Weapons = 1.0 + (p.EquippedWeaponPct + p.WeaponPassivePct) / Units.Percent;
+            p.Skills = 1.0 + p.SkillDpsPct / Units.Percent;
+            p.Companions = 1.0 + p.MpSufficiency * p.CompanionDpsPct / Units.Percent;
+            p.Fish = 1.0 + (p.FishBoardDpsPct + p.MissileDpsPct) / Units.Percent;
             p.Research = 1.0 + p.ResearchPct;
             p.Runes = 1.0 + p.RunePct;
             p.Crit = CritFactor(p.CritRate, p.CritDmg);
 
-            p.HeroHit = p.Base * p.Training * p.Hero * p.Weapons * (1.0 + p.FishBoardDpsPct / 100.0)
+            p.HeroHit = p.Base * p.Training * p.Hero * p.Weapons * (1.0 + p.FishBoardDpsPct / Units.Percent)
                       * p.Research * p.Runes * p.Awakening;
             p.SkillUnit = p.HeroHit * p.Crit * p.Speed;
             p.CompanionUnit = p.SkillUnit * p.Skills;

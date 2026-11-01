@@ -164,7 +164,7 @@ namespace HeroCat.Sim
             var row = FishBoard.Level(Db, n);
             bool discovered = Discover(n);
             double coins = discovered ? row.DiscoveryCoins : row.MergeCoins;
-            State.Combat.MissileQueue.Add(row.MissilePct / 100.0);   // 03 section 2.5 drains it on the next Fighting tick
+            State.Combat.MissileQueue.Add(row.MissilePct / Units.Percent);   // 03 section 2.5 drains it on the next Fighting tick
             Emit(new FishMerged(source, target, n, coins, row.MissilePct, discovered));
             if (discovered) Emit(new FishDiscovered(n, row.DiscoveryCoins));
             Ledger.Apply(State, new CurrencyDelta(Content.Currency.FISH_COIN, coins),

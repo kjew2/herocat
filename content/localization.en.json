@@ -483,6 +483,10 @@
       "text": "No boss to fight here"
     },
     {
+      "key": "reject.no_pending_offline_reward",
+      "text": "No reward to collect"
+    },
+    {
       "key": "reject.not_available",
       "text": "Not available"
     },
