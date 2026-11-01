@@ -309,11 +309,13 @@ namespace HeroCat.Bots
         {
             var db = LoadContent(a);
             string path = a.Str("out", SaveFixture.DefaultPath(ContentDir(a)));
+#pragma warning disable CS0162 // V1Frozen is a const that flips once; the build runs with -warnaserror (10 section 6.2)
             if (SaveSchema.V1Frozen)
             {
                 Console.Out.Write($"SKIP {path}: v1 is frozen; its hash is pinned by MigrationTests M5\n");
                 return a.Has("update") ? 1 : 0;
             }
+#pragma warning restore CS0162
             string text = SaveFixture.Generate(db);
             if (a.Has("update"))
             {
