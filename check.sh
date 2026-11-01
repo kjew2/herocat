@@ -53,8 +53,8 @@ step "Saves: the v1 fixture matches what the bot CLI generates (until SaveSchema
 $BOTS save-fixture --check
 
 if [ "$FAST" -eq 1 ]; then
-  step ".NET: unit tests (no golden)"
-  dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory!=Golden"
+  step ".NET: unit tests (no golden, no perf)"
+  dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory!=Golden&TestCategory!=Perf"
 else
   # Report-only steps: run, print, but do not stop the run while REWRITE_REPORT_ONLY=1.
   soft() {
@@ -70,16 +70,20 @@ else
 
   if [ "$REWRITE_REPORT_ONLY" -eq 1 ]; then
     step ".NET: unit tests (golden tests report-only during the M0 rewrite)"
-    dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory!=Golden"
+    dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory!=Golden&TestCategory!=Perf"
     step ".NET: golden tests (report-only)"
     soft dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory=Golden"
   else
-    step ".NET: all tests"
-    dotnet test HeroCat.sln -c Release --no-build
+    step ".NET: all tests but perf"
+    dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory!=Perf"
   fi
 
+  # Its own step so a perf flake reads as one (specs/10 section 1.1, issue #139).
+  step ".NET: perf tests"
+  dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory=Perf"
+
   step "Bots: tick benchmark"
-  $BOTS bench --ticks 1000000 --max-ms 2000
+  $BOTS bench --ticks 1000000 --stage 300 --max-ms 2000
 
   step "Bots: acceptance sweep (20 seeds x 30 days)"
   soft $BOTS acceptance --seeds 1-20 --days 30 --time-budget-s 180
