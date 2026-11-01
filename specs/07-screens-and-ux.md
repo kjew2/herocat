@@ -908,6 +908,7 @@ No artist in M0. Everything is a coloured `Image` with a TMP label, so the slice
 | Currency icons | letter chips: G, D, F, R, T |
 | VFX | a scaling ring sprite tinted per use; damage numbers are the real system |
 | Backgrounds | flat `#121212` with a chapter-tinted gradient band behind the combat viewport |
+| Font | DejaVu Sans (`Assets/Resources/Fonts/`, license beside it), built into a dynamic TMP font asset at runtime by `UiKit.Font`, because TMP's LiberationSans lacks the placeholder glyphs (rarity shapes, crown, gear, envelope, close). The shipped font and its `latin -> ja -> ko -> zh-Hans` fallback chain (section 15) replace it |
 
 ### 15.2 MVP asset list for the artist
 
