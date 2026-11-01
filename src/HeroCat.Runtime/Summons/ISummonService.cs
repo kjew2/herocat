@@ -13,7 +13,9 @@ namespace HeroCat.Runtime.Summons
 
     public enum SummonPayment { Diamonds, Tickets }
 
-    public enum SummonError { None, NotEnoughDiamonds, NotEnoughTickets, BannerClosed, RateLimited, Network, Replayed }
+    /// <summary>InFlight: a summon intent is already pending (01 section 8.5.1 step 2). SaveFailed: the intent could not be
+    /// saved, so nothing was rolled or charged.</summary>
+    public enum SummonError { None, NotEnoughDiamonds, NotEnoughTickets, BannerClosed, RateLimited, Network, Replayed, InFlight, SaveFailed }
 
     /// <summary>One request, 1 or 10 pulls (04 section 2). RequestId: a GUID in "N" format (01 section 2.5).</summary>
     public sealed class SummonRequest

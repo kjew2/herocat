@@ -89,6 +89,9 @@ namespace HeroCat.Runtime.Session
         double _accTicks;
         long _lastMono, _lastSaveMono, _lastClockSyncMono;
         bool _dirty, _started, _clockAnomalyReported;
+        SummonFlow _summons;
+        readonly object _syncLock = new object();
+        readonly List<(long extrapolated, long synced)> _syncsLanded = new List<(long, long)>();
 
         public SessionRunner(Simulation sim, GameServices services, EventBus bus, ICommandLog log = null, SessionRunnerOptions options = null)
         {
@@ -104,11 +107,19 @@ namespace HeroCat.Runtime.Session
             if (log != null) sim.CommandLog = log;
             long now = _mono.Ticks;
             _lastMono = _lastSaveMono = _lastClockSyncMono = now;
+            // 01 section 8.2 step 2: a clock sync may land on any thread; OnFrame handles it on the main thread.
+            if (services.Clock is IClockResync resync) resync.Resynced += PostClockSync;
         }
 
         public Simulation Sim => _sim;
         public EventBus Bus => _bus;
         public GameServices Services => _svc;
+
+        /// <summary>The monotonic clock the frame loop reads (Runtime flows time their latency with it).</summary>
+        public IMonoClock Mono => _mono;
+
+        /// <summary>The kill-safe summon flow of 01 section 8.5.1 over this runner (issue #68).</summary>
+        public SummonFlow Summons => _summons ??= new SummonFlow(this);
 
         /// <summary>
         /// A manual tick switch (debug and tests): false runs no ticks and accumulates no time; commands, clock syncs,
@@ -179,6 +190,7 @@ namespace HeroCat.Runtime.Session
             if (IsPaused) return 0;
             if (!_started) Start();
             _opt.Dispatcher?.RunPending();
+            HandleLandedClockSyncs();
 
             long mono = _mono.Ticks;
             double dt = (mono - _lastMono) / (double)_mono.Frequency;
@@ -261,6 +273,7 @@ namespace HeroCat.Runtime.Session
         {
             IsPaused = false;
             _accTicks = 0;
+            _summons?.OnResume();
             SyncAndCatchUp();
         }
 
@@ -300,22 +313,64 @@ namespace HeroCat.Runtime.Session
         }
 
         /// <summary>
-        /// The Runtime summon flow of 01 section 8.5, minimal (carried over from GameSession): ask the summon service, apply
-        /// the payload through the logged ApplySummonResult (the only summon mutator), publish, save. Main thread; the
-        /// local service completes synchronously. TODO(#93): the persisted Pending.Summon intent, the summon analytics
-        /// event (04 section 13) and the Remote pre-roll and timeout path.
+        /// The Runtime summon flow of 01 section 8.5: <see cref="Summons"/>' SummonAsync (persisted intent, the logged
+        /// ApplySummonResult, publish, save). Main thread; the local service completes synchronously.
         /// </summary>
-        public async Task<Result<SummonResultPayload, SummonError>> SummonAsync(Banner banner, int count, SummonPayment payment,
-                                                                               CancellationToken ct = default)
+        public Task<Result<SummonResultPayload, SummonError>> SummonAsync(Banner banner, int count, SummonPayment payment,
+                                                                         CancellationToken ct = default)
         {
             if (_svc.Summon == null) throw new InvalidOperationException("no summon service in this GameServices");
-            var result = await _svc.Summon.PullAsync(SummonRequest.New(banner, count, payment), ct).ConfigureAwait(false);
-            if (!result.IsOk) return result;
-            var applied = Issue(new ApplySummonResult(result.Value));
-            if (!applied.Ok) throw new InvalidOperationException("ApplySummonResult rejected a service payload: " + applied);
+            return Summons.SummonAsync(banner, count, payment, ct);
+        }
+
+        /// <summary>Publishes the events the sim has buffered (Runtime flows that Issue outside a frame).</summary>
+        public void PublishDrained()
+        {
+            if (_bus.IsPublishing) throw new InvalidOperationException("PublishDrained called from an EventBus handler");
             _bus.Publish(_sim.DrainEvents());
-            SaveNow(SaveTrigger.Summon);
-            return result;
+        }
+
+        /// <summary>
+        /// 01 section 8.2 step 2 (issue #65): a clock sync landed and reports <paramref name="syncedServerSeconds"/> where the
+        /// clock had extrapolated <paramref name="extrapolatedServerSeconds"/>. Past CLOCK_JUMP_WARN_SEC it reports
+        /// clock_anomaly{resync}; when real time was longer it credits the difference as a second catch-up window
+        /// (ApplyServerTime then ComputeOfflineCatchup at the corrected now; it sums into Offline.Pending, whose effective
+        /// cap applies to the sum, 8.7). When shorter nothing is taken back. Main thread, not from an EventBus handler; an
+        /// <see cref="IClockResync"/> clock's syncs arrive here through the next <see cref="OnFrame"/>.
+        /// </summary>
+        public void OnClockSynced(long extrapolatedServerSeconds, long syncedServerSeconds)
+        {
+            if (_bus.IsPublishing) throw new InvalidOperationException("OnClockSynced called from an EventBus handler");
+            long jump = syncedServerSeconds - extrapolatedServerSeconds;
+            if (Math.Abs(jump) <= RuntimeConfig.CLOCK_JUMP_WARN_SEC) return;
+            _svc.Analytics?.Track("clock_anomaly", new Dictionary<string, object>
+            {
+                ["kind"] = "resync", ["seconds"] = jump, ["negative"] = jump < 0,
+            });
+            if (jump < 0) return;   // the discrepancy is bounded by the cap and logged; the next re-anchor reports it backwards
+            _accTicks = 0;
+            Issue(new ApplyServerTime(syncedServerSeconds));
+            Issue(new ComputeOfflineCatchup(syncedServerSeconds));   // the second window: synced - LastTickServerTime
+            _bus.Publish(_sim.DrainEvents());
+            SaveNow(SaveTrigger.Resume);
+            _lastClockSyncMono = _mono.Ticks;
+        }
+
+        void PostClockSync(long extrapolated, long synced)
+        {
+            lock (_syncLock) _syncsLanded.Add((extrapolated, synced));
+        }
+
+        void HandleLandedClockSyncs()
+        {
+            (long extrapolated, long synced)[] landed;
+            lock (_syncLock)
+            {
+                if (_syncsLanded.Count == 0) return;
+                landed = _syncsLanded.ToArray();
+                _syncsLanded.Clear();
+            }
+            foreach (var (e, s) in landed) OnClockSynced(e, s);
         }
 
         /// <summary>clock_anomaly{backwards}, at most once per session (02 section 11.3).</summary>
@@ -328,8 +383,8 @@ namespace HeroCat.Runtime.Session
 
         void SyncAndCatchUp()
         {
-            // TODO(#149): fire ServerClock.SyncAsync here (not awaited; the result lands on a later frame), and on a jump
-            // over CLOCK_JUMP_WARN_SEC credit the second catch-up window (01 section 8.2 step 2).
+            // TODO(#149): fire ServerClock.SyncAsync here (not awaited). Its result lands through IClockResync.Resynced, and
+            // OnClockSynced credits a jump over CLOCK_JUMP_WARN_SEC as the second catch-up window (01 section 8.2 step 2).
             long now = _svc.Clock.NowServerSeconds;
             // 02 section 11.3: a resume behind the catch-up anchor credits nothing (the sim never moves the anchor back).
             long behind = _sim.State.Time.LastTickServerTime - now;

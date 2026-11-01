@@ -98,6 +98,8 @@ namespace HeroCat.Client.Core
         {
             if (!IsReady) return 0;
             int ticks = Runner.OnFrame();
+            // 01 section 8.2 step 3: a summon intent left by a kill is re-run once the offline modal is closed (issue #68).
+            if (Runner.Summons.ShouldResolve && !Vm.Summon.InFlight) Vm.Summon.Resume(Runner.Summons.ResolveAsync());
             if (Vm.ConsumeSaveRequest()) Runner.SaveNow(SaveTrigger.Debug);
             Vm.Frame();
             if (ticks > 0 | Vm.ConsumeDirty()) Vm.Refresh();
