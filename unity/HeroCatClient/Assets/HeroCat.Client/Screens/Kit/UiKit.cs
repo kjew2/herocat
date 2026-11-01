@@ -26,7 +26,7 @@ namespace HeroCat.Client.Screens
         /// <summary>Printable ASCII, the ellipsis TMP truncates with, and every placeholder glyph the screens use.</summary>
         const string Preload =
             " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~" +
-            "\u2026\u00B7\u2039\u25CF\u25A0\u25C6\u2605\u265B\u2699\u2709\u2715";
+            "\u2026\u00B7\u2039\u25CF\u25A0\u25C6\u2605\u265B\u2699\u2709\u2715\u2298";
 
         /// <summary>
         /// A dynamic TMP font built at runtime from DejaVu Sans, because TMP's LiberationSans lacks the placeholder
