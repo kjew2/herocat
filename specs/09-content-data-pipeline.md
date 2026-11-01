@@ -161,7 +161,7 @@ The exporter checks `constants` against this list (`E040` missing, `E042` unknow
 | 08's `STAGE_VS_TIME` whale curve | `plausibility_stage_bound` (generated, issue #60) | int, int |
 | 06 section 2 reference-day parameters | `constants.REF_DAILIES_DONE`, `.REF_NEW_BOSSES` *(named here, issue #55)* | int |
 
-Constants other specs declare and this spec hosts (their owners' Constants introduced sections are the source): 03's `ATTACK_PROGRESS_UNIT`, `CRIT_DMG_BASE`, `MP_POOL0`, `MP_REGEN0`, `BOSS_ROCK_CANDY_P`, `TRAIN_CAP[*]` (in `stats.cap`), `RES_*` (in `research`); 04's `WEAPON_ATK_PCT[r]`, `SKILL_DPS_PCT[r]`, `COMPANION_DPS_PCT[r]`, `LIMIT_BREAK_COST[r]`, `DUPE_OVERFLOW_ROCK_CANDY[r]` (in `rarities`), `BANNER_LVL_EXP` (in `banner_levels.exp_required`), `TUTORIAL_WEAPON_ID` (in `tutorial_steps`); 06's `FIRST_CLEAR_DIAMONDS`, `DUNGEON_*`, `INBOX_EXPIRY_DAYS`, shop rows. Quest diamond amounts live only in the quest rows' `reward_amount` (no `QUEST_*` reward constants, issues #55 and #244). `REQUIRED_CONSTANTS` in the exporter is the union; acceptance criterion 4 pins the C# `Constants` class to it.
+Constants other specs declare and this spec hosts (their owners' Constants introduced sections are the source): 03's `ATTACK_PROGRESS_UNIT`, `CRIT_DMG_BASE`, `MP_POOL0`, `MP_REGEN0`, `BOSS_ROCK_CANDY_P`, `TRAIN_CAP[*]` (in `stats.cap`), `RES_*` (in `research`); 05's `FISH_DISCARD_COINS_PCT` (05 section 16; a `constants` row); 04's `WEAPON_ATK_PCT[r]`, `SKILL_DPS_PCT[r]`, `COMPANION_DPS_PCT[r]`, `LIMIT_BREAK_COST[r]`, `DUPE_OVERFLOW_ROCK_CANDY[r]` (in `rarities`), `BANNER_LVL_EXP` (in `banner_levels.exp_required`), `TUTORIAL_WEAPON_ID` (in `tutorial_steps`); 06's `FIRST_CLEAR_DIAMONDS`, `DUNGEON_*`, `INBOX_EXPIRY_DAYS`, shop rows. Quest diamond amounts live only in the quest rows' `reward_amount` (no `QUEST_*` reward constants, issues #55 and #244). `REQUIRED_CONSTANTS` in the exporter is the union; acceptance criterion 4 pins the C# `Constants` class to it.
 
 ## 5. Table schemas
 
@@ -193,11 +193,12 @@ ATTACK_PROGRESS_UNIT int I    CRIT_DMG_BASE double S       MP_POOL0 double S
 MP_REGEN0 double S            BOSS_ROCK_CANDY_P double S   FIRST_CLEAR_DIAMONDS int I
 INBOX_EXPIRY_DAYS int S       DAILY_GIFT_WEAPON_TICKETS int S  LOGIN_DIAMONDS int I
 LIMIT_BREAK_RANKS int S       REF_DAILIES_DONE int S       REF_NEW_BOSSES int S
+FISH_DISCARD_COINS_PCT double S
 ```
 
 `REF_DAILIES_DONE` (8) and `REF_NEW_BOSSES` (4) are 06 section 2's reference-day assumptions (paying daily missions completed, new boss stages first-cleared); only `E039` and the bots read them (issue #55). There are no `QUEST_DAILY_DIAMONDS`, `QUEST_DAILY_BONUS_5`, `QUEST_DAILY_BONUS_8` or `QUEST_WEEKLY_DIAMONDS` constants: the quest rows are the single source (issues #55, #244).
 
-Range rules: every `*_TICKS`, `TICK_HZ`, `KILLS_PER_STAGE`, `BOSS_EVERY`, `CHAPTER_WIDTH`, `STAGE_CAP`, `TAP_ZAP_MAX_PER_SEC`, `DAY_SECONDS`, `OFFLINE_MIN_S`, `*_SLOTS`, `FISH_BOARD_*`, `FISH_MAX_LVL0`, `ATTACK_PROGRESS_UNIT`, `LIMIT_BREAK_RANKS` are `> 0`; `SPAWN_DELAY_TICKS`, `REF_DAILIES_DONE`, `REF_NEW_BOSSES` are `>= 0`; `BASE_ATK`, `BASE_HP`, `BOSS_HP_MULT`, `BOSS_GOLD_MULT`, `OFFLINE_CAP_H`, `DUPE_LVL_BONUS`, `MP_POOL0`, `MP_REGEN0` are `> 0`; `TAP_ZAP_DMG_PCT`, `OFFLINE_RATE`, `FISH_MERGE_COINS_PCT`, `FISH_BOARD_DPS_FACTOR`, `BOSS_ROCK_CANDY_P` are `in [0, 1]`; `CRIT_DMG_BASE >= 1`; `TRAIN_BULK_STEPS` strictly increasing with first element 1; `FISH_BOARD_W * FISH_BOARD_H <= 64` (02 stores the board as a fixed array).
+Range rules: every `*_TICKS`, `TICK_HZ`, `KILLS_PER_STAGE`, `BOSS_EVERY`, `CHAPTER_WIDTH`, `STAGE_CAP`, `TAP_ZAP_MAX_PER_SEC`, `DAY_SECONDS`, `OFFLINE_MIN_S`, `*_SLOTS`, `FISH_BOARD_*`, `FISH_MAX_LVL0`, `ATTACK_PROGRESS_UNIT`, `LIMIT_BREAK_RANKS` are `> 0`; `SPAWN_DELAY_TICKS`, `REF_DAILIES_DONE`, `REF_NEW_BOSSES` are `>= 0`; `BASE_ATK`, `BASE_HP`, `BOSS_HP_MULT`, `BOSS_GOLD_MULT`, `OFFLINE_CAP_H`, `DUPE_LVL_BONUS`, `MP_POOL0`, `MP_REGEN0` are `> 0`; `TAP_ZAP_DMG_PCT`, `OFFLINE_RATE`, `FISH_MERGE_COINS_PCT`, `FISH_BOARD_DPS_FACTOR`, `FISH_DISCARD_COINS_PCT`, `BOSS_ROCK_CANDY_P` are `in [0, 1]`; `CRIT_DMG_BASE >= 1`; `TRAIN_BULK_STEPS` strictly increasing with first element 1; `FISH_BOARD_W * FISH_BOARD_H <= 64` (02 stores the board as a fixed array).
 
 Example row: `{"key": "BOSS_TIME_TICKS", "type": "int", "value": 300, "kind": "S"}`. What the tuning tool checks for the `S` rows is stated by the owning spec (03 section 8.6, 05's `fish_model.py`, 06 section 2); this spec only guarantees the value reaches them unchanged.
 
@@ -226,6 +227,8 @@ Example: `{"id": "enemy_hp", "base": 20.0, "growth": 1.07, "x_offset": 0}`. 03 p
 | `tier` | enum(Tier) | |
 | `name_key`, `desc_key` | key | |
 | `icon` | asset | |
+
+Every row is `tier = M0`, `HP` and `DEF` included: Training levels and `ContentDb.Stats` are indexed by the enum, so no row of this table may be tier-filtered away. 03's P1 tag on `HP`/`DEF` is about their trainability, which is `trainable = false`.
 
 Example: `{"id": "CRIT_RATE", "trainable": true, "per_lvl": 0.0025, "cap": 300, "base": null, "tier": "M0", "name_key": "stat.crit_rate.name", "desc_key": "stat.crit_rate.desc", "icon": "icon_stat_crit_rate"}`.
 
@@ -633,7 +636,7 @@ Derived at build: `TotalAmount = base_amount + floor(base_amount * bonus_pct)`. 
 | `skippable` | bool | |
 | `tier` | enum(Tier) | |
 
-Rule `E062`: exactly one step has `trigger = PROFILE_CREATED` and it is `order = 1`.
+Rule `E062`: exactly one step has `trigger = PROFILE_CREATED` and it is `order = 1`. That step is `tier = M0` even though the tutorial overlay is MVP: M0 applies its grant at profile creation (06 section 1.2), so an M0 build must not filter it out.
 
 ### 5.30 `localization`
 
@@ -678,7 +681,7 @@ One gate per feature, read both by sim rejections (`RESEARCH_LOCKED`, `DUNGEON_L
 
 | Column | Type | Constraint |
 |---|---|---|
-| `feature` | id | Key, UPPER_SNAKE feature id (the form 06's `QUESTS_LOCKED` / `DUNGEON_LOCKED` checks name). MVP rows: `RESEARCH`, `COMPANIONS`, `QUESTS`, `DUNGEONS`, `SHOP`. |
+| `feature` | string | Key, UPPER_SNAKE feature id matching `^[A-Z][A-Z0-9_]*$` (`E071`; the `id` type's lowercase pattern cannot hold it) (the form 06's `QUESTS_LOCKED` / `DUNGEON_LOCKED` checks name). MVP rows: `RESEARCH`, `COMPANIONS`, `QUESTS`, `DUNGEONS`, `SHOP`. |
 | `condition` | enum(FeatureCondition) | `STAGE_HIGHEST`: `Progress.HighestCleared >= threshold`; `AWAKEN_RANK`: `Hero.AwakenRank >= threshold`; `ALWAYS`: never locked. |
 | `threshold` | int? | Required for `STAGE_HIGHEST` and `AWAKEN_RANK` (`>= 1`), empty for `ALWAYS` (`E054`). |
 | `screen` | string | `SCR_*` id the gate locks (`E021` against `SCREEN_IDS`). |
@@ -746,7 +749,8 @@ Localization file shape: `{"table": "localization", "locale": "ja", "rows": [{"k
     "ja": { "file": "localization.ja.json", "rows": 1402, "sha256": "..." }
   },
   "content_hash": "sha256 over every table and localization sha256 concatenated in the key order above",
-  "s_constants": ["BASE_HP", "BOSS_TIME_TICKS", "CHAPTER_WIDTH", "..."]
+  "s_constants": ["BASE_HP", "BOSS_TIME_TICKS", "CHAPTER_WIDTH", "..."],
+  "notes": "meta.notes, for the release ticket"
 }
 ```
 
@@ -790,7 +794,8 @@ Python 3.9+, stdlib only for `build`, `check`, `diff` and `translator-csv`; `pul
 ```
 python3 tools/export_content.py pull  --sheet <id> [--service-account creds.json | --csv-export] [--src content_src]
 python3 tools/export_content.py build [--src content_src] [--out content] [--previous content] [--ui-keys unity/HeroCatClient/Assets/HeroCat.Client/ui_keys.txt] [--strict-warnings]
-python3 tools/export_content.py check [--src content_src] [--out content]
+python3 tools/export_content.py check [--src content_src] [--out content] [--dto-out src/HeroCat.Sim/Content/Dto/ContentDtos.g.cs]
+python3 tools/export_content.py gen-dtos [--dto-out ...]                       # C# DTOs of section 9.1 from SCHEMA
 python3 tools/export_content.py diff  --a content --b <dir>          # human-readable row diff for a PR description
 python3 tools/export_content.py translator-csv --out $KIROCREW_SCRATCH/strings_ja.csv --locale ja [--missing-only]
 python3 tools/export_content.py import-translations --csv strings_ja.csv --locale ja   # writes back into content_src/localization.csv
@@ -801,7 +806,8 @@ python3 tools/export_content.py pseudo --locale xx --out content_pseudo         
 |---|---|---|
 | `pull` | `--service-account`: Sheets API v4 `spreadsheets.values.batchGet` for every tab, written as CSV. `--csv-export`: the `gviz/tq?tqx=out:csv&sheet=<tab>` URL per tab, which works for link-readable sheets without OAuth. Either way the result is the committed `content_src/`. | 0, 2 (network/auth) |
 | `build` | Parse, validate, emit. Lists every error, not the first. Prints `content_version`, `content_hash`, row count per table, pool sizes per rarity, the `S` constant list, and `hot_apply`. | 0, 1 (validation), 2 (usage/IO) |
-| `check` | Build to memory; exit 1 if the result differs byte-for-byte from `--out`. CI's stale-JSON guard. Writes nothing. | 0, 1 |
+| `check` | Build to memory; exit 1 if the result differs byte-for-byte from `--out`, or the generated DTO file differs from `--dto-out`. CI's stale-JSON guard. Writes nothing. | 0, 1 |
+| `gen-dtos` | Writes the `HeroCat.Sim.Content.Dto` classes (section 9.1) from `SCHEMA`; `build` does it too. Field names are the PascalCase of the columns, so the Runtime loader maps them back with Newtonsoft's snake-case naming. | 0 |
 | `diff` | Row-level added/removed/changed per table between two content dirs. Pasted into the PR. | 0 |
 | `translator-csv` | `key, en, <locale>, max_chars, context` for a translator; `--missing-only` filters to empty cells. | 0 |
 | `import-translations` | Merges a returned CSV into the `localization` CSV; refuses rows whose `en` no longer matches (`E076`, the source changed under the translator). | 0, 1 |
@@ -910,7 +916,7 @@ Namespace `HeroCat.Sim.Content`. No `UnityEngine`, no JSON, no IO, no reflection
 
 ### 9.1 DTOs and `Build`
 
-The DTOs are plain mutable classes with public fields in `HeroCat.Sim.Content.Dto`, one per table row, mirroring section 5 column for column (`double?` for nullable doubles, `string` for enums and refs, `Grant[]` for grantlists). They exist so Sim can accept data without knowing JSON; Runtime fills them with Newtonsoft and Sim never sees a `JObject`.
+The DTOs are plain mutable classes with public fields in `HeroCat.Sim.Content.Dto`, one per table row, mirroring section 5 column for column (`double?` for nullable doubles, `string` for enums and refs, `GrantDto[]` for grantlists, `object` for `constants.value`, which the loader hands over as a `long`, `double`, `bool` or `long[]`, never a JSON type). They are generated from the exporter's `SCHEMA` into `src/HeroCat.Sim/Content/Dto/ContentDtos.g.cs` and `check` fails on drift, so the Python and C# shapes cannot diverge. They exist so Sim can accept data without knowing JSON; Runtime fills them with Newtonsoft and Sim never sees a `JObject`.
 
 ```csharp
 namespace HeroCat.Sim.Content.Dto
@@ -1014,46 +1020,37 @@ public sealed class Constants
     public int    LimitBreakRanks { get; }        // LIMIT_BREAK_RANKS (00, 04)
     public int    RefDailiesDone { get; }         // REF_DAILIES_DONE (06 reference day; validator and bots only)
     public int    RefNewBosses { get; }           // REF_NEW_BOSSES (06 reference day; validator and bots only)
+    public double FishDiscardCoinsPct { get; }    // FISH_DISCARD_COINS_PCT (05)
 
     public bool IsBossStage(int s) => s % BossEvery == 0;
     public int  ChapterOf(int s)   => (s - 1) / ChapterWidth + 1;
 }
 
-/// base * growth^(x + offset), growth^k by repeated multiplication into a growable cache.
+/// base * growth^(x + offset), growth^k by repeated multiplication into a table precomputed at Build.
 /// This is the GeometricTable 03 refers to. No Math.Pow: 00 section 3 requires bit-identical
 /// results on x64, ARM64 and IL2CPP, and Pow is not guaranteed to be.
 public sealed class CurveDef
 {
     public string Id { get; }  public double Base { get; }  public double Growth { get; }  public int XOffset { get; }
-    private double[] _pow = { 1.0 };   // _pow[k] = Growth^k
-    private int _count = 1;
+    private readonly double[] _pow;    // _pow[k] = Growth^k, k < max(STAGE_CAP + BOSS_EVERY, hero_levels.level_cap) + 1
 
-    public double Eval(int x)
+    public double Power(int k)         // past the table: continue the same multiplication chain from its last entry
     {
-        int k = x + XOffset;
-        if (k < 0) throw new ArgumentOutOfRangeException(nameof(x));
-        if (k >= _count) Grow(k);
-        return Base * _pow[k];
+        if (k < 0) throw new ArgumentOutOfRangeException(nameof(k));
+        if (k < _pow.Length) return _pow[k];
+        double v = _pow[_pow.Length - 1];
+        for (int i = _pow.Length; i <= k; i++) v *= Growth;
+        return v;
     }
-    /// Sum of Base * Growth^(x..x+m-1) by the closed form over cached powers; used for bulk Training cost.
-    public double EvalSum(int x, int m)
-    {
-        int k = x + XOffset; Grow(k + m);
-        return Base * (_pow[k + m] - _pow[k]) / (Growth - 1.0);
-    }
-    /// Largest m >= 0 with EvalSum(x, m) <= budget, by walking the cache. No logarithm.
+    public double Eval(int x) => Base * Power(x + XOffset);
+    /// Sum of Base * Growth^(x..x+m-1) by the closed form over the powers; used for bulk Training cost.
+    public double EvalSum(int x, int m) => m <= 0 ? 0 : Base * (Power(x + XOffset + m) - Power(x + XOffset)) / (Growth - 1.0);
+    /// Largest m >= 0 with EvalSum(x, m) <= budget: doubling, then bisection over EvalSum. No logarithm.
     public int MaxAffordable(int x, double budget) { ... }
-    private void Grow(int k)
-    {
-        if (k < _count) return;
-        if (k >= _pow.Length) Array.Resize(ref _pow, Math.Max(k + 1, _pow.Length * 2));
-        for (int i = _count; i <= k; i++) _pow[i] = _pow[i - 1] * Growth;
-        _count = k + 1;
-    }
 }
 ```
 
-`Grow` is the only mutation inside `ContentDb` and it is idempotent and value-deterministic: two instances evaluated in any order hold identical `_pow[k]` for every `k`, so sharing one `ContentDb` across parallel bot seeds is safe (10 section 4). The cache is not thread-safe for concurrent growth; the bot harness pre-warms every curve to `STAGE_CAP` before forking seeds and the client runs the sim on one thread (01).
+The power table is filled once in `Build` and never mutated, so a `ContentDb` is immutable after `Build` (principle 6) and safe to share across parallel bot seeds and threads with no pre-warming (10 section 4). An index past the table yields the same bits a longer table would, because it continues the same left-to-right multiplication. This replaces an earlier lazily grown cache, which was not thread-safe (issue #125).
 
 ### 9.3 Row types (abbreviated)
 
@@ -1164,7 +1161,7 @@ Sim code takes `ContentDb` through its constructor (`new Simulation(db, state, c
 
 ### 9.5 Performance
 
-`Build` on the full MVP set targets under 30 ms on a 2 GB Android device and allocates once (arrays sized from row counts). Lookups are dictionary or array index; nothing is searched linearly on the tick path. `CurveDef` caches are pre-warmed by `Simulation` to the current stage plus `BOSS_EVERY` at construction so a tick never grows a cache mid-combat (the growth itself is cheap; the point is a predictable tick budget, 01 section 3.2).
+`Build` on the full MVP set targets under 30 ms on a 2 GB Android device and allocates once (arrays sized from row counts). Lookups are dictionary or array index; nothing is searched linearly on the tick path. `CurveDef` power tables are precomputed in `Build` to `STAGE_CAP + BOSS_EVERY` (or the hero level cap, whichever is larger), so a tick never grows anything (a predictable tick budget, 01 section 3.2).
 
 ## 10. Versioning and delivery
 

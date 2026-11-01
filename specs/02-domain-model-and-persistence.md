@@ -62,7 +62,8 @@ namespace HeroCat.Sim.State;
 
 public sealed class GameState
 {
-    public int    SchemaVersion   { get; set; } = SaveSchema.Current;   // SAVE_SCHEMA_VERSION; the only version field in the body
+    public const int CurrentSchemaVersion = 1;                           // SAVE_SCHEMA_VERSION; Runtime's SaveSchema.Current is this constant (the Sim cannot see Runtime)
+    public int    SchemaVersion   { get; set; } = CurrentSchemaVersion;  // the only version field in the body
     public string ContentVersion  { get; set; } = "";                   // ContentDb.Version active at last write (09)
     public string ContentHash     { get; set; } = "";                   // ContentDb.Hash (09 manifest sha256, lowercase hex) the save was last reconciled against; stamped with ContentVersion (issue #56)
     public Guid   PlayerId        { get; init; }                        // server playerId; Guid.Empty for an unlinked local guest (01 open question 7)
@@ -104,9 +105,9 @@ public sealed class TimeState
     public long AnchorServerTime     { get; set; }        // unix s; set by each ApplyServerTime. Virtual server now = AnchorServerTime + (Tick - AnchorTick) / TICK_HZ (01 section 3.1; issue #5)
     public long AnchorTick           { get; set; }        // Tick at that ApplyServerTime
     public long CreatedServerTime    { get; init; }       // unix s
-    public int  DayKey               { get; set; }        // floor(serverSeconds / DAY_SECONDS) at last rollover (06); the only daily key: quests, dungeon tickets and shop all reset off it (issue #7)
-    public int  WeekKey              { get; set; }        // floor((serverSeconds - WEEK_EPOCH_OFFSET) / (7 * DAY_SECONDS)) at last weekly rollover; the only weekly key
-    public int  LoginDayKey          { get; set; }        // DayKey on which LOGIN_DIAMONDS was last granted (reason LOGIN, issue #20)
+    public int  DayKey               { get; set; } = -1;  // floor(serverSeconds / DAY_SECONDS) at last rollover (06; -1 on a new profile, 06 section 4.2 rule 4); the only daily key: quests, dungeon tickets and shop all reset off it (issue #7)
+    public int  WeekKey              { get; set; } = -1;  // floor((serverSeconds - WEEK_EPOCH_OFFSET) / (7 * DAY_SECONDS)) at last weekly rollover; the only weekly key
+    public int  LoginDayKey          { get; set; } = -1;  // DayKey on which LOGIN_DIAMONDS was last granted (reason LOGIN, issue #20)
 }
 
 public sealed class HeroState
@@ -525,7 +526,7 @@ Newtonsoft.Json 13.x (`com.unity.nuget.newtonsoft-json` in Unity; the NuGet pack
 | Enums | `StringEnumConverter` | `"Mode": "Stage"`, `"WEAPON"` keys. Integers accepted on read. A saved member is never renamed in place; a rename is a migration. |
 | `Guid` | Default 36-char lowercase string | |
 | `Dictionary<Banner, BannerState>` | Keys as enum names via the converter | |
-| `Stats.ClientDiamondsEarned`, `ClientDiamondsSpent`, `ClientTicketsEarned` | Keys as enum names, written sorted by key | Byte stability (AC 3); issue #49. |
+| Every dictionary (`Banners`, `Rng`, `Items`, quest maps, `Research.Level`, `Shop.ExchangeCounts`, `Stats.ClientDiamondsEarned`, `ClientDiamondsSpent`, `ClientTicketsEarned`) | Written sorted by the key as written (ordinal string order: enum names, ids); read in any order | Byte stability (AC 3): two equal states built in different insertion orders encode to the same bytes; issue #49. The 5.2 example shows `Banners` in enum order for readability; the serializer writes `COMPANION`, `SKILL`, `WEAPON`. |
 | `HashSet<int>` / `HashSet<string>` | JSON arrays, written sorted | Sorted so two saves with equal state are byte-equal (determinism test, 10). |
 | `Formatting` | `None` release, `Indented` development | |
 | Encoding | UTF-8 without BOM | |
@@ -604,7 +605,7 @@ Left alone on purpose: `Time.DayKey > dayKey(now)` and `LastSavedServerTime > no
 ```csharp
 public static class SaveSchema
 {
-    public const int  Current  = 1;       // SAVE_SCHEMA_VERSION
+    public const int  Current  = GameState.CurrentSchemaVersion;   // SAVE_SCHEMA_VERSION
     public const bool V1Frozen = false;   // set true the day a build ships to anyone outside the team; never set back
 }
 

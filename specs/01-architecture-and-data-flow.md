@@ -107,16 +107,17 @@ public static Services Build(BackendMode mode, string dataDir, ContentDb db, Sim
 ### 2.1 Base types
 
 ```csharp
-namespace HeroCat.Sim;
+namespace HeroCat.Sim.Commands { ... }   // block namespaces: the sim is C# 9 (CLAUDE.md), so no file-scoped namespace
 
 public abstract record Command
 {
-    public long IssuedAtTick { get; init; }      // Simulation.Tick at the moment of Apply; set by Simulation, not the caller
+    public long IssuedAtTick { get; init; }      // Simulation.Tick at the moment of Apply; set by Simulation (cmd with { IssuedAtTick = Tick }), not the caller
+    internal abstract ApplyResult Execute(Simulation sim);   // the dispatch: each command type carries its handler, so adding one touches one file
 }
 
-public abstract record Event
+public abstract record Event                     // namespace HeroCat.Sim.Events
 {
-    public long Tick { get; init; }              // sim tick at emission
+    public long Tick { get; internal set; }      // sim tick at emission; stamped by the emitter (C# 9 cannot set an init property after construction)
 }
 
 public enum RejectCode                           // category: picks the UI presentation (section 7)
@@ -125,10 +126,11 @@ public enum RejectCode                           // category: picks the UI prese
     SlotOccupied, BoardFull, TankEmpty, LevelMismatch, NotAvailable, RateLimited, BadArgument, StaleRequest
 }
 
-public readonly record struct ApplyResult(bool Ok, RejectCode Code, string? Reason)
+public readonly struct ApplyResult               // a readonly struct: record structs are C# 10
 {
-    public static readonly ApplyResult Accepted = new(true, RejectCode.None, null);
-    public static ApplyResult Reject(RejectCode c, string? reason = null) => new(false, c, reason);
+    public bool Ok { get; }  public RejectCode Code { get; }  public string Reason { get; }   // Reason null when Ok
+    public static readonly ApplyResult Accepted = new ApplyResult(true, RejectCode.None, null);
+    public static ApplyResult Reject(RejectCode c, string reason = null) => new ApplyResult(false, c, reason);
 }
 ```
 
@@ -229,7 +231,8 @@ public readonly struct Snapshot
     public BossPhase BossPhase; public int BossTicksLeft;   // 02 `Combat.BossPhase` (None/Pending/Walled), issue #7
     public double EnemyHp, EnemyHpMax;
     public double HeroDps;                      // the 00 section 7 formula evaluated this tick
-    public double Gold, Diamonds, FishCoin, RockCandy, HeroExp, HeroExpToNext;
+    public double Gold, FishCoin, HeroExp, HeroExpToNext;
+    public long   Diamonds, RockCandy;               // counted currencies are long (00 contract 9)
     public int    HeroLevel, AwakenRank;
     public double Mp, MpMax;
     public int    TankFish, TankCap; public int TankRefillTicksLeft;

@@ -307,6 +307,7 @@ acceptance  [--table] [--verbose] [--targets path] [--time-budget-s N]
 report      --longest-walls | --layer-shares | --diamonds  --seeds  --days
 golden      --check | --update | --replay
 stage-bound --check | --update  [--seeds 1-20] [--days 60]
+save-fixture --check | --update                              # 02 section 7.3's v1.json from a played bot profile; check.sh drift-checks it until V1Frozen
 bench       --ticks 1000000 --stage 300 --max-ms 2000
 ```
 
