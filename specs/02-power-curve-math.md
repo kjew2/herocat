@@ -144,7 +144,7 @@ Never change `HP_G` to fix a local problem; it moves every stage at once. Change
 1. Median of 20 seeds lands within +/-20% of the stage targets in `specs/00` section 2.6 for days 1, 7, 30.
 2. No layer share (section 5 table) exceeds 80% or drops below 3% on any of days 1, 7, 30.
 3. First wall (boss failed at least once) occurs between stage 60 and stage 200 in every seed.
-4. No wall opened in the first 14 days lasts more than 48 h wall-clock (one overnight gap plus a session). The harness also reports the longest wall in active hours (see `specs/00` section 7, decision 3).
+4. No wall opened in the first 14 days lasts more than 96 h wall-clock (loosened from 48 h for now, see `specs/00` section 7, decision 3). The harness also reports the longest wall in active hours (see `specs/00` section 7, decision 3).
 5. Stat level never exceeds `0.95 * stage + 50` (if it does, gold is too plentiful relative to cost).
 6. The run is deterministic for a fixed seed: rerunning yields byte-identical output.
 

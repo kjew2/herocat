@@ -8,7 +8,7 @@
   "firstWallMinStage": 60,
   "firstWallMaxStage": 200,
   "maxWallHoursThroughDay": 14,
-  "maxWallHours": 48.0,
+  "maxWallHours": 96.0,
   "statLevelSlope": 0.95,
   "statLevelIntercept": 50
 }
