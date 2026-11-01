@@ -70,7 +70,7 @@ namespace HeroCat.Bots.Report
                 string cell = string.Format(Inv, "{0:0.0}%", 100 * v) + (mark != null ? mark(n, v) : "");
                 sb.Append(' ').Append(cell.PadLeft(Math.Max(6, n.Length)));
             }
-            return sb.ToString();
+            return sb.ToString().TrimEnd();
         }
 
         public static string Csv(RunResult run, bool allDays)
