@@ -41,23 +41,23 @@ public sealed class FishBoardState                               // GameState.Fi
 
 One row per level in the `fish_levels` table (09). Values are the 00 formulas evaluated; the table exists so that the sheet can override a level (for example to make level 10 a visible milestone) without the code knowing.
 
-| Level `n` | `FISH_DISCOVERY_COINS[n]` = `10 * 2^(n-1)` | `FISH_MERGE_COINS[n]` = 2% of discovery | `FISH_MISSILE_PCT[n]` = `5 * 1.5^(n-1)` (% of one hero hit) | Board DPS per fish = `0.5 * missile` (%) | Level-1 fish consumed |
+| Level `n` | `FISH_DISCOVERY_COINS[n]` = `10 * 2^(n-1)` | `FISH_MERGE_COINS[n]` = 2% of discovery | `FISH_MISSILE_PCT[n]` = `5 * 1.5^(n-1)` (% of one hero hit) | Board DPS per fish = `FISH_BOARD_DPS_FACTOR (0.77) * missile` (%) | Level-1 fish consumed |
 |---|---|---|---|---|---|
-| 1 | 10 | - | - (never fired: level 1 is released, not merged) | 2.5 | 1 |
-| 2 | 20 | 0.4 | 7.5 | 3.75 | 2 |
-| 3 | 40 | 0.8 | 11.25 | 5.6 | 4 |
-| 4 | 80 | 1.6 | 16.9 | 8.4 | 8 |
-| 5 | 160 | 3.2 | 25.3 | 12.7 | 16 |
-| 6 | 320 | 6.4 | 38.0 | 19.0 | 32 |
-| 7 | 640 | 12.8 | 57.0 | 28.5 | 64 |
-| 8 | 1,280 | 25.6 | 85.4 | 42.7 | 128 |
-| 9 | 2,560 | 51.2 | 128 | 64.1 | 256 |
-| 10 | 5,120 | 102 | 192 | 96.1 | 512 |
-| 11 | 10,240 | 205 | 288 | 144 | 1,024 |
-| 12 | 20,480 | 410 | 432 | 216 | 2,048 |
-| 13 | 40,960 | 819 | 648 | 324 | 4,096 |
-| 14 | 81,920 | 1,638 | 973 | 486 | 8,192 |
-| 15 | 163,840 | 3,277 | 1,459 | 730 | 16,384 |
+| 1 | 10 | - | - (never fired: level 1 is released, not merged) | 3.85 | 1 |
+| 2 | 20 | 0.4 | 7.5 | 5.78 | 2 |
+| 3 | 40 | 0.8 | 11.25 | 8.66 | 4 |
+| 4 | 80 | 1.6 | 16.9 | 13.0 | 8 |
+| 5 | 160 | 3.2 | 25.3 | 19.5 | 16 |
+| 6 | 320 | 6.4 | 38.0 | 29.2 | 32 |
+| 7 | 640 | 12.8 | 57.0 | 43.9 | 64 |
+| 8 | 1,280 | 25.6 | 85.4 | 65.8 | 128 |
+| 9 | 2,560 | 51.2 | 128 | 98.7 | 256 |
+| 10 | 5,120 | 102 | 192 | 148 | 512 |
+| 11 | 10,240 | 205 | 288 | 222 | 1,024 |
+| 12 | 20,480 | 410 | 432 | 333 | 2,048 |
+| 13 | 40,960 | 819 | 648 | 500 | 4,096 |
+| 14 | 81,920 | 1,638 | 973 | 749 | 8,192 |
+| 15 | 163,840 | 3,277 | 1,459 | 1,124 | 16,384 |
 
 `FISH_MERGE_COINS[n]` is an unrounded `double` (00 contract 9: `FISH_COIN` is a `double`); 09 does not round it and the UI floors the display (issue #16).
 
@@ -153,7 +153,9 @@ The merged fish lands in the **target** cell (where the finger let go), and the 
 
 ### 4.3 At the level cap
 
-Two fish at `FishMaxLvl` cannot merge (`Capped`, `FISH_AT_LEVEL_CAP`). They stay on the board and contribute their full `0.5 * FISH_MISSILE_PCT[cap]` each. A board of 20 cap fish is the Fish Board's finished state at the current Research level: 1,920% passive at cap 10, x20.2 on the Fish Board layer. From there the player has three moves: buy `RES_FISH_CAP` (03 section 6) and start merging pairs of cap fish into the new level, discard fish to make room (4.4), or do nothing and keep the DPS. The UI marks the cap fish with a cap badge (styling is 07's) and shows the `Research` shortcut when `Merge all` finds nothing to merge and the tank is not empty (07); before Research unlocks (Awakening rank 1, 09's `feature_unlocks`; issue #45) the shortcut shows the locked state and the discard hint instead.
+Two fish at `FishMaxLvl` cannot merge (`Capped`, `FISH_AT_LEVEL_CAP`). They stay on the board and contribute their full `FISH_BOARD_DPS_FACTOR * FISH_MISSILE_PCT[cap]` each.
+
+**Reachable ceiling** (issue #247). Building one level-`c` fish needs `c` cells at its peak (one fish each of levels `c-1, ..., 2` plus the pair of level-1 fish being merged), so with cap `c` on a board of `W * H` cells greedy play (`Release max` + `Merge all`) holds at most `W * H - c + 1` cap fish, plus one fish of each level `1..c-1`, which fills the board exactly. A board of 20 cap fish is not reachable by play. On the 20-cell board at cap 10 the ceiling is 11 cap fish plus one each of levels 1-9: 6,143 level-1 fish, `1,628 + 288 = 1,916%` passive, x20.2 on the Fish Board layer (`FISH_BOARD_DPS_FACTOR` is 0.77 so that this reachable board gives the intended ~x20; 00 decision 97). Each `RES_FISH_CAP` level lowers the cap-fish count by one and raises its worth x1.5. This ceiling is the Fish Board's finished state at the current Research level. From there the player has three moves: buy `RES_FISH_CAP` (03 section 6) and start merging pairs of cap fish into the new level, discard fish to make room (4.4), or do nothing and keep the DPS. The UI marks the cap fish with a cap badge (styling is 07's) and shows the `Research` shortcut when `Merge all` finds nothing to merge and the tank is not empty (07); before Research unlocks (Awakening rank 1, 09's `feature_unlocks`; issue #45) the shortcut shows the locked state and the discard hint instead.
 
 ### 4.4 `DiscardFish` (M0)
 
@@ -170,7 +172,7 @@ DiscardFish(cell):
   return Ok(coins)
 ```
 
-Discard is the escape hatch for a jammed board (section 11) and is reached by long-press on a fish, then `Release back to sea`. It pays 10% of the level's discovery value: a cap-10 fish is worth 512 coins, less than the 922 coins the 511 merges that built it already paid, so discarding is never a better coin source than merging, but it is enough that a player is not punished for making room. It is M0 because M0 has no Research: an attentive player fills the board with 20 cap fish in about nine days and the M0 bot runs fourteen.
+Discard is the escape hatch for a jammed board (section 11) and is reached by long-press on a fish, then `Release back to sea`. It pays 10% of the level's discovery value: a cap-10 fish is worth 512 coins, less than the 922 coins the 511 merges that built it already paid, so discarding is never a better coin source than merging, but it is enough that a player is not punished for making room. It is M0 because M0 has no Research: an attentive player reaches the cap-10 ceiling (section 4.3) on day 6 and the M0 bot runs fourteen.
 
 ### 4.5 `MoveFish` (MVP)
 
@@ -207,24 +209,24 @@ At Research 0 (`f = 10`, cap 10, speed 1): 1.39 hero hits per minute from missil
 ### 5.2 Passive board DPS
 
 ```
-FISH_BOARD_DPS_PCT = sum over occupied cells of BoardDpsPct[level] = sum of FISH_BOARD_DPS_FACTOR (0.5) * FISH_MISSILE_PCT[level]
+FISH_BOARD_DPS_PCT = sum over occupied cells of BoardDpsPct[level] = sum of FISH_BOARD_DPS_FACTOR (0.77) * FISH_MISSILE_PCT[level]
 fishMult_live      = 1 + FISH_BOARD_DPS_PCT / 100                      # in the tick loop's hero hit (03 section 7.1)
 fishMult           = 1 + (FISH_BOARD_DPS_PCT + missileDpsPct) / 100    # rated: Query.RatedDps only (issue #15)
 ```
 
-Recomputed when DPS is dirty after any board command, at most once per command, even `MergeAll` (section 6.1). Worked board states for the attentive player at Research 0 (section 8 explains the fish counts):
+Recomputed when DPS is dirty after any board command, at most once per command, even `MergeAll` (section 6.1). Worked board states for the attentive player at Research 0 (section 8 explains the fish counts; regenerated with `tools/fish_model.py`, `fishMult` includes the 2.3% missile share while merging):
 
 | When | Fish released so far | Board (levels) | `FISH_BOARD_DPS_PCT` | `fishMult` |
 |---|---|---|---|---|
-| End of first 10 minutes | 110 | 7, 6, 4, 3, 2 (binary of 110 = 64 + 32 + 8 + 4 + 2) | 28.5 + 19.0 + 8.4 + 5.6 + 3.75 = 65.3 | x1.65 |
-| End of day 1 (2 h) | 1,200 | 10, 10, 8, 6, 5 | 96 + 96 + 43 + 19 + 13 = 267 | x3.7 |
-| End of day 3 | 3,600 | 10 x7, 5 | 673 + 13 = 686 | x7.9 |
-| End of day 7 | 8,400 | 10 x16, 8, 7, 5 | 1,538 + 43 + 28 + 13 = 1,622 | x17.2 |
-| Day 9 onward (full) | >= 10,240 | 10 x20 | 1,922 | x20.2 |
-| After `RES_FISH_CAP` 1 and 10,240 more fish | | 11 x10, 10 x10 | 1,441 + 961 = 2,402 | x25 |
-| Cap 12 board, 20 fish | 40,960 | 12 x20 | 4,322 | x44 |
+| End of first 10 minutes | 110 | 7, 6, 4, 3, 2 (binary of 110 = 64 + 32 + 8 + 4 + 2) | 43.9 + 29.2 + 13.0 + 8.7 + 5.8 = 100.5 | x2.0 |
+| End of day 1 (2 h) | 1,200 | 10, 10, 8, 6, 5 | 148 + 148 + 66 + 29 + 19 = 410.5 | x5.1 |
+| End of day 3 | 3,600 | 10 x7, 5 | 1,036 + 19 = 1,055 | x11.6 |
+| End of day 5 | 6,000 | 10 x11, 9, 7, 6, 5 | 1,628 + 99 + 44 + 29 + 19 = 1,819 | x19.2 |
+| Day 6 onward (reachable ceiling, section 4.3) | 6,143 | 10 x11, one each of 9..1 | 1,628 + 288 = 1,916 | x20.2 |
+| After `RES_FISH_CAP` 1 and 5,120 more fish (cap-11 ceiling) | 11,263 | 11 x10, one each of 10..1 | 2,220 + 436 = 2,656 | x27.6 |
+| Cap-12 ceiling | 20,479 | 12 x9, one each of 11..1 | 2,997 + 658 = 3,655 | x37.6 |
 
-The idle contribution is the whole passive. A player who never merges still gets `fishMult = 1.25` from one `Release max` press at Research 0 (`TankCap` 10, 10 x 2.5%), `1.5` once two visits have filled the board's 20 cells, and nothing more until they merge (issue #19; final numbers from `tools/fish_model.py`). That is the floor the design accepts for pillar 1; the tool checks that the attentive and lazy policies in section 8 differ by at least x3 on this layer at day 7, so touching the board is worth it.
+The idle contribution is the whole passive. A player who never merges still gets `fishMult = 1.385` from one `Release max` press at Research 0 (`TankCap` 10, 10 x 3.85%), `1.77` once two visits have filled the board's 20 cells, and nothing more until they merge (issue #19; final numbers from `tools/fish_model.py`). That is the floor the design accepts for pillar 1; the tool checks that the attentive and lazy policies in section 8 differ by at least x3 on this layer at day 7, so touching the board is worth it.
 
 ## 6. Interaction model (07 renders; this section is the contract)
 
@@ -287,13 +289,13 @@ MergeAll():
 
 The tank yields `60 / TankRefillS` fish per active minute while the player keeps it below capacity:
 
-| `RES_TANK_REFILL` level | `TankRefillS` | Fish / min | Fish / 2 h session | Days of 2 h to a full cap-10 board (10,240 fish) |
+| `RES_TANK_REFILL` level | `TankRefillS` | Fish / min | Fish / 2 h session | Days of 2 h to the cap-10 ceiling (6,143 fish, section 4.3) |
 |---|---|---|---|---|
-| 0 | 6.0 | 10.0 | 1,200 | 8.5 |
-| 2 | 5.2 | 11.5 | 1,385 | 7.4 |
-| 5 | 4.0 | 15.0 | 1,800 | 5.7 |
-| 8 | 2.8 | 21.4 | 2,571 | 4.0 |
-| 10 | 2.0 | 30.0 | 3,600 | 2.8 |
+| 0 | 6.0 | 10.0 | 1,200 | 5.1 |
+| 2 | 5.2 | 11.5 | 1,385 | 4.4 |
+| 5 | 4.0 | 15.0 | 1,800 | 3.4 |
+| 8 | 2.8 | 21.4 | 2,571 | 2.4 |
+| 10 | 2.0 | 30.0 | 3,600 | 1.7 |
 
 `RES_TANK_CAP` does not change throughput for an attentive player; it changes how much a lazy player gets per visit (one tank) and how long the attentive player can look away without wasting refill time (`TankCap * TankRefillS` seconds: 60 s at Research 0, 120 s at cap 60 / 2 s).
 
@@ -303,11 +305,11 @@ Every level-1 fish eventually causes about one merge (a level-`n` fish is `2^(n-
 
 | Policy | Definition | Fish per day (Research 0) | Fish Coins per day at cap 10 (merges only) | `fishMult` at day 7 |
 |---|---|---|---|---|
-| Attentive | `ReleaseMax` + `MergeAll` every active minute for 120 min; discards the lowest fish when jammed | 1,200 | about 2,160 | x17 |
-| Lazy | `ReleaseMax` + `MergeAll` once per login, two logins a day | 20 | about 36 | x1.57 (140 fish by day 7, binary merged: 8, 4, 3 -> 42.7 + 8.4 + 5.6 = 56.7%, grows slowly) |
+| Attentive | `ReleaseMax` + `MergeAll` every active minute for 120 min; discards the lowest fish when jammed below the ceiling | 1,200 (until the ceiling on day 6) | about 2,160 | x20.2 |
+| Lazy | `ReleaseMax` + `MergeAll` once per login, two logins a day | 20 | about 36 | x1.87 (140 fish by day 7, binary merged: 8, 4, 3 -> 65.8 + 13.0 + 8.7 = 87.4%, grows slowly) |
 | Never | nothing | 0 | 0 | x1.0 |
 
-The lazy player's `fishMult` is x1.12 after the first login (10 fish merged: 4, 2) and about x1.57 after a week; the attentive player's is x17. That x11 gap at day 7 (inside the band but near its top; issue #19, final numbers from `tools/fish_model.py`) is the active-play edge the design wants on this layer, and the tool checks it stays between x3 and x12 (bigger and the board is mandatory; smaller and it is decoration).
+The lazy player's `fishMult` is x1.19 after the first login (10 fish merged: 4, 2) and about x1.87 after a week; the attentive player's is x20.2. That x10.8 gap at day 7 (inside the band but near its top; issue #19, final numbers from `tools/fish_model.py`) is the active-play edge the design wants on this layer, and the tool checks it stays between x3 and x12 (bigger and the board is mandatory; smaller and it is decoration).
 
 ### 8.3 Fish Coins per active minute
 
@@ -321,7 +323,7 @@ coinsPerFish(cap) = sum over n = 2..cap of FISH_MERGE_COINS_PCT * FISH_DISCOVERY
 
 ### 8.4 DPS per active minute
 
-Each active minute at Research 0 adds 10 fish to the board's merge tree. The board's passive after `F` released fish (all merged as far as they go) is `0.5 * sum of FISH_MISSILE_PCT over the levels in the binary representation of F`, which for large `F` is dominated by `floor(F / 512)` cap-10 fish at 96% each. So the attentive player gains about 96 percentage points of passive every 51 minutes, roughly +1.9 points of hero DPS per active minute, until the board fills around day 9; then nothing until `RES_FISH_CAP`. Missiles add a steady 2.3% of DPS while merging (section 5.1).
+Each active minute at Research 0 adds 10 fish to the board's merge tree. The board's passive after `F` released fish (all merged as far as they go) is `FISH_BOARD_DPS_FACTOR (0.77) * sum of FISH_MISSILE_PCT over the levels in the binary representation of F`, which for large `F` is dominated by `floor(F / 512)` cap-10 fish at 148% each. So the attentive player gains about 148 percentage points of passive every 51 minutes, roughly +2.9 points of hero DPS per active minute, until the board reaches its ceiling (section 4.3) on day 6; then nothing until `RES_FISH_CAP`. Missiles add a steady 2.3% of DPS while merging (section 5.1).
 
 ## 9. `tools/fish_model.py`
 
@@ -331,7 +333,7 @@ Inputs: `--days 30`, `--active-min 120`, `--sessions 2`, `--policy attentive|laz
 
 Model: tank stock and refill per minute; board as a count per level; the policy's release/merge/discard rules from sections 6.1 and 8.2; coins and missiles per merge from section 2.2; `FISH_BOARD_DPS_PCT` per section 5.2; offline fill per section 3.
 
-Outputs (printed and `tools/out/fish_<policy>.json`): per day, fish released, merges, discards, `FISH_BOARD_DPS_PCT`, `fishMult`, Fish Coins from discovery / merges / discards, highest fish level, board occupancy, minutes jammed; a policy comparison table (attentive vs lazy vs never) at days 1, 3, 7, 14, 30; the section 8.1 and 8.3 tables regenerated from content; a `FISHLINE day7 attentive x17.2 lazy x1.57 ratio 11.0` summary line for 03's report. `S` constants it validates: `TANK_CAP0`, `TANK_REFILL_S0` (attentive fish per day between 1,000 and 1,500 at Research 0), `FISH_MAX_LVL0` (board fills between day 6 and day 12 for the attentive policy), `FISH_DISCOVERY_COINS` and `FISH_MERGE_COINS_PCT` (day-1 Fish Coins between 8,000 and 14,000 including discovery; steady-state merge coins between 1,500 and 3,000 a day at cap 10), `FISH_MISSILE_PCT` and the 0.5 passive factor (attentive `fishMult` at day 7 between x12 and x25; attentive/lazy ratio between x3 and x12; `missileDpsPct` under 10% at every research level), `FISH_DISCARD_COINS_PCT` (discard coins under 10% of merge coins for the attentive policy), `RES_TANK_*` effects (jointly with 03's tool: `RES_TANK_REFILL` 10 at most triples fish per day), `AUTO_MERGE_INTERVAL_S` (auto policy within 10% of attentive).
+Outputs (printed and `tools/out/fish_<policy>.json`): per day, fish released, merges, discards, `FISH_BOARD_DPS_PCT`, `fishMult`, Fish Coins from discovery / merges / discards, highest fish level, board occupancy, minutes jammed; a policy comparison table (attentive vs lazy vs never) at days 1, 3, 7, 14, 30; the section 8.1 and 8.3 tables regenerated from content; a `FISHLINE day7 attentive x20.16 lazy x1.87 ratio 10.8` summary line for 03's report. `S` constants it validates: `TANK_CAP0`, `TANK_REFILL_S0` (attentive fish per day between 1,000 and 1,500 at Research 0), `FISH_MAX_LVL0` (the attentive board reaches the reachable ceiling of section 4.3, computed from the cap and the cell count, between day 6 and day 12; at Research 0 that is 11 cap fish plus one each of levels 1-9, reached on day 6), `FISH_DISCOVERY_COINS` and `FISH_MERGE_COINS_PCT` (day-1 Fish Coins between 8,000 and 14,000 including discovery; steady-state merge coins between 1,500 and 3,000 a day at cap 10), `FISH_MISSILE_PCT` and `FISH_BOARD_DPS_FACTOR` (0.77; attentive `fishMult` at day 7 between x12 and x25, x20.16 measured; attentive/lazy ratio between x3 and x12; `missileDpsPct` under 10% at every research level), `FISH_DISCARD_COINS_PCT` (discard coins under 10% of merge coins for the attentive policy), `RES_TANK_*` effects (jointly with 03's tool: `RES_TANK_REFILL` 10 at most triples fish per day), `AUTO_MERGE_INTERVAL_S` (auto policy within 10% of attentive).
 
 ## 10. Events
 
@@ -353,7 +355,7 @@ All of these except `FishMissileHit` (03's) are in 00 section 5.1's fish group; 
 |---|---|
 | Board full, tank has fish | `ReleaseFish` rejected `BoardFull`; tank keeps filling to cap and stops; `Release max` disabled with subtitle "Board full"; if `Merge all` would also do nothing the tank widget shows the Research shortcut (MVP) and the long-press discard hint. |
 | Tank empty | `ReleaseFish` rejected `TankEmpty`; tank shows a countdown `TankRefillTicks - TankRefillTick` ticks; `Release max` disabled. |
-| Jammed board: 20 fish, no mergeable pair, tank full | A full board is jammed iff every level below `FishMaxLvl` appears at most once (cap fish cannot merge, section 4.3). At cap `c`, a full board with no fish at level `c` always has a pair (pigeonhole: 20 cells over `c - 1` levels); with cap fish it can jam at any cap, for example 20 cap fish, or 11 level-10 fish plus one each of levels 1-9 at cap 10 (issue #17). Resolution is discard or Research; the bot discards the lowest fish. |
+| Jammed board: 20 fish, no mergeable pair, tank full | A full board is jammed iff every level below `FishMaxLvl` appears at most once (cap fish cannot merge, section 4.3). At cap `c`, a full board with no fish at level `c` always has a pair (pigeonhole: 20 cells over `c - 1` levels); with cap fish it can jam at any cap, for example 11 level-10 fish plus one each of levels 1-9 at cap 10, the reachable ceiling of section 4.3 (issue #17, issue #247), or 20 cap fish from a save or a lowered cap. Resolution is discard or Research; the bot discards the lowest fish. |
 | Merge during a boss fight | Allowed. The missile lands on the boss on the next tick; a merge is often the thing that breaks a wall by a hair, which is the intended drama. |
 | Merge or release while `Spawning` | Allowed; the missile waits in the queue for the next enemy (03 section 2.5). |
 | App backgrounded mid-drag | The drag is client state; no command has been sent. On resume the client cancels the drag (spring back) and the board is whatever the save says. |
@@ -409,12 +411,12 @@ Questions the dashboard should answer (10): share of sessions with at least one 
 5. `MergeAll` on the board `[1,1,1,1,2,2,0,...]` merges cells (0->1) and (2->3) into level 2, then (1->3) and (4->5) into level 3, then (3->5) into level 4; the final board has a single level-4 fish in cell 5, `merges == 5`, and the event sequence is five `FishMerged` in that order; the result is byte-identical on x64, ARM64 and IL2CPP.
 6. `ReleaseMax` with `TankCount 10` and 7 empty cells releases 7 and returns 7; with `TankCount 3` releases 3.
 7. `DiscardFish` on a level-10 fish pays 512 coins with reason `FISH_MERGE`, empties the cell and publishes `FishDiscarded`; on an empty cell rejected `InvalidTarget` (reason `EMPTY_CELL`). `MoveFish` to an empty cell moves the fish, publishes `FishMoved`, draws nothing and leaves `FISH_BOARD_DPS_PCT` unchanged; to an occupied cell it is rejected `InvalidTarget` (reason `CELL_OCCUPIED`).
-8. `Query.FishBoardDpsPct` for the board `[10,10,8,6,5,0...]` equals `96.1 + 96.1 + 42.7 + 19.0 + 12.7 = 266.6` from the table within 1e-9, and `fishMult` with `missileDpsPct 0` equals 3.666.
+8. `Query.FishBoardDpsPct` for the board `[10,10,8,6,5,0...]` equals `FISH_BOARD_DPS_FACTOR * (192.2 + 192.2 + 85.4 + 38.0 + 25.3)` from the table within 1e-9 (`148.0 + 148.0 + 65.8 + 29.2 + 19.5 = 410.5` at 0.77), and `fishMult` with `missileDpsPct 0` equals 5.105.
 9. A missile queued during `Spawning` applies on the first `Fighting` tick of the next enemy; one queued during a boss fight hits the boss; `crit.Counter` is unchanged by missiles.
 10. `fish_spawn.Counter == Stats.FishReleased` after a 200,000-command fuzz run mixing all six board commands; `Validate()` never throws.
 11. Offline: for a 3 h gap, `Catchup.Compute` changes nothing in `FishBoardState` and stores `Offline.Pending.TankFill`; `ClaimOfflineReward` changes only `TankCount` and `TankRefillTick`; `Cells`, `DiscoveredLevels`, the Wallet's Fish Coins and `fish_spawn.Counter` are unchanged by both. A gap under `OFFLINE_MIN_S` opens no modal and still advances the tank refill.
 12. A property test over 10,000 random full boards with levels in `1..cap-1` finds `MergeAll` returns >= 1 (pigeonhole); a board of 20 cap fish gives `MergeAll == 0` and the bot discards (issue #17).
-13. `tools/fish_model.py --policy attentive` reports between 1,000 and 1,500 fish on day 1 at Research 0, a full cap-10 board between day 6 and day 12, `fishMult` at day 7 between x12 and x25; `--policy lazy` reports `fishMult` at day 7 between x1.5 and x3; the ratio is between x3 and x12.
+13. `tools/fish_model.py --policy attentive` reports between 1,000 and 1,500 fish on day 1 at Research 0, the board at its reachable ceiling (section 4.3: 11 cap fish plus one each of levels 1-9 at cap 10) between day 6 and day 12, `fishMult` at day 7 between x12 and x25; `--policy lazy` reports `fishMult` at day 7 between x1.5 and x3; the ratio is between x3 and x12.
 14. `tools/fish_model.py` and the C# `HeroCat.Bots` fish policy agree on day-7 `fishMult` within 5% for the attentive policy (10's cross-check).
 15. PlayMode (07): dragging a fish onto an equal fish sends exactly one `MergeFish(source, target)` with `target` the cell under the release point; dropping on a mismatched fish sends nothing and plays the spring-back; dropping on an empty cell sends one `MoveFish(source, target)`; a tap-tap on two equal fish sends one `MergeFish`; `Merge all` with nothing to merge is disabled and shows "Nothing to merge".
 16. With `Combat.Mode == Dungeon`, each of `ReleaseFish`, `ReleaseMax`, `MergeFish`, `MergeAll`, `MoveFish` and `DiscardFish` is rejected `Locked` (reason `BOARD_LOCKED`) even when its arguments are also invalid, leaves `StateHash` unchanged and emits no events; `TickTank` still advances the tank, `Query.FishBoardDpsPct` is unchanged, and a missile queued before the run is still queued when `Combat.Mode = Stage` resumes (issue #40).
@@ -429,7 +431,7 @@ Questions the dashboard should answer (10): share of sessions with at least one 
 | `RES_TANK_REFILL_PER_LVL` | 0.4 s | S | 3 | Not a `constants` row: 09's `research[res_tank_refill].effect_per_level`; priced in 03 section 6. |
 | `Fish.TankReleaseLevel` | 1 (MVP; P1 upgrades) | S | 3 | State field (02) holding the upgrade level bought; what each level releases is content, base `tank.release_level` = 1 (issue #7). |
 | `FISH_DISCARD_COINS_PCT` | 0.10 | S | 4.4 | Of the level's discovery value. |
-| `BoardDpsPct[n]` | `FISH_BOARD_DPS_FACTOR (0.5) * FISH_MISSILE_PCT[n]` | S | 5.2 | Derived `fish_levels` column (09); the factor is 00's `FISH_BOARD_DPS_FACTOR` (issue #19). |
+| `BoardDpsPct[n]` | `FISH_BOARD_DPS_FACTOR (0.77) * FISH_MISSILE_PCT[n]` | S | 5.2 | Derived `fish_levels` column (09); the factor is 00's `FISH_BOARD_DPS_FACTOR` (issue #19; 0.77 since issue #247). |
 | `FISH_MAX_LVL_HARD` | 20 | S | 2.2 | `fish_levels` ships 20 rows; `RES_FISH_CAP` max 10. The only clamp applied to saved `Cells` (issue #41). |
 | `AUTO_MERGE_INTERVAL_S` (P1) | 3 | S | 6.2 | |
 | `UI_DRAG_START_PX`, `UI_LONG_PRESS_MS` | 8, 350 | - | 6 | Defined in 07's constants list (issue #18); `UI_LONG_PRESS_MS` is behaviour, so its value is this spec's. |

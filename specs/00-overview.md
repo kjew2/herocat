@@ -288,8 +288,8 @@ Code must read every constant from content data (spec 09), never from a literal.
 | `FISH_DISCOVERY_COINS[n]` | `10 * 2^(n-1)` | S | Fish Coins the first time a level-`n` fish is created. |
 | `FISH_MERGE_COINS_PCT` | 0.02 | S | Each merge pays 2% of that level's discovery value, unrounded (`FISH_COIN` is a `double`; the UI floors the display) (issue #16). |
 | `FISH_MISSILE_PCT[n]` | `5 * 1.5^(n-1)` | S | Damage of a fish missile fired when a level-`n` fish is created, as % of one hero hit. |
-| `FISH_BOARD_DPS_FACTOR` | 0.5 | S | Named so 09 can hold it as a `constants` row. |
-| `FISH_BOARD_DPS_PCT` | `sum over board of FISH_BOARD_DPS_FACTOR * FISH_MISSILE_PCT[level]` | S | Passive DPS% contributed by fish sitting on the board. Design lever so the board matters when idle. |
+| `FISH_BOARD_DPS_FACTOR` | 0.77 | S | Named so 09 can hold it as a `constants` row. Set so the reachable cap-10 board (11 cap fish plus one each of levels 1-9, 05 section 4.3) gives `fishMult` ~x20 (decision 97, issue #247). |
+| `FISH_BOARD_DPS_PCT` | `sum over board of FISH_BOARD_DPS_FACTOR * FISH_MISSILE_PCT[level]` | S | Passive DPS% contributed by fish sitting on the board. Design lever so the board matters when idle. A board of `W * H` cells at cap `c` holds at most `W * H - c + 1` cap fish plus one of each lower level (05 section 4.3). |
 
 ### 6.5 Awakening and Hero Level
 
@@ -531,3 +531,4 @@ Known stale spots left for the next pass rather than patched blind: early-day st
 94. **Companion damage scales with the skill layer**: companions deal multiples of `CompanionUnit = SkillUnit * (1 + skillDpsPct)`, keeping the rated formula multiplicative and the 1% rated-vs-measured test exact; may be revisited when `tools/power_curve_model.py` reports layer shares (section 7). Issue #243.
 95. **Insufficient-balance rejects are `NOT_ENOUGH_<CURRENCY>` everywhere**, tickets included (`NOT_ENOUGH_TICKET_SUMMON_WEAPON`, `NOT_ENOUGH_TICKET_EXP`), replacing `NOT_ENOUGH_TICKETS` and `NO_TICKETS` (section 5.1); items 1 and 2 of the issue are decision 87. Issue #244.
 96. **Analytics schemas are owned by the feature specs**: each event's fields are defined once, in its owner's analytics section (03 section 11 combat and progression, 04 section 13 summons and collection, 05 section 13 fish, 06 section 13 economy, quests, dungeons, offline, shop and IAP; 08 section 7.4 `plausibility_flag`); 02 section 14 keeps the common envelope, the offline queue, the session, save-health and clock events, and an index of every event name with its owner. `CURRENCY_AGG_SEC` moves to 06. Issue #245.
+97. **Fish Board ceiling and factor**: a 20-cell board holds at most 20 - cap + 1 cap fish plus one of each lower level; FISH_BOARD_DPS_FACTOR is 0.77 (S) so that reachable board gives the intended ~x20 multiplier. Issue #247.

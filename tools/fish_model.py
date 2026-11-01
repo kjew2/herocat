@@ -186,6 +186,26 @@ class Board:
     def is_finished(self, cap):
         return self.count[cap] >= self.max_cap_fish(cap)
 
+    def ceiling_counts(self, cap):
+        """The reachable ceiling (05 section 4.3, issue #247): cells - cap + 1 cap fish plus one fish of each level
+        1..cap-1, which fills the board exactly. Index = level."""
+        out = [0] * (self.db.hard + 1)
+        out[cap] = self.max_cap_fish(cap)
+        if out[cap] < self.db.cells:
+            for n in range(1, cap):
+                out[n] = 1
+        return out
+
+    def ceiling_fish(self, cap):
+        """Level-1 fish it takes to build the reachable ceiling."""
+        return sum(c * 2 ** (n - 1) for n, c in enumerate(self.ceiling_counts(cap)) if n > 0)
+
+    def ceiling_dps_pct(self, cap):
+        return sum(self.db.board_dps[n] * c for n, c in enumerate(self.ceiling_counts(cap)))
+
+    def at_ceiling(self, cap):
+        return self.count == self.ceiling_counts(cap)
+
     def discard_lowest_below(self, cap):
         for l in range(1, cap):
             if self.count[l] > 0:
@@ -210,7 +230,7 @@ def run(db, policy, days, active_min, sessions, research_for_day, dungeon_coins)
     gap_s = max(0, (24 * 60 - active_min) * 60 // sessions)
     credited_gap_ticks = min(gap_s, db.offline_cap_s) * db.tick_hz
     minute_ticks = 60 * db.tick_hz
-    full_day = finished_day = None
+    ceiling_day = finished_day = None
     for d in range(1, days + 1):
         res = research_for_day(d)
         cap, refill, fcap = db.tank_cap(res), db.refill_ticks(res), db.fish_cap(res)
@@ -233,22 +253,22 @@ def run(db, policy, days, active_min, sessions, research_for_day, dungeon_coins)
             b.tick_tank(credited_gap_ticks, cap, refill)   # offline catch-up between sessions (05 section 7)
         dps = b.dps_pct()
         missile_pct = 100.0 * b.day["missile_hits"] / (active_min * 60.0 / db.attack_s) if active_min else 0.0
-        full = b.count[fcap] == db.cells
-        if full and full_day is None:
-            full_day = d
+        ceiling = b.at_ceiling(fcap)
+        if ceiling and ceiling_day is None:
+            ceiling_day = d
         if b.is_finished(fcap) and finished_day is None:
             finished_day = d
         row = dict(b.day)
         row.update({
             "day": d, "fish_board_dps_pct": dps, "missile_dps_pct": missile_pct,
             "fish_mult": 1 + (dps + missile_pct) / 100.0, "fish_mult_live": 1 + dps / 100.0,
-            "highest_level": b.highest(), "occupancy": b.occupancy(), "board_full_cap": full,
+            "highest_level": b.highest(), "occupancy": b.occupancy(), "board_at_ceiling": ceiling,
             "cap_fish": b.count[fcap], "board_finished": b.is_finished(fcap),
             "coins_dungeon": dungeon_coins, "fish_cap": fcap, "tank_cap": cap, "refill_s": refill / db.tick_hz,
         })
         row["coins_board"] = row["coins_discovery"] + row["coins_merge"] + row["coins_discard"]
         out.append(row)
-    return out, (full_day, finished_day)
+    return out, (ceiling_day, finished_day)
 
 
 def act(b, level, fcap, discard):
@@ -318,13 +338,15 @@ def print_days(rows):
 
 def regenerated_tables(db, active_min):
     print("\n05 section 8.1: fish per minute by RES_TANK_REFILL level")
-    print("level  TankRefillS  fish/min  fish/2h  days to full cap-10 board")
-    full_fish = db.cells * 2 ** (db.c["FISH_MAX_LVL0"] - 1)
+    cap0 = db.fish_cap({})
+    max_caps = Board(db).max_cap_fish(cap0)
+    print(f"level  TankRefillS  fish/min  fish/2h  days to the cap-{cap0} ceiling ({max_caps} cap fish + one each of 1-{cap0 - 1})")
+    full_fish = Board(db).ceiling_fish(cap0)
     for lvl in (0, 2, 5, 8, 10):
         ticks = db.refill_ticks({"RES_TANK_REFILL": lvl})
         per_min = 60.0 * db.tick_hz / ticks
         per_day = per_min * active_min
-        print(f"{lvl:>5}  {ticks / db.tick_hz:>11.1f}  {per_min:>8.1f}  {per_day:>7,.0f}  {full_fish / per_day:>25.1f}")
+        print(f"{lvl:>5}  {ticks / db.tick_hz:>11.1f}  {per_min:>8.1f}  {per_day:>7,.0f}  {full_fish / per_day:>12.1f}")
     print("\n05 section 8.3: Fish Coins per level-1 fish fully merged, and per active minute")
     for cap in (10, 15, 20):
         cpf = sum(db.merge_coins[n] / 2 ** (n - 1) for n in range(2, min(cap, db.hard) + 1))
@@ -366,7 +388,7 @@ def main(argv=None):
         return run(db, policy, days, a.active_min, a.sessions, schedule, a.dungeon_coins)
 
     runs = {pol: go(pol) for pol in POLICIES}
-    rows, (full_day, finished_day) = runs[a.policy]
+    rows, (ceiling_day, finished_day) = runs[a.policy]
 
     if not a.quiet:
         if not db.research_from_content:
@@ -389,7 +411,7 @@ def main(argv=None):
 
     # ---- S-constant checks (05 section 9, AC13). Measured on Research 0 runs regardless of --research.
     r0 = lambda d: {}
-    att, (att_full, att_finished) = run(db, "attentive", max(a.days, 30), a.active_min, a.sessions, r0, a.dungeon_coins)
+    att, (att_ceiling, att_finished) = run(db, "attentive", max(a.days, 30), a.active_min, a.sessions, r0, a.dungeon_coins)
     lazy, _ = run(db, "lazy", max(a.days, 30), a.active_min, a.sessions, r0, a.dungeon_coins)
     auto, _ = run(db, "auto", max(a.days, 30), a.active_min, a.sessions, r0, a.dungeon_coins)
     fast, _ = run(db, "attentive", 1, a.active_min, a.sessions, lambda d: {"RES_TANK_REFILL": 10}, a.dungeon_coins)
@@ -412,10 +434,13 @@ def main(argv=None):
 
     probe = Board(db)
     max_caps = probe.max_cap_fish(cap0)
-    max_dps = max_caps * db.board_dps[cap0] + sum(db.board_dps[n] for n in range(1, cap0)) if max_caps < db.cells else db.cells * db.board_dps[cap0]
+    max_dps = probe.ceiling_dps_pct(cap0)
+    ceiling_name = (f"{max_caps} cap fish + one each of levels 1-{cap0 - 1} at cap {cap0}" if max_caps < db.cells
+                    else f"{db.cells} cap fish at cap {cap0}")
     checks = [
         ("TANK_CAP0, TANK_REFILL_S0: attentive fish on day 1 in 1,000..1,500", 1000 <= att[0]["released"] <= 1500, f"{att[0]['released']:,}"),
-        ("FISH_MAX_LVL0: attentive full cap-10 board between day 6 and day 12", att_full is not None and 6 <= att_full <= 12, f"day {att_full}"),
+        (f"FISH_MAX_LVL0: attentive board reaches the reachable ceiling ({ceiling_name}) between day 6 and day 12",
+         att_ceiling is not None and 6 <= att_ceiling <= 12, f"day {att_ceiling}"),
         ("FISH_DISCOVERY_COINS, FISH_MERGE_COINS_PCT: day-1 Fish Coins in 8,000..14,000", 8000 <= day1_coins <= 14000, f"{day1_coins:,.0f}"),
         ("FISH_MERGE_COINS_PCT: steady merge coins 1,500..3,000 a day at cap 10", 1500 <= steady <= 3000, f"{steady:,.0f}"),
         ("FISH_MISSILE_PCT, FISH_BOARD_DPS_FACTOR: attentive fishMult day 7 in x12..x25", 12 <= att7 <= 25, f"x{att7:.2f}"),
@@ -429,7 +454,8 @@ def main(argv=None):
         ("jam test: 10,000 random full boards below the cap all hold a pair", jam_free, f"seed {a.seed}"),
     ]
     print(f"\nnote: at cap {cap0} a {db.cells}-cell board holds at most {max_caps} cap fish (making one needs {cap0} free cells), "
-          f"so its largest FISH_BOARD_DPS_PCT is {max_dps:,.1f}% (x{1 + max_dps / 100:.2f}); attentive reaches it on day {att_finished}")
+          f"so its largest FISH_BOARD_DPS_PCT is {max_dps:,.1f}% (x{1 + max_dps / 100:.2f}) from {probe.ceiling_fish(cap0):,} level-1 fish; "
+          f"attentive holds {max_caps} cap fish on day {att_finished} and fills the ceiling on day {att_ceiling}")
     print("\nS-constant checks (Research 0)")
     for name, ok, val in checks:
         print(f"  {'PASS' if ok else 'FAIL'}  {name}: {val}")
@@ -438,7 +464,7 @@ def main(argv=None):
     os.makedirs(a.out, exist_ok=True)
     path = os.path.join(a.out, f"fish_{a.policy}.json")
     with open(path, "w", encoding="utf-8") as f:
-        json.dump({"policy": a.policy, "days": rows, "full_board_day": full_day, "finished_board_day": finished_day,
+        json.dump({"policy": a.policy, "days": rows, "ceiling_day": ceiling_day, "finished_board_day": finished_day,
                    "checks": [{"name": n, "pass": ok, "value": v} for n, ok, v in checks],
                    "fishline": {"attentive_day7": att7, "lazy_day7": lazy7, "ratio": ratio}}, f, indent=1)
     if not a.quiet:

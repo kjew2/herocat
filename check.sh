@@ -31,6 +31,9 @@ step "Content: exporter tests, and content_src builds to content/ (and the Sim D
 python3 tools/test_export_content.py
 python3 tools/export_content.py check
 
+step "Tools: fish_model.py S-constant checks (05 section 9)"
+python3 tools/fish_model.py --quiet
+
 step "Release: build-android.yml helpers (version.json, size gate)"
 python3 .github/scripts/test_android_release.py
 
@@ -86,11 +89,6 @@ else
 
   step "Bots: golden files match"
   soft $BOTS golden --check
-
-  # Report-only: 05 section 9's "full cap-10 board between day 6 and day 12" band cannot pass, because a 20-cell
-  # board holds at most 11 cap fish (making one needs FISH_MAX_LVL0 free cells). Pending a design decision.
-  step "Tools: fish_model.py S-constant checks (report-only)"
-  soft python3 tools/fish_model.py --quiet
 fi
 
 if [ "$REPORT_ONLY_FAILED" -eq 1 ]; then

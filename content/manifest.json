@@ -33,7 +33,7 @@
     "constants": {
       "file": "constants.json",
       "rows": 42,
-      "sha256": "b871ed28a2511da6d0993ee35d864434e056568c52bb4c828ef00ed038bac181"
+      "sha256": "73d6b82651e1b549afb4f0af491aa7905245156231e6376f5f3d28cc9b521568"
     },
     "curves": {
       "file": "curves.json",
@@ -113,7 +113,7 @@
       "sha256": "06afddaabf2600b2d58a797e82bf6ad52cbca570a0b20e90015059b589af7e9b"
     }
   },
-  "content_hash": "ec7f0c0e987e3a087442d9859c7a9359639235109b214c10f47328dd450aa8bf",
+  "content_hash": "271e3ca3b41417b56dc1a43bc308d485827cec3232992d9ba765923d519b9d62",
   "s_constants": [
     "BASE_HP",
     "BOSS_ROCK_CANDY_P",

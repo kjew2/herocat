@@ -290,7 +290,7 @@ namespace HeroCat.Sim.Tests
         {
             // Making a cap fish needs `cap` cells at its peak (cap-1, ..., 2, 1, 1), so with ReleaseMax + MergeAll a
             // 20-cell board stops at 11 cap-10 fish plus one each of levels 1-9 (the 05 section 11 jam), never 20.
-            // Pins the behaviour behind the open gap reported with tools/fish_model.py's full-board band.
+            // This reachable ceiling is the design (issue #247, 05 section 4.3); tools/fish_model.py checks the day it is reached.
             var sim = NewSim();
             int cap = sim.FishMaxLvl, cells = sim.State.Fish.Cells.Length;
             for (int i = 0; i < 2000; i++)
@@ -376,8 +376,12 @@ namespace HeroCat.Sim.Tests
             double table = 0;
             foreach (int n in new[] { 10, 10, 8, 6, 5 }) table += Db.FishLevels[n - 1].BoardDpsPct;
             Assert.That(sim.FishBoardDpsPct, Is.EqualTo(table).Within(1e-9));
-            Assert.That(sim.FishBoardDpsPct, Is.EqualTo(266.6).Within(0.05));
-            Assert.That(1 + sim.FishBoardDpsPct / 100, Is.EqualTo(3.666).Within(0.0005));
+            // 05 AC8 at the content's FISH_BOARD_DPS_FACTOR (0.77: 410.5, fishMult 5.105).
+            double missile = 0;
+            foreach (int n in new[] { 10, 10, 8, 6, 5 }) missile += Db.FishLevels[n - 1].MissilePct;
+            double expected = Db.Constants.FishBoardDpsFactor * missile;
+            Assert.That(sim.FishBoardDpsPct, Is.EqualTo(expected).Within(1e-9));
+            Assert.That(1 + sim.FishBoardDpsPct / 100, Is.EqualTo(1 + expected / 100).Within(1e-12));
             Assert.That(Db.FishLevels[9].BoardDpsPct, Is.EqualTo(Db.Constants.FishBoardDpsFactor * Db.FishLevels[9].MissilePct));
         }
 

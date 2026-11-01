@@ -171,7 +171,7 @@ namespace HeroCat.Sim.Tests
                 Assert.That(f.DiscoveryCoins, Is.EqualTo(10L << (n - 1)));
                 Assert.That(f.MissilePct, Is.EqualTo(missile).Within(1e-9));
                 Assert.That(f.MergeCoins, Is.EqualTo(f.DiscoveryCoins * 0.02).Within(1e-9));
-                Assert.That(f.BoardDpsPct, Is.EqualTo(0.5 * f.MissilePct).Within(1e-9));
+                Assert.That(f.BoardDpsPct, Is.EqualTo(Db.Constants.FishBoardDpsFactor * f.MissilePct).Within(1e-9));
             }
             Assert.That(Db.FishLevels[4].MissilePct, Is.EqualTo(25.3125));
             Assert.That(Db.Tank.Cap0, Is.EqualTo(10));
