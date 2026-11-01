@@ -41,7 +41,9 @@ namespace HeroCat.Runtime.Tests
             // Every command the bots issue is pinned, not registered by type name on first use.
             foreach (var t in new[] { typeof(ClaimOfflineReward), typeof(TrainStat), typeof(ReleaseMax), typeof(MergeAll), typeof(MergeFish),
                                       typeof(DiscardFish), typeof(AttemptBoss), typeof(AutoEquipBestWeapon), typeof(AutoEquipBestSkills),
-                                      typeof(ReleaseFish), typeof(MoveFish), typeof(LimitBreak) })
+                                      typeof(ReleaseFish), typeof(MoveFish), typeof(LimitBreak), typeof(Awaken),
+                                      typeof(ClaimQuest), typeof(ClaimAllQuests), typeof(Research),
+                                      typeof(ClaimDailyGift), typeof(ExchangeItem) })
                 Assert.That(CommandCodec.RegisteredTypes, Does.Contain(t), t.Name);
             Assert.That(CommandCodec.Encode(new ApplyServerTime(123)), Does.Not.Contain("HeroCat."));
             Assert.Throws<FormatException>(() => CommandCodec.Decode("{\"tick\":1,\"type\":\"NoSuchCommand\"}"));

@@ -65,7 +65,8 @@ namespace HeroCat.Sim
             int newLevel = def.LevelFor(bs.Exp);
             if (newLevel > oldLevel) Emit(new BannerLeveledUp(p.Banner, newLevel));
 
-            // TODO(#107): Quests.OnSummon(p.Banner, p.Count), 06's SUMMON / LIFETIME_SUMMONS progress.
+            QuestsProgress(QuestGoal.SUMMON, p.Count, (int)p.Banner);   // each pull, with the banner filter (06 section 5.1)
+            AchievementsOnCollection(p.Banner, col);                     // OWN_* ladders: distinct ids owned (06 section 5.4)
             if (p.Banner == Banner.WEAPON) AutoEquipWeapon(auto: true);   // weapons only (04 open question 4 default)
             SummonsMarkDpsDirty();
             RememberApplied(p.RequestId);

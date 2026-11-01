@@ -63,6 +63,14 @@ namespace HeroCat.Sim.Content
         /// <summary>The PROFILE_CREATED step's grants (TUTORIAL_DIAMONDS and the starter weapon); empty if absent.</summary>
         public IReadOnlyList<Grant> ProfileCreatedGrants { get; private set; }
 
+        /// <summary>shop_exchange offers by SortOrder (09 section 5.37, 06 section 8.4). Empty in an M0 build (tier MVP rows).</summary>
+        public IReadOnlyList<ExchangeOfferDef> ExchangeOffers { get; private set; }
+
+        IReadOnlyDictionary<string, ExchangeOfferDef> _exchangeById;
+
+        /// <summary>The exchange offer with this id, or null if shop_exchange (after the tier filter) has none.</summary>
+        public ExchangeOfferDef ExchangeOffer(string id) => id != null && _exchangeById.TryGetValue(id, out var o) ? o : null;
+
         /// <summary>Research nodes by id (09 section 5.18). Empty when the table is absent or filtered out by tier (M0).</summary>
         public IReadOnlyDictionary<string, ResearchDef> Research { get; private set; }
 
@@ -71,6 +79,46 @@ namespace HeroCat.Sim.Content
         {
             foreach (var r in Research.Values) if (r.Effect == effect) return r;
             return null;
+        }
+
+        /// <summary>quests_daily rows by SortOrder (09 section 5.21), bonus rows included. Empty in an M0 build (tier MVP rows).</summary>
+        public IReadOnlyList<QuestDef> QuestsDaily { get; private set; }
+
+        /// <summary>quests_weekly rows by SortOrder (09 section 5.22). Empty in an M0 build.</summary>
+        public IReadOnlyList<QuestDef> QuestsWeekly { get; private set; }
+
+        /// <summary>
+        /// achievements rungs (09 section 5.23, 06 section 5.4; issue #171) as <see cref="QuestKind.ACHIEVEMENT"/> quest rows,
+        /// grouped by ladder (in the order each ladder first appears) and by rung within it; SortOrder is that position.
+        /// Empty in an M0 build (tier MVP rows).
+        /// </summary>
+        public IReadOnlyList<QuestDef> Achievements { get; private set; }
+
+        /// <summary>Each ladder's rungs by Rung (rung r is index r - 1, E060), keyed by ladder id.</summary>
+        public IReadOnlyDictionary<string, IReadOnlyList<QuestDef>> AchievementLadders { get; private set; }
+
+        IReadOnlyDictionary<string, QuestDef> _dailyById, _weeklyById, _achievementById;
+        IReadOnlyList<QuestDef>[] _achievementsByGoal;
+
+        /// <summary>The rows of one kind by SortOrder; empty for a kind outside <see cref="QuestKind"/>.</summary>
+        public IReadOnlyList<QuestDef> QuestsOf(QuestKind kind) =>
+            kind == QuestKind.DAILY ? QuestsDaily : kind == QuestKind.WEEKLY ? QuestsWeekly : kind == QuestKind.ACHIEVEMENT ? Achievements
+            : (IReadOnlyList<QuestDef>)Array.Empty<QuestDef>();
+
+        /// <summary>The achievement rungs with <paramref name="goal"/>, by SortOrder (no allocation; the sim calls it per event).</summary>
+        public IReadOnlyList<QuestDef> AchievementsFor(QuestGoal goal)
+        {
+            int i = (int)goal;
+            return i >= 0 && i < _achievementsByGoal.Length ? _achievementsByGoal[i] : Array.Empty<QuestDef>();
+        }
+
+        /// <summary>A daily row, else a weekly row, else an achievement rung with this id; null if no table (after the tier filter) has it.</summary>
+        public QuestDef Quest(string id)
+        {
+            if (id == null) return null;
+            if (_dailyById.TryGetValue(id, out var d)) return d;
+            if (_weeklyById.TryGetValue(id, out var w)) return w;
+            return _achievementById.TryGetValue(id, out var a) ? a : null;
         }
 
         // ------------------------------------------------------------------------------------------- accessors

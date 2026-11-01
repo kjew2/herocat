@@ -206,7 +206,7 @@ Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them
 | Avatar | `Profile.AvatarId` | tap: push `SCR_PROFILE` |
 | Inbox icon | `Inbox.UnclaimedCount` badge | tap: push `SCR_INBOX` |
 | Settings gear | | tap: push `SCR_SETTINGS` |
-| Stage label | `Combat.Stage`, `Combat.Chapter`, `Combat.Selected` | tap: push `SCR_STAGE_SELECT` (MVP; M0 no-op); while farming a side stage it reads "Farming 235 · frontier 240" (issue #35) |
+| Stage label | snapshot `Stage`, `Chapter`, `SelectedStage` (02 `Combat.Selected`; issue #254) | tap: push `SCR_STAGE_SELECT` (MVP; M0 no-op); while farming a side stage it reads "Farming 235 · frontier 240" (issue #35) |
 | Kill counter | `Combat.KillsInStage / KILLS_PER_STAGE` | red when `IsWalled` |
 | WALL badge | `Combat.IsWalled` | |
 | Enemy sprite, HP bar | `Combat.EnemyId`, `EnemyIsBoss`, `EnemyHp`, `EnemyMaxHp` | HP bar text "1.2M / 1.7M" |
@@ -374,7 +374,7 @@ Purpose: the Fish Coin sink (03 node list: MP pool, MP regen, tank capacity, tan
 | Row per node | `Rows[node]`: `Level`, `MaxLevel`, `CurrentText`, `NextText`, `Cost`, `CanAfford`, `AtMax`; `[Buy]` sends `cmd Research(nodeId)` |
 | Header | `Wallet.FishCoin` |
 
-Events: `ResearchLeveled(node, level)` (row flash, tank gauge on `SCR_MAIN` updates via snapshot), `CurrencyChanged(FISH_COIN)`. Locked before Awakening rank 1 (`feature_unlocks`, 00 decision 11, issue #45; the sim rejects with `RESEARCH_LOCKED`): greyed with "Unlocks at Awakening I". First-time coach mark on Tank capacity.
+Events: `ResearchLeveled(nodeId, newLevel, cost)` (row flash, tank gauge on `SCR_MAIN` updates via snapshot), `CurrencyChanged(FISH_COIN)`. Locked before Awakening rank 1 (`feature_unlocks`, 00 decision 11, issue #45; the sim rejects with `RESEARCH_LOCKED`): greyed with "Unlocks at Awakening I". First-time coach mark on Tank capacity.
 
 ### 4.10 `SCR_SUMMON` (Full, M0)
 
@@ -515,10 +515,10 @@ Purpose: farm a cleared side stage (an easier stage for `GOLD_GAIN`-tuned kill r
 |---|---|
 | Chapter dropdown | `Chapters[]` (`CHAPTER_WIDTH` groups up to `Progress.HighestCleared`) |
 | Stage chips | `Stages[]`: `Number`, `IsBoss`, `IsFrontier`, `IsSelected`, `Cleared`; tap: `cmd SelectStage(n)` for `n <= Progress.HighestCleared` (02's meaning: highest stage of any kind completed, issue #35); tapping the frontier chip equals Return |
-| Return to frontier | `cmd SelectStage(null)`; shown while `Combat.Selected != null` |
+| Return to frontier | `cmd SelectStage(null)`; shown while snapshot `SelectedStage != null` |
 | Challenge boss | `cmd AttemptBoss` for the frontier boss only (only when walled) |
 
-Rules the modal makes visible: offline gold and EXP use the frontier `Combat.Stage` (06 section 7.1), the Dungeons unlock reads `Progress.HighestCleared` and first-clear diamonds read `Progress.HighestFirstClearBoss`, never the selected stage (06, 03 and 02; issue #35), so a lower stage is never a loophole; the modal says "Rewards for offline time use your highest stage". Events: `StageChanged` (from `SelectStage`), `StageCleared`; the selected stage is read from the snapshot (`Combat.Selected`, null = frontier), there is no `StageSelected` event (issue #11).
+Rules the modal makes visible: offline gold and EXP use the frontier `Combat.Stage` (06 section 7.1), the Dungeons unlock reads `Progress.HighestCleared` and first-clear diamonds read `Progress.HighestFirstClearBoss`, never the selected stage (06, 03 and 02; issue #35), so a lower stage is never a loophole; the modal says "Rewards for offline time use your highest stage". Events: `StageChanged` (from `SelectStage`), `StageCleared`; the selected stage is read from the snapshot (`SelectedStage`, which mirrors 02 `Combat.Selected`; null = frontier; issue #254), there is no `StageSelected` event (issue #11).
 
 ### 4.15 `SCR_QUESTS` (Full, MVP)
 
@@ -540,9 +540,10 @@ Rules the modal makes visible: offline gold and EXP use the frontier `Combat.Sta
 |---|---|
 | Tabs | `Tab` in {DAILY, WEEKLY, ACHIEVEMENT}; badge per tab = count `COMPLETED` |
 | Daily progress bar | `DailyCompletedCount / 11`, bonus chips for `d_bonus_5`, `d_bonus_8` with their state |
+| Weekly progress bar | `WeeklyCompletedCount / 7`, bonus chips for `w_bonus_all_skill`, `w_bonus_all_companion` (one ticket each, 06 section 5.3) with their state |
 | Row per quest | `Rows[]`: `TitleKey`, `TitleArgs` (target), `Progress`, `Target`, `State`, `RewardIcon`, `RewardAmount`, `GoScreen` (deep link for `IN_PROGRESS` rows) |
 | Claim | `cmd ClaimQuest(id)`; Claim all: `cmd ClaimAllQuests(tab)` with a summary toast "+140 diamonds". `d_login` pays nothing (login diamonds are auto-granted on rollover, issue #20): its row shows "done" with no Claim button and only counts toward the bonus rows |
-| Achievements tab | one row per ladder showing the lowest unclaimed rung and "3 / 11 rungs" |
+| Achievements tab | one row per ladder showing the lowest unclaimed rung and "3 / 11 rungs" (`Simulation.AchievementRows()`, `ClaimedRungs(ladder)`, 06 section 5.4); a fully claimed ladder drops out |
 
 Events: `QuestCompleted` (row state swap, badge), `QuestClaimed`, `QuestsBulkClaimed` (toast), `DayRolledOver` / `WeekRolledOver` (full refresh; a toast "Missions reset" if the screen is open).
 
@@ -854,7 +855,7 @@ Music: one combat loop per chapter skin, ducked 50% under modals, off during a r
 
 ## 12. Localization
 
-- Every string is a key (`scr.<screen>.<element>`, `err.<code_lower>.title` / `.body`, `reject.<reason_lower>`, `notice.<code_lower>.title` / `.body`, `quest.<id>.title`, `item.<id>.name`; keys are lowercase, issue #248), resolved through `ContentDb.Text(key, args)` (09). No literal strings in prefabs or code; a missing key renders the key itself in dev and the English fallback in release and logs once.
+- Every string is a key (`scr.<screen>.<element>`, `err.<code_lower>.title` / `.body`, `reject.<reason_lower>`, `notice.<code_lower>.title` / `.body`, `quest.<id>.name` (the quest rows' `name_key`, 09 section 5.21), `item.<id>.name`; keys are lowercase, issue #248), resolved through `ContentDb.Text(key, args)` (09). No literal strings in prefabs or code; a missing key renders the key itself in dev and the English fallback in release and logs once.
 - Pluralisation through ICU MessageFormat in the 09 table (`{n, plural, one {# copy} other {# copies}}`); never concatenate number + noun in code.
 - Numbers and dates through the formatters in section 7 with the locale's grouping separator; the suffix ladder letters are not localised (K/M/B/T/aa are shown in all locales; Open question 4 for ja/ko/zh 万/億 ladders).
 - RTL readiness: all layouts use horizontal layout groups with `childAlignment` mirrored by a single `RtlFlipper` component; icons that imply direction (back chevron, arrows) are mirrored; text uses TMP's RTL support. No RTL locale ships in MVP, but the flip is tested in CI with a pseudo-RTL locale.

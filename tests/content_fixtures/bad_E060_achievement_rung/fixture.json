@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "achievements",
+      "ach_stage_02,stage,2,",
+      "ach_stage_02,stage,3,"
+    ]
+  ],
+  "csharp": true
+}

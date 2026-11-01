@@ -364,36 +364,45 @@ namespace HeroCat.Runtime.Save
                     if (def.Enabled && !s.Banners.ContainsKey(def.Id)) { s.Banners[def.Id] = new BannerState(); Hit("P11"); }
             }
 
-            // P12: quest progress. TODO(#170): drop quest ids the content does not define (no quest tables in ContentDb yet).
+            // P12: quest progress. Daily, weekly and achievement rung ids the content does not define are dropped (a missing
+            // entry reads as IN_PROGRESS at 0; issues #170, #171). The sim raises the max ladders back to the state's values
+            // when it is constructed, so a dropped or clamped rung recovers what the state proves.
             void P12()
             {
-                if (CleanQuests(s.Quests.Daily)) Hit("P12");
-                if (CleanQuests(s.Quests.Weekly)) Hit("P12");
-                if (CleanQuests(s.Quests.Achievement)) Hit("P12");
+                if (CleanQuests(s.Quests.Daily, db.QuestsOf(QuestKind.DAILY))) Hit("P12");
+                if (CleanQuests(s.Quests.Weekly, db.QuestsOf(QuestKind.WEEKLY))) Hit("P12");
+                if (CleanQuests(s.Quests.Achievement, db.QuestsOf(QuestKind.ACHIEVEMENT))) Hit("P12");
             }
 
-            static bool CleanQuests(Dictionary<string, QuestProgress> map)
+            static bool CleanQuests(Dictionary<string, QuestProgress> map, IReadOnlyList<QuestDef> known)
             {
                 bool changed = false;
                 List<string> drop = null;
+                var ids = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var q in known) ids.Add(q.Id);
                 foreach (var kv in map)
                 {
-                    if (kv.Value == null) { (drop ??= new List<string>()).Add(kv.Key); continue; }
+                    if (kv.Value == null || !ids.Contains(kv.Key)) { (drop ??= new List<string>()).Add(kv.Key); continue; }
                     if (kv.Value.Progress < 0) { kv.Value.Progress = 0; changed = true; }
                 }
                 if (drop != null) { foreach (var id in drop) map.Remove(id); changed = true; }
                 return changed;
             }
 
-            // P13: research levels. A value < 1 is removed (absent reads as level 0).
-            // TODO(#158): unknown research ids and the per-node maxLevel (no research table in ContentDb yet).
+            // P13: research levels. An id the content does not define, or a value < 1, is removed (absent reads as level 0);
+            // a value above the node's max_level is clamped to it (09 section 6.3: content may lower a cap, nothing refunded).
             void P13()
             {
                 List<string> drop = null;
+                List<KeyValuePair<string, int>> clamp = null;
                 foreach (var kv in s.Research.Level)
-                    if (kv.Value < 1) (drop ??= new List<string>()).Add(kv.Key);
-                if (drop == null) return;
-                foreach (var id in drop) s.Research.Level.Remove(id);
+                {
+                    if (kv.Value < 1 || !db.Research.TryGetValue(kv.Key, out var node)) (drop ??= new List<string>()).Add(kv.Key);
+                    else if (kv.Value > node.MaxLevel) (clamp ??= new List<KeyValuePair<string, int>>()).Add(new KeyValuePair<string, int>(kv.Key, node.MaxLevel));
+                }
+                if (drop == null && clamp == null) return;
+                if (drop != null) foreach (var id in drop) s.Research.Level.Remove(id);
+                if (clamp != null) foreach (var kv in clamp) s.Research.Level[kv.Key] = kv.Value;
                 Hit("P13");
             }
 

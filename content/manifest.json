@@ -1,10 +1,15 @@
 {
   "schema_version": 1,
-  "content_version": "2026.11.01.1",
+  "content_version": "2026.11.01.3",
   "min_client_version": "0.1.0",
   "source_revision": "2026-11-01 m0 skeleton, spec 00 seed values (agent)",
   "hot_apply": false,
   "tables": {
+    "achievements": {
+      "file": "achievements.json",
+      "rows": 54,
+      "sha256": "5b4ef7246bbd6c351bca08ae4e0ca9703793f0a6cc33c17fa3e11b809c0b82f0"
+    },
     "awakening": {
       "file": "awakening.json",
       "rows": 5,
@@ -65,15 +70,35 @@
       "rows": 5,
       "sha256": "96c05f0a4376bcf4e6a035f9866bbcd197b3e2f97a1fdfa6fe0e5c92b451cd13"
     },
+    "quests_daily": {
+      "file": "quests_daily.json",
+      "rows": 14,
+      "sha256": "f7a8922fc481453dfe1561dddfc007697c93e548149264282b64797f128a8ecf"
+    },
+    "quests_weekly": {
+      "file": "quests_weekly.json",
+      "rows": 9,
+      "sha256": "beb9a2912a70980edfb2e6c4349041fd59baf3e525817bb8e0d52a027bb9c383"
+    },
     "rarities": {
       "file": "rarities.json",
       "rows": 5,
       "sha256": "7da59786cbad1e1ef75456d4650edfb888dac3da043f38a8609dbbe314dcf329"
     },
+    "research": {
+      "file": "research.json",
+      "rows": 8,
+      "sha256": "2a52acfb7c5f875333adac9796eb0d25ec6a9e62fa190db88a76aa817ff34cc1"
+    },
     "runes": {
       "file": "runes.json",
       "rows": 0,
       "sha256": "3261e985463cf5bc04fc2980bab3ccc3559fc1aa0e9f270d9e1e80b76593b1b4"
+    },
+    "shop_exchange": {
+      "file": "shop_exchange.json",
+      "rows": 3,
+      "sha256": "338fa2140a85ecbd5a010d65ac11429f2b6ea3ad0a8ef43879cbad101173037a"
     },
     "skills": {
       "file": "skills.json",
@@ -109,11 +134,11 @@
   "localization": {
     "en": {
       "file": "localization.en.json",
-      "rows": 452,
-      "sha256": "59fb75a4be24a3a3dd23663c43e6cc4f0be768d2c1f6bed70a7912e7144d6b8e"
+      "rows": 562,
+      "sha256": "e36d99976b22a1ff9f7509425631dbcb601a2a7f0fbcda9e1a94f050e12eeb4c"
     }
   },
-  "content_hash": "9c245d7b3017b1db74a67c317ff9361a355832cc497b17e7ee808e965f42d9e8",
+  "content_hash": "8e2b3cc39003a8d3cf7dc0bd89c11bd7999887ebc64a5d1b0608ce3fe3930197",
   "s_constants": [
     "BASE_HP",
     "BOSS_ROCK_CANDY_P",

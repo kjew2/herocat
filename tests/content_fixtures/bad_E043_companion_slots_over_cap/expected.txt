@@ -1,0 +1,1 @@
+CONTENT E043 awakening[5].companion_slots_after: value 5 out of range (<= COMPANION_SLOTS)

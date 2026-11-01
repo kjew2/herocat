@@ -2,6 +2,7 @@
 """Unit tests for tools/export_content.py (issues #121-#124, #128, #132, #250) and the content fixtures in tests/content_fixtures/.
 Run: python3 tools/test_export_content.py (check.sh does, --no-dotnet included)."""
 import json
+import math
 import os
 import re
 import shutil
@@ -77,6 +78,23 @@ class ExporterTests(unittest.TestCase):
         self.assertEqual(ex.newtonsoft_snake("MShareOfLplus"), "m_share_of_lplus")
         errs = ex.Errors()
         ex.check_dto_names(errs)
+        self.assertEqual(list(errs), [])
+
+    def test_enums_mirror_the_sim_enums(self):   # Enums.cs says ENUMS mirrors it; Locale/ConstantType are tool-only
+        src = open(os.path.join(REPO, "src", "HeroCat.Sim", "Content", "Enums.cs"), encoding="utf-8").read()
+        src = re.sub(r"//[^\n]*|/\*.*?\*/", "", src, flags=re.S)
+        sim = {m.group(1): [v.split("=")[0].strip() for v in m.group(2).split(",") if v.strip()]
+               for m in re.finditer(r"public enum (\w+)(?:\s*:\s*\w+)?\s*\{([^}]*)\}", src)}
+        self.assertEqual(set(ex.ENUMS) - set(sim), {"Locale", "ConstantType"})
+        for name, members in sim.items():
+            self.assertEqual(ex.ENUMS.get(name), members, name)
+
+    def test_quest_goal_has_train_levels(self):   # 06 section 5.1 order; weekly w_train uses it (issue #256)
+        goals = ex.ENUMS["QuestGoal"]
+        self.assertEqual(goals.index("TRAIN_LEVELS"), goals.index("CLEAR_DUNGEON") + 1)
+        errs = ex.Errors()
+        self.assertEqual(ex.parse_cell("enum(QuestGoal)", "TRAIN_LEVELS", "quests_weekly[w_train].goal", errs),
+                         "TRAIN_LEVELS")
         self.assertEqual(list(errs), [])
 
 
@@ -161,9 +179,7 @@ class ErrorCodeTests(unittest.TestCase):
 
 
 # Codes with no fixture yet, and why. Everything else in 09 section 8 (E0xx-E09x) must have a bad_<code>_* fixture.
-NO_FIXTURE = {
-    "E076": "import-translations (13.2) is not built yet; E076 lands with it",
-}
+NO_FIXTURE = {}   # code -> why it has no fixture yet (every section 8 code has one since issue #213's E076)
 
 
 class FixtureTests(unittest.TestCase):
@@ -509,6 +525,242 @@ class IcuTests(unittest.TestCase):
 
     def test_rendered_length_takes_the_longest_branch(self):
         self.assertEqual(ex.rendered_len(ex.icu_parse("{n, plural, one {# fish} other {# fishes}}")), 8)
+
+
+LOC_HEADER = "key,en,ja,ko,zh_hans,max_chars,plural,#context\n"
+
+
+def write_loc(d, body):
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "localization.csv"), "w", encoding="utf-8", newline="") as f:
+        f.write(LOC_HEADER + body)
+
+
+def read_text(path):
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
+def translator_rows(text):
+    import csv
+    import io
+    return list(csv.reader(io.StringIO(text)))
+
+
+def write_rows(path, rows):
+    import csv
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        csv.writer(f, lineterminator="\n").writerows(rows)
+
+
+class TranslatorRoundTripTests(unittest.TestCase):
+    """09 sections 7.1, 13.2 and E076 (issue #213): translator-csv -> fill -> import-translations."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.src = os.path.join(self.tmp, "src")
+        shutil.copytree(fx.BASE, self.src)
+        self.loc = os.path.join(self.src, "localization.csv")
+        text = read_text(self.loc)
+        for key in ("awakening.rank_2.name", "awakening.rank_3.name"):   # two rows the translator still owes
+            text = re.sub(rf"^{re.escape(key)},([^,]*),[^,]*,", rf"{key},\1,,", text, count=1, flags=re.M)
+        with open(self.loc, "w", encoding="utf-8", newline="") as f:
+            f.write(text)
+        self.before = text
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def export(self, missing_only=True, locale="ja"):
+        out = os.path.join(self.tmp, f"strings_{locale}.csv")
+        args = ["translator-csv", "--src", self.src, "--locale", locale, "--out", out]
+        rc, lines = fx.run_main(args + (["--missing-only"] if missing_only else []))
+        self.assertEqual((rc, lines), (0, []))
+        return out, translator_rows(read_text(out))
+
+    def import_(self, path, locale="ja"):
+        return fx.run_main(["import-translations", "--src", self.src, "--csv", path, "--locale", locale])
+
+    def test_round_trip_fills_missing_rows_and_build_passes(self):
+        # Before the import the ship locale ja is incomplete, so the build fails E073.
+        rc, lines = fx.run_main(["build", "--src", self.src, "--out", os.path.join(self.tmp, "o0"),
+                                 "--dto-out", os.path.join(self.tmp, "d0.cs")])
+        self.assertEqual(rc, 1)
+        self.assertTrue(lines[0].startswith("CONTENT E073 localization[awakening.rank_2.name].ja"), lines)
+        path, rows = self.export()
+        self.assertEqual(rows[0], ["key", "en", "ja", "max_chars", "context"])
+        self.assertEqual([r[0] for r in rows[1:]], ["awakening.rank_2.name", "awakening.rank_3.name"])
+        self.assertEqual(rows[1], ["awakening.rank_2.name", "Awakened 2", "", "24", ""])
+        rows[1][2], rows[2][2] = "覚醒 2", "覚醒 3"
+        write_rows(path, rows)
+        self.assertEqual(self.import_(path), (0, []))
+        after = read_text(self.loc)
+        self.assertEqual(after, self.before.replace("awakening.rank_2.name,Awakened 2,,", "awakening.rank_2.name,Awakened 2,覚醒 2,")
+                         .replace("awakening.rank_3.name,Awakened 3,,", "awakening.rank_3.name,Awakened 3,覚醒 3,"))
+        rc, lines = fx.run_main(["build", "--src", self.src, "--out", os.path.join(self.tmp, "o"),
+                                 "--dto-out", os.path.join(self.tmp, "d.cs"), "--strict-warnings"])
+        self.assertEqual((rc, lines), (0, []))
+        with open(os.path.join(self.tmp, "o", "localization.ja.json"), encoding="utf-8") as f:
+            ja = {r["key"]: r["text"] for r in json.load(f)["rows"]}
+        self.assertEqual(ja["awakening.rank_2.name"], "覚醒 2")
+        _, rows = self.export()
+        self.assertEqual(rows[1:], [], "nothing is missing any more")
+
+    def test_en_edited_between_export_and_import_is_E076_and_the_rest_merges(self):
+        path, rows = self.export()
+        rows[1][2], rows[2][2] = "覚醒 2", "覚醒 3"
+        write_rows(path, rows)
+        with open(self.loc, "w", encoding="utf-8", newline="") as f:
+            f.write(self.before.replace("awakening.rank_2.name,Awakened 2,", "awakening.rank_2.name,Awakened Two,"))
+        rc, lines = self.import_(path)
+        self.assertEqual(rc, 1)
+        self.assertEqual(lines, ["CONTENT E076 localization[awakening.rank_2.name].ja: en text changed since this "
+                                 "translation was exported ('Awakened 2' -> 'Awakened Two')"])
+        after = read_text(self.loc)
+        self.assertIn("awakening.rank_2.name,Awakened Two,,", after)
+        self.assertIn("awakening.rank_3.name,Awakened 3,覚醒 3,", after)
+
+    def test_full_export_keeps_existing_text_and_empty_cells_never_clear(self):
+        path, rows = self.export(missing_only=False)
+        self.assertEqual(len(rows) - 1, len(re.findall(r"^\w", self.before, re.M)) - 1)
+        self.assertEqual(rows[1], ["awakening.rank_1.name", "Awakened 1", "Awakened 1", "24", ""])
+        for r in rows[1:]:
+            r[2] = ""
+        write_rows(path, rows)
+        self.assertEqual(self.import_(path), (0, []))
+        self.assertEqual(read_text(self.loc), self.before)
+
+    def test_context_note_and_zh_hans_column(self):
+        d = os.path.join(self.tmp, "loc")
+        write_loc(d, 'ui.scr_main.claim,Claim,,,,18,false,"Offline popup, main button"\n')
+        out = os.path.join(self.tmp, "zh.csv")
+        self.assertEqual(fx.run_main(["translator-csv", "--src", d, "--locale", "zh-Hans", "--out", out])[0], 0)
+        rows = translator_rows(read_text(out))
+        self.assertEqual(rows, [["key", "en", "zh_hans", "max_chars", "context"],
+                                ["ui.scr_main.claim", "Claim", "", "18", "Offline popup, main button"]])
+        rows[1][2] = "领取"
+        write_rows(out, rows)
+        self.assertEqual(fx.run_main(["import-translations", "--src", d, "--csv", out, "--locale", "zh-Hans"]), (0, []))
+        self.assertEqual(read_text(os.path.join(d, "localization.csv")),
+                         LOC_HEADER + 'ui.scr_main.claim,Claim,,,领取,18,false,"Offline popup, main button"\n')
+
+    def test_import_refuses_budget_plural_unknown_and_duplicate_rows(self):
+        d = os.path.join(self.tmp, "loc")
+        write_loc(d, "ui.a.short,Go,,,,4,false,\n"
+                     "ui.a.fish,\"{n, plural, one {# fish} other {# fish}}\",,,,0,true,\n"
+                     "ui.a.gold,{gold} gold,,,,0,false,\n")
+        rows = [["key", "en", "ja", "max_chars", "context"],
+                ["ui.a.short", "Go", "いってらっしゃい", "4", ""],                 # E074: 8 chars, budget 4
+                ["ui.a.fish", "{n, plural, one {# fish} other {# fish}}", "{n, plural, one {#匹}}", "0", ""],   # E075
+                ["ui.a.nope", "Nope", "いいえ", "0", ""],                          # E072
+                ["ui.a.gold", "{gold} gold", "{gold} ゴールド", "0", ""],
+                ["ui.a.gold", "{gold} gold", "{gold}G", "0", ""]]                 # E020
+        path = os.path.join(self.tmp, "ja.csv")
+        write_rows(path, rows)
+        rc, lines = fx.run_main(["import-translations", "--src", d, "--csv", path, "--locale", "ja"])
+        self.assertEqual(rc, 1)
+        self.assertEqual(lines, [
+            "CONTENT E074 localization[ui.a.short].ja: ja text is 8 chars, budget 4",
+            "CONTENT E075 localization[ui.a.fish].ja: plural message must have 'one' and 'other' branches: ja lacks other",
+            "CONTENT E072 translations row 3: key 'ui.a.nope' has no row in localization",
+            "CONTENT E020 translations row 5: duplicate key 'ui.a.gold' (first seen at row 4)",
+        ])
+        text = read_text(os.path.join(d, "localization.csv"))
+        self.assertIn("ui.a.gold,{gold} gold,{gold} ゴールド,", text)
+        self.assertIn("ui.a.short,Go,,", text)
+        # ja needs only the `other` branch (13.2): the same message without `one` is accepted.
+        write_rows(path, [rows[0], ["ui.a.fish", rows[2][1], "{n, plural, other {#匹}}", "0", ""]])
+        self.assertEqual(fx.run_main(["import-translations", "--src", d, "--csv", path, "--locale", "ja"]), (0, []))
+
+    def test_usage_errors_exit_2(self):
+        path = os.path.join(self.tmp, "x.csv")
+        for argv in (["translator-csv", "--locale", "en", "--out", path], ["translator-csv", "--locale", "xx", "--out", path],
+                     ["translator-csv", "--locale", "ja"], ["import-translations", "--locale", "ja"],
+                     ["import-translations", "--locale", "ja", "--csv", os.path.join(self.tmp, "missing.csv")]):
+            with self.subTest(argv=argv):
+                self.assertEqual(fx.run_main(argv + ["--src", self.src])[0], 2)
+        write_rows(path, [["key", "en", "max_chars"]])
+        self.assertEqual(self.import_(path),
+                         (1, ["CONTENT E002 translations: missing required column 'ja'"]))
+
+
+def icu_shape(parts):
+    """The argument structure of a parsed ICU message, literal text dropped."""
+    return [(p[0], p[1], {k: icu_shape(v) for k, v in p[2].items()}) for p in parts if isinstance(p, tuple)]
+
+
+class PseudoLocTests(unittest.TestCase):
+    """09 section 13.3, 07 section 12 (issue #213): the pseudo locale xx."""
+
+    SAMPLES = ["Test", "OK", "Awakened 1", "Claim {gold} gold", "{gold, number} per second",
+               "You have {n, plural, one {# fish} other {# fish}} in {t, select, big {the big} other {a}} tank",
+               "{n, plural, offset:1 =0 {nobody} one {just you} other {you and # others}}", "it''s '{literal}'",
+               "a stray } brace is plain text"]
+
+    def test_accents_brackets_and_padding(self):
+        self.assertEqual(ex.pseudo_text("Test"), "[!!! Ţêšţ !!!]")   # 07 section 12's sample
+        self.assertEqual(ex.pseudo_text("a e"), "[!!! å ê !!!]")
+        long = "Release every fish in the tank"
+        p = ex.pseudo_text(long)
+        self.assertEqual(p, "[!!! Ŕêļêåšê êvêŕý fîšĥ îñ ţĥê ţåñķ~~ !!!]")   # 30 chars -> 42 = 30 + 40%
+        self.assertEqual(len(p), 42)
+
+    def test_icu_structure_kept_and_length_at_least_140_pct(self):
+        for en in self.SAMPLES:
+            with self.subTest(en=en):
+                p = ex.pseudo_text(en)
+                try:
+                    want = ex.icu_parse(en)
+                except ValueError:
+                    self.assertEqual(len(p), len(en) + max(10, math.ceil(len(en) * 0.4)))
+                    continue
+                got = ex.icu_parse(p)
+                self.assertEqual(icu_shape(got), icu_shape(want))
+                self.assertGreaterEqual(ex.rendered_len(got), 1.4 * ex.rendered_len(want))
+                self.assertTrue(p.startswith("[!!! ") and p.endswith(" !!!]"))
+        self.assertIn("{n, plural, one {# fîšĥ} other {# fîšĥ}}", ex.pseudo_text(self.SAMPLES[5]))
+        self.assertIn("'{ļîţêŕåļ}'", ex.pseudo_text(self.SAMPLES[7]))
+
+    def test_pseudo_build_of_the_shipped_strings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "content_pseudo")
+            rc, lines = fx.run_main(["pseudo", "--src", SRC, "--locale", "xx", "--out", out])
+            self.assertEqual((rc, lines), (0, []))
+            with open(os.path.join(out, "localization.xx.json"), encoding="utf-8") as f:
+                xx = json.load(f)
+            with open(os.path.join(out, "localization.en.json"), encoding="utf-8") as f:
+                en = json.load(f)
+            with open(os.path.join(out, "manifest.json"), encoding="utf-8") as f:
+                manifest = json.load(f)
+            with open(os.path.join(REPO, "content", "manifest.json"), encoding="utf-8") as f:
+                shipped = json.load(f)
+        self.assertEqual(xx["locale"], "xx")
+        self.assertEqual([r["key"] for r in xx["rows"]], [r["key"] for r in en["rows"]])
+        for e, x in zip(en["rows"], xx["rows"]):
+            want, got = ex.icu_parse(e["text"]), ex.icu_parse(x["text"])
+            self.assertEqual(icu_shape(got), icu_shape(want), e["key"])
+            self.assertGreaterEqual(ex.rendered_len(got), 1.4 * ex.rendered_len(want), e["key"])
+        self.assertEqual(manifest["localization"]["xx"]["rows"], len(xx["rows"]))
+        self.assertEqual(manifest["tables"], shipped["tables"], "only the xx strings are added")
+        shas = [v["sha256"] for v in list(manifest["tables"].values()) + list(manifest["localization"].values())]
+        self.assertEqual(manifest["content_hash"], ex.hashlib.sha256("".join(shas).encode("ascii")).hexdigest())
+        self.assertNotEqual(manifest["content_hash"], shipped["content_hash"])
+
+    def test_xx_never_ships(self):
+        errs = ex.Errors()
+        with tempfile.TemporaryDirectory() as tmp:
+            p = os.path.join(tmp, "meta.csv")
+            with open(p, "w", encoding="utf-8") as f:
+                f.write('key,value\ncontent_version,2026.11.01\nmin_client_version,0.1.0\nsource_revision,x\n'
+                        'ship_locales,"en,xx"\n')
+            ex.read_meta(p, errs)
+            self.assertEqual(list(errs), ["CONTENT E021 meta[ship_locales]: 'xx' is not a valid Locale "
+                                          "(allowed: en, ja, ko, zh-Hans)"])
+            for argv in (["pseudo", "--locale", "ja", "--out", os.path.join(tmp, "p")],
+                         ["pseudo", "--out", os.path.join(REPO, "content")], ["pseudo"]):
+                with self.subTest(argv=argv):
+                    self.assertEqual(fx.run_main(argv + ["--src", SRC])[0], 2)
+            self.assertFalse(os.path.exists(os.path.join(REPO, "content", "localization.xx.json")))
 
 
 if __name__ == "__main__":

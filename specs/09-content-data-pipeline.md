@@ -90,7 +90,7 @@ Enums are defined once in C# (`HeroCat.Sim.Content.Enums`) and mirrored in `tool
 | `AbilityType` | `DAMAGE`, `BUFF_ATK`, `BUFF_GOLD`, `MP_REGEN` | no |
 | `ResearchEffect` | `RESEARCH_PCT`, `GOLD_MULT`, `MP_POOL`, `MP_REGEN`, `TANK_CAP`, `TANK_REFILL`, `FISH_CAP`, `OFFLINE_CAP` | no |
 | `QuestKind` | `DAILY`, `WEEKLY`, `ACHIEVEMENT` | no |
-| `QuestGoal` | 06 section 5.1 list: `LOGIN`, `LOGIN_DAYS`, `KILL_ENEMIES`, `ATTEMPT_BOSS`, `CLEAR_STAGES`, `SUMMON`, `RELEASE_FISH`, `MERGE_FISH`, `CLEAR_DUNGEON`, `DAILIES_COMPLETED`, `WEEKLIES_COMPLETED`, `REACH_STAGE`, `REACH_HERO_LEVEL`, `OWN_WEAPONS`, `OWN_SKILLS`, `OWN_COMPANIONS`, `LIFETIME_MERGES`, `FISH_LEVEL`, `AWAKEN_RANK`, `LIFETIME_SUMMONS`, `WATCH_AD` (P1) | no |
+| `QuestGoal` | 06 section 5.1 list: `LOGIN`, `LOGIN_DAYS`, `KILL_ENEMIES`, `ATTEMPT_BOSS`, `CLEAR_STAGES`, `SUMMON`, `RELEASE_FISH`, `MERGE_FISH`, `CLEAR_DUNGEON`, `TRAIN_LEVELS`, `DAILIES_COMPLETED`, `WEEKLIES_COMPLETED`, `REACH_STAGE`, `REACH_HERO_LEVEL`, `OWN_WEAPONS`, `OWN_SKILLS`, `OWN_COMPANIONS`, `LIFETIME_MERGES`, `FISH_LEVEL`, `AWAKEN_RANK`, `LIFETIME_SUMMONS`, `WATCH_AD` (P1) | no |
 | `Element` | `NONE`, `FIRE`, `WATER`, `LEAF`, `LIGHT`, `DARK` | no (cosmetic in MVP) |
 | `PackageLimit` | `ONCE`, `DAILY`, `WEEKLY`, `MONTHLY` | no |
 | `InboxKind` | `IAP`, `MAIL`, `COMPENSATION`, `COUPON`, `SYSTEM` | no |
@@ -157,6 +157,7 @@ The exporter checks `constants` against this list (`E040` missing, `E042` unknow
 | `HERO_LVL_MULT` | `hero_levels.mult_per_level` | double |
 | Section 6.6 day/stage targets | `progress_targets` | int, int |
 | Feature unlock gates (Research, Companions, Quests, Dungeons, Shop) | `feature_unlocks` (issue #45) | enum, int |
+| Exchange offers (06 section 8.4: price, grant, daily limit) | `shop_exchange` (issue #174) | enum, long, int |
 | Awakening cadence target (03, 06) | `awakening_targets.max_days_after_gate` (issue #43) | int |
 | 08's `STAGE_VS_TIME` whale curve | `plausibility_stage_bound` (generated, issue #60) | int, int |
 | 06 section 2 reference-day parameters | `constants.REF_DAILIES_DONE`, `.REF_NEW_BOSSES` *(named here, issue #55)* | int |
@@ -509,7 +510,7 @@ Same schema, two tabs, because 06 resets them on different keys and `SCR_QUESTS`
 |---|---|---|
 | `id` | id | Key. 06's `d_*` / `w_*` ids. |
 | `goal` | enum(QuestGoal) | |
-| `filter` | string? | Required for `SUMMON` (a `Banner` value) and `CLEAR_DUNGEON` (a `Dungeon` value); must parse as that enum (`E021`); empty otherwise (`E054`). |
+| `filter` | string? | For `SUMMON` a `Banner` value and for `CLEAR_DUNGEON` a `Dungeon` value; must parse as that enum (`E021`). Empty on those two goals means any banner or any dungeon (`w_summons`, `w_dungeons`, 06 section 5.3). Empty for every other goal (`E054`). |
 | `target` | long | `>= 1`. |
 | `reward_currency` | enum(Currency) | |
 | `reward_amount` | long | `>= 1`; `0` allowed only for goal `LOGIN` (`d_login` is a counting row that pays nothing, issue #20). |
@@ -537,6 +538,8 @@ Example: `{"id": "d_merge", "goal": "MERGE_FISH", "filter": null, "target": 15, 
 | `reward_amount` | long | `>= 1`. |
 | `tier` | enum(Tier) | |
 | `name_key` | key | |
+
+The rows are 06 section 5.4's 54 rungs in nine ladders (ids `stage`, `hero_level`, `weapons`, `skills`, `companions`, `merges`, `fish_level`, `awakening`, `summons`), all `DIAMOND`, `tier` `MVP`, summing to 6,260. They are the only home of the achievement rewards. `ClaimAllQuests(ACHIEVEMENT)` claims in the built order: ladders in the order their first row appears, rungs ascending.
 
 Example: `{"id": "ach_merges_04", "ladder": "merges", "rung": 4, "goal": "LIFETIME_MERGES", "target": 1000, "reward_currency": "DIAMOND", "reward_amount": 80, "tier": "MVP", "name_key": "achievement.merges_04.name"}`.
 
@@ -709,6 +712,25 @@ The whale stage curve 08's `STAGE_VS_TIME` check multiplies by `STAGE_BOUND_MULT
 | `day` | int | Key. Exactly `1..60` (`E060`). Past the last row 08 does not run the check. |
 | `stage` | int | `>= 1`; non-decreasing (`E048`). |
 
+### 5.37 `shop_exchange` (3 rows)
+
+The diamond-for-dungeon-ticket offers of 06 section 8.4 (issue #174). Sim-read (`ExchangeItem`), so not `hotApply`-eligible; tier MVP, so an M0 build has none.
+
+| Column | Type | Constraint |
+|---|---|---|
+| `id` | id | Key. 06's `ex_ticket_fish`, `ex_ticket_candy`, `ex_ticket_exp`. |
+| `price_currency` | enum(Currency) | Must be `DIAMOND` (`E059`). |
+| `price_amount` | long | Per unit; `>= 1` (`E043`). |
+| `grant_currency` | enum(Currency) | One of `TICKET_FISH_COIN`, `TICKET_ROCK_CANDY`, `TICKET_EXP` (`E059`; 06 section 8.5: nothing else is sold). |
+| `grant_amount` | long | Per unit; `>= 1` (`E043`). |
+| `daily_limit` | int | Units per day key; `>= 1` (`E043`). |
+| `sort_order` | int | Unique (`E046`); display order on `SCR_SHOP`. |
+| `tier` | enum(Tier) | |
+| `name_key` | key | |
+| `icon` | asset | |
+
+Example: `{"id": "ex_ticket_fish", "price_currency": "DIAMOND", "price_amount": 50, "grant_currency": "TICKET_FISH_COIN", "grant_amount": 1, "daily_limit": 2, "sort_order": 1, "tier": "MVP", "name_key": "shop.ex_ticket_fish.name", "icon": "icon_ticket_fish_coin"}`.
+
 ## 6. JSON layout, manifest and versioning
 
 ### 6.1 One file per table
@@ -739,7 +761,7 @@ Localization file shape: `{"table": "localization", "locale": "ja", "rows": [{"k
   "source_revision": "sheet rev 118 kj",
   "hot_apply": false,
   "tables": {
-    "achievements":    { "file": "achievements.json",    "rows": 58,  "sha256": "9f1c..." },
+    "achievements":    { "file": "achievements.json",    "rows": 54,  "sha256": "9f1c..." },
     "awakening":       { "file": "awakening.json",       "rows": 5,   "sha256": "0b77..." },
     "banner_levels":   { "file": "banner_levels.json",   "rows": 30,  "sha256": "c2a0..." },
     "banners":         { "file": "banners.json",         "rows": 4,   "sha256": "5d1e..." },
@@ -780,7 +802,7 @@ Save compatibility (02 owns it, issue #56): the save stores `ContentVersion` and
 
 ## 7. The exporter: `tools/export_content.py`
 
-Python 3.9+, stdlib only for `build`, `check`, `diff` and `translator-csv`; `pull --service-account` needs `google-api-python-client` and is optional (the CSV path needs nothing). One file, about 600 lines, structured as:
+Python 3.9+, stdlib only for `build`, `check`, `diff`, `translator-csv`, `import-translations` and `pseudo`; `pull --service-account` needs `google-api-python-client` and is optional (the CSV path needs nothing). One file, about 600 lines, structured as:
 
 - `SCHEMA`: dict `table -> TableSchema(columns, key, folds, required, tiered)`; columns carry `(type, nullable)`. The single machine-readable form of section 5; `tools/content.py` (section 11) imports it.
 - `ENUMS`, `REQUIRED_CONSTANTS`, `SCREEN_IDS`: mirrors of 3.3, 5.1 and 00 section 5.3.
@@ -798,9 +820,9 @@ python3 tools/export_content.py build [--src content_src] [--out content] [--pre
 python3 tools/export_content.py check [--src content_src] [--out content] [--dto-out src/HeroCat.Sim/Content/Dto/ContentDtos.g.cs]
 python3 tools/export_content.py gen-dtos [--dto-out ...]                       # C# DTOs of section 9.1 from SCHEMA
 python3 tools/export_content.py diff  --a content --b <dir>          # human-readable row diff for a PR description
-python3 tools/export_content.py translator-csv --out /tmp/strings_ja.csv --locale ja [--missing-only]
-python3 tools/export_content.py import-translations --csv strings_ja.csv --locale ja   # writes back into content_src/localization.csv
-python3 tools/export_content.py pseudo --locale xx --out content_pseudo              # pseudo-localized build (section 13)
+python3 tools/export_content.py translator-csv --out /tmp/strings_ja.csv --locale ja [--missing-only] [--src content_src]
+python3 tools/export_content.py import-translations --csv strings_ja.csv --locale ja [--src content_src]   # writes back into content_src/localization.csv
+python3 tools/export_content.py pseudo --locale xx --out content_pseudo [--src content_src]               # pseudo-localized build (section 13)
 ```
 
 | Verb | Does | Exit codes |
@@ -810,9 +832,9 @@ python3 tools/export_content.py pseudo --locale xx --out content_pseudo         
 | `check` | Build to memory; exit 1 if the result differs byte-for-byte from `--out`, or the generated DTO file differs from `--dto-out`. CI's stale-JSON guard. Writes nothing. | 0, 1 |
 | `gen-dtos` | Writes the `HeroCat.Sim.Content.Dto` classes (section 9.1) from `SCHEMA`; `build` does it too. Field names are the PascalCase of the columns, so the Runtime loader maps them back with Newtonsoft's snake-case naming. | 0 |
 | `diff` | Row-level added/removed/changed per table between two content dirs. Pasted into the PR. | 0 |
-| `translator-csv` | `key, en, <locale>, max_chars, context` for a translator; `--missing-only` filters to empty cells. | 0 |
-| `import-translations` | Merges a returned CSV into the `localization` CSV; refuses rows whose `en` no longer matches (`E076`, the source changed under the translator). | 0, 1 |
-| `pseudo` | Builds a content set where every string is pseudo-localized (section 13.3). | 0 |
+| `translator-csv` | `key, en, <locale>, max_chars, context` for a translator; `--missing-only` filters to empty cells. `--locale` is `ja`, `ko` or `zh-Hans` (section 13.2 has the file format). | 0, 1 (`localization.csv` does not parse), 2 (usage/IO) |
+| `import-translations` | Merges a returned CSV into the `localization` CSV; refuses rows whose `en` no longer matches (`E076`, the source changed under the translator), over budget (`E074`) or missing a plural branch the locale needs (`E075`), and merges the rest. | 0, 1 (a row refused), 2 (usage/IO) |
+| `pseudo` | Builds a content set where every string is pseudo-localized (section 13.3), into `--out`, which is required and never the shipped `content/`. | 0, 1 (validation), 2 (usage/IO) |
 
 Errors go to stderr one per line in the section 8.1 format. Warnings go to stderr prefixed `CONTENT W...` and do not fail the build unless `--strict-warnings` (CI passes it).
 
@@ -883,7 +905,7 @@ CONTENT <code> <location>: <message>
 | `E056` | chapters, tank, achievements | `{column} must equal {expected} ({reason}), got {value}` |
 | `E057` | enemies, bosses | `chapter '{chapter}' has {n} {enemies or bosses}, expected {rule}` |
 | `E058` | skills, companions | `duration_ticks {d} must be in 1..cooldown_ticks {c}` |
-| `E059` | banners, dungeons, shop_products | `{column} '{value}' is not an allowed currency here ({rule})` |
+| `E059` | banners, dungeons, shop_products, shop_exchange | `{column} '{value}' is not an allowed currency here ({rule})` |
 | `E060` | index columns | `{column} must be exactly 1..{n} in row order, got {values}` |
 | `E061` | dupe_levels | `cum_copies for level 1 must be 1, got {value}` |
 | `E062` | tutorial_steps | `exactly one PROFILE_CREATED step at order 1 required` |
@@ -909,14 +931,14 @@ CONTENT <code> <location>: <message>
 
 `W010` more than two `BUFF` skills in one rarity; `W011` a rarity `<= RARE` with no `MP_REGEN` companion; `W012` banners with different `banner_levels` counts; `W013` a reachable fish level reuses a lower sprite with no `tint` (issue #48); `W031` `FISH_MAX_LVL0` or the `res_fish_cap` max decreased against `--previous` (05, issue #41); `W020` missing non-ship-locale text; `W021` unused localization key; `W030` an `S` constant changed without a note in `meta.notes`.
 
-Loader scope: `ContentDb.Build` implements every `E0xx`, `E03x`-`E06x` rule that touches sim-read data, and `E9xx`. It does not implement `E07x` localization rules (strings are client-only) or `E09x` (no previous build). `check` in CI plus the hash check at load are what make a hand edit of `content/` visible. In code: the rules live in `ContentDb.Rules.cs`, mirror the exporter's `RULES` in order, and sort by table like it. Also left to the exporter: the warnings, `E039` (a budget check for the designer, not a sim guard) and the rules over tables the sim never reads (`enemies`/`bosses` `E057`, the shop tables, `inbox_templates`). The quest, achievement and dungeon rules join `Build` when those tables are built into `ContentDb` (issues #170, #171, #173).
+Loader scope: `ContentDb.Build` implements every `E0xx`, `E03x`-`E06x` rule that touches sim-read data, and `E9xx`. It does not implement `E07x` localization rules (strings are client-only) or `E09x` (no previous build). `check` in CI plus the hash check at load are what make a hand edit of `content/` visible. In code: the rules live in `ContentDb.Rules.cs`, mirror the exporter's `RULES` in order, and sort by table like it. Also left to the exporter: the warnings, `E039` (a budget check for the designer, not a sim guard) and the rules over tables the sim never reads (`enemies`/`bosses` `E057`, the shop tables, `inbox_templates`). The quest rules (`E043`, `E046`, `E054`, `E064` on `quests_daily` / `quests_weekly`) run in `Build` (issue #170), and so do the achievement rules (`E060`, `E043`, `E031`, `E056`, `E065` on `achievements`, issue #171) and `shop_exchange`'s (`E043`, `E046`, `E059`; issue #174); the dungeon rules join it when that table is built into `ContentDb` (issue #173).
 
 ### 8.7 How the rules read where the tables above leave it open
 
 Decided while implementing issues #122, #123 and #128; each is a default the design owner may veto.
 
 - **Order.** `validate` sorts its errors by table in `SCHEMA` order (acceptance 7). Within one table the rule order holds. `E020` comes first because the reader finds it before any rule runs.
-- **Tables not authored yet.** A rule whose table is optional and absent is skipped. That covers `E034` for a banner whose pool table is missing (`companions`, issue #161), `E039`/`E064` without `quests_daily`, `E065` without `achievements`, `E057` without `enemies`/`bosses`, and the research halves of `E038`, `E056` and `E063`.
+- **Tables not authored yet.** A rule whose table is optional and absent is skipped. That covers `E034` for a banner whose pool table is missing (`companions`, issue #161), `E039`/`E064` without `quests_daily`, `E065` for an `OWN_*` goal whose pool table is missing (`OWN_COMPANIONS` until `companions` lands, issue #161), `E057` without `enemies`/`bosses`, and the research halves of `E038`, `E056` and `E063` (the shipped content has the `research` rows since issue #158; the table stays optional so minimal fixtures need not carry it).
 - **Bounds that name no code** report as `E043` with the rule text. That includes `awakening.companion_slots_after <= COMPANION_SLOTS` and banner level 1's `exp_required = 0`. `E048` is kept for the ordering rules.
 - **`E055` and `E022`.** When a `training_curves` row names a stat that does not exist, `E022` reports it and `E055` stays silent.
 - **`E059` on banners**: `ticket_currency` must be exactly `TICKET_SUMMON_<id>`.
@@ -1110,8 +1132,8 @@ public sealed class HeroLevelsDef { CurveDef Exp; double? AtkPctPerLevel; double
 public sealed class ResearchDef   { string Id; ResearchEffect Effect; double EffectPerLevel; double? EffectFloor; int MaxLevel; CurveDef Cost; int UnlockAwakenRank; int LayoutRow, LayoutCol; Tier Tier; ... }
 public sealed class FishLevelDef  { int Level; long DiscoveryCoins; double MissilePct; double MergeCoins; double BoardDpsPct; /* derived */ string Sprite, Tint, NameKey; }
 public sealed class TankDef       { int Cap0; double RefillS0; int RefillTicks0; int ReleaseLevel; double RefillFloorS; }
-public sealed class QuestDef      { string Id; QuestKind Kind; QuestGoal Goal; string Filter; long Target; Currency RewardCurrency; long RewardAmount; int SortOrder; Tier Tier; string NameKey, Icon; }
-public sealed class AchievementDef{ string Id, Ladder; int Rung; QuestGoal Goal; long Target; Currency RewardCurrency; long RewardAmount; Tier Tier; string NameKey; }
+public sealed class QuestDef      { string Id; QuestKind Kind; QuestGoal Goal; string Filter; long Target; Currency RewardCurrency; long RewardAmount; int SortOrder; Tier Tier; string NameKey, Icon;
+                                    string Ladder; int Rung; }   // an achievements row is a QuestDef of Kind ACHIEVEMENT: Ladder and Rung set, Filter and Icon null (issue #171)
 public sealed class DungeonDef    { string Id; Dungeon? Kind; Currency? TicketCurrency; int TicketsPerDay, UnlockStage, FloorStageStep, Floors; bool SweepAllowed; Tier Tier; IReadOnlyList<DungeonFloorDef> FloorDefs; ... }
 public sealed class DungeonFloorDef { int Floor; int StageEquiv; Currency RewardCurrency; double RewardAmount; /* resolved at build for HERO_EXP */ string Boss; IReadOnlyList<Grant> FirstClearBonus; }
 public sealed class ShopProductDef{ string Sku, AppleProductId, GoogleProductId; int UsdTier; double Usd; long BaseAmount; double BonusPct; long TotalAmount; double FirstPurchaseMult; int SortOrder; bool Enabled; Tier Tier; ... }
@@ -1162,11 +1184,15 @@ public sealed partial class ContentDb
     public TankDef Tank { get; }
 
     public IReadOnlyList<QuestDef> QuestsDaily { get; }  public IReadOnlyList<QuestDef> QuestsWeekly { get; }   // by SortOrder
-    public IReadOnlyDictionary<string, IReadOnlyList<AchievementDef>> AchievementLadders { get; }           // by Rung
+    public IReadOnlyList<QuestDef> Achievements { get; }                          // by ladder (first-row order), then Rung; SortOrder is that position
+    public IReadOnlyDictionary<string, IReadOnlyList<QuestDef>> AchievementLadders { get; }                 // by Rung
+    public IReadOnlyList<QuestDef> QuestsOf(QuestKind kind);  public IReadOnlyList<QuestDef> AchievementsFor(QuestGoal goal);
+    public QuestDef Quest(string id);                                             // quests_daily, then quests_weekly, then achievements
     public IReadOnlyDictionary<string, DungeonDef> Dungeons { get; }
     public DungeonDef DungeonOf(Dungeon kind);
 
     public IReadOnlyList<ShopProductDef> ShopProducts { get; }  public IReadOnlyList<ShopPackageDef> ShopPackages { get; }
+    public IReadOnlyList<ExchangeOfferDef> ExchangeOffers { get; }  public ExchangeOfferDef ExchangeOffer(string id);   // by SortOrder; null if unknown
     public IReadOnlyDictionary<string, InboxTemplateDef> InboxTemplates { get; }
     public IReadOnlyList<TutorialStepDef> TutorialSteps { get; }                  // by Order
     public IReadOnlyList<ProgressTargetDef> ProgressTargets { get; }              // by Day
@@ -1267,9 +1293,18 @@ Keys are declared where they are used: table rows carry `name_key`/`desc_key`, a
 
 `translator-csv --locale ja --missing-only` writes `key, en, ja, max_chars, context`. The translator fills `ja`. `import-translations` merges, refusing rows whose `en` drifted (`E076`) and rows over budget (`E074`). ICU plural messages are checked for the branches the target locale needs (CLDR: `ja`, `ko`, `zh-Hans` need only `other`; `en` needs `one` and `other`).
 
+How the round trip reads where the paragraph above leaves it open (issue #213; defaults the design owner may veto):
+
+- **File format.** CSV, UTF-8 without BOM, `\n` line endings, minimal quoting, like `content_src/`. The locale column is named like the `localization` column (`zh_hans` for `zh-Hans`). `context` is the row's `#context` note. Without `--missing-only` the locale column carries the current text, so a full export doubles as a review sheet. `import-translations` accepts a BOM (spreadsheet exports add one) and ignores any column but `key`, `en` and the locale's; `max_chars` comes from the `localization` row, not from the file.
+- **Drift.** The `en` cell in the file is the text the translator saw; `E076` fires when it differs from the current `en` (both trimmed).
+- **Partial merge.** Every filled row that passes is merged; each refused row is listed and the verb exits 1, so the refused rows reappear in the next `--missing-only` export. An empty locale cell is skipped and never clears a translation. A key with no `localization` row is `E072` and a key repeated in the file is `E020`, both located `translations row <n>`; the other codes are located `localization[<key>].<column>`.
+- **Writing back.** Only the locale cells of merged rows change; every other byte of `localization.csv` stays (columns, `#context`, row order). Rebuilding `content/` and bumping `meta.content_version` stay the author's step (section 12).
+
 ### 13.3 Pseudo-localization
 
 `export_content.py pseudo --locale xx` emits `localization.xx.json` where every `en` string is transformed: accented substitutions (`a -> å`, `e -> ê`), `[!!! ... !!!]` brackets, and padding to 140% length (07). `nightly-bots.yml` (10) builds the client with `xx` active and captures one screenshot per screen; a clipped or overlapping label is a visual regression the artist reviews. `xx` is never shipped.
+
+The output is the normal build of `--src` plus `localization.xx.json`, listed in the manifest's `localization` block and folded into `content_hash`; `--out` is required and may not be the shipped `content/`. Every letter of literal text gets one precomposed accented code point (`Test` -> `Ţêšţ`, 07's sample), so accenting never changes a length; argument names, types, styles, plural/select selectors, `#` and ICU quotes are copied verbatim, so the pseudo message parses to the same arguments as the `en` one. Length is E074's measure (section 8.7, the longest branch): the pseudo string, brackets included, is at least `ceil(len * (1 + PSEUDO_LOC_PAD_PCT))`, reached with `~` padding before the closing ` !!!]`. `xx` is not a `Locale` value, so `meta.ship_locales` rejects it (`E021`); `pseudo --locale` refuses a shipping locale. The client's `Localizer` treats `xx` like any non-`en` locale: it reads the file from the manifest and picks plural branches by `other`.
 
 ### 13.4 Runtime
 
@@ -1335,7 +1370,7 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 3. **Deterministic export.** `export_content.py build` twice from the same `content_src/` produces byte-identical `content/`; `check` exits 0 on the committed tree.
 4. **Constants pinned.** The set of `REQUIRED_CONSTANTS` keys in the exporter equals the set of `constants.json` keys equals the set of `Constants` properties (snake-cased), and every property is non-default after build.
 5. **Every 00 section 6 row is reachable.** For each row of the section 4 table, a unit test reads the named location from `ContentDb` and compares to the 00 value (`[Category("Golden")]`; updated in the same PR as 00).
-6. **Every rule has a fixture.** For every `E0xx`-`E09x` code in section 8 there is a `tests/content_fixtures/bad_<code>_<name>/` directory with one defect (described as edits on `good_minimal/`, section 8.7) and an `expected.txt`; the Python test (`tools/test_export_content.py`) and the C# `ContentDbFixtureTests` both produce exactly that first line for the codes in their scope. `E076` waits for `import-translations`.
+6. **Every rule has a fixture.** For every `E0xx`-`E09x` code in section 8 there is a `tests/content_fixtures/bad_<code>_<name>/` directory with one defect (described as edits on `good_minimal/`, section 8.7) and an `expected.txt`; the Python test (`tools/test_export_content.py`) and the C# `ContentDbFixtureTests` both produce exactly that first line for the codes in their scope. `E076`'s fixture runs `import-translations` on a translator CSV exported from `good_minimal` before its `en` was edited (`"import"` in `fixture.json`).
 7. **All errors reported.** A fixture with three independent defects yields three errors in table order from both validators.
 8. **Hash tamper.** Flipping one byte in `skills.json` makes the loader fail with `E900` naming the file; adding an unlisted `pets.json` fails with `E902`.
 9. **Curve eval is bit-exact.** `CurveDef("enemy_hp", 20, 1.07).Eval(s)` for `s` in `{0, 1, 10, 100, 550, 9000}` produces identical `BitConverter.DoubleToInt64Bits` on x64 Linux, Apple ARM64 and an IL2CPP Android build (10's golden-file test carries this).

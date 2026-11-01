@@ -17,9 +17,8 @@ namespace HeroCat.Sim.Content
         //
         // Not here, by design: E07x (strings never reach the Sim), E09x (no previous build), the warnings, E039
         // (a budget check for the designer, not a sim guard), and the rules over tables the sim does not read
-        // (enemies/bosses E057, shop E031/E046/E059, inbox). TODO(#170, #171, #173): quests (E054 filter, E064),
-        // achievements (E031, E056, E060, E065) and dungeons (E034, E048, E054, E059, E060) join when those tables
-        // are built into ContentDb.
+        // (enemies/bosses E057, shop E031/E046/E059, inbox). TODO(#173): dungeons (E034, E048, E054, E059, E060) join
+        // when that table is built into ContentDb.
         sealed partial class Builder
         {
             // literal-ok-begin: validation bounds and tolerances 09 section 5 states (not balance), percent display
@@ -209,6 +208,17 @@ namespace HeroCat.Sim.Content
                     x["level"] = r.Level; x["discovery_coins"] = r.DiscoveryCoins; x["missile_pct"] = r.MissilePct;
                 });
                 Add(t, "tank", d.Tank, r => r.Id, (r, x) => { x["cap0"] = r.Cap0; x["refill_s0"] = r.RefillS0; x["refill_floor_s"] = r.RefillFloorS; });
+                foreach (var (table, rows) in new[] { ("quests_daily", d.QuestsDaily), ("quests_weekly", d.QuestsWeekly) })
+                    Add(t, table, rows, r => r.Id, (r, x) =>
+                    {
+                        x["id"] = r.Id; x["goal"] = r.Goal; x["filter"] = r.Filter; x["target"] = r.Target;
+                        x["reward_currency"] = r.RewardCurrency; x["reward_amount"] = r.RewardAmount; x["sort_order"] = r.SortOrder; x["tier"] = r.Tier;
+                    });
+                Add(t, "achievements", d.Achievements, r => r.Id, (r, x) =>
+                {
+                    x["id"] = r.Id; x["ladder"] = r.Ladder; x["rung"] = r.Rung; x["goal"] = r.Goal; x["target"] = r.Target;
+                    x["reward_currency"] = r.RewardCurrency; x["reward_amount"] = r.RewardAmount; x["tier"] = r.Tier;
+                });
                 Add(t, "tutorial_steps", d.TutorialSteps, r => r.Id, (r, x) =>
                 {
                     x["order"] = r.Order; x["trigger"] = r.Trigger; x["trigger_value"] = r.TriggerValue; x["expect_event"] = r.ExpectEvent;
@@ -221,6 +231,11 @@ namespace HeroCat.Sim.Content
                 });
                 Add(t, "awakening_targets", d.AwakeningTargets, r => I(r.Rank), (r, x) => { x["rank"] = r.Rank; x["max_days_after_gate"] = r.MaxDaysAfterGate; });
                 Add(t, "plausibility_stage_bound", d.PlausibilityStageBound, r => I(r.Day), (r, x) => { x["day"] = r.Day; x["stage"] = r.Stage; });
+                Add(t, "shop_exchange", d.ShopExchange, r => r.Id, (r, x) =>
+                {
+                    x["id"] = r.Id; x["price_currency"] = r.PriceCurrency; x["price_amount"] = r.PriceAmount; x["grant_currency"] = r.GrantCurrency;
+                    x["grant_amount"] = r.GrantAmount; x["daily_limit"] = r.DailyLimit; x["sort_order"] = r.SortOrder; x["tier"] = r.Tier;
+                });
                 return t;
             }
 
@@ -247,11 +262,15 @@ namespace HeroCat.Sim.Content
                 Unique("research", Rows(d.Research), r => r.Id);
                 Unique("fish_levels", Rows(d.FishLevels), r => I(r.Level));
                 Unique("tank", Rows(d.Tank), r => r.Id);
+                Unique("quests_daily", Rows(d.QuestsDaily), r => r.Id);
+                Unique("quests_weekly", Rows(d.QuestsWeekly), r => r.Id);
+                Unique("achievements", Rows(d.Achievements), r => r.Id);
                 Unique("tutorial_steps", Rows(d.TutorialSteps), r => r.Id);
                 Unique("progress_targets", Rows(d.ProgressTargets), r => I(r.Day));
                 Unique("feature_unlocks", Rows(d.FeatureUnlocks), r => r.Feature);
                 Unique("awakening_targets", Rows(d.AwakeningTargets), r => I(r.Rank));
                 Unique("plausibility_stage_bound", Rows(d.PlausibilityStageBound), r => I(r.Day));
+                Unique("shop_exchange", Rows(d.ShopExchange), r => r.Id);
             }
 
             /// <summary>E043 for one constants row; called from BuildConstants right after the value parses (export_content.check_constant_range).</summary>
@@ -324,6 +343,8 @@ namespace HeroCat.Sim.Content
                 RuleE061DupeLevelOne();
                 RuleE062ProfileCreatedStep();
                 RuleE063FeatureGates();
+                RuleE064DailyBonusRows();
+                RuleE065OwnedCountsBelowPool();
             }
 
             /// <summary>Stable-sorts the errors from <paramref name="from"/> on by table (09 acceptance 7).</summary>
@@ -506,6 +527,8 @@ namespace HeroCat.Sim.Content
                     if (Has(tc.Item1)) ExactlyOneToN(tc.Item1, tc.Item2, Ints(T(tc.Item1), tc.Item2));
                 foreach (var g in Groups(T("banner_levels"), "banner"))
                     ExactlyOneToN("banner_levels", $"level for banner {g.Key}", Ints(g.Value, "level"));
+                foreach (var g in Groups(T("achievements"), "ladder"))
+                    ExactlyOneToN("achievements", $"rung for ladder {g.Key}", Ints(g.Value, "rung"));
                 if (Has("awakening_targets"))
                     ExactlyOneToN("awakening_targets", "rank", Ints(T("awakening_targets"), "rank"), Has("awakening") ? T("awakening").Count : (int?)null);
             }
@@ -553,9 +576,20 @@ namespace HeroCat.Sim.Content
                 if (hz != null)
                     Rng("tank", "refill_s0", v => v * hz.Value == Math.Round(v * hz.Value, MidpointRounding.ToEven),
                         "refill_s0 * TICK_HZ must be a whole number of ticks");
+                foreach (var q in new[] { "quests_daily", "quests_weekly" })
+                {
+                    Rng(q, "target", ge1, ">= 1");
+                    foreach (var r in T(q))
+                    {
+                        bool login = r.S("goal") == "LOGIN";
+                        Rng(q, "reward_amount", login ? ge0 : ge1, login ? ">= 0 for LOGIN" : ">= 1", new List<Row> { r });
+                    }
+                }
+                Rng("achievements", "reward_amount", ge1, ">= 1");
                 Rng("tutorial_steps", "expect_count", ge1, ">= 1");
                 Rng("progress_targets", "stage", ge1, ">= 1");
                 Rng("feature_unlocks", "threshold", ge1, ">= 1");
+                foreach (var col in new[] { "price_amount", "grant_amount", "daily_limit" }) Rng("shop_exchange", col, ge1, ">= 1");
                 Rng("awakening_targets", "max_days_after_gate", ge0, ">= 0");
                 Rng("plausibility_stage_bound", "stage", ge1, ">= 1");
             }
@@ -597,6 +631,7 @@ namespace HeroCat.Sim.Content
                 NonDecreasing(T("awakening"), "rune_slots_after", "rank");
                 StrictlyIncreasing("E031", T("fish_levels"), "discovery_coins");
                 StrictlyIncreasing("E031", T("fish_levels"), "missile_pct");
+                foreach (var g in Groups(T("achievements"), "ladder")) StrictlyIncreasing("E031", g.Value, "target");
                 StrictlyIncreasing("E032", T("progress_targets"), "day");
                 NonDecreasing(T("progress_targets"), "stage", "day");
                 NonDecreasing(T("plausibility_stage_bound"), "stage", "day");
@@ -692,6 +727,9 @@ namespace HeroCat.Sim.Content
                 UniqueCols(T("banners"), "sort_order");
                 UniqueCols(T("research"), "effect");
                 UniqueCols(T("research"), "layout_row", "layout_col");
+                UniqueCols(T("quests_daily"), "sort_order");
+                UniqueCols(T("quests_weekly"), "sort_order");
+                UniqueCols(T("shop_exchange"), "sort_order");
             }
 
             void RuleBannerPityAndGuarantee()
@@ -730,6 +768,16 @@ namespace HeroCat.Sim.Content
                         Cond(r, "mult_per_level", r["atk_pct_per_level"] == null, "atk_pct_per_level", r["atk_pct_per_level"]);
                 foreach (var r in T("research"))
                     if (r.S("effect") == "TANK_REFILL") Cond(r, "effect_floor", true, "effect", r["effect"]);
+                foreach (var q in new[] { "quests_daily", "quests_weekly" })
+                    foreach (var r in T(q))
+                    {
+                        // SUMMON and CLEAR_DUNGEON take an optional filter (empty = any, 09 section 5.21); every other goal none
+                        string goal = r.S("goal"), filter = r.S("filter");
+                        Type filterEnum = goal == "SUMMON" ? typeof(Banner) : goal == "CLEAR_DUNGEON" ? typeof(Dungeon) : null;
+                        if (filterEnum == null) Cond(r, "filter", false, "goal", r["goal"]);
+                        else if (filter != null && Array.IndexOf(System.Enum.GetNames(filterEnum), filter) < 0)
+                            Err("E021", r.Loc + ".filter", $"'{filter}' is not a valid {filterEnum.Name} (allowed: {string.Join(", ", System.Enum.GetNames(filterEnum))})");
+                    }
                 foreach (var r in T("tutorial_steps"))
                 {
                     Cond(r, "trigger_value", r.S("trigger") == "STAGE_REACHED" || r.S("trigger") == "SCREEN_OPENED", "trigger", r["trigger"]);
@@ -772,6 +820,13 @@ namespace HeroCat.Sim.Content
                     foreach (var r in T("tank"))
                         if (N(r["refill_floor_s"]) != N(node["effect_floor"]))
                             Err("E056", r.Loc + ".refill_floor_s", $"refill_floor_s must equal {Fmt(node["effect_floor"])} ({node.Loc}.effect_floor), got {Fmt(r["refill_floor_s"])}");
+                foreach (var g in Groups(T("achievements"), "ladder"))
+                {
+                    string first = g.Value[0].S("goal");
+                    for (int i = 1; i < g.Value.Count; i++)
+                        if (g.Value[i].S("goal") != first)
+                            Err("E056", g.Value[i].Loc + ".goal", $"goal must equal {first} (same goal for every rung of ladder {g.Key}), got {g.Value[i].S("goal")}");
+                }
             }
 
             void RuleE058DurationWithinCooldown()
@@ -785,6 +840,9 @@ namespace HeroCat.Sim.Content
                     }
             }
 
+            /// <summary>06 section 8.4: what shop_exchange may grant (the exporter's EXCHANGE_GRANTS).</summary>
+            static readonly string[] ExchangeGrants = { "TICKET_FISH_COIN", "TICKET_ROCK_CANDY", "TICKET_EXP" };
+
             void RuleE059CurrencyAllowlists()
             {
                 foreach (var b in T("banners"))
@@ -792,6 +850,13 @@ namespace HeroCat.Sim.Content
                     string want = "TICKET_SUMMON_" + b.S("id");
                     if (b.S("ticket_currency") != want)
                         Err("E059", b.Loc + ".ticket_currency", $"ticket_currency '{b.S("ticket_currency")}' is not an allowed currency here ({want} for banner {b.S("id")})");
+                }
+                foreach (var x in T("shop_exchange"))   // 06 sections 8.4-8.5: diamonds for dungeon tickets, nothing else
+                {
+                    if (x.S("price_currency") != "DIAMOND")
+                        Err("E059", x.Loc + ".price_currency", $"price_currency '{x.S("price_currency")}' is not an allowed currency here (DIAMOND only)");
+                    if (Array.IndexOf(ExchangeGrants, x.S("grant_currency")) < 0)
+                        Err("E059", x.Loc + ".grant_currency", $"grant_currency '{x.S("grant_currency")}' is not an allowed currency here ({string.Join(", ", ExchangeGrants)})");
                 }
             }
 
@@ -818,6 +883,33 @@ namespace HeroCat.Sim.Content
                             Err("E063", r.Loc + ".unlock_awaken_rank", $"research[{r.S("id")}] unlocks at {Fmt(r["unlock_awaken_rank"])}, before feature 'RESEARCH' ({Fmt(gate["threshold"])})");
                 Row shop = T("feature_unlocks").Find(r => r.S("feature") == "SHOP");
                 if (shop != null && shop.S("condition") != "ALWAYS") Err("E063", shop.Loc + ".condition", "feature 'SHOP' must be ALWAYS");
+            }
+
+            void RuleE064DailyBonusRows()
+            {
+                if (!Has("quests_daily")) return;
+                var rows = T("quests_daily").FindAll(r => TierLe(r));
+                var bonus = rows.FindAll(r => r.S("goal") == "DAILIES_COMPLETED");
+                if (bonus.Count == 0)
+                    Err("E064", "quests_daily", "missing or unreachable daily bonus rows (no DAILIES_COMPLETED row with tier <= MVP)");
+                foreach (var r in bonus)
+                    if ((long)r["target"] > rows.Count)
+                        Err("E064", r.Loc + ".target", $"missing or unreachable daily bonus rows ({r.S("id")} target {Fmt(r["target"])} exceeds the {I(rows.Count)} daily rows)");
+            }
+
+            /// <summary>00 pillar 4, issue #44: a count-owned rung never equals owning the whole pool (09 section 5.23).</summary>
+            void RuleE065OwnedCountsBelowPool()
+            {
+                foreach (var r in T("achievements"))
+                {
+                    string goal = r.S("goal");
+                    string table = goal == "OWN_WEAPONS" ? "weapons" : goal == "OWN_SKILLS" ? "skills" : goal == "OWN_COMPANIONS" ? "companions" : null;
+                    if (table == null || !Has(table)) continue;
+                    int pool = 0;
+                    foreach (var x in T(table)) if (TierLe(x)) pool++;
+                    if (!((long)r["target"] < pool))
+                        Err("E065", r.Loc + ".target", $"{goal} target {Fmt(r["target"])} must be below the pool size {I(pool)} (pillar 4)");
+                }
             }
         }
     }

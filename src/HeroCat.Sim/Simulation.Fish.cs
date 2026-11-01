@@ -105,7 +105,7 @@ namespace HeroCat.Sim
                 Emit(new FishDiscovered(lvl, coins));
                 Ledger.Apply(State, new CurrencyDelta(Content.Currency.FISH_COIN, coins), CurrencyReason.FISH_DISCOVERY, this);
             }
-            // TODO(#170): Quests.OnFishReleased() (RELEASE_FISH).
+            QuestsProgress(Content.QuestGoal.RELEASE_FISH, 1);
             return ApplyResult.Accepted;
         }
 
@@ -169,7 +169,7 @@ namespace HeroCat.Sim
             if (discovered) Emit(new FishDiscovered(n, row.DiscoveryCoins));
             Ledger.Apply(State, new CurrencyDelta(Content.Currency.FISH_COIN, coins),
                          discovered ? CurrencyReason.FISH_DISCOVERY : CurrencyReason.FISH_MERGE, this);
-            // TODO(#170): Quests.OnFishMerged(n) (MERGE_FISH, LIFETIME_MERGES, FISH_LEVEL via SetMax).
+            QuestsProgress(Content.QuestGoal.MERGE_FISH, 1);   // d_merge, w_merges and the LIFETIME_MERGES ladder (06 section 5.4)
         }
 
         internal ApplyResult HandleMoveFish(MoveFish c)
@@ -208,7 +208,11 @@ namespace HeroCat.Sim
         {
             var f = State.Fish;
             if (!f.DiscoveredLevels.Add(n)) return false;
-            if (n > f.HighestLevel) f.HighestLevel = n;
+            if (n > f.HighestLevel)
+            {
+                f.HighestLevel = n;
+                AchievementsSetMax(Content.QuestGoal.FISH_LEVEL, n);   // the Fish level ladder (06 section 5.4)
+            }
             return true;
         }
     }

@@ -8,6 +8,11 @@
    },
    {
     "properties": {
+     "title": "achievements"
+    }
+   },
+   {
+    "properties": {
      "title": "awakening"
     }
    },
@@ -78,7 +83,22 @@
    },
    {
     "properties": {
+     "title": "quests_daily"
+    }
+   },
+   {
+    "properties": {
+     "title": "quests_weekly"
+    }
+   },
+   {
+    "properties": {
      "title": "rarities"
+    }
+   },
+   {
+    "properties": {
+     "title": "shop_exchange"
     }
    },
    {
@@ -116,6 +136,67 @@
  "batchGet": {
   "spreadsheetId": "fixture-sheet-id",
   "valueRanges": [
+   {
+    "range": "achievements!A1:I5",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "id",
+      "ladder",
+      "rung",
+      "goal",
+      "target",
+      "reward_currency",
+      "reward_amount",
+      "tier",
+      "name_key"
+     ],
+     [
+      "ach_stage_01",
+      "stage",
+      "1",
+      "REACH_STAGE",
+      "10",
+      "DIAMOND",
+      "20",
+      "MVP",
+      "chapter.01.name"
+     ],
+     [
+      "ach_stage_02",
+      "stage",
+      "2",
+      "REACH_STAGE",
+      "30",
+      "DIAMOND",
+      "30",
+      "MVP",
+      "chapter.01.name"
+     ],
+     [
+      "ach_weapons_01",
+      "weapons",
+      "1",
+      "OWN_WEAPONS",
+      "3",
+      "DIAMOND",
+      "30",
+      "MVP",
+      "chapter.01.name"
+     ],
+     [
+      "ach_weapons_02",
+      "weapons",
+      "2",
+      "OWN_WEAPONS",
+      "4",
+      "DIAMOND",
+      "50",
+      "MVP",
+      "chapter.01.name"
+     ]
+    ]
+   },
    {
     "range": "awakening!A1:I6",
     "majorDimension": "ROWS",
@@ -1832,6 +1913,126 @@
     ]
    },
    {
+    "range": "quests_daily!A1:J6",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "id",
+      "goal",
+      "filter",
+      "target",
+      "reward_currency",
+      "reward_amount",
+      "sort_order",
+      "tier",
+      "name_key",
+      "icon"
+     ],
+     [
+      "d_login",
+      "LOGIN",
+      "",
+      "1",
+      "DIAMOND",
+      "0",
+      "1",
+      "MVP",
+      "chapter.01.name",
+      "icon_quest_login"
+     ],
+     [
+      "d_kill",
+      "KILL_ENEMIES",
+      "",
+      "100",
+      "DIAMOND",
+      "20",
+      "2",
+      "MVP",
+      "chapter.01.name",
+      "icon_quest_kill"
+     ],
+     [
+      "d_summon_weapon",
+      "SUMMON",
+      "WEAPON",
+      "1",
+      "DIAMOND",
+      "20",
+      "3",
+      "MVP",
+      "chapter.01.name",
+      "icon_quest_summon"
+     ],
+     [
+      "d_bonus_2",
+      "DAILIES_COMPLETED",
+      "",
+      "2",
+      "DIAMOND",
+      "30",
+      "4",
+      "MVP",
+      "chapter.01.name",
+      "icon_quest_bonus"
+     ],
+     [
+      "d_bonus_3",
+      "DAILIES_COMPLETED",
+      "",
+      "3",
+      "DIAMOND",
+      "70",
+      "5",
+      "MVP",
+      "chapter.01.name",
+      "icon_quest_bonus"
+     ]
+    ]
+   },
+   {
+    "range": "quests_weekly!A1:J3",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "id",
+      "goal",
+      "filter",
+      "target",
+      "reward_currency",
+      "reward_amount",
+      "sort_order",
+      "tier",
+      "name_key",
+      "icon"
+     ],
+     [
+      "w_kills",
+      "KILL_ENEMIES",
+      "",
+      "1000",
+      "DIAMOND",
+      "350",
+      "1",
+      "MVP",
+      "chapter.01.name",
+      "icon_quest_kill"
+     ],
+     [
+      "w_summons",
+      "SUMMON",
+      "",
+      "10",
+      "TICKET_SUMMON_SKILL",
+      "1",
+      "2",
+      "MVP",
+      "chapter.01.name",
+      "icon_quest_summon"
+     ]
+    ]
+   },
+   {
     "range": "rarities!A1:M6",
     "majorDimension": "ROWS",
     "values": [
@@ -1924,6 +2125,36 @@
       "50",
       "0.1",
       "rarity.mythic.name"
+     ]
+    ]
+   },
+   {
+    "range": "shop_exchange!A1:J2",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "id",
+      "price_currency",
+      "price_amount",
+      "grant_currency",
+      "grant_amount",
+      "daily_limit",
+      "sort_order",
+      "tier",
+      "name_key",
+      "icon"
+     ],
+     [
+      "ex_ticket_fish",
+      "DIAMOND",
+      "50",
+      "TICKET_FISH_COIN",
+      "1",
+      "2",
+      "1",
+      "MVP",
+      "chapter.01.name",
+      "icon_ticket_fish_coin"
      ]
     ]
    },

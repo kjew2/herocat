@@ -8,8 +8,15 @@
 #   ./check.sh --content    content.yml: exporter rebuild + diff, model oracles, acceptance sweep, layer shares, golden
 #   ./check.sh --nightly    nightly-bots.yml: bot sweep CSV, longest walls, golden --replay
 #   ./check.sh --nightly --replay-only   the Windows/macOS nightly legs: build and golden --replay only
+#   ./check.sh --server     pr.yml's server job: build, HeroCat.Server.Tests, and the Postgres steps (needs Postgres)
 #   ./check.sh --fast       inner loop (combines with a mode): skips golden, perf, bench, acceptance and the count guard
 #   ./check.sh --no-dotnet  only the Python checks of the chosen modes (machines without the .NET SDK; partial)
+#
+# Postgres steps (--pr and --server): the SQL migration set applies from empty to a scratch database on the server
+# named by $HEROCAT_TEST_POSTGRES (an Npgsql connection string that may create databases). Without it they print
+# "SKIP db-migrations: no Postgres" and the run is a partial check.
+# Redis step (--pr and --server): the Redis rate-limit store and maint key against the Redis named by
+# $HEROCAT_TEST_REDIS (a StackExchange.Redis configuration string). Without it it prints "SKIP redis-pipeline".
 #
 # Outputs (acceptance table, shares, diffs, TRX, sweep CSV) land in $CHECK_OUT_DIR (default build/check/).
 # Exits non-zero on the first hard failure; report-only steps print a warning and the summary says so.
@@ -22,6 +29,7 @@ REPLAY_ONLY=0
 MODE_PR=0
 MODE_CONTENT=0
 MODE_NIGHTLY=0
+MODE_SERVER=0
 # M0 rewrite (specs/00 decision 33): the user agreed to run the acceptance sweep report-only until the new bots meet
 # the day-stage targets. The golden files are regenerated from the new bots and are a hard gate again (#138).
 # TODO(#136): set to 0 (acceptance a hard gate again) once the greedy-f2p sweep passes honestly. Offline catch-up
@@ -33,14 +41,15 @@ for arg in "$@"; do
     --pr) MODE_PR=1 ;;
     --content) MODE_CONTENT=1 ;;
     --nightly) MODE_NIGHTLY=1 ;;
+    --server) MODE_SERVER=1 ;;
     --replay-only) REPLAY_ONLY=1 ;;
     --fast) FAST=1 ;;
     --no-dotnet) DOTNET=0 ;;
-    -h|--help) sed -n 2,15p "$0"; exit 0 ;;
+    -h|--help) sed -n 2,21p "$0"; exit 0 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
-if [ "$MODE_PR" -eq 0 ] && [ "$MODE_CONTENT" -eq 0 ] && [ "$MODE_NIGHTLY" -eq 0 ]; then
+if [ "$MODE_PR" -eq 0 ] && [ "$MODE_CONTENT" -eq 0 ] && [ "$MODE_NIGHTLY" -eq 0 ] && [ "$MODE_SERVER" -eq 0 ]; then
   MODE_PR=1
   MODE_CONTENT=1
 fi
@@ -123,10 +132,11 @@ content_python() {
   step "Summons: tools/gacha_model.py matches content/, Fixtures/Summon/stream.json and vectors.json (04, decision 46)"
   $PY tools/gacha_model.py --check
 
-  # Report-only: several of 03 section 8.6's S-constant bands miss under the current content (layer floors, walls,
-  # Awakening cadence, ...). Retuning is the user's balance call; make this a hard gate once the checks pass.
+  # Report-only: several of 03 section 8.6's S-constant bands and 06's economy checks (issue #178) miss under the
+  # current content (layer floors, walls, Awakening cadence, dungeon shares, ...). Retuning is the user's balance call
+  # (decision #249); make this a hard gate once the checks pass.
   if [ "$FAST" -eq 0 ]; then
-    step "Tools: power_curve_model.py --check, 20-seed sweep and S-constant checks (03 section 8.6; report-only)"
+    step "Tools: power_curve_model.py --check, 20-seed sweep, S-constant and economy checks (03 section 8.6, 06 sections 2/11; report-only)"
     if ! $PY tools/power_curve_model.py --check --quiet; then
       POWER_CURVE_FAILED=1
       printf '\nWARNING: report-only step failed (power_curve_model.py S-constant bands, balance call pending). Not a full pass.\n'
@@ -139,6 +149,10 @@ content_python() {
 BOTS="dotnet run -c Release --no-build --project src/HeroCat.Bots --"
 BUILT=0
 GOLDEN_DONE=0
+DB_DONE=0
+DB_SKIPPED=0
+REDIS_DONE=0
+REDIS_SKIPPED=0
 
 need_dotnet() {
   if ! command -v dotnet >/dev/null 2>&1; then
@@ -180,6 +194,35 @@ golden_check() {
   GOLDEN_DONE=1
 }
 
+# specs/10 section 6.2, specs/02 section 12 (issue #33): the migration set applies from empty, twice, through the runner
+# and through `HeroCat.Server --migrate`, in a scratch database the tests create and drop. Guarded on Postgres.
+# TODO(#154): also run 02 AC 16 (the schema test) here once the schema v1 migrations land.
+db_checks() {
+  if [ "$DB_DONE" -eq 1 ]; then return 0; fi
+  DB_DONE=1
+  step "Server: SQL migrations apply from empty to a scratch Postgres database (specs/02 section 12, issue #33)"
+  if [ -z "${HEROCAT_TEST_POSTGRES:-}" ]; then
+    echo "SKIP db-migrations: no Postgres (set HEROCAT_TEST_POSTGRES to run this step). Partial check."
+    DB_SKIPPED=1
+    return 0
+  fi
+  dotnet test src/HeroCat.Server.Tests/HeroCat.Server.Tests.csproj -c Release --no-build --filter "TestCategory=Postgres"
+}
+
+# specs/08 section 1.1 (issue #193): the Redis rate-limit script and the maintenance key against a real Redis.
+# Guarded on Redis like the Postgres steps.
+redis_checks() {
+  if [ "$REDIS_DONE" -eq 1 ]; then return 0; fi
+  REDIS_DONE=1
+  step "Server: Redis sliding-window rate limits and the maint key against a real Redis (specs/08 section 1.1, issue #193)"
+  if [ -z "${HEROCAT_TEST_REDIS:-}" ]; then
+    echo "SKIP redis-pipeline: no Redis (set HEROCAT_TEST_REDIS, e.g. localhost:6379, to run this step). Partial check."
+    REDIS_SKIPPED=1
+    return 0
+  fi
+  dotnet test src/HeroCat.Server.Tests/HeroCat.Server.Tests.csproj -c Release --no-build --filter "TestCategory=Redis"
+}
+
 pr_dotnet() {
   build
 
@@ -218,6 +261,18 @@ pr_dotnet() {
   $BOTS bench --ticks 1000000 --stage 300 --max-ms 2000
 
   golden_check
+  db_checks
+  redis_checks
+}
+
+# pr.yml's server job (specs/10 section 6.2): the server tests on their own, then the Postgres steps. The tests also
+# run in --pr through HeroCat.sln. TODO(#219): the Testcontainers Postgres + Redis integration groups.
+server_dotnet() {
+  build
+  step "Server: HeroCat.Server.Tests (specs/10 section 1.3)"
+  dotnet test src/HeroCat.Server.Tests/HeroCat.Server.Tests.csproj -c Release --no-build --filter "TestCategory!=Postgres&TestCategory!=Redis"
+  db_checks
+  redis_checks
 }
 
 content_dotnet() {
@@ -282,6 +337,7 @@ need_dotnet
 if [ "$MODE_PR" -eq 1 ]; then pr_dotnet; fi
 if [ "$MODE_CONTENT" -eq 1 ]; then content_dotnet; fi
 if [ "$MODE_NIGHTLY" -eq 1 ]; then nightly_dotnet; fi
+if [ "$MODE_SERVER" -eq 1 ]; then server_dotnet; fi
 
 if [ "$POWER_CURVE_FAILED" -eq 1 ]; then
   printf '\nHard checks passed; report-only power_curve_model.py --check FAILED (03 section 8.6 bands, balance call pending). Not a full pass.\n'
@@ -294,4 +350,10 @@ elif [ "$REWRITE_REPORT_ONLY" -eq 1 ] && [ "$FAST" -eq 0 ] && [ "$MODE_CONTENT" 
   printf '\nAll checks passed (the acceptance sweep is report-only until the balance decision #249).\n'
 else
   printf '\nAll checks passed.\n'
+fi
+if [ "$DB_SKIPPED" -eq 1 ]; then
+  printf 'Partial check, not a full pass: SKIP db-migrations, no Postgres (set HEROCAT_TEST_POSTGRES to run the Postgres steps).\n'
+fi
+if [ "$REDIS_SKIPPED" -eq 1 ]; then
+  printf 'Partial check, not a full pass: SKIP redis-pipeline, no Redis (set HEROCAT_TEST_REDIS to run the Redis step).\n'
 fi

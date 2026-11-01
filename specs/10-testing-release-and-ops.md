@@ -200,7 +200,7 @@ public RunResult Run(IBotPolicy policy, ulong seed, int days)
 }
 ```
 
-Facts a developer can rely on: ticks per day `ActiveMinutesPerDay * 60 * TICK_HZ` = 72,000; a 30-day run is 2.16 M ticks; 20 seeds are 43.2 M ticks, which at 1 µs/tick is 43 s single-threaded and 15-25 s across 2-4 cores. Catch-up runs twice a day with 8.5-13.5 h gaps, never hitting `OFFLINE_CAP_H`; on even days the evening session runs across 00:00 UTC, so the in-session rollover path feeds the acceptance numbers half the time (a `--lapsed` option in P1 inserts skipped days). Diamonds come from the sim's own quests, first clears and login (`--diamonds content`, default); `--diamonds flat` grants `DIAMONDS_PER_DAY_F2P` at day start for parity with `power_curve_model.py`.
+Facts a developer can rely on: ticks per day `ActiveMinutesPerDay * 60 * TICK_HZ` = 72,000; a 30-day run is 2.16 M ticks; 20 seeds are 43.2 M ticks, which at 1 µs/tick is 43 s single-threaded and 15-25 s across 2-4 cores. Catch-up runs twice a day with 8.5-13.5 h gaps, never hitting `OFFLINE_CAP_H`; on even days the evening session runs across 00:00 UTC, so the in-session rollover path feeds the acceptance numbers half the time (a `--lapsed` option in P1 inserts skipped days). Diamonds come from the sim's own quests, first clears and login (`--diamonds content`, default); `--diamonds flat` grants `DIAMONDS_PER_DAY_F2P` at day start for parity with `power_curve_model.py --diamonds flat` (the tool defaults to 06's sources too, issue #178).
 
 ### 3.4 Policies
 
@@ -364,10 +364,11 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps: [checkout, ./.github/actions/setup, run: ./check.sh --pr, upload TRX + golden output]
-  server:                                                                         # not yet: lands with src/HeroCat.Server
-    if: changed paths include src/HeroCat.Server or src/HeroCat.Sim
+  server:                                                                         # a changes job decides, as in content.yml
+    if: changed paths include src/HeroCat.Server(.Tests), src/HeroCat.Sim, server/, check.sh, pr.yml or the setup action
     services: { postgres: { image: postgres:16 }, redis: { image: redis:7 } }
-    steps: [checkout, setup-dotnet 8.0.x, run: ./check.sh --server]
+    env: { HEROCAT_TEST_POSTGRES: <the service container's connection string> }
+    steps: [checkout, ./.github/actions/setup, run: ./check.sh --server]
   unity-editmode:                                                                 # not yet: runner label waits on issue #23
     if: changed paths include unity/
     runs-on: [self-hosted, unity-6000.6.7f1]
@@ -394,11 +395,12 @@ dotnet test HeroCat.sln -c Release --no-build --filter "TestCategory=Perf" --log
 python3 tools/ci/test_counts.py --trx-dir build/check/trx                         # section 1 count guard, TEST_COUNT_MIN_RATIO
 dotnet run -c Release --no-build --project src/HeroCat.Bots -- bench --ticks 1000000 --stage 300 --max-ms 2000
 dotnet run -c Release --no-build --project src/HeroCat.Bots -- golden --check     # goldens, plus the seed-7 command log replay
+dotnet test src/HeroCat.Server.Tests -c Release --no-build --filter "TestCategory=Postgres"   # only with HEROCAT_TEST_POSTGRES, else SKIP
 ```
 
 Test-count guard: `tests/counts.json` records the executed tests per test project (from the TRX files of the two `dotnet test` runs; `[Ignore]`d tests do not count). `tools/ci/test_counts.py` fails when a project runs fewer than `TEST_COUNT_MIN_RATIO` x its recorded count, when a recorded project does not run, or when a project runs that the file does not list. A PR that adds tests updates the file with `python3 tools/ci/test_counts.py --update --trx-dir build/check/trx` (the guard prints a note when counts grew); a PR that removes tests on purpose does the same, so the drop shows in the diff. `pytest` fixtures for the exporter (`tools/tests`) are not used: the exporter tests are plain `unittest` scripts.
 
-`./check.sh --server` (not yet; lands with `src/HeroCat.Server`) applies the plain versioned SQL migration set (02 section 12; no EF Core migrations, issue #33) to an empty Postgres container and runs 02 AC16 on it, then runs `dotnet test src/HeroCat.Server.Tests -c Release` against the Postgres and Redis containers. Plain `./check.sh` will include the migration step behind a "Postgres available" guard: without Docker or Postgres (cloud sessions) it prints `SKIP db-migrations: no Postgres`, and the run must be reported as a partial check.
+`./check.sh --server` (issue #192) runs `dotnet test src/HeroCat.Server.Tests -c Release`, then the Postgres steps: the `Postgres`-category tests create a scratch database on the server named by `HEROCAT_TEST_POSTGRES` (an Npgsql connection string allowed to create databases; in CI the `postgres:16` service container), apply the plain versioned SQL migration set (02 section 12; no EF Core migrations, issue #33) from empty twice, through the runner and through `HeroCat.Server --migrate`, and drop the database (02 AC16 joins them with the schema v1 migrations, issue #154; the Testcontainers Postgres + Redis groups of section 1.3 with #219). Plain `./check.sh` (its `--pr` part) includes the same Postgres steps behind that guard: without `HEROCAT_TEST_POSTGRES` (cloud sessions, the `checks` job) it prints `SKIP db-migrations: no Postgres`, the summary ends with a "Partial check" line, and the run must be reported as a partial check.
 
 `.github/workflows/content.yml` (~8 min) starts on every PR and every push to `main`; a `changes` job reads the PR's files through the GitHub API and the `content` job runs only when they touch `content/`, `content_src/`, `tools/`, `src/HeroCat.Sim`, `src/HeroCat.Runtime`, `src/HeroCat.Bots`, `golden/`, `Fixtures/`, `check.sh`, the workflow or the setup action (a workflow-level `paths:` filter would leave the required check pending). The job calls `./check.sh --content`, then uploads the artifacts (acceptance tables, shares, golden output, exporter diff) and runs `python3 tools/ci/pr_comment.py`, which creates or edits one PR comment with the acceptance table, the day-30 median stage and the check lines, and writes the same to the job summary. The comment is informational (a fork PR's read-only token only warns); the job's status is what blocks merge. `--content` runs:
 

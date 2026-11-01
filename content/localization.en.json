@@ -3,6 +3,222 @@
   "locale": "en",
   "rows": [
     {
+      "key": "achievement.stage_01.name",
+      "text": "Clear stage 10"
+    },
+    {
+      "key": "achievement.stage_02.name",
+      "text": "Clear stage 30"
+    },
+    {
+      "key": "achievement.stage_03.name",
+      "text": "Clear stage 50"
+    },
+    {
+      "key": "achievement.stage_04.name",
+      "text": "Clear stage 100"
+    },
+    {
+      "key": "achievement.stage_05.name",
+      "text": "Clear stage 150"
+    },
+    {
+      "key": "achievement.stage_06.name",
+      "text": "Clear stage 200"
+    },
+    {
+      "key": "achievement.stage_07.name",
+      "text": "Clear stage 300"
+    },
+    {
+      "key": "achievement.stage_08.name",
+      "text": "Clear stage 400"
+    },
+    {
+      "key": "achievement.stage_09.name",
+      "text": "Clear stage 500"
+    },
+    {
+      "key": "achievement.stage_10.name",
+      "text": "Clear stage 700"
+    },
+    {
+      "key": "achievement.stage_11.name",
+      "text": "Clear stage 1,000"
+    },
+    {
+      "key": "achievement.hero_level_01.name",
+      "text": "Reach hero level 10"
+    },
+    {
+      "key": "achievement.hero_level_02.name",
+      "text": "Reach hero level 25"
+    },
+    {
+      "key": "achievement.hero_level_03.name",
+      "text": "Reach hero level 50"
+    },
+    {
+      "key": "achievement.hero_level_04.name",
+      "text": "Reach hero level 75"
+    },
+    {
+      "key": "achievement.hero_level_05.name",
+      "text": "Reach hero level 100"
+    },
+    {
+      "key": "achievement.hero_level_06.name",
+      "text": "Reach hero level 150"
+    },
+    {
+      "key": "achievement.hero_level_07.name",
+      "text": "Reach hero level 200"
+    },
+    {
+      "key": "achievement.weapons_01.name",
+      "text": "Own 5 different weapons"
+    },
+    {
+      "key": "achievement.weapons_02.name",
+      "text": "Own 10 different weapons"
+    },
+    {
+      "key": "achievement.weapons_03.name",
+      "text": "Own 20 different weapons"
+    },
+    {
+      "key": "achievement.weapons_04.name",
+      "text": "Own 25 different weapons"
+    },
+    {
+      "key": "achievement.skills_01.name",
+      "text": "Own 5 different skills"
+    },
+    {
+      "key": "achievement.skills_02.name",
+      "text": "Own 10 different skills"
+    },
+    {
+      "key": "achievement.skills_03.name",
+      "text": "Own 20 different skills"
+    },
+    {
+      "key": "achievement.skills_04.name",
+      "text": "Own 30 different skills"
+    },
+    {
+      "key": "achievement.skills_05.name",
+      "text": "Own 35 different skills"
+    },
+    {
+      "key": "achievement.companions_01.name",
+      "text": "Own 5 different companions"
+    },
+    {
+      "key": "achievement.companions_02.name",
+      "text": "Own 10 different companions"
+    },
+    {
+      "key": "achievement.companions_03.name",
+      "text": "Own 20 different companions"
+    },
+    {
+      "key": "achievement.companions_04.name",
+      "text": "Own 35 different companions"
+    },
+    {
+      "key": "achievement.companions_05.name",
+      "text": "Own 45 different companions"
+    },
+    {
+      "key": "achievement.merges_01.name",
+      "text": "Merge fish 50 times"
+    },
+    {
+      "key": "achievement.merges_02.name",
+      "text": "Merge fish 200 times"
+    },
+    {
+      "key": "achievement.merges_03.name",
+      "text": "Merge fish 500 times"
+    },
+    {
+      "key": "achievement.merges_04.name",
+      "text": "Merge fish 1,000 times"
+    },
+    {
+      "key": "achievement.merges_05.name",
+      "text": "Merge fish 3,000 times"
+    },
+    {
+      "key": "achievement.merges_06.name",
+      "text": "Merge fish 10,000 times"
+    },
+    {
+      "key": "achievement.fish_level_01.name",
+      "text": "Create a level 5 fish"
+    },
+    {
+      "key": "achievement.fish_level_02.name",
+      "text": "Create a level 8 fish"
+    },
+    {
+      "key": "achievement.fish_level_03.name",
+      "text": "Create a level 10 fish"
+    },
+    {
+      "key": "achievement.fish_level_04.name",
+      "text": "Create a level 12 fish"
+    },
+    {
+      "key": "achievement.fish_level_05.name",
+      "text": "Create a level 15 fish"
+    },
+    {
+      "key": "achievement.awakening_01.name",
+      "text": "Reach Awakening rank 1"
+    },
+    {
+      "key": "achievement.awakening_02.name",
+      "text": "Reach Awakening rank 2"
+    },
+    {
+      "key": "achievement.awakening_03.name",
+      "text": "Reach Awakening rank 3"
+    },
+    {
+      "key": "achievement.awakening_04.name",
+      "text": "Reach Awakening rank 4"
+    },
+    {
+      "key": "achievement.awakening_05.name",
+      "text": "Reach Awakening rank 5"
+    },
+    {
+      "key": "achievement.summons_01.name",
+      "text": "Summon 10 times"
+    },
+    {
+      "key": "achievement.summons_02.name",
+      "text": "Summon 50 times"
+    },
+    {
+      "key": "achievement.summons_03.name",
+      "text": "Summon 100 times"
+    },
+    {
+      "key": "achievement.summons_04.name",
+      "text": "Summon 300 times"
+    },
+    {
+      "key": "achievement.summons_05.name",
+      "text": "Summon 500 times"
+    },
+    {
+      "key": "achievement.summons_06.name",
+      "text": "Summon 1,000 times"
+    },
+    {
       "key": "awakening.rank_1.name",
       "text": "Awakened 1"
     },
@@ -395,6 +611,98 @@
       "text": "A new game was started"
     },
     {
+      "key": "quest.d_bonus_5.name",
+      "text": "Complete 5 daily missions"
+    },
+    {
+      "key": "quest.d_bonus_8.name",
+      "text": "Complete 8 daily missions"
+    },
+    {
+      "key": "quest.d_boss.name",
+      "text": "Challenge a boss"
+    },
+    {
+      "key": "quest.d_dungeon_candy.name",
+      "text": "Clear the Rock Candy Dungeon"
+    },
+    {
+      "key": "quest.d_dungeon_exp.name",
+      "text": "Clear the EXP Dungeon"
+    },
+    {
+      "key": "quest.d_dungeon_fish.name",
+      "text": "Clear the Fish Coin Dungeon"
+    },
+    {
+      "key": "quest.d_kills.name",
+      "text": "Defeat enemies"
+    },
+    {
+      "key": "quest.d_login.name",
+      "text": "Log in"
+    },
+    {
+      "key": "quest.d_merge.name",
+      "text": "Merge fish"
+    },
+    {
+      "key": "quest.d_release.name",
+      "text": "Release fish"
+    },
+    {
+      "key": "quest.d_summon_companion.name",
+      "text": "Summon a companion"
+    },
+    {
+      "key": "quest.d_summon_skill.name",
+      "text": "Summon a skill"
+    },
+    {
+      "key": "quest.d_summon_weapon.name",
+      "text": "Summon a weapon"
+    },
+    {
+      "key": "quest.d_watch_ad.name",
+      "text": "Watch an ad"
+    },
+    {
+      "key": "quest.w_bonus_all_companion.name",
+      "text": "Complete all weekly missions"
+    },
+    {
+      "key": "quest.w_bonus_all_skill.name",
+      "text": "Complete all weekly missions"
+    },
+    {
+      "key": "quest.w_dailies.name",
+      "text": "Complete daily missions"
+    },
+    {
+      "key": "quest.w_dungeons.name",
+      "text": "Clear dungeons"
+    },
+    {
+      "key": "quest.w_kills.name",
+      "text": "Defeat enemies"
+    },
+    {
+      "key": "quest.w_login.name",
+      "text": "Log in on different days"
+    },
+    {
+      "key": "quest.w_merges.name",
+      "text": "Merge fish"
+    },
+    {
+      "key": "quest.w_summons.name",
+      "text": "Summon on any banner"
+    },
+    {
+      "key": "quest.w_train.name",
+      "text": "Buy Training levels"
+    },
+    {
       "key": "rarity.common.name",
       "text": "Common"
     },
@@ -429,6 +737,10 @@
     {
       "key": "reject.bad_cell",
       "text": "Invalid cell"
+    },
+    {
+      "key": "reject.bad_quantity",
+      "text": "Choose at least one"
     },
     {
       "key": "reject.bad_server_time",
@@ -471,12 +783,20 @@
       "text": "Not ready yet"
     },
     {
+      "key": "reject.daily_gift_already_claimed",
+      "text": "Already claimed today"
+    },
+    {
       "key": "reject.dungeon_run_in_progress",
       "text": "Finish the dungeon run first"
     },
     {
       "key": "reject.empty_cell",
       "text": "No fish there"
+    },
+    {
+      "key": "reject.exchange_limit_reached",
+      "text": "Daily limit reached"
     },
     {
       "key": "reject.fish_at_level_cap",
@@ -583,8 +903,28 @@
       "text": "You don't own this"
     },
     {
+      "key": "reject.nothing_to_claim",
+      "text": "Nothing to claim"
+    },
+    {
+      "key": "reject.quest_already_claimed",
+      "text": "Already claimed"
+    },
+    {
+      "key": "reject.quest_not_completed",
+      "text": "Mission not completed yet"
+    },
+    {
+      "key": "reject.quests_locked",
+      "text": "Missions unlock at stage 10"
+    },
+    {
       "key": "reject.rate_limited",
       "text": "Too fast, try again"
+    },
+    {
+      "key": "reject.shop_locked",
+      "text": "Shop not available yet"
     },
     {
       "key": "reject.skill_in_other_slot",
@@ -641,6 +981,10 @@
     {
       "key": "reject.tank_empty",
       "text": "The tank is empty"
+    },
+    {
+      "key": "reject.unknown_id",
+      "text": "Not found"
     },
     {
       "key": "reject.unknown_item",
@@ -1137,6 +1481,18 @@
     {
       "key": "scr.weapons.title",
       "text": "Weapons"
+    },
+    {
+      "key": "shop.ex_ticket_candy.name",
+      "text": "Rock Candy ticket"
+    },
+    {
+      "key": "shop.ex_ticket_exp.name",
+      "text": "EXP ticket"
+    },
+    {
+      "key": "shop.ex_ticket_fish.name",
+      "text": "Fish Coin ticket"
     },
     {
       "key": "skill.c_01.desc",
@@ -1809,6 +2165,90 @@
     {
       "key": "weapon.r_08.name",
       "text": "Rare Weapon 8"
+    },
+    {
+      "key": "reject.awaken_max_rank",
+      "text": "Already at max Awakening"
+    },
+    {
+      "key": "reject.awaken_stage_not_reached",
+      "text": "Reach the stage gate first"
+    },
+    {
+      "key": "research.res_atk.name",
+      "text": "Sharp Claws"
+    },
+    {
+      "key": "research.res_atk.desc",
+      "text": "+5% damage per level."
+    },
+    {
+      "key": "research.res_gold_gain.name",
+      "text": "Lucky Paw"
+    },
+    {
+      "key": "research.res_gold_gain.desc",
+      "text": "+5% gold per level."
+    },
+    {
+      "key": "research.res_mp_pool.name",
+      "text": "Deep Mana"
+    },
+    {
+      "key": "research.res_mp_pool.desc",
+      "text": "+20 max MP per level."
+    },
+    {
+      "key": "research.res_mp_regen.name",
+      "text": "Mana Flow"
+    },
+    {
+      "key": "research.res_mp_regen.desc",
+      "text": "+0.5 MP per second per level."
+    },
+    {
+      "key": "research.res_tank_cap.name",
+      "text": "Bigger Tank"
+    },
+    {
+      "key": "research.res_tank_cap.desc",
+      "text": "+5 Magic Tank capacity per level."
+    },
+    {
+      "key": "research.res_tank_refill.name",
+      "text": "Quick Refill"
+    },
+    {
+      "key": "research.res_tank_refill.desc",
+      "text": "Magic Tank refills 0.4 s faster per level (2 s minimum)."
+    },
+    {
+      "key": "research.res_fish_cap.name",
+      "text": "Rare Waters"
+    },
+    {
+      "key": "research.res_fish_cap.desc",
+      "text": "+1 highest fish level per level."
+    },
+    {
+      "key": "research.res_offline_cap.name",
+      "text": "Long Nap"
+    },
+    {
+      "key": "research.res_offline_cap.desc",
+      "text": "+2 h offline reward cap per level."
+    },
+    {
+      "key": "reject.research_locked",
+      "text": "Unlocks at Awakening 1"
+    },
+    {
+      "key": "reject.research_maxed",
+      "text": "Research is at max level"
+    },
+    {
+      "key": "reject.unknown_research",
+      "text": "Unknown research"
     }
   ]
 }

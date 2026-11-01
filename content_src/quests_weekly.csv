@@ -1,0 +1,10 @@
+id,goal,filter,target,reward_currency,reward_amount,sort_order,tier,name_key,icon
+w_login,LOGIN_DAYS,,5,DIAMOND,50,1,MVP,quest.w_login.name,icon_quest_login
+w_kills,KILL_ENEMIES,,3000,DIAMOND,50,2,MVP,quest.w_kills.name,icon_quest_kills
+w_dailies,DAILIES_COMPLETED,,40,DIAMOND,50,3,MVP,quest.w_dailies.name,icon_quest_bonus
+w_summons,SUMMON,,30,DIAMOND,50,4,MVP,quest.w_summons.name,icon_quest_summon
+w_merges,MERGE_FISH,,100,DIAMOND,50,5,MVP,quest.w_merges.name,icon_quest_merge
+w_dungeons,CLEAR_DUNGEON,,25,DIAMOND,50,6,MVP,quest.w_dungeons.name,icon_quest_dungeon
+w_train,TRAIN_LEVELS,,300,DIAMOND,50,7,MVP,quest.w_train.name,icon_quest_train
+w_bonus_all_skill,WEEKLIES_COMPLETED,,7,TICKET_SUMMON_SKILL,1,8,MVP,quest.w_bonus_all_skill.name,icon_quest_bonus
+w_bonus_all_companion,WEEKLIES_COMPLETED,,7,TICKET_SUMMON_COMPANION,1,9,MVP,quest.w_bonus_all_companion.name,icon_quest_bonus

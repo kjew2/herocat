@@ -12,13 +12,17 @@ the C# harness's job (10).
 
   power_curve_model.py [--seed 7] [--days 30] [--active-min 120] [--sessions 2] [--m0] [--override NAME=VALUE ...]
                        [--tickets W,S,C] [--rock-candy-per-day N] [--fish-coin-per-day N] [--policy greedy|lazy]
+                       [--diamonds content|flat]
   power_curve_model.py --check [--seeds 1-20]    20-seed sweep: median day table vs progress_targets (03 AC16) and
-                                                 every S-constant check of 03 section 8.6 per seed; exits 1 on FAIL
+                                                 every S-constant check of 03 section 8.6 and 06 economy check per
+                                                 seed; exits 1 on FAIL
 
-Prints the day table (days 1, 2, 3, 5, 7, 10, 14, 21, 30), the layer-share table with PASS/FAIL/WARN per layer
-(03 section 8.5), the wall report, the economy report, the per-banner pull cadence and the `DAYTABLE` line for
-00 section 6.6, and writes tools/out/power_curve_<seed>.json. MVP tables the M0 content does not ship yet (research,
-companions, dungeons, quests) fall back to their spec rows, flagged in the output (TODOs below).
+Diamonds follow 06's rules by default (login, the quest rows the bot's day completes, first clears, achievement rungs;
+issue #178); --diamonds flat grants DIAMONDS_PER_DAY_F2P a day instead. Prints the day table (days 1, 2, 3, 5, 7, 10,
+14, 21, 30), the layer-share table with PASS/FAIL/WARN per layer (03 section 8.5), the wall report, the economy
+report, the per-banner pull cadence, 06's section 2 (diamond income by day) and section 11 (sinks by day) tables and
+the `DAYTABLE` line for 00 section 6.6, and writes tools/out/power_curve_<seed>.json. MVP tables the M0 content does
+not ship yet (research, companions, dungeons, achievements) fall back to their spec rows, flagged in the output.
 """
 import argparse
 import json
@@ -68,7 +72,7 @@ LIMIT_BREAK_DAILY_FROM_DAY, LIMIT_BREAK_CANDY_SHARE_MAX = 10, 0.60   # 04 sectio
 FISH_DUNGEON_SHARE_BAND, FISH_DUNGEON_DAYS = (0.25, 0.50), (1, 7, 30)  # 06 section 6.3 (a)
 
 # ---- MVP tables the M0 content does not ship yet. Each is the owning spec's row set, used only when content lacks it.
-RESEARCH_FALLBACK = [   # 03 section 6 / 09 section 5.18. TODO(#158): read content/research.json once it ships.
+RESEARCH_FALLBACK = [   # 03 section 6 / 09 section 5.18. Only for content without a research table (content/ ships it, #158).
     {"id": "res_atk", "effect": "ATK_PCT", "effect_per_level": 0.05, "effect_floor": None, "max_level": 50, "cost0": 150.0, "cost_g": 1.20, "unlock_awaken_rank": 1},
     {"id": "res_gold_gain", "effect": "GOLD_GAIN", "effect_per_level": 0.05, "effect_floor": None, "max_level": 20, "cost0": 250.0, "cost_g": 1.40, "unlock_awaken_rank": 1},
     {"id": "res_mp_pool", "effect": "MP_POOL", "effect_per_level": 20.0, "effect_floor": None, "max_level": 10, "cost0": 200.0, "cost_g": 1.50, "unlock_awaken_rank": 1},
@@ -86,8 +90,37 @@ COMPANION_FALLBACK = {"mix": [("DAMAGE", 0.50), ("BUFF_ATK", 0.20), ("BUFF_GOLD"
 DUNGEON_FALLBACK = {"tickets_per_day": 2, "floor_stage_step": 20, "floors": 40,
                     "FISH_COIN": 50.0, "ROCK_CANDY": 10.0, "EXP_KILLS": 300}
 # 06 section 1 / 00 decision 15: weeklies and achievements pay about 0.15 skill and 0.15 companion tickets a day.
-# TODO(#170, #171): derive from quests_weekly / achievements rows once they ship. The weapon ticket is content.
+# The weekly share is content now (w_bonus_all_skill / w_bonus_all_companion, 1 a week each); the achievement share is not.
+# TODO(#171): derive both from quests_weekly + achievements rows once achievements ship. The weapon ticket is content.
 SUMMON_TICKETS_FALLBACK = {"SKILL": 0.15, "COMPANION": 0.15}
+# 06 section 5.4 achievement ladders as (goal, [(target, diamonds), ...]). TODO(#171): read content/achievements.json
+# once it ships (the table is preferred whenever it exists).
+ACHIEVEMENTS_FALLBACK = [
+    ("REACH_STAGE", [(10, 20), (30, 30), (50, 50), (100, 80), (150, 100), (200, 100), (300, 150), (400, 150), (500, 200),
+                     (700, 250), (1000, 300)]),
+    ("REACH_HERO_LEVEL", [(10, 20), (25, 30), (50, 50), (75, 80), (100, 100), (150, 150), (200, 200)]),
+    ("OWN_WEAPONS", [(5, 30), (10, 50), (20, 100), (25, 200)]),
+    ("OWN_SKILLS", [(5, 30), (10, 50), (20, 100), (30, 150), (35, 250)]),
+    ("OWN_COMPANIONS", [(5, 30), (10, 50), (20, 100), (35, 150), (45, 300)]),
+    ("LIFETIME_MERGES", [(50, 20), (200, 30), (500, 50), (1000, 80), (3000, 100), (10000, 200)]),
+    ("FISH_LEVEL", [(5, 30), (8, 50), (10, 100), (12, 150), (15, 300)]),
+    ("AWAKEN_RANK", [(1, 50), (2, 100), (3, 150), (4, 200), (5, 300)]),
+    ("LIFETIME_SUMMONS", [(10, 20), (50, 50), (100, 80), (300, 100), (500, 150), (1000, 300)]),
+]
+
+# ---- 06 economy checks (issue #178): sections 2, 6.3, 11, open questions 1 and 5, Constants introduced
+WEEK_DAYS = 7                                  # bot epoch is a Monday (00 decision 25): weeks are days 1-7, 8-14, ...
+DIAMOND_STEADY_DAYS = (15, 28)                 # 06 section 2 "steady state after day 14": the two whole weeks after it
+DIAMOND_BUDGET_TOL = 0.10                      # 06 open question 1 names no number; E039's 10% (09) is used
+FIRST_CLEAR_TOL = 0.20                         # 06 Constants introduced, FIRST_CLEAR_DIAMONDS
+FIRST_CLEAR_PERIODS = ((1, 1), (2, 3), (4, 7), (8, 14), (15, 30))   # 06 section 2 table rows, as day ranges
+TENPULL_MAX_DAYS = {"WEAPON": 2.5, "SKILL": 5.0, "COMPANION": 7.5}   # 06 section 2: income affords a 10-pull every N days
+DIAMOND_HOLD_MAX_DAYS = 2.5                    # 06 section 11 observation 2
+GOLD_SPENT_MIN = 0.99                          # 06 section 11 observation 1: "100% of gold is spent", less rounding
+EXP_DUNGEON_SHARE_BAND, EXP_DUNGEON_DAYS = (0.10, 0.20), (7, 30)    # 06 Constants introduced, EXP_DUNGEON_KILLS
+BEST_FLOOR_BAND, BEST_FLOOR_DAY = (25, 29), 30                      # 06 open question 5
+SECTION11_DAYS, SECTION2_DAYS = (1, 7, 30), (1, 3, 7, 14, 30)
+DIAMOND_SOURCES = ("TUTORIAL", "LOGIN", "QUEST_DAILY", "QUEST_WEEKLY", "FIRST_CLEAR", "ACHIEVEMENT", "FLAT")
 
 
 # ================================================================================================ parameters
@@ -95,8 +128,9 @@ SUMMON_TICKETS_FALLBACK = {"SKILL": 0.15, "COMPANION": 0.15}
 class Params:
     """Every number the model uses, read from content (plus the flagged fallbacks), with --override applied."""
 
-    def __init__(self, content_dir, overrides, m0):
+    def __init__(self, content_dir, overrides, m0, diamonds="content"):
         self.content_dir = content_dir
+        self.diamond_mode = diamonds   # "content": 06's rules (login, quests, first clears, achievements); "flat": 400/day
         self.db = db = contentlib.load_or_exit(content_dir)
         self.m0 = m0
         self.tier = "M0" if m0 else "MVP"
@@ -136,7 +170,7 @@ class Params:
         research = db.table("research", None)
         if research is None and not m0:
             research = RESEARCH_FALLBACK
-            self.fallbacks.append("research: 03 section 6 rows (content has no research table, TODO(#158))")
+            self.fallbacks.append("research: 03 section 6 rows (content has no research table)")
         self.research = {} if m0 else {r["id"]: dict(r) for r in research if tier_ok(r) or "tier" not in r}
         for rid, r in self.research.items():
             c[f"RES_COST0[{rid}]"], c[f"RES_COST_G[{rid}]"] = r["cost0"], r["cost_g"]
@@ -151,9 +185,10 @@ class Params:
             for b, v in SUMMON_TICKETS_FALLBACK.items():
                 c[f"TICKETS_PER_DAY[{b}]"] = v
             c["TICKETS_PER_DAY[WEAPON]"] = c["DAILY_GIFT_WEAPON_TICKETS"]
-            self.fallbacks.append("skill/companion tickets: 06 section 1 'about 0.15 a day' (no quests/achievements tables, TODO(#170, #171))")
+            self.fallbacks.append("skill/companion tickets: 06 section 1 'about 0.15 a day' (no achievements table, TODO(#171))")
         c["ROCK_CANDY_PER_DAY"] = None   # None = dungeon income per 06; a number replaces it (--rock-candy-per-day)
         c["FISH_COIN_PER_DAY"] = None
+        self._load_quests(db, tier_ok)
 
         grants = [g for row in db.table("tutorial_steps") if tier_ok(row) for g in (row["grants"] or [])]
         c["TUTORIAL_DIAMONDS"] = sum(g["amount"] for g in grants if g.get("currency") == "DIAMOND")
@@ -205,6 +240,20 @@ class Params:
                               ("res_fish_cap", "RES_FISH_CAP_PER_LVL")):
                 if node in self.research:
                     self.fish.c[key] = c[f"RES_EFFECT[{node}]"]
+
+    def _load_quests(self, db, tier_ok):
+        """06 section 5 quest rows (content) and the section 5.4 ladders (content, else the spec rows, TODO(#171))."""
+        pick = lambda rows: [r for r in rows if tier_ok(r)]
+        self.quests_daily = pick(db.table("quests_daily", None) or [])
+        self.quests_weekly = pick(db.table("quests_weekly", None) or [])
+        ach = db.table("achievements", None)
+        if ach is None and self.quests_daily:   # achievements ship with quests (MVP); M0 has neither
+            ach = [{"id": f"a_{g.lower()}_{t}", "goal": g, "filter": None, "target": t, "reward_currency": "DIAMOND",
+                    "reward_amount": d, "tier": "MVP"} for g, rungs in ACHIEVEMENTS_FALLBACK for t, d in rungs]
+            self.fallbacks.append("achievements: 06 section 5.4 ladder rows (content has no achievements table, TODO(#171))")
+        self.achievements = pick(ach or [])
+        if self.diamond_mode == "flat":
+            self.fallbacks.append("diamonds: flat DIAMONDS_PER_DAY_F2P a day (--diamonds flat, parity mode)")
 
     def _companion_fallback(self, banner_row):
         rows = []
@@ -304,7 +353,11 @@ class Bot:
                      "coins_discovery": 0.0, "coins_merge": 0.0, "coins_discard": 0.0, "coins_dungeon": 0.0,
                      "coins_spent": {rid: 0.0 for rid in p.research},
                      "candy_boss": 0.0, "candy_dungeon": 0.0, "candy_overflow": 0.0,
-                     "candy_awaken": 0.0, "candy_limit_break": 0.0, "limit_breaks": 0}
+                     "candy_awaken": 0.0, "candy_limit_break": 0.0, "limit_breaks": 0,
+                     "diamonds_by_source": {k: 0.0 for k in DIAMOND_SOURCES}, "first_clears": 0, "merges_total": 0}
+        self.econ["diamonds_by_source"]["TUTORIAL"] = float(c["TUTORIAL_DIAMONDS"])
+        self.week = None                               # weekly quest counters, reset every WEEK_DAYS (06 section 5.3)
+        self.achieved = set()                          # achievement row ids claimed (06 section 5.4)
         self.daily = []
         self.day_counters = None
         self._dirty = True
@@ -494,6 +547,8 @@ class Bot:
         self.econ["gold_kills"] += g
         self.econ["exp_kills"] += e
         self.add_exp(e)
+        if self.day_counters is not None:
+            self.day_counters["kills"] += 1
 
     def add_exp(self, e):
         self.exp_bank += e
@@ -530,7 +585,10 @@ class Bot:
                 if t < ft:
                     break
                 t -= ft
+                self.count_boss_attempt()
                 if ok:
+                    if s > self.highest:
+                        self.grant_first_clear()
                     self.grant_kill(s, True)
                     if self.loot.random() < c["BOSS_ROCK_CANDY_P"]:
                         self.candy += 1
@@ -597,6 +655,8 @@ class Bot:
             self.gold -= best_cost
             self.econ["gold_spent"][best] += best_cost
             self.train[best] += 1
+            if self.day_counters is not None:
+                self.day_counters["train_levels"] += 1
             self._dirty = True
 
     def next_gate(self):
@@ -832,6 +892,7 @@ class Bot:
                 if floor == 0:
                     break
                 self.dungeon_tickets[kind] -= 1
+                self.day_counters["dungeon_clears"][kind] += 1   # a clear or a sweep (06 section 5.2 d_dungeon_*)
                 if kind == "FISH_COIN":
                     amt = c["DUNGEON_FISH_COIN"] * floor
                     if c["FISH_COIN_PER_DAY"] is None:
@@ -847,6 +908,95 @@ class Bot:
                     e = c["DUNGEON_EXP_KILLS"] * self.p.exp(step * floor)
                     self.econ["exp_dungeon"] += e
                     self.add_exp(e)
+
+    # ------------------------------------------------------------------------------------------ diamonds and quests (06 2, 5)
+    def grant_diamonds(self, source, amount):
+        if amount:
+            self.diamonds += amount
+            self.econ["diamonds_earned"] += amount
+            self.econ["diamonds_by_source"][source] += amount
+
+    def start_day_diamonds(self):
+        """Day-start diamonds: LOGIN_DIAMONDS (06 section 4.2), or the flat DIAMONDS_PER_DAY_F2P in --diamonds flat."""
+        if self.p.diamond_mode == "flat":
+            self.grant_diamonds("FLAT", self.c["DIAMONDS_PER_DAY_F2P"])
+        else:
+            self.grant_diamonds("LOGIN", self.c["LOGIN_DIAMONDS"])
+        if (self.day - 1) % WEEK_DAYS == 0:
+            self.week = {"progress": {}, "claimed": set()}
+
+    def count_boss_attempt(self):
+        if self.day_counters is not None:
+            self.day_counters["boss_attempts"] += 1
+
+    def grant_first_clear(self):
+        """FIRST_CLEAR_DIAMONDS for a boss stage cleared for the first time (06 section 1.2, M0)."""
+        self.econ["first_clears"] += 1
+        if self.p.diamond_mode != "flat":
+            self.grant_diamonds("FIRST_CLEAR", self.c["FIRST_CLEAR_DIAMONDS"])
+
+    def _quest_value(self, goal, flt):
+        """Today's progress toward a daily or weekly goal (06 section 5.1); counted goals sum over the week."""
+        d = self.day_counters
+        if goal in ("LOGIN", "LOGIN_DAYS"):
+            return 1
+        if goal == "KILL_ENEMIES":
+            return d["kills"]
+        if goal == "ATTEMPT_BOSS":
+            return d["boss_attempts"]
+        if goal == "SUMMON":
+            return d["pulls"][flt] if flt else sum(d["pulls"].values())
+        if goal == "RELEASE_FISH":
+            return self.board.day["released"]
+        if goal == "MERGE_FISH":
+            return self.board.day["merges"]
+        if goal == "CLEAR_DUNGEON":
+            return d["dungeon_clears"][flt] if flt else sum(d["dungeon_clears"].values())
+        if goal == "TRAIN_LEVELS":
+            return d["train_levels"]
+        raise ValueError(f"power_curve_model: no model for quest goal {goal}")
+
+    def _achievement_value(self, goal):
+        owned = lambda b: sum(1 for n in self.state[b].copies.values() if n > 0) if b in self.state else 0
+        values = {"REACH_STAGE": lambda: self.highest, "REACH_HERO_LEVEL": lambda: self.hero_level,
+                  "OWN_WEAPONS": lambda: owned("WEAPON"), "OWN_SKILLS": lambda: owned("SKILL"),
+                  "OWN_COMPANIONS": lambda: owned("COMPANION"), "LIFETIME_MERGES": lambda: self.econ["merges_total"],
+                  "FISH_LEVEL": lambda: max(self.board.discovered, default=0), "AWAKEN_RANK": lambda: self.rank,
+                  "LIFETIME_SUMMONS": lambda: sum(self.econ["pulls_ticket"].values()) + sum(self.econ["pulls_diamond"].values())}
+        if goal not in values:
+            raise ValueError(f"power_curve_model: no model for achievement goal {goal}")
+        return values[goal]()
+
+    def claim_quests(self):
+        """End of day: the bot claims every completed daily, weekly and achievement row (10 section 3.4, 06 section 5).
+
+        Only DIAMOND rewards are paid here; summon-ticket income stays on the TICKETS_PER_DAY path."""
+        self.econ["merges_total"] += self.board.day["merges"]
+        if self.p.diamond_mode == "flat":
+            return
+        bonus = lambda r: r["goal"] in ("DAILIES_COMPLETED", "WEEKLIES_COMPLETED")
+        pay = lambda r, src: self.grant_diamonds(src, r["reward_amount"] if r["reward_currency"] == "DIAMOND" else 0)
+        done = [r for r in self.p.quests_daily if not bonus(r) and self._quest_value(r["goal"], r["filter"]) >= r["target"]]
+        self.day_counters["dailies_done"] = len(done)
+        for r in done + [r for r in self.p.quests_daily if r["goal"] == "DAILIES_COMPLETED" and len(done) >= r["target"]]:
+            pay(r, "QUEST_DAILY")
+        wk = self.week
+        prog = wk["progress"]
+        for r in self.p.quests_weekly:
+            if r["goal"] == "DAILIES_COMPLETED":
+                prog[r["id"]] = prog.get(r["id"], 0) + len(done)
+            elif r["goal"] != "WEEKLIES_COMPLETED":
+                prog[r["id"]] = prog.get(r["id"], 0) + self._quest_value(r["goal"], r["filter"])
+        n_weekly = sum(1 for r in self.p.quests_weekly if not bonus(r) and prog[r["id"]] >= r["target"])
+        for r in self.p.quests_weekly:
+            ok = n_weekly >= r["target"] if r["goal"] == "WEEKLIES_COMPLETED" else prog[r["id"]] >= r["target"]
+            if ok and r["id"] not in wk["claimed"]:
+                wk["claimed"].add(r["id"])
+                pay(r, "QUEST_WEEKLY")
+        for r in self.p.achievements:
+            if r["id"] not in self.achieved and self._achievement_value(r["goal"]) >= r["target"]:
+                self.achieved.add(r["id"])
+                pay(r, "ACHIEVEMENT")
 
     # ------------------------------------------------------------------------------------------ time
     def offline(self, gap_s):
@@ -873,9 +1023,9 @@ class Bot:
     def start_day(self):
         c = self.c
         self.day_counters = {"pulls": {b: 0 for b in BANNERS}, "limit_breaks": 0, "coins_board": 0.0,
-                             "coins_dungeon": 0.0}
-        self.diamonds += c["DIAMONDS_PER_DAY_F2P"]
-        self.econ["diamonds_earned"] += c["DIAMONDS_PER_DAY_F2P"]
+                             "coins_dungeon": 0.0, "kills": 0, "boss_attempts": 0, "train_levels": 0,
+                             "dungeon_clears": {k: 0 for k in self.best_floor}, "dailies_done": 0}
+        self.start_day_diamonds()
         for b in BANNERS:
             self.tickets[b] += self.ticket_income.get(b, 0)
         if not self.p.m0:
@@ -907,6 +1057,8 @@ class Bot:
     def active_minute(self):
         if self.walled and self.policy == "greedy" and self.boss_clearable():
             self.walled = False   # AttemptBoss when Query.BossClearable (10 section 3.4); the attempt itself is free
+        elif self.walled and self.policy == "greedy":
+            self.count_boss_attempt()   # 03 8.3 item 6: a walled bot retries every active minute (counts for d_boss)
         self.fight(60.0)
         self.active_minutes += 1
         if self.wall is not None:
@@ -935,6 +1087,7 @@ class Bot:
                 self.session_start(s == 0)
                 for _ in range(session_min[s]):
                     self.active_minute()
+            self.claim_quests()
             self.daily.append(self.snapshot())
         if self.wall is not None:
             self.walls.append(dict(self.wall, open=True))
@@ -959,6 +1112,8 @@ class Bot:
             "coins_board_today": self.day_counters["coins_board"], "coins_dungeon_today": self.day_counters["coins_dungeon"],
             "diamonds": self.diamonds, "rock_candy": self.candy, "fish_coins": self.coins,
             "walled": self.walled,
+            "econ_cum": flat_econ(self.econ), "best_floor": dict(self.best_floor),
+            "dailies_done": self.day_counters["dailies_done"],
         }
 
 
@@ -967,6 +1122,140 @@ class Bot:
 def wall_stats(bot, lo_day=1, hi_day=10 ** 9):
     ws = [w for w in bot.walls if lo_day <= w["day"] <= hi_day]
     return max(ws, key=lambda w: w["active_min"]) if ws else None
+
+
+def flat_econ(e):
+    """The econ counters as one flat {name: number} dict (nested per-banner/per-stat dicts become 'name.key')."""
+    out = {}
+    for k, v in e.items():
+        if isinstance(v, dict):
+            for kk, vv in v.items():
+                out[f"{k}.{kk}"] = vv
+        else:
+            out[k] = v
+    return out
+
+
+def day_flow(bot, d):
+    """06 section 2 / 11 quantities earned and spent on day d (cumulative counters differenced against day d - 1)."""
+    row = bot.daily[d - 1]
+    cur = row["econ_cum"]
+    prev = bot.daily[d - 2]["econ_cum"] if d > 1 else {}
+    dx = lambda k: cur.get(k, 0) - prev.get(k, 0)
+    sdx = lambda pre: sum(dx(k) for k in cur if k.startswith(pre + "."))
+    f = {"day": d, "stage": row["stage"], "new_bosses": dx("first_clears"), "dailies_done": row["dailies_done"]}
+    for s in DIAMOND_SOURCES:
+        f["dia_" + s.lower()] = dx("diamonds_by_source." + s)
+    f["dia_total"] = sdx("diamonds_by_source")
+    f["dia_spent"] = sdx("diamonds_spent")
+    f["dia_balance"] = row["diamonds"]
+    lo = (d - 1) // WEEK_DAYS * WEEK_DAYS + 1
+    if lo + WEEK_DAYS - 1 > len(bot.daily) and lo > WEEK_DAYS:
+        lo -= WEEK_DAYS   # the run ends mid-week (days 29-30): amortise the last whole week instead
+    hi = min(lo + WEEK_DAYS - 1, len(bot.daily))
+    week = sum(bot.daily[i - 1]["econ_cum"].get("diamonds_by_source.QUEST_WEEKLY", 0)
+               - (bot.daily[i - 2]["econ_cum"].get("diamonds_by_source.QUEST_WEEKLY", 0) if i > 1 else 0)
+               for i in range(lo, hi + 1))
+    f["dia_weekly_amortised"] = week / WEEK_DAYS
+    f["gold_earned"] = dx("gold_kills") + dx("gold_offline")
+    f["gold_spent"] = sdx("gold_spent")
+    f["coins_board"] = dx("coins_discovery") + dx("coins_merge") + dx("coins_discard")
+    f["coins_dungeon"] = dx("coins_dungeon")
+    f["coins_spent"] = sdx("coins_spent")
+    for k in ("dungeon", "boss", "overflow"):
+        f["candy_" + k] = dx("candy_" + k)
+    f["candy_earned"] = f["candy_dungeon"] + f["candy_boss"] + f["candy_overflow"]
+    f["candy_awaken"], f["candy_limit_break"] = dx("candy_awaken"), dx("candy_limit_break")
+    f["candy_spent"] = f["candy_awaken"] + f["candy_limit_break"]
+    f["exp_dungeon"] = dx("exp_dungeon")
+    f["exp_total"] = dx("exp_kills") + dx("exp_offline") + f["exp_dungeon"]
+    for k, v in row["best_floor"].items():
+        f["best_floor_" + k.lower()] = v
+    f["awaken_rank"] = row["awaken_rank"]
+    return f
+
+
+def target_stage(p, day):
+    """00 section 6.6 progress_targets interpolated linearly, stage 0 at day 0 (06 section 2 table rule)."""
+    pts = [(0, 0)] + [(t["day"], t["stage"]) for t in p.targets]
+    for (d0, s0), (d1, s1) in zip(pts, pts[1:]):
+        if day <= d1:
+            return s0 + (s1 - s0) * (day - d0) / (d1 - d0)
+    return pts[-1][1]
+
+
+def steady_diamonds(bot):
+    """(mean daily diamond income over DIAMOND_STEADY_DAYS, max end-of-day balance there), or None if the run is short."""
+    lo, hi = DIAMOND_STEADY_DAYS
+    if len(bot.daily) < hi:
+        return None
+    flows = [day_flow(bot, d) for d in range(lo, hi + 1)]
+    return statistics.fmean(f["dia_total"] for f in flows), max(f["dia_balance"] for f in flows)
+
+
+def economy_checks(p, bot):
+    """[(status, name, value)] for the 06 economy checks (issue #178). MVP only: M0 has no quests or dungeons."""
+    out = []
+
+    def add(ok, name, val):
+        out.append(("PASS" if ok else "FAIL", name, val))
+
+    last = len(bot.daily)
+    e = bot.econ
+    earned = e["gold_kills"] + e["gold_offline"]
+    sp = sum(e["gold_spent"].values())
+    add(earned == 0 or sp / earned >= GOLD_SPENT_MIN, "06 11 obs. 1: gold is fully spent on Training (>= 99% of earned)",
+        f"{sp / earned:.2%}" if earned else "no gold")
+    if p.m0:
+        return out
+    c = p.c
+    st = steady_diamonds(bot)
+    if p.diamond_mode == "content" and st is not None:
+        mean, held = st
+        floor = c["DIAMONDS_PER_DAY_F2P"] * (1 - DIAMOND_BUDGET_TOL)
+        add(mean >= floor, f"DIAMONDS_PER_DAY_F2P (06 2, OQ1): steady-state income, days {DIAMOND_STEADY_DAYS[0]}-"
+            f"{DIAMOND_STEADY_DAYS[1]}, >= {c['DIAMONDS_PER_DAY_F2P']} - {DIAMOND_BUDGET_TOL:.0%}", f"{mean:.0f} a day")
+        add(held <= DIAMOND_HOLD_MAX_DAYS * mean, f"06 11 obs. 2: diamonds spent within {DIAMOND_HOLD_MAX_DAYS} days in steady "
+            f"state (end-of-day balance <= {DIAMOND_HOLD_MAX_DAYS} x daily income)", f"max balance {held:.0f}")
+    if p.diamond_mode == "content":
+        cum = lambda d: bot.daily[d - 1]["econ_cum"]["first_clears"] if d >= 1 else 0
+        for a, b in FIRST_CLEAR_PERIODS:
+            if b > last:
+                continue
+            want = (target_stage(p, b) - target_stage(p, a - 1)) / c["BOSS_EVERY"] * c["FIRST_CLEAR_DIAMONDS"]
+            got = (cum(b) - cum(a - 1)) * c["FIRST_CLEAR_DIAMONDS"]
+            days = b - a + 1
+            add(abs(got - want) <= FIRST_CLEAR_TOL * want,
+                f"FIRST_CLEAR_DIAMONDS (06 2): first-clear diamonds on day{'s' if days > 1 else ''} {a}"
+                f"{'-' + str(b) if days > 1 else ''} within {FIRST_CLEAR_TOL:.0%} of the target stage curve's",
+                f"{got / days:.0f} a day vs {want / days:.0f}")
+    income = st[0] if st is not None else (e["diamonds_earned"] - c["TUTORIAL_DIAMONDS"]) / max(1, last)
+    for b in p.banner_ids:
+        # 06 section 2: the day's income (diamonds plus that banner's tickets at its pull price) buys one 10-pull every N days.
+        cost = p.banner[b].pull_cost
+        eff = income + bot.ticket_income.get(b, 0) * cost
+        every = 10 * cost / eff if eff > 0 else float("inf")
+        add(every <= TENPULL_MAX_DAYS[b], f"PULL_COST[{b}] (06 2): income affords a {b} 10-pull every {TENPULL_MAX_DAYS[b]} days "
+            "or less", f"every {every:.2f} days ({income:.0f} diamonds + {bot.ticket_income.get(b, 0):g} tickets a day)")
+        n = e["pulls_ticket"][b] + e["pulls_diamond"][b]
+        out.append(("INFO", f"{b} pulls the bot actually made (its value-per-diamond choice, 03 8.3 item 2)",
+                    f"{n} over {last} days, a 10-pull's worth every {last / (n / 10) if n else float('inf'):.2f} days"))
+        add(e["lplus"][b] >= 1, f"PITY_HARD (06 2): {b} pity resolves (a Legendary or better) within {last} days",
+            f"{e['lplus'][b]} L+")
+    for d in EXP_DUNGEON_DAYS:
+        if d <= last:
+            f = day_flow(bot, d)
+            sh = f["exp_dungeon"] / f["exp_total"] if f["exp_total"] else 0.0
+            add(EXP_DUNGEON_SHARE_BAND[0] <= sh <= EXP_DUNGEON_SHARE_BAND[1],
+                f"EXP_DUNGEON_KILLS (06 consts): EXP Dungeon share of day-{d} EXP in "
+                f"{EXP_DUNGEON_SHARE_BAND[0]:.0%}..{EXP_DUNGEON_SHARE_BAND[1]:.0%}", f"{sh:.1%}")
+    if last >= BEST_FLOOR_DAY:
+        floors = bot.daily[BEST_FLOOR_DAY - 1]["best_floor"]
+        for k, v in floors.items():
+            add(BEST_FLOOR_BAND[0] <= v <= BEST_FLOOR_BAND[1],
+                f"DUNGEON_FLOOR_STAGE_STEP (06 OQ5): {k} best floor on day {BEST_FLOOR_DAY} in {BEST_FLOOR_BAND[0]}..{BEST_FLOOR_BAND[1]}",
+                f"floor {v}")
+    return out
 
 
 def checks_for(p, bot):
@@ -1080,6 +1369,7 @@ def checks_for(p, bot):
         med = statistics.median(ratios)
         add(med <= TAP_WALL_SPEEDUP_MAX, "TAP_ZAP_*: a tapping variant clears a wall at most 2.5x faster than idle (median wall)",
             f"median x{med:.2f}, max x{ratios[-1]:.2f}, longest wall x{lr:.2f}")
+    out += economy_checks(p, bot)
     return out
 
 
@@ -1174,6 +1464,44 @@ def print_cadence(p, bot):
           f"(target days 20-35 on the 20-seed median, 00 decision 70; one seed, see --check)")
 
 
+def median_flows(runs, seeds, days):
+    """{day: {key: 20-seed median}} of day_flow for the given days (each column its own median)."""
+    out = {}
+    for d in days:
+        fs = [day_flow(runs[s], d) for s in seeds if d <= len(runs[s].daily)]
+        if fs:
+            out[d] = {k: statistics.median(f[k] for f in fs) for k in fs[0]}
+    return out
+
+
+def print_economy_tables(p, flows, label):
+    """06 section 2 (diamond income by day) and section 11 (sinks by day) as the model computes them (issue #178)."""
+    print(f"\n06 section 2: diamond income by day ({label}; weekly rows amortised over their week)")
+    print("day  stage  new bosses  dailies  login  dailies+bonus  first clears  weekly  achievements  tutorial  flat  "
+          "day total  spent  balance")
+    for d in SECTION2_DAYS:
+        f = flows.get(d)
+        if f:
+            total = f["dia_total"] - f["dia_quest_weekly"] + f["dia_weekly_amortised"]
+            print(f"{d:>3}  {f['stage']:>5g}  {f['new_bosses']:>10g}  {f['dailies_done']:>7g}  {f['dia_login']:>5g}  "
+                  f"{f['dia_quest_daily']:>13g}  {f['dia_first_clear']:>12g}  {f['dia_weekly_amortised']:>6.0f}  "
+                  f"{f['dia_achievement']:>12g}  {f['dia_tutorial']:>8g}  {f['dia_flat']:>4g}  {total:>9.0f}  "
+                  f"{f['dia_spent']:>5g}  {f['dia_balance']:>7.0f}")
+    print(f"\n06 section 11: sinks by day ({label})")
+    print("day  stage  gold earned  gold spent  dia earned  dia spent  coins board  coins dungeon  coins spent  "
+          "candy earned (dungeon/boss/overflow)  candy spent (awaken/LB)  EXP dungeon share  floors F/C/E  rank")
+    for d in SECTION11_DAYS:
+        f = flows.get(d)
+        if f:
+            sh = f["exp_dungeon"] / f["exp_total"] if f["exp_total"] else 0.0
+            candy = f"{fmt(f['candy_earned'])} ({fmt(f['candy_dungeon'])}/{fmt(f['candy_boss'])}/{fmt(f['candy_overflow'])})"
+            spent = f"{fmt(f['candy_spent'])} ({fmt(f['candy_awaken'])}/{fmt(f['candy_limit_break'])})"
+            floors = f"{f['best_floor_fish_coin']:g}/{f['best_floor_rock_candy']:g}/{f['best_floor_exp']:g}"
+            print(f"{d:>3}  {f['stage']:>5g}  {fmt(f['gold_earned']):>11}  {fmt(f['gold_spent']):>10}  {f['dia_total']:>10.0f}  "
+                  f"{f['dia_spent']:>9.0f}  {fmt(f['coins_board']):>11}  {fmt(f['coins_dungeon']):>13}  {fmt(f['coins_spent']):>11}  "
+                  f"{candy:<36}  {spent:<23}  {sh:>17.1%}  {floors:<12}  {f['awaken_rank']:g}")
+
+
 def median_rows(runs, seeds):
     out = []
     for d in SHARE_DAYS:
@@ -1251,6 +1579,8 @@ def main(argv=None):
     ap.add_argument("--rock-candy-per-day", type=float, help="flat Rock Candy income instead of the dungeon (06 6.3)")
     ap.add_argument("--fish-coin-per-day", type=float, help="flat Fish Coin income instead of the dungeon (06 6.3)")
     ap.add_argument("--policy", default="greedy", choices=("greedy", "lazy", "spender20", "whale"))
+    ap.add_argument("--diamonds", default="content", choices=("content", "flat"),
+                    help="content: 06's login, quests, first clears and achievements (default); flat: DIAMONDS_PER_DAY_F2P a day")
     ap.add_argument("--m0", action="store_true", help="M0 tier: no Companions, Research, dungeons or summon tickets")
     ap.add_argument("--check", action="store_true", help="20-seed sweep + every S-constant check; exit 1 on FAIL")
     ap.add_argument("--seeds", default="1-20")
@@ -1268,7 +1598,7 @@ def main(argv=None):
         overrides["ROCK_CANDY_PER_DAY"] = str(a.rock_candy_per_day)
     if a.fish_coin_per_day is not None:
         overrides["FISH_COIN_PER_DAY"] = str(a.fish_coin_per_day)
-    p = Params(a.content, overrides, a.m0)
+    p = Params(a.content, overrides, a.m0, diamonds=a.diamonds)
 
     print(f"power_curve_model: content {p.db.version} ({p.db.content_hash[:12]}), tier {p.tier}, policy {a.policy}, "
           f"{a.days} days, {a.active_min} active min in {a.sessions} sessions")
@@ -1284,10 +1614,12 @@ def main(argv=None):
         print_walls(bot)
         print_economy(bot)
         print_cadence(p, bot)
+        print_economy_tables(p, {d: day_flow(bot, d) for d in set(SECTION2_DAYS) | set(SECTION11_DAYS) if d <= a.days},
+                             f"seed {a.seed}")
 
     targets = [(t["day"], t["stage"], t["tolerance"]) for t in p.targets if t["day"] <= a.days]
     seed_stages = [(d, bot.daily[d - 1]["stage"]) for d, _, _ in targets]
-    sweep = sweep_rows = None
+    sweep = sweep_rows = econ_median = None
     if a.check:
         seeds = parse_seeds(a.seeds)
         runs = {a.seed: bot}
@@ -1311,6 +1643,12 @@ def main(argv=None):
                            f"{max(runs[s].daily[d - 1]['stage'] for s in seeds)})"))
         sweep_rows = median_rows(runs, seeds)
         print_sweep(p, a, seeds, runs, sweep_rows)
+        econ_median = median_flows(runs, seeds, sorted(set(SECTION2_DAYS) | set(SECTION11_DAYS)))
+        print_economy_tables(p, econ_median, f"{len(seeds)}-seed medians")
+        sd = [steady_diamonds(runs[s]) for s in seeds]
+        if all(sd):
+            print(f"  steady-state diamonds (days {DIAMOND_STEADY_DAYS[0]}-{DIAMOND_STEADY_DAYS[1]}): median "
+                  f"{statistics.median(x[0] for x in sd):.0f} a day, max balance median {statistics.median(x[1] for x in sd):.0f}")
         for name, ss in sorted(per_seed_fail.items()):
             print(f"  failing on {len(ss)}/{len(seeds)} seeds: {name}")
     else:
@@ -1335,7 +1673,9 @@ def main(argv=None):
                    "banner_level_day": bot.banner_level_day, "awaken_gate_day": bot.gate_day,
                    "awaken_day": bot.awaken_day, "checks": [{"status": s, "name": n, "value": v} for s, n, v in checks],
                    "daytable": dict(stages), "sweep_median": sweep,
-                   "sweep_shares": sweep_rows}, f, indent=1, default=str)
+                   "sweep_shares": sweep_rows, "diamond_mode": p.diamond_mode,
+                   "economy_by_day": [day_flow(bot, d) for d in range(1, len(bot.daily) + 1)],
+                   "economy_sweep_median": econ_median}, f, indent=1, default=str)
     if not a.quiet:
         print(f"wrote {os.path.relpath(path)}")
     failed = [c for c in checks if c[0] == "FAIL"]

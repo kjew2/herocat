@@ -240,7 +240,7 @@ public sealed class ProgressState
 public sealed class QuestState                                          // reset off Time.DayKey / Time.WeekKey (06 EnsureDay); no keys of its own
 {
     public Dictionary<string, QuestProgress> Daily       { get; init; } = new();   // key: quest id from quests_daily (09), bonus rows (d_bonus_5, d_bonus_8) included; reset on rollover
-    public Dictionary<string, QuestProgress> Weekly      { get; init; } = new();   // w_bonus_all included
+    public Dictionary<string, QuestProgress> Weekly      { get; init; } = new();   // key: quest id from quests_weekly (09), bonus rows (w_bonus_all_skill, w_bonus_all_companion) included; reset on weekly rollover
     public Dictionary<string, QuestProgress> Achievement { get; init; } = new();   // key: rung id (`ach_<ladder>_<rung>`, 09), one entry per rung; never reset
 }
 
@@ -587,7 +587,7 @@ Repair:
 | P9b | `TankCount` outside `[0, TankCap]`; `TankRefillTick` outside `[0, refillTicks-1]`, or non-zero on a full tank; `TankReleaseLevel < 1` or above its content max | Clamp (a full tank's refill progress to 0, 05 section 3). A repaired board passes `FishBoard.FirstViolation`. |
 | P10 | `Items` key unknown to content, or `Copies <= 0` | Remove the entry. No refund in MVP (issue #56); ids are never deleted (09 section 3.4), so this path is rare. |
 | P11 | `Banners[b].Pity` outside `[0, PITY_HARD-1]`; `Exp < 0` | Clamp. Missing banner for a banner the content defines -> add default. |
-| P12 | Quest id unknown to content; `Progress < 0` | Drop the entry; clamp to 0. A quest with no entry reads as `IN_PROGRESS` with progress 0. |
+| P12 | Quest id unknown to content (`Daily`, `Weekly` and `Achievement` maps, each checked against its own table); `Progress < 0` | Drop the entry; clamp to 0. A quest with no entry reads as `IN_PROGRESS` with progress 0. The sim raises the achievement ladders back to the state's values when it is constructed (06 section 5.4, issue #171). |
 | P13 | `Research.Level` key unknown or value `< 1` or `> maxLevel` | Remove (unknown or `< 1`: absent reads as level 0) / clamp. |
 | P14 | `OwnedItem.Copies > DUPE_LVL_CUM[10]` (160); `LimitBreaks` outside `[0, LIMIT_BREAK_RANKS]` | Clamp (no Rock Candy is granted on load; conversion happens only at pull time, 04). |
 | P15 | Stream counter invariants (3.4): `combat.Counter != 0` (MVP), `crit.Counter != Stats.HeroHits`, `loot.Counter != Stats.BossKills`, `fish_spawn.Counter != Stats.FishReleased`, Local mode `summon_x.Counter != 3 * TotalPulls` | Set the counter from the stat. The player-visible count is the source of truth for "which draw is next". |
@@ -951,14 +951,14 @@ As built (issues #78, #149): `ServerClock.cs` holds both clocks. `SystemClock` i
 | `now < Offline.Pending.ComputedServerTime` at load | P18 clears the pending reward (it was never credited). |
 | `now < Pending.Summon.RequestedServerTime` | Irrelevant; the server's idempotency store decides. |
 | Resync shows the server is *ahead* of the extrapolation by more than `CLOCK_JUMP_WARN_SEC` | Extra elapsed time is credited as a second catch-up window (01 section 8.2 step 2), capped by the 24 h sum. |
-| Resync shows the server is *behind* by more than `CLOCK_BACKWARDS_TOLERANCE_S` | Nothing is taken back; `clock_anomaly{resync, negative}`; the save's `LastTickServerTime` keeps its larger value, which simply shortens the next window. |
+| Resync shows the server is *behind* the extrapolation by more than `CLOCK_JUMP_WARN_SEC` (the same 300 s threshold as *ahead*; 11.1, 01 section 8.2 step 2; issue #257) | Nothing is taken back; `clock_anomaly{resync, negative}`; the save's `LastTickServerTime` keeps its larger value, which simply shortens the next window. A smaller backwards correction emits no `resync` event: the next `ApplyServerTime` re-anchor (at most `WALL_CLOCK_SYNC_SEC` later) reports it as `clock_anomaly{backwards}` once it exceeds `CLOCK_BACKWARDS_TOLERANCE_S` (once per session). |
 | Device clock set years ahead, then back (offline) | At most one `OFFLINE_CAP_H` window and one daily reset were gained while unauthoritative; the next authoritative upload carries `CLOCK_AHEAD` and the server's ledger reconciliation (08) corrects diamonds. |
 
 ## 12. Server-side relational schema (PostgreSQL 16)
 
 All timestamps `timestamptz`, all ids `uuid` unless noted. Money is never stored as float: prices are `integer` minor units plus `char(3)` currency. Row-level comments give the owning API (08). This section owns every server table, including the server-only ones 08 reads and writes, so the GDPR delete job (13.2) can enumerate them from here (issue #53).
 
-**Migration tooling** (issue #33): the schema ships as plain versioned SQL files, `server/db/migrations/NNNN_<name>.sql` (`0001_init.sql` is the DDL below, verbatim), applied in order by a small runner (DbUp or an in-house runner, at server startup and in CI) that records applied files in a `schema_migrations` table. No EF Core migrations; queries use Npgsql/Dapper, or EF Core for queries only, never to change the schema. A migration file is immutable once merged. CI applies the set to an empty PostgreSQL 16 container (`postgres:16`, as in 10) and runs AC 16; `check.sh` runs the same job behind a "Postgres available" guard and reports it as skipped, not passed, where no Postgres or Docker exists (cloud sessions).
+**Migration tooling** (issue #33): the schema ships as plain versioned SQL files, `server/db/migrations/NNNN_<name>.sql` (`0001_init.sql` is the DDL below, verbatim; `0002_save_history_trim.sql` adds the 13.1 trim trigger and `0003_partitions.sql` the partitions, both described after the DDL; issue #154), applied in order by a small in-house runner (`HeroCat.Server --migrate` in the deploy pipeline's pre-deploy job and in CI; `HeroCat:Database:MigrateOnStartup` also runs it at api startup, off by default; issue #192) that records applied files in a `schema_migrations` table. No EF Core migrations; queries use Npgsql/Dapper, or EF Core for queries only, never to change the schema. A migration file is immutable once merged. CI applies the set to an empty PostgreSQL 16 container (`postgres:16`, as in 10) and runs AC 16; `check.sh` runs the same job behind a "Postgres available" guard and reports it as skipped, not passed, where no Postgres or Docker exists (cloud sessions).
 
 ```sql
 create table accounts (
@@ -1228,6 +1228,10 @@ create table guild_members (guild_id uuid references guilds on delete cascade, p
 create table guild_chat (id bigserial primary key, guild_id uuid references guilds on delete cascade, player_id uuid references accounts on delete set null, body text not null, created_at timestamptz not null default now());
 ```
 
+**Trim trigger** (`0002`): `save_history_trim`, after each insert into `save_history`, deletes the player's rows beyond the newest `SAVE_HISTORY_KEEP` (newest by `uploaded_at`, then `save_seq`).
+
+**Partitions** (`0003`; issue #154): `ensure_partitions(p_parent regclass, p_grain text, p_from timestamptz, p_until timestamptz) returns integer` creates every missing partition whose range touches `[p_from, p_until]`: UTC month ranges named `<parent>_pYYYYMM` for `p_grain = 'month'`, UTC day ranges named `<parent>_pYYYYMMDD` for `'day'`; it returns how many it created and a rerun is harmless. The migration creates the current month plus 3 months for `diamond_ledger` and `summon_log` and today plus 14 days for `events`; the worker's partition job keeps that horizon ahead of now (issue #262). There is no default partition: a row outside every partition fails its insert, so a missing partition is loud, and a new range partition never collides with rows parked in a default one.
+
 Redis structures (P1 leaderboards, MVP rate limits and sessions):
 
 | Key | Type | Content | TTL |
@@ -1235,10 +1239,13 @@ Redis structures (P1 leaderboards, MVP rate limits and sessions):
 | `lb:stage:{weekKey}` | ZSET | member `playerId`, score `HighestCleared * 1e6 + (1e6 - secondsIntoWeek/60)` so ties favour the earlier clear | 14 days |
 | `lb:fish:{weekKey}` | ZSET | score `HighestFish` | 14 days |
 | `lb:name:{playerId}` | STRING | display name + avatar for leaderboard rows | 1 day |
-| `rl:{route}:{playerId}` | STRING (counter) | sliding-window rate limit (08 per-endpoint limits) | window length |
+| `rl:{route}:{playerId}` | ZSET (accepted-request timestamps) | sliding-window rate-limit log (08 per-endpoint limits); `{route}` is the lowercase method and path below `/v1` (`put/save`), and all of a route's windows share the set, so the TTL is the longest of them | window length |
+| `rl:{route}:ip:{ip}` | ZSET (accepted-request timestamps) | the same log per client IP for `auth none` routes (08 section 1.1); an IPv6 address's colons are written `-` | window length |
 | `sess:{playerId}` | HASH | last device, last ip hash, last activity | 1 h |
 | `summon:lock:{playerId}` | STRING | per-player mutex for the summon handler | 10 s |
 | `maint` | STRING | maintenance JSON | none |
+
+As built (issue #154): `HeroCat.Server.Infrastructure.Redis.RedisKeys` holds these keys and TTLs for every handler (a test diffs it against this table). `{playerId}` is the lowercase 36-character GUID, `{weekKey}` the integer week key of 00 section 8 item 7, `{route}` a key segment without spaces or braces.
 
 ## 13. Data retention and GDPR/CCPA delete
 
@@ -1247,9 +1254,9 @@ Redis structures (P1 leaderboards, MVP rate limits and sessions):
 | Data | Retention | Mechanism |
 |---|---|---|
 | Current save blob + `saves` row | While account active | |
-| `save_history` | Last `SAVE_HISTORY_KEEP = 10` blobs per player | Trigger on insert deletes the oldest; S3 lifecycle removes orphaned keys after 7 days |
+| `save_history` | Last `SAVE_HISTORY_KEEP = 10` blobs per player | Trigger on insert (`save_history_trim`, section 12) deletes the oldest; S3 lifecycle removes orphaned keys after 7 days |
 | `idempotency` | `IDEMPOTENCY_TTL_H = 24` | Hourly purge job |
-| `summon_log`, `diamond_ledger` | 7 years (financial audit; loot-box disclosure disputes) | Partitioned by month |
+| `summon_log`, `diamond_ledger` | 7 years (financial audit; loot-box disclosure disputes) | Partitioned by month; partitions created ahead by `ensure_partitions` (section 12) |
 | `ticket_ledger`, `granted_items` | While account active | Deleted with the account (13.2) |
 | `store_notifications` | 90 days | Daily purge (dedupe only needs the stores' retry window) |
 | `account_exports` | Row 30 days; export object 7 days | Daily purge; S3 lifecycle on the export prefix |
@@ -1295,11 +1302,20 @@ Each feature spec owns its own events' field lists, next to the state and comman
 
 Added by the sink to every event: `ts` (server seconds), `sessionId` (GUID per process), `playerIdHash` (sha256 of playerId with a per-environment salt; never raw), `deviceId`, `clientVersion`, `contentVersion`, `schemaVersion`, `debugTainted`, `clockAuthoritative`, `dayIndex = (ts - CreatedServerTime) / DAY_SECONDS`, `stage` (current), `ageGate` (0/1, 08 section 10.1). Owner sections do not repeat these fields.
 
-Names snake_case; properties camelCase. Economy events (those that carry a currency, purchase, summon, dungeon or inbox payload) go to the backend `events` table (00 section 3) as well as Firebase so they can be joined with `purchases` and `saves`. The `events` table and its nightly `currency_daily` materialized view (06 source/sink dashboards) are defined in section 12 (issue #34).
+As built (`HeroCat.Runtime.Services.AnalyticsEnvelope`, issue #155): `playerIdHash` is lowercase hex `sha256(UTF8(salt + ":" + playerId))` with the playerId as a 36-character GUID, and `null` for an unlinked local guest (`PlayerId = Guid.Empty`; `deviceId` identifies it). `deviceId` is the install id (8.4), `schemaVersion` is `SAVE_SCHEMA_VERSION`, `contentVersion` the active `ContentDb.Version`. Every field is always present; `dayIndex` and `stage` are `null` for events tracked before the save loads (the save-health events of 8.3). Each queued event also carries `eventId` (32 hex, random), the server's per-event dedupe key. A queued line is `{"name", "eventId", <envelope fields>, "props": {<owner fields>}}`.
+
+Names snake_case; properties camelCase. The sink drops an event whose name is not snake_case and a property that is not camelCase, names an envelope field, or is a raw `playerId`; it never throws. `HeroCat.Runtime.Services.AnalyticsNames` holds every name in the 14.4 index (a test diffs it against the index) and `AnalyticsEvents` the typed events of 14.3 and 06's `currency_changed`. Economy events (those that carry a currency, purchase, summon, dungeon or inbox payload) go to the backend `events` table (00 section 3) as well as Firebase so they can be joined with `purchases` and `saves`. The `events` table and its nightly `currency_daily` materialized view (06 source/sink dashboards) are defined in section 12 (issue #34).
 
 ### 14.2 Offline queue
 
 The sink enqueues on the main thread and flushes on the thread pool (01 threading table). Pending events persist to `analytics/queue.ndjson` (8.4; excluded from OS backup) so they survive a kill while offline. Uploads go in batches of at most `ANALYTICS_BATCH_MAX` events; `OnPause` and `OnQuit` flush (01). The queue holds at most `ANALYTICS_QUEUE_MAX` events; past that the oldest are dropped.
+
+As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
+
+1. The file is one JSON event per line (14.1), appended per event. It may hold up to `2 * ANALYTICS_QUEUE_MAX` lines between compactions; it is rewritten (temp file, then rename) after each accepted batch and when an overflow finds it that long. A load keeps the newest `ANALYTICS_QUEUE_MAX` lines and skips a line that does not parse (a torn last line after a kill). A file error never throws: the events stay in memory.
+2. A flush first raises the sink's flush hook, so in-memory aggregates (06 section 13's `KILL`/`BOSS` window) reach the queue, then uploads on the thread pool, oldest first. Each batch's `X-Request-Id` is the first 32 hex of `sha256` of its events' `eventId`s, so a retry of the same events reuses it and a different set never does.
+3. An upload outcome is accepted (the events leave the queue), retry (offline, timeout, 5xx, 429, or the uploader threw: the flush stops and the next flush retries the same batch) or rejected (a non-retryable 4xx: the batch is dropped so it cannot block the queue). The remote uploader (Firebase for every event, the backend events route of issue #209 for the economy ones) waits on `ApiClient` (issue #143); a sink with no uploader keeps the events on disk.
+4. A Local build without a backend uses `NullAnalytics` and writes no queue file (01 section 1.2); bots and tests use `MemoryAnalytics` (no envelope, no files).
 
 ### 14.3 Events owned here (session, save health, cloud, clock)
 
@@ -1309,7 +1325,7 @@ The sink enqueues on the main thread and flushes on the thread pool (01 threadin
 | `session_end` | `durationSec`, `stageStart`, `stageEnd`, `kills`, `ticks`, `trigger` (pause/quit/gap) | Runtime on pause/quit | |
 | `cloud_save_uploaded` | `saveSeq`, `sizeBytes`, `trigger`, `latencyMs`, `flags[]` | Runtime | |
 | `cloud_conflict` / `cloud_autoresolved` | 9.4 | Runtime | |
-| `save_fallback`, `save_corrupt`, `save_corrupt_all{supportId}`, `save_repaired{rule}`, `save_reject{file, reason}`, `save_write_failed{consecutive}`, `migration_applied{from, to}` | | Runtime | Save health. `save_corrupt_all` is a new profile replacing an unreadable save (8.3; issue #248). |
+| `save_fallback`, `save_corrupt{problems}`, `save_corrupt_all{supportId}`, `save_repaired{rule}`, `save_reject{file, reason}`, `save_write_failed{consecutive}`, `migration_applied{from, to}` | | Runtime | Save health. `save_corrupt_all` is a new profile replacing an unreadable save (8.3; issue #248). |
 | `clock_anomaly` | `kind` (backwards/gap/resync), `seconds` | Runtime | Section 11 and 01; also emitted with `kind = backwards` when 06's offline compute sees `ClockWentBackwards`. |
 | `player_deleted` | `playerIdHash` | Server | 13.2 step 5. |
 
@@ -1354,7 +1370,7 @@ The sink enqueues on the main thread and flushes on the thread pool (01 threadin
 13. Uploads are suspended while `Status == Conflict` is unresolved (no `PUT` observed by a fake API during that window).
 14. `ServerClock`: `Observe` makes `IsAuthoritative` true; a device clock change of +1 day between observations changes `NowServerSeconds` by the monotonic elapsed only; before any observation, `NowServerSeconds >= floor`.
 15. Backwards clock: `dayKey(now) < DayKey` resets nothing and emits `clock_anomaly`; `now < LastTickServerTime` credits zero.
-16. The SQL migration set (section 12; issue #33) applies to an empty PostgreSQL 16 database and creates every table in section 12, including `ticket_ledger`, `granted_items`, `store_notifications`, `account_exports`, `events` and the P1 stubs (issue #53). A GDPR hard delete of a player with purchases leaves no row in any table referencing the old `player_id`, and exactly the player's `purchases`, `summon_log` and `diamond_ledger` rows referencing the tombstone account (`status = 'deleted'`); for a player without purchases, nothing remains. Deleting an `accounts` row that still has financial rows fails (`on delete restrict`; issue #32). Runs in CI and in `check.sh` when Postgres is available.
+16. The SQL migration set (section 12; issue #33) applies to an empty PostgreSQL 16 database and creates every table in section 12, including `ticket_ledger`, `granted_items`, `store_notifications`, `account_exports`, `events` and the P1 stubs (issue #53), with section 12's columns, types, nullability, foreign-key delete rules and indexes, the partitions, and the trim trigger (an 11th `save_history` row for a player leaves `SAVE_HISTORY_KEEP`; issue #154). A GDPR hard delete of a player with purchases leaves no row in any table referencing the old `player_id`, and exactly the player's `purchases`, `summon_log` and `diamond_ledger` rows referencing the tombstone account (`status = 'deleted'`); for a player without purchases, nothing remains. Deleting an `accounts` row that still has financial rows fails (`on delete restrict`; issue #32). Runs in CI and in `check.sh` when Postgres is available.
 17. Moved to 06 acceptance 25 (`currency_changed` is owned by 06 section 13; issue #245).
 18. No `UnityEngine`, `DateTime*.Now`, `Stopwatch` in `HeroCat.Sim`; in `HeroCat.Runtime` only `ServerClock.cs` and `SessionRunner.cs` reference the clock APIs (CI grep: `tools/check_clock_apis.py` in `check.sh`, with a self-test that proves it catches a bad line).
 19. IL2CPP build: a save produced by the editor loads on an ARM64 device build and vice versa with zero repairs (device-farm test, 10).

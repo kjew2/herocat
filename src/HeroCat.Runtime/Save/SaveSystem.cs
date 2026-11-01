@@ -55,8 +55,7 @@ namespace HeroCat.Runtime.Save
             readonly IAnalytics _a;
             public AnalyticsMigrationLog(IAnalytics a) { _a = a; }
 
-            public void Applied(int from, int to) =>
-                _a.Track("migration_applied", new Dictionary<string, object> { ["from"] = from, ["to"] = to });
+            public void Applied(int from, int to) => _a.Track(new AnalyticsEvents.MigrationApplied(from, to));
         }
     }
 }

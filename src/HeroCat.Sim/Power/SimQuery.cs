@@ -89,6 +89,64 @@ namespace HeroCat.Sim.Power
         /// <summary>Bought level of the Research node with <paramref name="effect"/> (0 in M0 content).</summary>
         public int ResearchLevel(ResearchEffect effect) => PowerFormula.ResearchLevel(_db, _s, effect);
 
+        // ------------------------------------------------------------------------------------------- awakening (03 5.3)
+
+        /// <summary>Hero.AwakenRank, clamped to the content's ranks.</summary>
+        public int AwakenRank => AwakeningRules.Rank(_db, _s);
+
+        /// <summary>The next rank's AWAKEN_STAGES gate (Progress.HighestCleared must reach it); null at the last rank.</summary>
+        public int? NextAwakenStageGate => AwakeningRules.Next(_db, _s)?.StageGate;
+
+        /// <summary>Rock Candy the next Awaken charges (AWAKEN_COST_ROCK_CANDY); 0 at the last rank.</summary>
+        public long NextAwakenCost => AwakeningRules.Next(_db, _s)?.RockCandyCost ?? 0;
+
+        /// <summary>Awaken would be accepted now (next rank exists, gate reached, Rock Candy held).</summary>
+        public bool CanAwaken => AwakeningRules.CanAwaken(_db, _s);
+
+        /// <summary>Companion slots open now: 1 at rank 0, then awakening.companion_slots_after (00 decision 11).</summary>
+        public int CompanionSlotsUnlocked => AwakeningRules.CompanionSlots(_db, _s);
+
+        /// <summary>Rune slots open now (P1): awakening.rune_slots_after, 0 at rank 0.</summary>
+        public int RuneSlotsUnlocked => AwakeningRules.RuneSlots(_db, _s);
+
+        /// <summary>
+        /// The feature_unlocks gate for Research (09 section 5.34; seeded at Awakening rank 1, 00 decision 11). The Research
+        /// command rejects Locked/RESEARCH_LOCKED while this is false.
+        /// </summary>
+        public bool ResearchUnlocked => _db.IsUnlocked(AwakeningRules.ResearchFeature, _s);
+
+        // ------------------------------------------------------------------------------------------- research (03 6)
+
+        /// <summary>Bought level of node <paramref name="nodeId"/> (09 res_* id), clamped to max_level; 0 when unknown.</summary>
+        public int ResearchLevelOf(string nodeId) => ResearchRules.Level(_db, _s, nodeId);
+
+        /// <summary>Fish Coins the next Research(<paramref name="nodeId"/>) charges; 0 when unknown or maxed.</summary>
+        public double NextResearchCost(string nodeId) => ResearchRules.NextCost(_db, _s, nodeId);
+
+        /// <summary>Research(<paramref name="nodeId"/>) would be accepted now (known, unlocked, below max, affordable).</summary>
+        public bool CanResearch(string nodeId) => ResearchRules.CanResearch(_db, _s, nodeId);
+
+        /// <summary>effect_per_level * level of the node with <paramref name="effect"/> (0 without the node).</summary>
+        public double ResearchEffectTotal(ResearchEffect effect) => ResearchRules.EffectTotal(_db, _s, effect);
+
+        /// <summary>MP_POOL0 + res_mp_pool (03 section 2.4).</summary>
+        public double MpPoolMax => ResearchRules.MpPoolMax(_db, _s);
+
+        /// <summary>(MP_REGEN0 + res_mp_regen) / TICK_HZ (03 section 2.4).</summary>
+        public double MpRegenPerTick => ResearchRules.MpRegenPerTick(_db, _s);
+
+        /// <summary>
+        /// TankCap with the res_tank_cap term (05 section 3). The board applies it from #167 on; until then the live tank
+        /// uses TANK_CAP0 (Simulation.FishTankCap).
+        /// </summary>
+        public int ResearchTankCap => ResearchRules.TankCap(_db, _s);
+
+        /// <summary>TankRefillTicks with the res_tank_refill term, floor 2.0 s (05 section 3). Applied to the board by #167.</summary>
+        public int ResearchTankRefillTicks => ResearchRules.TankRefillTicks(_db, _s);
+
+        /// <summary>FishMaxLvl with the res_fish_cap term (05 section 4.3). Applied to the board by #167.</summary>
+        public int ResearchFishMaxLvl => ResearchRules.FishMaxLvl(_db, _s);
+
         // ------------------------------------------------------------------------------------------- limit breaks (04 5.2)
 
         /// <summary>Rock Candy LimitBreak(<paramref name="itemId"/>) would charge now; 0 when unknown, unowned or maxed.</summary>

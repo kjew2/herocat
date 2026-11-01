@@ -1,0 +1,1 @@
+CONTENT E060 achievements: rung for ladder stage must be exactly 1..2 in row order, got 1, 3

@@ -29,7 +29,12 @@ namespace HeroCat.Sim
         }
 
         public long Tick { get; init; }
+        /// <summary>The frontier: Combat.Stage, never the selected farm stage.</summary>
         public int Stage { get; init; }
+
+        /// <summary>Combat.Selected, the side stage being farmed; null = fighting the frontier (01 section 2.4, issue #254).</summary>
+        public int? SelectedStage { get; init; }
+
         public int KillsInStage { get; init; }
         public int Chapter { get; init; }
         public BossPhase BossPhase { get; init; }
@@ -66,6 +71,7 @@ namespace HeroCat.Sim
         {
             Tick = Tick,
             Stage = Stage,
+            SelectedStage = SelectedStage,
             KillsInStage = KillsInStage,
             Chapter = Chapter,
             BossPhase = BossPhase,

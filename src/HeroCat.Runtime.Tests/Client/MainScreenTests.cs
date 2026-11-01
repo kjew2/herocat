@@ -169,5 +169,26 @@ namespace HeroCat.Runtime.Tests
             f.Vm.Refresh();
             Assert.That(SinkBinder.Total(counters), Is.EqualTo(after1), "nothing changed, nothing written");
         }
+
+        [Test]
+        public void StageLabel_ReadsTheSnapshotsSelectedStage()   // 07 section 4.1, issue #254
+        {
+            var f = ClientFixture.Open(st =>
+            {
+                st.Combat.Stage = 12;
+                st.Progress.HighestCleared = 11;
+                st.Combat.Selected = 5;
+            });
+            var label = f.Vm.Combat.StageLabel;
+            Assert.That(label.Key, Is.EqualTo(UiKeys.MainStageFarming));
+            Assert.That((label.Arg(0), label.Arg(1)), Is.EqualTo((LabelArg.Int(5), LabelArg.Int(12))));
+            f.S.Sim.State.Combat.Selected = null;
+            f.Vm.Refresh();
+            Assert.That(label.Key, Is.EqualTo(UiKeys.MainStageFarming), "the label follows the snapshot, not GameState");
+            f.S.Sim.Advance(0);
+            f.Vm.Refresh();
+            Assert.That(label.Key, Is.EqualTo(UiKeys.MainStage));
+            Assert.That(label.Arg(0), Is.EqualTo(LabelArg.Int(12)));
+        }
     }
 }

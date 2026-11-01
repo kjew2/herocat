@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using HeroCat.Runtime.Content;
+using HeroCat.Runtime.Profile;
 using HeroCat.Runtime.Save;
 using HeroCat.Sim;
 using HeroCat.Sim.Content;
@@ -192,8 +194,10 @@ namespace HeroCat.Runtime.Tests
                                   s => Assert.That(s.Banners[Banner.SKILL].TotalPulls, Is.EqualTo(0)));
 
             // P12-P13: quests and research
-            yield return new Case("P12", "negative quest progress", s => s.Quests.Daily["d_kill"] = new QuestProgress { Progress = -4 },
-                                  s => Assert.That(s.Quests.Daily["d_kill"].Progress, Is.EqualTo(0)));
+            yield return new Case("P12", "quest id unknown to content dropped", s => s.Quests.Daily["d_kill"] = new QuestProgress { Progress = -4 },
+                                  s => Assert.That(s.Quests.Daily.ContainsKey("d_kill"), Is.False));
+            yield return new Case("P12", "null weekly entry dropped", s => s.Quests.Weekly["w_kills"] = null,
+                                  s => Assert.That(s.Quests.Weekly, Is.Empty));
             yield return new Case("P13", "research level below 1 removed", s => s.Research.Level["res_mp_pool"] = 0,
                                   s => Assert.That(s.Research.Level, Is.Empty));
 
@@ -275,6 +279,46 @@ namespace HeroCat.Runtime.Tests
             c.Check(s);
             Assert.That(SaveValidator.Run(s, Now, Db, Opt()), Is.Empty, "a repaired state validates clean");
             Assert.That(HeroCat.Sim.Fish.FishBoard.FirstViolation(s, Db), Is.Null, "a repaired state holds the Fish Board invariants (05)");
+        }
+
+        [Test]
+        public void P12_KnownQuestIds_AreKept_NegativeProgressClamped_UnknownDropped()   // 02 rule P12 (issue #170)
+        {
+            var mvp = ContentLoader.LoadFromDirectory(TestContent.Dir, Tier.MVP);
+            var s = ProfileFactory.Create(mvp, Guid.Empty, TestContent.T0, TestContent.Device, TestContent.Root);
+            s.Quests.Daily["d_kills"] = new QuestProgress { Progress = -4, State = QuestStatus.IN_PROGRESS };
+            s.Quests.Daily["d_merge"] = new QuestProgress { Progress = 20, State = QuestStatus.COMPLETED };
+            s.Quests.Daily["w_kills"] = new QuestProgress { Progress = 5 };   // a weekly id in the daily map
+            s.Quests.Weekly["w_kills"] = new QuestProgress { Progress = 5 };
+            s.Quests.Achievement["pad_achievement"] = new QuestProgress { Progress = 1 };   // unknown rung id (issue #171)
+            s.Quests.Achievement["ach_merges_01"] = new QuestProgress { Progress = -3 };
+            s.Quests.Achievement["ach_stage_01"] = new QuestProgress { Progress = 12, State = QuestStatus.CLAIMED };
+            s.Quests.Achievement["d_kills"] = new QuestProgress { Progress = 1 };            // a daily id in the achievement map
+            Assert.That(SaveValidator.Run(s, Now, mvp, Opt()), Is.EqualTo(new[] { "P12" }));
+            Assert.That(s.Quests.Daily.Keys.OrderBy(k => k), Is.EqualTo(new[] { "d_kills", "d_merge" }));
+            Assert.That((s.Quests.Daily["d_kills"].Progress, s.Quests.Daily["d_merge"].State), Is.EqualTo((0L, QuestStatus.COMPLETED)));
+            Assert.That(s.Quests.Weekly.Keys, Is.EqualTo(new[] { "w_kills" }));
+            Assert.That(s.Quests.Achievement.Keys.OrderBy(k => k), Is.EqualTo(new[] { "ach_merges_01", "ach_stage_01" }));
+            Assert.That((s.Quests.Achievement["ach_merges_01"].Progress, s.Quests.Achievement["ach_stage_01"].State), Is.EqualTo((0L, QuestStatus.CLAIMED)));
+            Assert.That(SaveValidator.Run(s, Now, mvp, Opt()), Is.Empty);
+        }
+
+        [Test]
+        public void P13_ResearchLevels_ClampedToMaxLevel_UnknownIdsDropped()   // 02 rule P13, 09 section 6.3 (issue #158)
+        {
+            var mvp = ContentLoader.LoadFromDirectory(TestContent.Dir, Tier.MVP);
+            var s = ProfileFactory.Create(mvp, Guid.Empty, TestContent.T0, TestContent.Device, TestContent.Root);
+            int fishMax = mvp.Research["res_fish_cap"].MaxLevel;
+            s.Research.Level["res_atk"] = 7;
+            s.Research.Level["res_fish_cap"] = fishMax + 4;   // content lowered the cap: clamp, nothing refunded
+            s.Research.Level["res_offline_cap"] = mvp.Research["res_offline_cap"].MaxLevel;
+            s.Research.Level["rs_mp_pool"] = 3;               // an id the content does not define
+            Assert.That(SaveValidator.Run(s, Now, mvp, Opt()), Is.EqualTo(new[] { "P13" }));
+            Assert.That(s.Research.Level.Keys.OrderBy(k => k, StringComparer.Ordinal),
+                        Is.EqualTo(new[] { "res_atk", "res_fish_cap", "res_offline_cap" }));
+            Assert.That(s.Research.Level["res_atk"], Is.EqualTo(7));
+            Assert.That(s.Research.Level["res_fish_cap"], Is.EqualTo(fishMax));
+            Assert.That(SaveValidator.Run(s, Now, mvp, Opt()), Is.Empty);
         }
 
         [Test]

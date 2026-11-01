@@ -54,8 +54,16 @@ namespace HeroCat.Sim
             b.Tick = State.Time.Tick;
         }
 
-        /// <summary>What Emit does with a coalesced CurrencyChanged(KILL): its amount is summed through the kill's EnemyKilled.</summary>
-        internal void FoldKillCurrency() => OpenBatch(FoughtStage);   // the fought stage, as FoldKill: a side stage when farming one
+        /// <summary>
+        /// What Emit does with a coalesced CurrencyChanged(KILL) of GOLD or HERO_EXP: the amount goes into the open batch's
+        /// KillGold / KillExp, so the KILL rows of 06 section 13's <c>currency_changed</c> stay exact under coalescing.
+        /// </summary>
+        internal void FoldKillCurrency(Currency c, double amount)
+        {
+            var b = OpenBatch(FoughtStage);   // the fought stage, as FoldKill: a side stage when farming one
+            if (c == Currency.GOLD) b.KillGold += amount;
+            else b.KillExp += amount;
+        }
 
         /// <summary>The fought stage: the selected side stage, else the frontier (03 section 2.6; selection is MVP, #159).</summary>
         int FoughtStage => State.Combat.Selected ?? State.Combat.Stage;
@@ -280,6 +288,7 @@ namespace HeroCat.Sim
             f.BossTicksLeft = isBoss ? k.BossTimeTicks : 0;
             f.Phase = FightPhase.Fighting;
             Emit(new EnemySpawned(fought, isBoss, hp));
+            if (isBoss) QuestsProgress(QuestGoal.ATTEMPT_BOSS, 1);   // one boss spawn = one attempt, the automatic one included (d_boss)
         }
 
         void Kill(FightState f)
@@ -299,7 +308,7 @@ namespace HeroCat.Sim
             if (isBoss) st.BossKills += 1;
             if (CoalescingKills) FoldKill(s, gold, exp);
             else Emit(new EnemyKilled(s, isBoss, gold, exp));
-            // TODO(#170): Quests.OnKill(s, isBoss) (06).
+            QuestsProgress(QuestGoal.KILL_ENEMIES, 1);   // 06 section 5.1: every kill, boss included
 
             if (isBoss)
             {
@@ -345,7 +354,11 @@ namespace HeroCat.Sim
             var k = Db.Constants;
             var p = State.Progress;
             int from = c.Stage;
-            if (from > p.HighestCleared) p.HighestCleared = from;
+            if (from > p.HighestCleared)
+            {
+                p.HighestCleared = from;
+                AchievementsSetMax(QuestGoal.REACH_STAGE, from);   // the Stage ladder reads Progress.HighestCleared (06 section 5.4)
+            }
             if (from >= k.StageCap)
             {
                 // Issue #81's decision: at the cap the stage loops (kills reset) and StageCapReached is emitted once.
@@ -364,6 +377,7 @@ namespace HeroCat.Sim
             c.Boss = BossPhase.None;
             c.BossFailsOnStage = 0;
             Emit(new StageCleared(from, from + 1, viaBoss));
+            QuestsProgress(QuestGoal.CLEAR_STAGES, 1);
             if (from % k.ChapterWidth == 0) Emit(new ChapterEntered(k.ChapterOf(from + 1)));
         }
 

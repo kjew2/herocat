@@ -21,6 +21,8 @@ namespace HeroCat.Bots.Policies
     ///   Decide (every active minute): gold (step 1), Fish Board (step 5), boss (step 6). Steps 3-4 (Rock Candy, Fish
     ///                   Coins) are MVP systems (Awakening, limit breaks, Research): stubbed until the content tier has them
     ///                   (TODO(#214)).
+    ///   Quests:         10 section 3.4's "claim every quest when claimable" (ClaimAllQuests DAILY / WEEKLY, issue #170) is
+    ///                   an MVP-tier step: the M0 build has no quest rows, so it joins with the MVP bots (TODO(#214)).
     ///   OnSessionEnd:   diamonds (step 2: what first clears paid this session), gold (step 1), release the tank (step 5).
     ///
     /// Commands only (00 contract 5): the policy reads <see cref="BotContext.Query"/> and the state, and never writes it.
@@ -117,6 +119,38 @@ namespace HeroCat.Bots.Policies
             if (cost <= 0 || !(now > 0)) return 0;
             return Math.Log(q.RatedDpsAfterLimitBreak(id) / now) / cost;
         }
+
+        // ============================================================================================ step 3: Rock Candy -> Awakening
+
+        /// <summary>03 section 8.3 step 3: limit breaks only while the next Awakening gate is more than this many stages away.</summary>
+        public const int AwakenSaveWindowStages = 50;
+
+        /// <summary>
+        /// 03 section 8.3 step 3's first half: awaken as soon as the stage gate and the cost both pass (03 section 5.3).
+        /// True when a rank was bought. Not called from Decide yet: wiring step 3 changes the bot's runs, the golden files
+        /// and the acceptance sweep, and the Rock Candy cadence is decision #249 items 3 and 5. TODO(#214).
+        /// </summary>
+        public static bool TryAwaken(BotContext ctx) => ctx.Query.CanAwaken && ctx.Apply(new Awaken()).Ok;
+
+        /// <summary>
+        /// 03 section 8.3's <c>NextAwakenWithin(sim, 50)</c>: the next rank's gate is at most <paramref name="stages"/> above
+        /// Progress.HighestCleared, so Rock Candy is saved for it instead of limit breaks. False at the last rank.
+        /// </summary>
+        public static bool NextAwakenWithin(BotContext ctx, int stages)
+        {
+            int? gate = ctx.Query.NextAwakenStageGate;
+            return gate.HasValue && gate.Value - ctx.State.Progress.HighestCleared <= stages;
+        }
+
+        // ============================================================================================ step 4: Fish Coins -> Research
+
+        /// <summary>
+        /// 03 section 8.3 step 4's purchase: one level of <paramref name="nodeId"/> when Research accepts it (unlocked at
+        /// Awakening rank 1, below max_level, affordable; 03 section 6). True when a level was bought. Not called from
+        /// Decide yet, and the node ranking (MP-starved -> res_mp_regen, else best ln(DPS) per coin) is not written: wiring
+        /// step 4 changes the bot's runs, the golden files and the acceptance sweep, and waits on decision #249. TODO(#214).
+        /// </summary>
+        public static bool TryResearch(BotContext ctx, string nodeId) => ctx.Query.CanResearch(nodeId) && ctx.Apply(new Research(nodeId)).Ok;
 
         // ============================================================================================ step 1: gold -> Training
 

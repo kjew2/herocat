@@ -48,6 +48,16 @@ namespace HeroCat.Runtime.Replay
             (typeof(SelectStage), "SelectStage"),
             // Collections (04 section 5.2; issue #162).
             (typeof(LimitBreak), "LimitBreak"),
+            // Awakening (03 section 5.3; issue #157).
+            (typeof(Awaken), "Awaken"),
+            // Quest claims (06 section 5.5; issue #170).
+            (typeof(ClaimQuest), "ClaimQuest"),
+            (typeof(ClaimAllQuests), "ClaimAllQuests"),
+            // Research (03 section 6; issue #158).
+            (typeof(Research), "Research"),
+            // Shop: daily gift and exchange (06 sections 8.3-8.4; issue #174).
+            (typeof(ClaimDailyGift), "ClaimDailyGift"),
+            (typeof(ExchangeItem), "ExchangeItem"),
         };
 
         static readonly object Lock = new object();

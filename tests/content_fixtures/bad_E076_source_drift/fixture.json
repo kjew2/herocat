@@ -1,0 +1,15 @@
+{
+  "import": {
+    "locale": "ja",
+    "fill": {
+      "awakening.rank_1.name": "覚醒 1"
+    }
+  },
+  "edits": [
+    [
+      "localization",
+      "awakening.rank_1.name,Awakened 1,",
+      "awakening.rank_1.name,Awakened I,"
+    ]
+  ]
+}

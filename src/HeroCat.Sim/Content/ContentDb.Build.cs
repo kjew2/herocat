@@ -82,6 +82,9 @@ namespace HeroCat.Sim.Content
                 Required("fish_levels", d.FishLevels); Required("tank", d.Tank);
                 Required("tutorial_steps", d.TutorialSteps); Required("progress_targets", d.ProgressTargets);
                 Required("feature_unlocks", d.FeatureUnlocks);
+                Required("quests_daily", d.QuestsDaily); Required("quests_weekly", d.QuestsWeekly);
+                Required("achievements", d.Achievements);
+                Required("shop_exchange", d.ShopExchange);
                 if (Errors.Count > 0) return null;
 
                 // Loader-scope validation (ContentDb.Rules.cs, issue #126): keys first, then constants, refs and the
@@ -254,7 +257,7 @@ namespace HeroCat.Sim.Content
                 foreach (var r in Rows(d.AwakeningTargets)) at.Add(new AwakeningTargetDef(r.Rank, r.MaxDaysAfterGate));
                 db.AwakeningTargets = at.AsReadOnly();
 
-                // research (optional until #158 ships the rows; tier-filtered like every tiered table)
+                // research (09 section 5.18; optional so minimal fixtures need not carry it; tier-filtered like every tiered table)
                 var research = Rows(d.Research);
                 Unique("research", research, r => r.Id);
                 var nodes = new Dictionary<string, ResearchDef>(StringComparer.Ordinal);
@@ -264,7 +267,94 @@ namespace HeroCat.Sim.Content
                                                       r.EffectFloor, r.MaxLevel, r.Cost0, r.CostG, r.UnlockAwakenRank,
                                                       Enum<Tier>(r.Tier, $"research[{r.Id}].tier"));
                 db.Research = new ReadOnlyDictionary<string, ResearchDef>(nodes);
+
+                // daily and weekly quests (09 sections 5.21-5.22, issue #170): MVP rows, so an M0 build has none
+                db.QuestsDaily = BuildQuests("quests_daily", QuestKind.DAILY, d.QuestsDaily, out db._dailyById);
+                db.QuestsWeekly = BuildQuests("quests_weekly", QuestKind.WEEKLY, d.QuestsWeekly, out db._weeklyById);
+                BuildAchievements(db, d.Achievements);
+
+                // diamond-for-ticket exchange offers (09 section 5.37, issue #174): MVP rows, so an M0 build has none
+                var offers = new List<ExchangeOfferDef>();
+                foreach (var r in d.ShopExchange)
+                {
+                    if (!Keep("shop_exchange", r.Id, r.Tier)) continue;
+                    string loc = "shop_exchange[" + r.Id + "]";
+                    offers.Add(new ExchangeOfferDef(r.Id, Enum<Currency>(r.PriceCurrency, loc + ".price_currency"), r.PriceAmount,
+                                                    Enum<Currency>(r.GrantCurrency, loc + ".grant_currency"), r.GrantAmount, r.DailyLimit,
+                                                    r.SortOrder, Enum<Tier>(r.Tier, loc + ".tier"), r.NameKey, r.Icon));
+                }
+                offers.Sort((a, b) => a.SortOrder.CompareTo(b.SortOrder));   // sort_order is unique (E046)
+                var offerMap = new Dictionary<string, ExchangeOfferDef>(StringComparer.Ordinal);
+                foreach (var o in offers) offerMap[o.Id] = o;
+                db.ExchangeOffers = offers.AsReadOnly();
+                db._exchangeById = new ReadOnlyDictionary<string, ExchangeOfferDef>(offerMap);
                 return db;
+            }
+
+            /// <summary>
+            /// achievements (09 section 5.23, issue #171): one ACHIEVEMENT quest row per rung, grouped by ladder in the order
+            /// each ladder first appears, by rung within it (E060 makes the rungs 1..N in row order).
+            /// </summary>
+            void BuildAchievements(ContentDb db, AchievementRowDto[] rows)
+            {
+                var ladders = new Dictionary<string, List<AchievementRowDto>>(StringComparer.Ordinal);
+                var order = new List<string>();
+                foreach (var r in rows)
+                {
+                    if (!Keep("achievements", r.Id, r.Tier)) continue;
+                    if (!ladders.TryGetValue(r.Ladder, out var l)) { ladders[r.Ladder] = l = new List<AchievementRowDto>(); order.Add(r.Ladder); }
+                    l.Add(r);
+                }
+                var list = new List<QuestDef>();
+                var byLadder = new Dictionary<string, IReadOnlyList<QuestDef>>(StringComparer.Ordinal);
+                var byGoal = new List<QuestDef>[System.Enum.GetValues(typeof(QuestGoal)).Length];
+                foreach (var ladder in order)
+                {
+                    var rungs = ladders[ladder];
+                    rungs.Sort((a, b) => a.Rung.CompareTo(b.Rung));
+                    var defs = new List<QuestDef>(rungs.Count);
+                    foreach (var r in rungs)
+                    {
+                        string loc = "achievements[" + r.Id + "]";
+                        var goal = Enum<QuestGoal>(r.Goal, loc + ".goal");
+                        var def = new QuestDef(r.Id, QuestKind.ACHIEVEMENT, goal, null, -1, r.Target,
+                                               Enum<Currency>(r.RewardCurrency, loc + ".reward_currency"), r.RewardAmount, list.Count + 1,
+                                               Enum<Tier>(r.Tier, loc + ".tier"), r.NameKey, null, r.Ladder, r.Rung);
+                        defs.Add(def);
+                        list.Add(def);
+                        (byGoal[(int)goal] ??= new List<QuestDef>()).Add(def);
+                    }
+                    byLadder[ladder] = defs.AsReadOnly();
+                }
+                var map = new Dictionary<string, QuestDef>(StringComparer.Ordinal);
+                foreach (var q in list) map[q.Id] = q;
+                db.Achievements = list.AsReadOnly();
+                db.AchievementLadders = new ReadOnlyDictionary<string, IReadOnlyList<QuestDef>>(byLadder);
+                db._achievementById = new ReadOnlyDictionary<string, QuestDef>(map);
+                db._achievementsByGoal = new IReadOnlyList<QuestDef>[byGoal.Length];
+                for (int i = 0; i < byGoal.Length; i++)
+                    db._achievementsByGoal[i] = byGoal[i] != null ? byGoal[i].AsReadOnly() : (IReadOnlyList<QuestDef>)Array.Empty<QuestDef>();
+            }
+
+            IReadOnlyList<QuestDef> BuildQuests(string table, QuestKind kind, QuestRowDto[] rows, out IReadOnlyDictionary<string, QuestDef> byId)
+            {
+                var list = new List<QuestDef>();
+                foreach (var r in rows)
+                {
+                    if (!Keep(table, r.Id, r.Tier)) continue;
+                    string loc = table + "[" + r.Id + "]";
+                    var goal = Enum<QuestGoal>(r.Goal, loc + ".goal");
+                    int filter = -1;   // any (E054 allows an empty filter only on SUMMON and CLEAR_DUNGEON)
+                    if (r.Filter != null && goal == QuestGoal.SUMMON) filter = (int)Enum<Banner>(r.Filter, loc + ".filter");
+                    else if (r.Filter != null && goal == QuestGoal.CLEAR_DUNGEON) filter = (int)Enum<Dungeon>(r.Filter, loc + ".filter");
+                    list.Add(new QuestDef(r.Id, kind, goal, r.Filter, filter, r.Target, Enum<Currency>(r.RewardCurrency, loc + ".reward_currency"),
+                                          r.RewardAmount, r.SortOrder, Enum<Tier>(r.Tier, loc + ".tier"), r.NameKey, r.Icon));
+                }
+                list.Sort((a, b) => a.SortOrder.CompareTo(b.SortOrder));   // sort_order is unique per table (E046)
+                var map = new Dictionary<string, QuestDef>(StringComparer.Ordinal);
+                foreach (var q in list) map[q.Id] = q;
+                byId = new ReadOnlyDictionary<string, QuestDef>(map);
+                return list.AsReadOnly();
             }
 
             static bool HasStatRow(StatRowDto[] stats, string id)

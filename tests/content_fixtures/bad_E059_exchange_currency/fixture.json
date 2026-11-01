@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "shop_exchange",
+      "ex_ticket_fish,DIAMOND,50,TICKET_FISH_COIN,",
+      "ex_ticket_fish,DIAMOND,50,TICKET_SUMMON_WEAPON,"
+    ]
+  ],
+  "csharp": true
+}

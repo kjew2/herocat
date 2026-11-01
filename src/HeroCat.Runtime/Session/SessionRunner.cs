@@ -346,7 +346,7 @@ namespace HeroCat.Runtime.Session
         {
             if (_bus.IsPublishing) throw new InvalidOperationException("OnClockSynced called from an EventBus handler");
             long jump = syncedServerSeconds - extrapolatedServerSeconds;
-            if (Math.Abs(jump) <= RuntimeConfig.CLOCK_JUMP_WARN_SEC) return;   // TODO(#257): 02 section 11.3 says 5 s when behind
+            if (Math.Abs(jump) <= RuntimeConfig.CLOCK_JUMP_WARN_SEC) return;
             _svc.Analytics?.Track("clock_anomaly", new Dictionary<string, object>
             {
                 ["kind"] = "resync", ["seconds"] = jump, ["negative"] = jump < 0,

@@ -230,6 +230,23 @@ namespace HeroCat.Runtime.Tests
         }
 
         [Test]
+        public void ABackwardsResync_UsesTheSameThresholdAsForwards()   // 02 section 11.3, issue #257
+        {
+            var t = TestSession.Open();
+            t.Play(5);
+            long now = t.Clock.NowServerSeconds;
+            long warn = HeroCat.Runtime.RuntimeConfig.CLOCK_JUMP_WARN_SEC;
+            t.Runner.OnClockSynced(now, now - 6);      // past CLOCK_BACKWARDS_TOLERANCE_S, but no resync event
+            t.Runner.OnClockSynced(now, now - warn);
+            Assert.That(t.Analytics.Count("clock_anomaly"), Is.EqualTo(0));
+            t.Runner.OnClockSynced(now, now - warn - 1);
+            var e = t.Analytics.Events.Single(x => x.Name == "clock_anomaly");
+            Assert.That(e.Props["kind"], Is.EqualTo("resync"));
+            Assert.That(e.Props["negative"], Is.EqualTo(true));
+            Assert.That(e.Props["seconds"], Is.EqualTo(-warn - 1));
+        }
+
+        [Test]
         public void AServerClockObservation_LandsOnTheNextFrame()
         {
             var device = new FakeClock(TestContent.T0);

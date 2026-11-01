@@ -1,0 +1,1 @@
+CONTENT E059 shop_exchange[ex_ticket_fish].grant_currency: grant_currency 'TICKET_SUMMON_WEAPON' is not an allowed currency here (TICKET_FISH_COIN, TICKET_ROCK_CANDY, TICKET_EXP)

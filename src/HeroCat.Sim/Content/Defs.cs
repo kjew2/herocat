@@ -392,7 +392,16 @@ namespace HeroCat.Sim.Content
         {
             Id = id; Effect = effect; EffectPerLevel = effectPerLevel; EffectFloor = effectFloor; MaxLevel = maxLevel;
             Cost0 = cost0; CostG = costG; UnlockAwakenRank = unlockAwakenRank; Tier = tier;
+            _cost = new CurveDef("research_cost_" + id, cost0, costG, 0, maxLevel < 0 ? 1 : maxLevel + 1);
         }
+
+        readonly CurveDef _cost;
+
+        /// <summary>
+        /// Fish Coins for level <paramref name="level"/> -> level + 1: <c>RES_COST0 * RES_COST_G^level</c> (03 section 6), from
+        /// the node's precomputed GeometricTable (repeated multiplication, never Math.Pow; 00 section 3). Unrounded.
+        /// </summary>
+        public double Cost(int level) => _cost.Eval(level < 0 ? 0 : level);
 
         public string Id { get; }
         public ResearchEffect Effect { get; }
@@ -403,5 +412,78 @@ namespace HeroCat.Sim.Content
         public double CostG { get; }
         public int UnlockAwakenRank { get; }
         public Tier Tier { get; }
+    }
+
+    /// <summary>
+    /// A daily or weekly mission row (09 sections 5.21-5.22, 06 sections 5.1-5.3), or an achievement rung (09 section
+    /// 5.23, 06 section 5.4; issue #171). The rows are the only home of quest reward amounts (issues #55, #244);
+    /// <see cref="RewardAmount"/> 0 is a counting row (d_login) that pays nothing.
+    /// </summary>
+    public sealed class QuestDef
+    {
+        internal QuestDef(string id, QuestKind kind, QuestGoal goal, string filter, int filterValue, long target,
+                          Currency rewardCurrency, long rewardAmount, int sortOrder, Tier tier, string nameKey, string icon,
+                          string ladder = null, int rung = 0)
+        {
+            Id = id; Kind = kind; Goal = goal; Filter = filter; FilterValue = filterValue; Target = target;
+            RewardCurrency = rewardCurrency; RewardAmount = rewardAmount; SortOrder = sortOrder; Tier = tier;
+            NameKey = nameKey; Icon = icon; Ladder = ladder; Rung = rung;
+        }
+
+        /// <summary>The achievement ladder id (06 section 5.4); null on a daily or weekly row.</summary>
+        public string Ladder { get; }
+
+        /// <summary>The rung within <see cref="Ladder"/>, 1..N (E060); 0 on a daily or weekly row.</summary>
+        public int Rung { get; }
+
+        public string Id { get; }
+        public QuestKind Kind { get; }
+        public QuestGoal Goal { get; }
+
+        /// <summary>A Banner name for SUMMON, a Dungeon name for CLEAR_DUNGEON; null matches any (w_summons, w_dungeons).</summary>
+        public string Filter { get; }
+
+        /// <summary><see cref="Filter"/> as its enum ordinal, or -1 for any; what the sim compares (no string per event).</summary>
+        internal int FilterValue { get; }
+
+        public long Target { get; }
+        public Currency RewardCurrency { get; }
+        public long RewardAmount { get; }
+        /// <summary>Display and claim-all order: sort_order for missions; for rungs, ladder by first row then rung.</summary>
+        public int SortOrder { get; }
+        public Tier Tier { get; }
+        public string NameKey { get; }
+
+        /// <summary>The row's icon; null on an achievement rung (09's achievements table has no icon column).</summary>
+        public string Icon { get; }
+
+        /// <summary>True when an event with <paramref name="filter"/> (an enum ordinal, -1 for none) counts toward this row.</summary>
+        internal bool Matches(int filter) => FilterValue < 0 || FilterValue == filter;
+    }
+
+    /// <summary>
+    /// A diamond-for-dungeon-ticket exchange offer (09 section 5.37, 06 section 8.4; issue #174): Qty of them costs
+    /// Qty x <see cref="PriceAmount"/> <see cref="PriceCurrency"/> (DIAMOND, E059) and grants Qty x <see cref="GrantAmount"/>
+    /// <see cref="GrantCurrency"/> (a dungeon ticket, E059), at most <see cref="DailyLimit"/> a day key.
+    /// </summary>
+    public sealed class ExchangeOfferDef
+    {
+        internal ExchangeOfferDef(string id, Currency priceCurrency, long priceAmount, Currency grantCurrency, long grantAmount,
+                                  int dailyLimit, int sortOrder, Tier tier, string nameKey, string icon)
+        {
+            Id = id; PriceCurrency = priceCurrency; PriceAmount = priceAmount; GrantCurrency = grantCurrency; GrantAmount = grantAmount;
+            DailyLimit = dailyLimit; SortOrder = sortOrder; Tier = tier; NameKey = nameKey; Icon = icon;
+        }
+
+        public string Id { get; }
+        public Currency PriceCurrency { get; }
+        public long PriceAmount { get; }
+        public Currency GrantCurrency { get; }
+        public long GrantAmount { get; }
+        public int DailyLimit { get; }
+        public int SortOrder { get; }
+        public Tier Tier { get; }
+        public string NameKey { get; }
+        public string Icon { get; }
     }
 }

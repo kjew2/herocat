@@ -245,6 +245,39 @@ namespace HeroCat.Bots.Tests
         }
 
         [Test]
+        public void Awakening_BuysTheRankWhenGateAndCostPass_AndReportsTheSaveWindow()   // 03 section 8.3 step 3 (#157)
+        {
+            var ctx = BotRunner.CreateContext(Content.Mvp, 7);
+            ctx.Runner.Start();
+            ctx.State.Progress.HighestCleared = 49;
+            ctx.State.Wallet.RockCandy = 100;
+            Assert.That(GreedyF2PBot.NextAwakenWithin(ctx, GreedyF2PBot.AwakenSaveWindowStages), Is.True, "gate 50 is 1 stage away");
+            Assert.That(GreedyF2PBot.TryAwaken(ctx), Is.False, "gate not reached");
+            ctx.State.Progress.HighestCleared = 50;
+            Assert.That(GreedyF2PBot.TryAwaken(ctx), Is.True);
+            Assert.That(ctx.State.Hero.AwakenRank, Is.EqualTo(1));
+            Assert.That(ctx.State.Wallet.RockCandy, Is.EqualTo(0));
+            Assert.That(GreedyF2PBot.NextAwakenWithin(ctx, GreedyF2PBot.AwakenSaveWindowStages), Is.False, "gate 150 is 100 stages away");
+            Assert.That(GreedyF2PBot.NextAwakenWithin(ctx, 100), Is.True);
+            Assert.That(GreedyF2PBot.TryAwaken(ctx), Is.False, "no candy");
+        }
+
+        [Test]
+        public void Research_BuysALevelOnlyWhenTheCommandWouldAccept()   // 03 section 8.3 step 4 hook (#158; ranking is #214)
+        {
+            var ctx = BotRunner.CreateContext(Content.Mvp, 7);
+            ctx.Runner.Start();
+            ctx.State.Wallet.FishCoin = 300;
+            Assert.That(GreedyF2PBot.TryResearch(ctx, "res_mp_regen"), Is.False, "locked before Awakening rank 1");
+            ctx.State.Hero.AwakenRank = 1;
+            Assert.That(GreedyF2PBot.TryResearch(ctx, "res_mp_regen"), Is.True);
+            Assert.That(ctx.State.Research.Level["res_mp_regen"], Is.EqualTo(1));
+            Assert.That(ctx.State.Wallet.FishCoin, Is.EqualTo(0));
+            Assert.That(GreedyF2PBot.TryResearch(ctx, "res_mp_regen"), Is.False, "450 coins short");
+            Assert.That(GreedyF2PBot.TryResearch(ctx, "res_nope"), Is.False);
+        }
+
+        [Test]
         public void Diamonds_TenPullPreferredWhenAffordable()
         {
             var ctx = Started();

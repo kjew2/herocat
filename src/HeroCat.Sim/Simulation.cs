@@ -35,6 +35,7 @@ namespace HeroCat.Sim
             Db = db ?? throw new ArgumentNullException(nameof(db));
             _tickHz = db.Constants.TickHz;
             RecomputeNextDayTick();
+            RecomputeAchievements();   // 06 section 5.4: on load and on a new content build (Simulation.Achievements.cs)
             RefreshSnapshot();
         }
 
@@ -198,6 +199,7 @@ namespace HeroCat.Sim
             {
                 Tick = s.Time.Tick,
                 Stage = s.Combat.Stage,
+                SelectedStage = s.Combat.Selected,
                 KillsInStage = s.Combat.KillsInStage,
                 Chapter = k.ChapterOf(s.Combat.Stage < 1 ? 1 : s.Combat.Stage),
                 BossPhase = s.Combat.Boss,
@@ -214,7 +216,7 @@ namespace HeroCat.Sim
                 HeroLevel = s.Hero.Level,
                 AwakenRank = s.Hero.AwakenRank,
                 Mp = s.Combat.Mp,
-                MpMax = k.MpPool0,
+                MpMax = ResearchRules.MpPoolMax(Db, s),
                 TankFish = s.Fish.TankCount,
                 TankCap = FishTankCap,
                 TankRefillTicksLeft = FishTankRefillTicks - s.Fish.TankRefillTick,

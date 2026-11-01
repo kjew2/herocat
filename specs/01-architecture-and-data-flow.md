@@ -168,8 +168,8 @@ Concrete commands (`VerbNoun`, 00 section 5.1) and the events they emit. Full fi
 | `SweepDungeon` | `Dungeon kind` | 06 | `DungeonSwept`, `CurrencyChanged(..., DUNGEON)` |
 | `ClaimQuest` | `string questId` | 06 | `QuestClaimed`, `CurrencyChanged(..., QUEST)` |
 | `ClaimAllQuests` | `QuestKind kind` | 06 | one `QuestClaimed` per quest |
-| `ClaimDailyGift` | none | 06 | `CurrencyChanged(TICKET_SUMMON_WEAPON, DAILY_GIFT)` |
-| `ExchangeItem` | `string offerId, int qty` | 06 | `CurrencyChanged(..., SHOP_EXCHANGE)` |
+| `ClaimDailyGift` | none | 06 | `DailyGiftClaimed`, `CurrencyChanged(TICKET_SUMMON_WEAPON, DAILY_GIFT)` |
+| `ExchangeItem` | `string offerId, int qty` | 06 | `ItemExchanged`, `CurrencyChanged(DIAMOND, SHOP_EXCHANGE)`, `CurrencyChanged(TICKET_*, SHOP_EXCHANGE)` |
 | `Awaken` | none | 03 | `Awakened`, `CurrencyChanged(ROCK_CANDY, AWAKENING)` |
 | `Research` | `string nodeId` | 03 | `ResearchLeveled`, `CurrencyChanged(FISH_COIN, RESEARCH)` |
 | `ApplyInboxGrant` | `InboxGrantPayload grant` | 06/08 | `CurrencyChanged(..., IAP or MAIL)`, `ItemAcquired?` |
@@ -209,7 +209,7 @@ Rules:
 
 ### 2.3 Event buffering
 
-`Simulation` appends to a `List<Event>` with capacity `EVENT_BUFFER_MAX = 4096`. If a single `Advance` exceeds it (a 10 s catch-up at `MAX_TICKS_PER_FRAME` on a high-DPS hero can kill a few hundred mobs), the sim coalesces per tick: repeated `EnemyKilled` and `CurrencyChanged(KILL)` in the same `Advance` call are summed into `EnemyKilledBatch(count, goldTotal, expTotal, fromStage, toStage)` once the buffer passes `EVENT_COALESCE_AT = 1024`. Coalescing is deterministic (it depends only on counts) and the bot harness turns it on permanently to keep memory flat.
+`Simulation` appends to a `List<Event>` with capacity `EVENT_BUFFER_MAX = 4096`. If a single `Advance` exceeds it (a 10 s catch-up at `MAX_TICKS_PER_FRAME` on a high-DPS hero can kill a few hundred mobs), the sim coalesces per tick: repeated `EnemyKilled` and `CurrencyChanged(KILL)` in the same `Advance` call are summed into `EnemyKilledBatch(count, goldTotal, expTotal, fromStage, toStage, killGold, killExp)` once the buffer passes `EVENT_COALESCE_AT = 1024`. `goldTotal`/`expTotal` sum the folded kills (boss kills included, whose `CurrencyChanged(BOSS)` is not folded); `killGold`/`killExp` sum only the folded `CurrencyChanged(KILL)` amounts, so 06 section 13's `currency_changed` stays exact (issue #155). Coalescing is deterministic (it depends only on counts) and the bot harness turns it on permanently to keep memory flat.
 
 `SessionRunner` drains the buffer once per frame after ticking and dispatches to the `EventBus`:
 
@@ -232,7 +232,8 @@ Handlers run in subscription order on the main thread. A handler that wants to i
 public readonly struct Snapshot
 {
     public long   Tick;
-    public int    Stage, KillsInStage, Chapter;
+    public int    Stage, KillsInStage, Chapter;     // Stage is the frontier (02 `Combat.Stage`)
+    public int?   SelectedStage;                     // 02 `Combat.Selected`: the side stage being farmed, null = frontier (issue #254)
     public BossPhase BossPhase; public int BossTicksLeft;   // 02 `Combat.BossPhase` (None/Pending/Walled), issue #7
     public double EnemyHp, EnemyHpMax;
     public double HeroDps;                      // the 00 section 7 formula evaluated this tick
@@ -896,7 +897,7 @@ sequenceDiagram
 1. Rollover is tick-driven (06): the tick whose virtual server time crosses a day key runs `EnsureDay`. `ApplyServerTime` is issued and logged only at sync points (3.1; issue #5); it re-anchors the virtual clock and runs the same key check, which handles a jump. Between syncs the check is a two-integer comparison per tick. `dayKey = floor(now / DAY_SECONDS)`, `weekKey = floor((now - WEEK_EPOCH_OFFSET) / (7 * DAY_SECONDS))` (06 fixes the week start; default Monday 00:00 UTC, `WEEK_EPOCH_OFFSET = 4 * DAY_SECONDS` because 1970-01-01 was a Thursday).
 2. Rollover is forward-only: `if newKey <= Time.DayKey return`. A backwards clock never resets the day (02 section 11.3).
 3. What resets: daily quest progress and claimed flags, dungeon tickets to the daily grant, daily free gift, login diamonds granted once per day key (`LOGIN_DIAMONDS` auto-granted with reason `LOGIN`, guarded by `Time.LoginDayKey`; `d_login` is a counting row that pays nothing, issue #20). What persists: everything else. A boss attempt or dungeon run in progress is not interrupted; the quest it would complete counts toward the new day, and a dungeon run that clears debits its ticket from the new day's allotment (06).
-4. A rollover during `SCR_QUESTS` re-renders the list in place with a toast `NEW_DAY`. A `ClaimQuest` for a stale quest id returns `StaleRequest` and the UI refreshes.
+4. A rollover during `SCR_QUESTS` re-renders the list in place with a toast `NEW_DAY`. A `ClaimQuest` for a quest the rollover just reset runs `EnsureDay` first and is rejected `(NotAvailable, QUEST_NOT_COMPLETED)` (06 sections 1.3 and 5.5), and the UI refreshes.
 5. Skipped days: a 3-day absence rolls once (the day key jumps); daily quests are not retroactively granted. Login diamonds are once per *key change*, not per day skipped.
 
 ### 8.12 Remote config and content hot update
