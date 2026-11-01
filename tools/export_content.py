@@ -1828,7 +1828,8 @@ def gen_dtos():
 
     lines += ["", "    /// <summary>The exporter's rule data ContentDb.Build re-checks (09 section 8.6 loader scope), so the lists cannot drift.</summary>",
               "    public static class ContentRules", "    {"]
-    lines += cs_list("TableOrder", TABLE_ORDER, "SCHEMA order: errors are reported sorted by table in this order (09 acceptance 7).")[1:]
+    sim_tables = [t for t in TABLE_ORDER if t != "localization"]   # strings never reach the Sim (09 section 13)
+    lines += cs_list("TableOrder", sim_tables, "SCHEMA order without localization: errors sort by table in this order (09 acceptance 7).")[1:]
     lines += cs_list("Positive", POSITIVE, "Constants that must be &gt; 0 (09 section 5.1).")
     lines += cs_list("NonNegative", NON_NEGATIVE, "Constants that must be &gt;= 0.")
     lines += cs_list("UnitInterval", UNIT_INTERVAL, "Constants that must be in [0, 1].")

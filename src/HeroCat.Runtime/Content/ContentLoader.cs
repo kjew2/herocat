@@ -88,7 +88,7 @@ namespace HeroCat.Runtime.Content
     /// <summary>
     /// Bundled-content loader (09 sections 2, 6.2, 8.5; issue #127): verifies the manifest (E900-E903), parses every table
     /// into the Sim's plain DTOs with Newtonsoft and hands them to <see cref="ContentDb.Build"/>. The Sim never sees JSON
-    /// (00 contract 1). Localization files are hash-checked here but their text goes to Runtime's Localizer (TODO(#129)).
+    /// (00 contract 1). Localization files are hash-checked here; their text is read by <see cref="Localizer"/>.
     /// TODO(#212): the CDN cache, which keeps the bundled set when a downloaded manifest fails E903.
     /// </summary>
     public static class ContentLoader
@@ -215,7 +215,7 @@ namespace HeroCat.Runtime.Content
             }
         }
 
-        static string Sha256Hex(byte[] data)
+        internal static string Sha256Hex(byte[] data)
         {
             using (var sha = SHA256.Create())
             {

@@ -498,14 +498,14 @@ namespace HeroCat.Sim.Content.Dto
     /// <summary>The exporter's rule data ContentDb.Build re-checks (09 section 8.6 loader scope), so the lists cannot drift.</summary>
     public static class ContentRules
     {
-        /// <summary>SCHEMA order: errors are reported sorted by table in this order (09 acceptance 7).</summary>
+        /// <summary>SCHEMA order without localization: errors sort by table in this order (09 acceptance 7).</summary>
         public static readonly string[] TableOrder =
         {
             "constants", "curves", "stats", "training_curves", "chapters", "enemies", "bosses", "rarities", "weapons",
             "skills", "companions", "runes", "banners", "banner_levels", "dupe_levels", "awakening", "hero_levels",
             "research", "fish_levels", "tank", "quests_daily", "quests_weekly", "achievements", "dungeons", "dungeon_floors",
-            "shop_products", "shop_packages", "inbox_templates", "tutorial_steps", "localization", "progress_targets",
-            "feature_unlocks", "awakening_targets", "plausibility_stage_bound",
+            "shop_products", "shop_packages", "inbox_templates", "tutorial_steps", "progress_targets", "feature_unlocks",
+            "awakening_targets", "plausibility_stage_bound",
         };
 
         /// <summary>Constants that must be &gt; 0 (09 section 5.1).</summary>
