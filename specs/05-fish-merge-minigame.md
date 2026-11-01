@@ -377,14 +377,16 @@ All of these except `FishMissileHit` (03's) are in 00 section 5.1's fish group; 
 
 ## 13. Analytics events
 
+This section owns these events' fields (issue #245); every event also carries 02 section 14.1's envelope (which includes `dayIndex`), and 02 section 14.4 indexes them.
+
 | Event | Fields | When |
 |---|---|---|
 | `fish_release` | `count`, `stockBefore`, `stockAfter`, `boardOccupancyAfter`, `viaButton` (bool) | per `ReleaseFish` or once per `ReleaseMax` with the count |
 | `fish_merge` | `count`, `levelsCreated[]` (histogram of `NewLevel`), `coins`, `discoveries[]`, `viaButton` (bool), `duringBoss` (bool) | per `MergeFish` or once per `MergeAll` |
-| `fish_discovered` | `level`, `coins`, `dayIndex` (days since profile creation) | per `FishDiscovered` |
+| `fish_discovered` | `level`, `coins` | per `FishDiscovered` |
 | `fish_discard` | `level`, `coins`, `boardOccupancyBefore` | per `DiscardFish` |
-| `fish_board_snapshot` | `cells[]`, `fishBoardDpsPct`, `fishMult`, `tankCap`, `tankRefillS`, `fishMaxLvl`, `autoMerge` | at session end (also replaces 02's `fish_session`; issue #11) |
-| `currency_changed` | 02 schema with reasons `FISH_DISCOVERY`, `FISH_MERGE` | per wallet delta |
+| `fish_board_snapshot` | `cells[]`, `fishBoardDpsPct`, `fishMult`, `tankCap`, `tankRefillS`, `fishMaxLvl`, `autoMerge`, and session totals `releases`, `merges`, `discoveries`, `coinsEarned`, `activeSec` | Runtime, at session end (replaces the former `fish_session`; throughput for `tools/fish_model.py`; issue #11) |
+| `currency_changed` | 06 section 13, reasons `FISH_DISCOVERY`, `FISH_MERGE` | per wallet delta |
 
 Questions the dashboard should answer (10): share of sessions with at least one merge, merges per active minute distribution (attentive vs lazy in the wild), day index of first level-10 fish, `fishMult` percentile bands at day 7 versus the tool's x12-x25, discard rate, jam rate.
 

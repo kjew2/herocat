@@ -451,6 +451,8 @@ Dungeon correlation (issue #52): each upload's `Dungeons.RecentRuns` entries fil
 | `certain` `ITEM_WITHOUT_PULL`, `DPS_VS_STAGE`, `REPLAY_DIVERGENCE`, `STREAM_COUNTER_MISMATCH`, `RESEARCH_WITHOUT_COINS`, `DUNGEON_WITHOUT_SEED` | `rollback` | Save of record reverts to the last unflagged `save_history` entry; client gets `409 SAVE_ROLLED_BACK` on next upload and must download; inbox notice with appeal link | `moderation_actions(rollback)` |
 | 2 rollbacks in 30 days, or `DUPLICATE_REQUEST_ID`, or `TAINTED` on a release build, or refund abuse >= 5 | `ban` | `accounts.status = banned`; all routes return `403 ACCOUNT_BANNED` with appeal url; purchases remain refundable through the store | `moderation_actions(ban)` |
 
+Every decision in this matrix also emits the analytics event `plausibility_flag` (`flags[]`, `action`) from the server so the warehouse mirrors it (index: 02 section 14.4).
+
 Never automatic: deleting an account, clawing back items, charging money. A ban is reviewed by a human within 72 h (queue in the admin UI); an unreviewed ban auto-downgrades to `soft_flag` after 72 h.
 
 ### 7.5 Appeal path

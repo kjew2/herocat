@@ -575,7 +575,7 @@ States: Locked before its `feature_unlocks` condition (stage 10, after the first
 | Diamond packs | `Packs[]`: `Total`, `BonusPct`, `FirstPurchaseAvailable`, `LocalizedPrice`, `PerUsd` |
 | Exchange | `Offers[]`: `Price`, `Grant`, `UsedToday / Limit`; `cmd ExchangeItem(offerId, qty)` with a qty stepper |
 
-IAP states: pressed button shows a spinner; the store sheet is native; on success a toast "Purchase complete: check your Inbox" and the Inbox badge increments when the server grant lands (08); on `IAP_PENDING` (deferred approval, 01 code) a card explains; a store-side cancel shows nothing; other failures show `SCR_ERROR` with the presentation of their 01 class (e.g. `RECEIPT_INVALID` is `Rejected`: a modal with the specific message; issue #30). Prices are never shown before the store returns them (skeleton rows meanwhile). `shop_view` analytics on open.
+IAP states: pressed button shows a spinner; the store sheet is native; on success a toast "Purchase complete: check your Inbox" and the Inbox badge increments when the server grant lands (08); on `IAP_PENDING` (deferred approval, 01 code) a card explains; a store-side cancel shows nothing; other failures show `SCR_ERROR` with the presentation of their 01 class (e.g. `RECEIPT_INVALID` is `Rejected`: a modal with the specific message; issue #30). Prices are never shown before the store returns them (skeleton rows meanwhile). `shop_view` analytics on open (fields in 06 section 13).
 
 ### 4.17 `SCR_INBOX` (Modal, MVP)
 

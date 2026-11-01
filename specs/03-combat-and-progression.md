@@ -466,7 +466,7 @@ Two things must change, and this spec recommends both:
 1. **Gentler enemy curve.** `HP_G 1.07 -> 1.04`, `GOLD_G 1.05 -> 1.03`, `EXP_G 1.04 -> 1.025`. The gold gap to HP stays at 0.01 per stage so Training stays a minority layer (the sibling's gap was 0.02 and gave Training 10%; here the gap is smaller because gold has six stats to feed and no enhancement competitor). `HP0`, `GOLD0`, `EXP0`, `BASE_ATK` stay. Stage numbers get larger across the board; chapter and awakening gates still land on sensible days (section 5.3).
 2. **One compounding stage-fed layer**: Hero Level at `HERO_LVL_MULT = 1.02` (section 5.2).
 
-These constants are re-tagged `S` in section 13 and the tool in section 8.6 is their validator. Everything else inherited from the sibling stays as 00 states it.
+These constants are re-tagged `S` in section 14 and the tool in section 8.6 is their validator. Everything else inherited from the sibling stays as 00 states it.
 
 ### 8.2 Worked numbers (scratch model, seed 7, recommended constants)
 
@@ -486,7 +486,7 @@ Reading the table:
 
 - **The 40% cap holds.** Hero Level is the largest layer at 26-28% throughout, by design (section 5.2). Nothing else passes 20%.
 - **The 5% floor is missed by Research (3-5%), Companions on days 1-3, Skills on day 1, and speed on day 30.** Research needs `res_atk` to be roughly twice as strong or half as expensive; Companions are MVP and the bot gets slot 2 only at Awakening rank 1, so days 1-3 are expected to be low; `ATK_SPD` is capped at x2 and its share can only fall as the others grow, so speed is permanently exempt from the floor (issue #36). The MVP fix is chosen from section 9's levers using `tools/power_curve_model.py` output, run first (issue #36); candidates are `res_atk` at 0.08 per level and limit-break repricing (04 section 5), and the lever choice and any new values are pending the tool. The day-1 misses are unlock timing and are not checked (the floor applies on days 7 and 30 only); Research and Companions are M0 floor exemptions that report `WARN` (section 8.5, issue #12).
-- **Pace.** Day 1 ends at stage 240 with the first wall at stage 70 in the first hour and Awakening rank 1 bought in the first session. Days 2-7 average 27 stages a day; days 7-14 average 7; days 14-30 average 4.4. The longest wall inside 30 days is 460 active minutes (about four sessions) starting around day 20. The sibling's criterion of no wall over 48 h wall-clock in the first 14 days holds; the day-20 wall does not, and MVP acceptance 18 now bounds walls on days 14-30 too (issue #36; fix pending the tool, section 11 question 2).
+- **Pace.** Day 1 ends at stage 240 with the first wall at stage 70 in the first hour and Awakening rank 1 bought in the first session. Days 2-7 average 27 stages a day; days 7-14 average 7; days 14-30 average 4.4. The longest wall inside 30 days is 460 active minutes (about four sessions) starting around day 20. The sibling's criterion of no wall over 48 h wall-clock in the first 14 days holds; the day-20 wall does not, and MVP acceptance 18 now bounds walls on days 14-30 too (issue #36; fix pending the tool, section 12 question 2).
 
 ### 8.3 The greedy F2P bot policy
 
@@ -601,7 +601,22 @@ Never change `HP_G` to fix a local problem; it moves every stage at once and eve
 
 Summons are not a client stream (00 section 8 item 2). Draws are consumed even when the outcome is predetermined so the invariants above hold and the server can audit a save (08). These invariants are the validator's and 08's (02 section 3.4, issue #8). Stream seeds are derived in Runtime, not the sim: the first 8 bytes of SHA-256(`RngRoot` ++ UTF-8 stream name), where `RngRoot` is the immutable Guid set at profile creation (00 contract 2, issue #9); 02 persists `(seed, counter)` per name.
 
-## 11. Open questions
+## 11. Analytics events
+
+This section owns these events' fields (issue #245); every event also carries 02 section 14.1's envelope, and 02 section 14.4 indexes them. The sim publishes the event named in the last column and the Runtime sink maps it.
+
+| Event | Fields | When |
+|---|---|---|
+| `stage_cleared` | `stage`, `isBoss`, `firstClear`, `diamondsGranted`, `attempts` (boss stages only), `ticksOnStage`, `dps` | `StageCleared`; feeds the 00 section 6.6 day table |
+| `boss_failed` | `stage`, `bossHpLeftPct`, `attempt` | `BossFailed` (2.7); the first one on a stage is the wall hit (2.8) |
+| `wall_broken` | `stage`, `wallSec`, `activeSecDuringWall`, `attempts`, `layersChangedDuringWall[]` | `StageCleared` of a boss stage that was `Walled` |
+| `training` | `stat`, `levelFrom`, `levelTo`, `goldCost` | `StatTrained`; one per command, not per level (01) |
+| `level_up` | `heroLevel` | `LevelUp` (5.2) |
+| `awakened` | `rank`, `stage`, `rockCandyCost`, `rockCandyAfter` | `Awakened` (5.3) |
+| `research_bought` | `researchId`, `level`, `fishCoinCost` | `ResearchLeveled` (6) |
+| `currency_changed` | 06 section 13, reasons `KILL`, `BOSS`, `FIRST_CLEAR`, `TRAINING`, `RESEARCH`, `AWAKENING` | per wallet delta |
+
+## 12. Open questions
 
 1. **Adopt the recommended curve?** `HP_G 1.04 / GOLD_G 1.03 / EXP_G 1.025 / HERO_LVL_MULT 1.02` and the new day table in section 8.4. Owner: 00. Default: yes; 03, 05, 06 and 10 write their worked numbers against it from now on, and 00 section 6.6 is replaced by the tool's `DAYTABLE` line once `tools/power_curve_model.py` exists.
 2. **Day-20 wall.** Resolved (issue #36): ship M0 as is; for MVP, run `tools/power_curve_model.py` first and pick the levers from section 9 that clear both the day-20 wall and the 5% floor misses (candidates: `res_atk` at 0.08 per level, limit breaks priced so the bot buys one every day from day 10, 04 section 5). The lever choice and values are pending the tool. Acceptance 18 bounds walls on days 14-30; speed is permanently exempt from the floor.
@@ -612,7 +627,7 @@ Summons are not a client stream (00 section 8 item 2). Draws are consumed even w
 7. **Auto boss retry** (`BOSS_AUTO_RETRY_S = 60`) is P1 here; 07 may want it in MVP for the idle-on-desk player. Default: P1.
 8. **Tap Zap and the server plausibility check.** A tapping player's stage-vs-time bound is up to 4x the idle bound during bosses (section 2.5). 08 must use the tapping bound, not the bot's. Default: 08 uses `DPS * (1 + TAP_ZAP_DMG_PCT * TAP_ZAP_MAX_PER_SEC)` as the upper bound.
 
-## 12. Acceptance criteria
+## 13. Acceptance criteria
 
 1. From a fresh profile, the first `EnemySpawned` is at tick `SPAWN_DELAY_TICKS` and the first `HitLanded` at `SPAWN_DELAY_TICKS + ATTACK_INTERVAL_TICKS`; with `ATK_SPD` level 100 the hit interval is exactly 5 ticks for 1,000 consecutive hits.
 2. Ten normal kills on stage 1 advance to stage 2 with one `StageCleared(1, 2, false)`; on stage 10 the 10th enemy spawns as a boss with `Hp == BOSS_HP_MULT * Hp(10)` and `BossTicksLeft == BOSS_TIME_TICKS`.
@@ -637,7 +652,7 @@ Summons are not a client stream (00 section 8 item 2). Draws are consumed even w
 21. Awakening cadence (issue #43): in the 20-seed sweep, every Awakening rank the bot's stage reaches within 30 days is bought no more than `awakening_targets.max_days_after_gate` days after the day its `AWAKEN_STAGES` gate is first reached; the tool and the bot read the same `awakening_targets` rows.
 22. Stage select (issue #35): at frontier stage 57 with `KillsInStage == 4`, `SelectStage(56)` succeeds and `SelectStage(58)` is rejected with `Locked`/`STAGE_NOT_CLEARED`; kills on stage 56 pay `Gold(56) * GoldMult` and `Exp(56) * ExpMult`, spawn no boss and leave `Combat.Stage`, `KillsInStage`, `Combat.Boss` and `Progress.HighestCleared` unchanged; `SelectStage(null)` resumes stage 57 at 4 kills; on a walled boss stage the `Walled` phase survives a select and return, and `AttemptBoss` while a side stage is selected clears `Combat.Selected` and spawns the frontier boss.
 
-## 13. Constants introduced
+## 14. Constants introduced
 
 Every constant this spec adds or changes, for lifting into 00 section 6. Tag `S` means `tools/power_curve_model.py` validates it as described in section 8.6.
 

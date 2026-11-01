@@ -434,16 +434,17 @@ namespace HeroCat.Runtime.Summons
 
 ## 13. Analytics events
 
-All carry `playerId`, `serverTime`, `contentVersion`, `clientVersion`, `sessionId` (02 common envelope).
+This section owns these events' fields (issue #245); every event also carries 02 section 14.1's envelope, and 02 section 14.4 indexes them.
 
 | Event | Fields | When |
 |---|---|---|
-| `summon` | `requestId`, `banner`, `count`, `payment` (DIAMOND/TICKET), `diamondsSpent`, `ticketsSpent`, `pityBefore`, `pityAfter`, `bannerLevelBefore`, `bannerLevelAfter`, `results[]` of `{itemId, rarity, isNew, levelBefore, levelAfter, overflowRockCandy, guaranteeApplied}`, `lplusCount`, `guaranteeApplied` (bool, any slot), `source` (LOCAL/SERVER), `latencyMs` | once per request, after `ApplySummonResult`; one merged schema shared with 02 (issue #13) |
+| `summon` | `requestId`, `banner`, `count`, `payment` (DIAMOND/TICKET), `diamondsSpent`, `ticketsSpent`, `pityBefore`, `pityAfter`, `bannerLevelBefore`, `bannerLevelAfter`, `results[]` of `{itemId, rarity, isNew, levelBefore, levelAfter, overflowRockCandy, guaranteeApplied}`, `lplusCount`, `guaranteeApplied` (bool, any slot), `source` (LOCAL/SERVER), `latencyMs` | once per request, after `ApplySummonResult`; one merged schema (issue #13); per-pull audit detail is also in `summon_log` (08) |
 | `summon_reconciled` | `requestId`, `banner`, `currency`, `localAfter`, `serverAfter` | Remote mode, when the local balance minus `Debits` differs from the server balance (issue #13) |
-| `item_acquired` | `banner`, `itemId`, `rarity`, `isNew`, `copiesAfter`, `levelAfter`, `acquireReason` (SUMMON/MAIL/TUTORIAL) | once per result item (also for non-summon grants) |
+| `summon_pending` / `summon_resolved` | `requestId`, `banner`, `count`; resolved adds `latencySec`, `outcome` (replayed/executed/rejected) | Remote mode: when the pending path is entered, and when it closes (01) |
+| `item_acquired` | `banner`, `itemId`, `rarity`, `isNew`, `copiesAfter`, `levelBefore`, `levelAfter`, `acquireReason` (SUMMON/MAIL/TUTORIAL), `requestId` (summon or inbox claim; null otherwise) | once per result item (also for non-summon grants) |
 | `item_equipped` | `banner`, `slot`, `itemId`, `previousItemId`, `auto` (bool) | on equip |
 | `limit_break` | `banner`, `itemId`, `rarity`, `rankAfter`, `rockCandySpent` | on `ItemLimitBroken` |
-| `currency_changed` | 02 schema with `reason = SUMMON` | per wallet delta |
+| `currency_changed` | 06 section 13, reasons `SUMMON`, `LIMIT_BREAK` | per wallet delta |
 
 Dashboards 10 wants from these: L+ frequency per banner vs the published 3.657% (the odds-drift alarm is 10 section 10's: a sample-size-scaled Wilson interval per banner level, runbook `RB-SUMMON-RATES`; issue #59), guarantee fire rate per banner level, pulls per DAU per banner, first-L+ day distribution, limit-break adoption.
 

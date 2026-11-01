@@ -55,7 +55,7 @@ Grouped by what they protect. Each group names the fixtures it uses; fixtures ar
 | `ContentLoader` | 16 | 09 section 10.3 steps 2-8 with a fake HTTP layer: hash failure keeps the bundle; `min_client_version` gate; atomic rename; hot-apply swaps only the four allowlisted tables (`localization`, `shop_products`, `shop_packages`, `inbox_templates`; issue #54); `ContentDb` identity stable across a config refresh. |
 | Network | 20 | 01 section 5: retry/backoff (`HTTP_RETRY_*`), `requestId` reuse on retry, `(status, code)` classification from 01 section 5.2's single table (a known 08 code decides class, retry and UI action; an unknown code falls back to the status rule; every 409 and 503 code in 08 covered; issue #30), offline-mode allow list. |
 | Local seams | 14 | `LocalSummonService` equals the server algorithm on `Fixtures/Summon/vectors.json`, rolls on cloned banner/collection state and never writes `GameState` (`ApplySummonResult` is the only mutator, issue #13); `LocalConfigService` returns "everything on"; `LocalInboxService` claim idempotent; `LocalDungeonSeedService` (the `IDungeonSeedService` seam, issue #25) draws once from the `dungeon` stream per run. |
-| Analytics | 12 | 02 section 14: envelope fields, batching at `ANALYTICS_BATCH_MAX`, queue cap, `currency_changed` carries `reason`, `playerIdHash` never raw. |
+| Analytics | 12 | 02 section 14: envelope fields, batching at `ANALYTICS_BATCH_MAX`, queue cap, `playerIdHash` never raw; each event's fields match its owner section in the 02 section 14.4 index (`currency_changed` carries `reason`, 06 section 13). |
 
 ### 1.3 `HeroCat.Server.Tests`
 

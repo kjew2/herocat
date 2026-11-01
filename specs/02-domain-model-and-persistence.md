@@ -47,7 +47,6 @@ Engineering constants in `HeroCat.Runtime.SaveConfig` (code, not `ContentDb`; mi
 | `RETENTION_INACTIVE_DAYS` | 730 | S | Inactive accounts purged after 2 years. |
 | `ANALYTICS_BATCH_MAX` | 100 | I | Events per upload batch. |
 | `ANALYTICS_QUEUE_MAX` | 10000 | I | Offline queue cap, oldest dropped. |
-| `CURRENCY_AGG_SEC` | 60 | I | `KILL` currency deltas are aggregated per minute before emission. |
 | `DUNGEON_RECENT_RUNS_MAX` | 30 | S | `Dungeons.RecentRuns` length (issue #52). Covers a day of seeds (`DUNGEON_SEEDS_PER_DAY` 10 x 3 kinds, 08) between uploads. A sim constant (`HeroCat.Sim`), since the run-end code trims the list. |
 
 ## 3. `GameState`
@@ -1264,43 +1263,44 @@ Hard delete, in one transaction per account (issue #32). The three financial tab
 
 Export (`POST /account/export`, job state in `account_exports`): assembles `accounts`, `account_links` (provider only), `devices` (model/os), current save JSON, `purchases`, `inbox_items`, `diamond_ledger`, `ticket_ledger`, `granted_items`, `summon_log`, `moderation_actions` into one JSON file in S3 with a 7-day presigned link mailed to the linked platform email or shown in `SCR_SETTINGS`. Rate limit one per 7 days.
 
-## 14. Analytics event schema (economy events)
+## 14. Analytics envelope, queue and event index
 
-Envelope on every event, added by the sink: `ts` (server seconds), `sessionId` (GUID per process), `playerIdHash` (sha256 of playerId with a per-environment salt; never raw), `deviceId`, `clientVersion`, `contentVersion`, `schemaVersion`, `debugTainted`, `clockAuthoritative`, `dayIndex = (ts - CreatedServerTime) / DAY_SECONDS`, `stage` (current).
+Each feature spec owns its own events' field lists, next to the state and commands they describe (00 decision 96, issue #245). This section owns only the common envelope, naming, the offline queue, the session and save-health events in 14.3, and the index in 14.4. A field list is written once, in its owner's section; every other spec links to it.
 
-Names snake_case; properties camelCase. Economy events go to the backend `events` table (00 section 3) as well as Firebase so they can be joined with `purchases` and `saves`.
+### 14.1 Envelope
+
+Added by the sink to every event: `ts` (server seconds), `sessionId` (GUID per process), `playerIdHash` (sha256 of playerId with a per-environment salt; never raw), `deviceId`, `clientVersion`, `contentVersion`, `schemaVersion`, `debugTainted`, `clockAuthoritative`, `dayIndex = (ts - CreatedServerTime) / DAY_SECONDS`, `stage` (current), `ageGate` (0/1, 08 section 10.1). Owner sections do not repeat these fields.
+
+Names snake_case; properties camelCase. Economy events (those that carry a currency, purchase, summon, dungeon or inbox payload) go to the backend `events` table (00 section 3) as well as Firebase so they can be joined with `purchases` and `saves`. The `events` table and its nightly `currency_daily` materialized view (06 source/sink dashboards) are defined in section 12 (issue #34).
+
+### 14.2 Offline queue
+
+The sink enqueues on the main thread and flushes on the thread pool (01 threading table). Pending events persist to `analytics/queue.ndjson` (8.4; excluded from OS backup) so they survive a kill while offline. Uploads go in batches of at most `ANALYTICS_BATCH_MAX` events; `OnPause` and `OnQuit` flush (01). The queue holds at most `ANALYTICS_QUEUE_MAX` events; past that the oldest are dropped.
+
+### 14.3 Events owned here (session, save health, cloud, clock)
 
 | Event | Properties | Emitted by | Notes |
 |---|---|---|---|
 | `session_start` | `offlineElapsedSec`, `offlineCredited`, `coldBoot` (bool), `bootMs` | Runtime at `SCR_MAIN` shown | |
 | `session_end` | `durationSec`, `stageStart`, `stageEnd`, `kills`, `ticks`, `trigger` (pause/quit/gap) | Runtime on pause/quit | |
-| `currency_changed` | `currency` (code from 00 section 5.2), `delta` (double), `balanceAfter`, `reason` (closed enum, 00 section 8.6), `refId` (item/quest/banner id when applicable) | Sim `Wallet.Apply` -> sink | `KILL` and `BOSS` reasons are summed per currency over `CURRENCY_AGG_SEC` and emitted once; all other reasons per occurrence. |
-| `item_acquired` | `kind` (WEAPON/SKILL/COMPANION/RUNE), `itemId`, `rarity`, `isNew`, `copiesAfter`, `levelBefore`, `levelAfter`, `source` (SUMMON/MAIL/QUEST/ADMIN), `requestId` | Sim on `ItemAcquired` | One per item. |
-| `summon` | `requestId`, `banner`, `count`, `payment` (DIAMOND/TICKET), `diamondsSpent`, `ticketsSpent`, `pityBefore`, `pityAfter`, `bannerLevelBefore`, `bannerLevelAfter`, `results[]` of `{itemId, rarity, isNew, levelBefore, levelAfter, overflowRockCandy, guaranteeApplied}`, `lplusCount`, `guaranteeApplied` (bool, any slot), `source` (LOCAL/SERVER), `latencyMs` | Runtime after `ApplySummonResult` | One per batch, one schema shared with 04 section 13 (issue #13); per-pull audit detail is also in `summon_log`. |
-| `summon_reconciled` | `requestId`, `banner`, `currency`, `localAfter`, `serverAfter` | Runtime | Remote mode only: the local balance minus `Debits` disagreed with the server balance that replaced it (issue #13; 04 section 13). |
-| `summon_pending` / `summon_resolved` | `requestId`, `banner`, `count`; resolved adds `latencySec`, `outcome` (replayed/executed/rejected) | Runtime | |
-| `stage_cleared` | `stage`, `isBoss`, `firstClear`, `diamondsGranted`, `attempts` (for a boss), `ticksOnStage`, `dps` | Sim | Feeds the 00 section 6.6 day table. |
-| `boss_failed` | `stage`, `bossHpLeftPct`, `attempt` | Sim | Wall detection: first `boss_failed` on a stage = `wall_hit`. |
-| `wall_broken` | `stage`, `wallSec`, `activeSecDuringWall`, `attempts`, `layersChangedDuringWall[]` | Sim | |
-| `training` | `stat`, `levelFrom`, `levelTo`, `goldCost` | Sim | |
-| `level_up` | `heroLevel` | Sim | |
-| `awakened` | `rank`, `stage`, `rockCandyCost` | Sim | |
-| `research_bought` | `researchId`, `level`, `fishCoinCost` | Sim | |
-| `fish_release`, `fish_merge`, `fish_discovered`, `fish_discard` | 05 section 13 | Sim | Per command; `ReleaseMax` and `MergeAll` emit one batched event (issue #11). |
-| `fish_board_snapshot` | 05 section 13, plus session totals `releases`, `merges`, `discoveries`, `coinsEarned`, `activeSec` | Runtime, at session end | Replaces the former `fish_session`; throughput for 05's model. |
-| `quest_completed` / `quest_claimed` | `questId`, `kind`, `tier`, `rewards[]` | Sim | |
-| `dungeon_run` | `kind`, `floor`, `outcome` (cleared/failed/swept/abandoned), `ticksUsed`, `rewards[]`, `grantId` | Sim/Runtime | |
-| `offline_catchup` | `elapsedSec`, `creditedSec`, `capped`, `gold`, `exp`, `tankFill`, `stage`, `claimed` (bool, false if cleared by P18) | Runtime | |
-| `daily_rollover` | `dayKey`, `skippedDays`, `loginDiamonds` | Sim | |
-| `iap` | `sku`, `platform`, `priceMinor`, `currency`, `status` (initiated/store_ok/validated/granted/invalid/refunded), `transactionIdHash`, `firstPurchase`, `latencyMs` | Runtime + server | Server emits `validated`/`granted`/`refunded`; client emits the rest. |
-| `inbox_claimed` | `inboxItemId`, `kind`, `grants[]`, `ageSec` | Runtime | |
 | `cloud_save_uploaded` | `saveSeq`, `sizeBytes`, `trigger`, `latencyMs`, `flags[]` | Runtime | |
 | `cloud_conflict` / `cloud_autoresolved` | 9.4 | Runtime | |
 | `save_fallback`, `save_corrupt`, `save_repaired{rule}`, `save_reject{file, reason}`, `save_write_failed{consecutive}`, `migration_applied{from, to}` | | Runtime | Save health. |
-| `clock_anomaly` | `kind` (backwards/gap/resync), `seconds` | Runtime | |
-| `plausibility_flag` | `flags[]`, `action` | Server | Mirrors the server's decision for the warehouse. |
+| `clock_anomaly` | `kind` (backwards/gap/resync), `seconds` | Runtime | Section 11 and 01; also emitted with `kind = backwards` when 06's offline compute sees `ClockWentBackwards`. |
+| `player_deleted` | `playerIdHash` | Server | 13.2 step 5. |
 
-The backend `events` table and its nightly `currency_daily` materialized view (06 source/sink dashboards) are defined in section 12 (issue #34).
+### 14.4 Event index
+
+| Event | Owner |
+|---|---|
+| `stage_cleared`, `boss_failed`, `wall_broken`, `training`, `level_up`, `awakened`, `research_bought` | 03 section 11 |
+| `summon`, `summon_reconciled`, `summon_pending`, `summon_resolved`, `item_acquired`, `item_equipped`, `limit_break` | 04 section 13 |
+| `fish_release`, `fish_merge`, `fish_discovered`, `fish_discard`, `fish_board_snapshot` | 05 section 13 |
+| `currency_changed`, `quest_completed`, `quest_claimed`, `achievement_unlocked`, `dungeon_run`, `offline_claimed`, `day_rollover`, `daily_gift_claimed`, `exchange`, `shop_view`, `iap_initiated`, `iap_completed`, `iap_failed`, `iap_status`, `inbox_claimed` | 06 section 13 |
+| `plausibility_flag` | 08 section 7.4 |
+| `session_start`, `session_end`, `cloud_save_uploaded`, `cloud_conflict`, `cloud_autoresolved`, `save_*`, `migration_applied`, `clock_anomaly`, `player_deleted` | 14.3 |
+
+07 defines no events of its own; screen-driven events (`shop_view`) are owned by the feature spec of the screen. A new event is added to its owner's section and to this index in the same change.
 
 ## Open questions
 
@@ -1331,7 +1331,7 @@ The backend `events` table and its nightly `currency_daily` materialized view (0
 14. `ServerClock`: `Observe` makes `IsAuthoritative` true; a device clock change of +1 day between observations changes `NowServerSeconds` by the monotonic elapsed only; before any observation, `NowServerSeconds >= floor`.
 15. Backwards clock: `dayKey(now) < DayKey` resets nothing and emits `clock_anomaly`; `now < LastTickServerTime` credits zero.
 16. The SQL migration set (section 12; issue #33) applies to an empty PostgreSQL 16 database and creates every table in section 12, including `ticket_ledger`, `granted_items`, `store_notifications`, `account_exports`, `events` and the P1 stubs (issue #53). A GDPR hard delete of a player with purchases leaves no row in any table referencing the old `player_id`, and exactly the player's `purchases`, `summon_log` and `diamond_ledger` rows referencing the tombstone account (`status = 'deleted'`); for a player without purchases, nothing remains. Deleting an `accounts` row that still has financial rows fails (`on delete restrict`; issue #32). Runs in CI and in `check.sh` when Postgres is available.
-17. `currency_changed` events for one simulated hour with `KILL` reason number at most `60 / CURRENCY_AGG_SEC * 60 = 60` per currency, and the sum of their deltas equals the wallet delta.
+17. Moved to 06 acceptance 25 (`currency_changed` is owned by 06 section 13; issue #245).
 18. No `UnityEngine`, `DateTime*.Now`, `Stopwatch` in `HeroCat.Sim`; in `HeroCat.Runtime` only `ServerClock.cs` and `SessionRunner.cs` reference the clock APIs (CI grep).
 19. IL2CPP build: a save produced by the editor loads on an ARM64 device build and vice versa with zero repairs (device-farm test, 10).
 
@@ -1357,7 +1357,6 @@ The backend `events` table and its nightly `currency_daily` materialized view (0
 | `RETENTION_INACTIVE_DAYS` | 730 | S | 13 |
 | `ANALYTICS_BATCH_MAX` | 100 | I | 14 |
 | `ANALYTICS_QUEUE_MAX` | 10000 | I | 14 |
-| `CURRENCY_AGG_SEC` | 60 | I | 14 |
 | `DUNGEON_RECENT_RUNS_MAX` | 30 | S | 2, 3.2 |
 | `progressScore` weights | 100 / 10 / 1 / 5 / 50 / 2000 / 20 | S | 9.1 |
 

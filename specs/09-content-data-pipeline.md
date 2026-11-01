@@ -752,7 +752,7 @@ Localization file shape: `{"table": "localization", "locale": "ja", "rows": [{"k
 
 - `schema_version` is the version of this document's table layout; the loader refuses an unknown value (`E901`). It changes only when exporter and `ContentDb.Build` change together.
 - No timestamp anywhere. `source_revision` is the human provenance.
-- `content_hash` is what the save (02), the analytics envelope (02 section 14), the bot reports (10) and `GET /config` (08) carry.
+- `content_hash` is what the save (02), the analytics envelope (02 section 14.1), the bot reports (10) and `GET /config` (08) carry.
 - `hot_apply` is computed by the exporter: `true` only when the diff against `--previous` touches nothing but the hot-apply allowlist `localization.*`, `shop_products`, `shop_packages`, `inbox_templates` (00 contract 3, 01 section 8.12; issue #54). This bool is the single source; 08's `hotApplyTables` in `GET /config` echoes the exporter's allowlist constant.
 
 ### 6.3 `content_version` ordering and compatibility

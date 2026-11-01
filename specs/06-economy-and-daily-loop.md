@@ -627,24 +627,25 @@ Observations the tool must confirm: (1) gold is always 100% spent, so Training a
 
 ## 13. Analytics events
 
-All carry `playerId`, `serverTime`, `dayKey`, `stage`, `clientVersion`, `contentVersion`. Economy events also carry the `CurrencyReason`.
+This section owns these events' fields (issue #245); every event also carries 02 section 14.1's envelope (`dayIndex`, `stage`; the day key is `ts / DAY_SECONDS`), and 02 section 14.4 indexes them. Other specs' `currency_changed` rows only name their reasons.
 
 | Event | Fields | Emitted on |
 |---|---|---|
-| `currency_changed` | `currency`, `delta`, `balanceAfter`, `reason` | every `Wallet.Apply`; batched per tick for `KILL` (one row per tick with the sum) |
+| `currency_changed` | `currency` (code from 00 section 5.2), `delta` (double), `balanceAfter`, `reason` (`CurrencyReason`, 00 section 8 item 6), `refId` (item, quest, offer or banner id when applicable) | every `Wallet.Apply`; `KILL` and `BOSS` deltas are summed per currency over `CURRENCY_AGG_SEC` and emitted once (`balanceAfter` at emission), every other reason once per apply |
 | `quest_completed` | `questId`, `kind` | `QuestCompleted` |
 | `quest_claimed` | `questId`, `kind`, `rewardCurrency`, `rewardAmount`, `bulk` | `QuestClaimed` |
-| `dungeon_run` | `kind`, `floor`, `outcome` (cleared/failed/swept/abandoned), `ticksUsed`, `rewards[]`, `grantId` (02 section 14) | `DungeonCleared`, `DungeonFailed`, `DungeonSwept`, `DungeonAbandoned` |
-| `offline_claimed` | `elapsedSec`, `creditedSec`, `capped`, `gold`, `exp`, `x2` | `OfflineRewardClaimed` |
-| `day_rollover` | `dayKey`, `secondsSinceLastTick` | `DayRolledOver` |
-| `clock_anomaly` | `deltaSeconds` | `ClockWentBackwards` |
-| `shop_view` | `tab` | `SCR_SHOP` opened |
-| `iap_initiated`, `iap_completed`, `iap_failed` | `sku`, `priceTier`, `firstPurchase`, `errorCode` | 08 purchase flow |
-| `exchange` | `offerId`, `qty`, `diamonds` | `ExchangeItem` |
-| `daily_gift_claimed` | | `ClaimDailyGift` |
-| `inbox_claimed` | `itemId`, `type`, `grants[]`, `bulk` | claim confirmed |
-| `awakened` | `rank`, `rockCandyAfter` | `Awakened` |
 | `achievement_unlocked` | `questId`, `rung` | achievement `QuestCompleted` |
+| `dungeon_run` | `kind`, `floor`, `outcome` (cleared/failed/swept/abandoned), `ticksUsed`, `rewards[]`, `grantId` | `DungeonCleared`, `DungeonFailed`, `DungeonSwept`, `DungeonAbandoned` |
+| `offline_claimed` | `elapsedSec`, `creditedSec`, `capped`, `gold`, `exp`, `tankFill`, `stage`, `x2` | `OfflineRewardClaimed` |
+| `day_rollover` | `dayKey`, `skippedDays`, `secondsSinceLastTick` | `DayRolledOver` |
+| `daily_gift_claimed` | | `ClaimDailyGift` |
+| `exchange` | `offerId`, `qty`, `diamonds` | `ExchangeItem` |
+| `shop_view` | `tab` | `SCR_SHOP` opened (07 section 4.16) |
+| `iap_initiated`, `iap_completed`, `iap_failed` | `sku`, `platform`, `priceTier`, `priceMinor`, `currency` (store ISO code), `firstPurchase`, `latencyMs`, `errorCode` (`iap_failed` only; `RECEIPT_INVALID` for a `400` from validate) | client purchase flow (01, 08 section 5): store sheet opened, store success, store or validate failure |
+| `iap_status` | `sku`, `platform`, `status` (validated/granted/invalid/refunded/chargeback), `transactionIdHash`, `priceMinor`, `currency`, `firstPurchase` | server, on each `purchases` status change (08 sections 5.2 and 5.4) |
+| `inbox_claimed` | `itemId`, `type`, `grants[]`, `bulk`, `ageSec` | claim confirmed |
+
+`awakened` is 03 section 11's; `clock_anomaly` (with `kind = backwards` for `ClockWentBackwards`) is 02 section 14.3's.
 
 ## Open questions
 
@@ -683,7 +684,7 @@ All carry `playerId`, `serverTime`, `dayKey`, `stage`, `clientVersion`, `content
 22. Every `Wallet.Apply` emits exactly one `CurrencyChanged` with a `CurrencyReason`; a debit below zero returns false, leaves the balance unchanged (no clamp) and emits nothing.
 23. Inbox claim with a replayed `requestId` returns the original result and grants nothing twice (08 contract, exercised from the client).
 24. `ClaimAllQuests(DAILY)` with nothing completed is rejected `(NotAvailable, NOTHING_TO_CLAIM)`; with three completed emits three `QuestClaimed` and one `QuestsBulkClaimed`.
-25. Analytics: a scripted day produces one `currency_changed` row per non-`KILL` apply and at most one `KILL` row per tick.
+25. Analytics: a scripted day produces one `currency_changed` row per non-`KILL`/`BOSS` apply; over one simulated hour the `KILL` rows number at most `3600 / CURRENCY_AGG_SEC = 60` per currency and the sum of all rows' deltas equals the wallet delta (moved from 02 acceptance 17).
 26. Day rollover grants exactly `LOGIN_DIAMONDS` once with `CurrencyReason.LOGIN`; `d_login` reaches `CLAIMED` with no `CurrencyChanged` and counts toward `d_bonus_5`/`d_bonus_8`; a second `ApplyServerTime` on the same day key grants nothing (issue #20).
 27. Offline: a 2 h gap stores `TankFill` in `Offline.Pending` and leaves `Fish.TankCount` unchanged until `ClaimOfflineReward`, which adds it bounded by `TankCap`; with `RES_OFFLINE_CAP` at 6 levels a 40 h gap yields `CreditedSec` = 129,600; two stacked gaps of 20 h each at Research 0 yield `CreditedSec` = 86,400, `ElapsedSec` = 144,000, `Capped` = true and the second gap's `Stage` (issue #21).
 28. Replaying the command log (`ApplyServerTime`, `ComputeOfflineCatchup`, `Advance`, commands) from the prior save reproduces the same `Offline.Pending`, day keys and `StateHash` as the live session (issues #5, #6).
@@ -716,3 +717,4 @@ All carry `playerId`, `serverTime`, `dayKey`, `stage`, `clientVersion`, `content
 | `CurrencyReason` | 00 section 8 item 6's list (section 1) | | Resolved, issue #11 |
 | Reject reasons | section 1.3 | | |
 | `QuestGoal` enum, `WEEKLIES_COMPLETED` | section 5.1 | | |
+| `CURRENCY_AGG_SEC` | 60 | I | None; engineering. `KILL`/`BOSS` `currency_changed` aggregation window (section 13; moved from 02, issue #245) |
