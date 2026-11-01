@@ -30,6 +30,17 @@ namespace HeroCat.Runtime.Replay
             (typeof(ComputeOfflineCatchup), "ComputeOfflineCatchup"),
             (typeof(ApplySummonResult), "ApplySummonResult"),
             (typeof(ApplyInboxGrant), "ApplyInboxGrant"),
+            (typeof(ClaimOfflineReward), "ClaimOfflineReward"),
+            // The commands the bots issue (greedy-f2p, 10 section 3.4), pinned so the golden command log does not depend
+            // on CLR type names.
+            (typeof(TrainStat), "TrainStat"),
+            (typeof(ReleaseMax), "ReleaseMax"),
+            (typeof(MergeAll), "MergeAll"),
+            (typeof(MergeFish), "MergeFish"),
+            (typeof(DiscardFish), "DiscardFish"),
+            (typeof(AttemptBoss), "AttemptBoss"),
+            (typeof(AutoEquipBestWeapon), "AutoEquipBestWeapon"),
+            (typeof(AutoEquipBestSkills), "AutoEquipBestSkills"),
         };
 
         static readonly object Lock = new object();
