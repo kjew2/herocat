@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run every check in the repo. Agents and humans run this before calling a change done.
 #
-#   ./check.sh            everything (what CI runs, see specs/09 section 13)
+#   ./check.sh            everything (what CI runs, see specs/10 section 6.2, specs/00 decision 59)
 #   ./check.sh --fast     inner loop: skips golden tests, the bench and the acceptance sweep
 #   ./check.sh --no-dotnet  only the content check (for machines without the .NET SDK)
 #

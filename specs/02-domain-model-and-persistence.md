@@ -47,6 +47,8 @@ Engineering constants in `HeroCat.Runtime.SaveConfig` (code, not `ContentDb`; mi
 | `RETENTION_INACTIVE_DAYS` | 730 | S | Inactive accounts purged after 2 years. |
 | `ANALYTICS_BATCH_MAX` | 100 | I | Events per upload batch. |
 | `ANALYTICS_QUEUE_MAX` | 10000 | I | Offline queue cap, oldest dropped. |
+| `PENDING_STALE_DAYS` | 7 | S | `Pending.Summon` / `Pending.Dungeon` older than this is cleared on load (6.4 P17). |
+| `SAVE_HISTORY_KEEP` | 10 | S | Server-side blobs kept per player for support rollback (9.2, 13). |
 | `DUNGEON_RECENT_RUNS_MAX` | 30 | S | `Dungeons.RecentRuns` length (issue #52). Covers a day of seeds (`DUNGEON_SEEDS_PER_DAY` 10 x 3 kinds, 08) between uploads. A sim constant (`HeroCat.Sim`), since the run-end code trims the list. |
 
 ## 3. `GameState`
@@ -106,7 +108,7 @@ public sealed class TimeState
     public long AnchorTick           { get; set; }        // Tick at that ApplyServerTime
     public long CreatedServerTime    { get; init; }       // unix s
     public int  DayKey               { get; set; } = -1;  // floor(serverSeconds / DAY_SECONDS) at last rollover (06; -1 on a new profile, 06 section 4.2 rule 4); the only daily key: quests, dungeon tickets and shop all reset off it (issue #7)
-    public int  WeekKey              { get; set; } = -1;  // floor((serverSeconds - WEEK_EPOCH_OFFSET) / (7 * DAY_SECONDS)) at last weekly rollover; the only weekly key
+    public int  WeekKey              { get; set; } = -1;  // floor((dayKey - 4) / 7) at last weekly rollover (00 contract 7; equal to floor((serverSeconds - WEEK_EPOCH_OFFSET) / (7 * DAY_SECONDS)) with WEEK_EPOCH_OFFSET = 4 * DAY_SECONDS); the only weekly key
     public int  LoginDayKey          { get; set; } = -1;  // DayKey on which LOGIN_DIAMONDS was last granted (reason LOGIN, issue #20)
 }
 
@@ -362,7 +364,7 @@ public sealed class LifetimeStats
 | `dungeon` | M0 dungeon seed derivation (`IDungeonSeedService` local implementation); MVP unused for new runs | 1 per M0 run | M0 | none |
 | `dungeon_run` | dungeon fight draws (hero crit) while `Combat.Mode == Dungeon` (03, 06; issue #42) | per 03 | MVP | Temporary: not in `Rng`; seed `DungeonRun.Seed`, counter `DungeonRun.StreamCounter`; discarded when the run ends |
 | `loot` | boss Rock Candy drop | 1 per boss kill | M0 | `Counter == Stats.BossKills` (P1 drop tables add their own invariant) |
-| `summon_weapon`, `summon_skill`, `summon_companion` | `LocalSummonService` (M0 and bots) draws on a clone; the `ApplySummonResult` payload carries the counter after the pull and `Apply` sets it (issue #6) | 3 per pull (rarity, item, guarantee reroll; 04) | M0 | `Counter == 3 * Banners[b].TotalPulls` in Local mode; ignored in Remote mode |
+| `summon_weapon`, `summon_skill`, `summon_companion` | `LocalSummonService` (M0 and bots) draws on a clone; the `ApplySummonResult` payload carries the counter after the pull and `Apply` sets it (issue #6) | 3 per pull (L+ check, tier, item index; 04 section 3.2) | M0 | `Counter == 3 * Banners[b].TotalPulls` in Local mode; ignored in Remote mode |
 
 Seed derivation at profile creation: `seed(name) = first 8 bytes of SHA-256(RngRoot.ToByteArray() ++ UTF8(name))` little-endian, computed in `HeroCat.Runtime.ProfileFactory` (the sim has no hashing). `RngRoot` is `PlayerId` when the profile is created with a known player, else a fresh random `Guid`; it never changes, so seeds are independent of account linking and of which device writes the save (issue #9). Generator: SplitMix64 stateless derive, `Derive(seed, k)` (03 owns the code; same as the sibling).
 
@@ -838,7 +840,7 @@ Why last-writer-wins with a progress override and not a merge: the save is a sin
 
 ### 10.1 Device key and HMAC
 
-At first launch `HeroCat.Runtime.DeviceKey.Create()` generates `HMAC_KEY_BYTES` random bytes, stores them in platform secure storage, and registers the public half of the device record with `POST /devices` (08): `{deviceId, keyId, model, os, clientVersion}` plus the key itself over TLS. The server stores the key in `devices.hmac_key` (encrypted at rest). Every save header carries `hmac = HMAC-SHA256(deviceKey, body)`.
+At first launch `HeroCat.Runtime.DeviceKey.Create()` generates `HMAC_KEY_BYTES` random bytes, stores them in platform secure storage, and registers the device with `POST /devices` (08): `{deviceId, keyId, model, os, clientVersion}` plus the key itself over TLS. The key is symmetric: the client and the server hold the same bytes. The server stores it in `devices.hmac_key_enc` (envelope-encrypted, section 12). Every save header carries `hmac = HMAC-SHA256(deviceKey, body)`.
 
 What it is for: the server can tell a save written by this client build on this registered device from a hand-edited blob. What it is not: protection against a rooted device, which can extract the key. The key makes casual editing fail and makes a cheater's edits attributable to a device; the plausibility checks make them detectable.
 
@@ -1309,9 +1311,9 @@ The sink enqueues on the main thread and flushes on the thread pool (01 threadin
 2. **`progressScore` weights** (9.1). Owner: 06. Default: as written; revisit after closed beta conflict telemetry.
 3. **Conflict modal replacing a running sim** (9.4). Alternative: defer applying the other device's save to the next cold boot. Owner: 07. Default: replace immediately with the warning line, because deferring makes the modal's choice feel ignored.
 4. **`OwnedItem.Overflow` semantics** past level 10. Resolved: no field; a copy past 160 converts to Rock Candy at pull time in `ApplySummonResult` and `Copies` stays at 160 (04 section 5.3, issue #7).
-5. **OS backup exclusion** (8.4). Excluding saves means a player who loses a phone before linking an account loses progress unless cloud save (guest accounts upload too). Owner: 08. Default: exclude; guest cloud save covers it.
-6. **`PENDING_STALE_DAYS = 7` vs `IDEMPOTENCY_TTL_H = 24`.** A pending summon older than 24 h cannot be replayed; the server will execute it fresh. Is that acceptable (the player did intend it) or should the client ask first. Owner: 08. Default: execute fresh silently up to 7 days, since the diamonds were never charged.
-7. **Week start** (`WEEK_EPOCH_OFFSET`). Monday 00:00 UTC assumed. Owner: 06.
+5. **OS backup exclusion** (8.4). Resolved: saves are excluded from OS backup; cloud save, guests included, is the backup (00 decision 27).
+6. **`PENDING_STALE_DAYS = 7` vs `IDEMPOTENCY_TTL_H = 24`.** Resolved: a pending summon older than 24 h executes fresh without asking, up to 7 days, since the diamonds were never charged (00 decision 28).
+7. **Week start** (`WEEK_EPOCH_OFFSET`). Resolved: Monday 00:00 UTC, `WeekKey = floor((dayKey - 4) / 7)` (00 contract 7, decision 21).
 8. **Tombstone retention for non-purchasers' `summon_log`.** Resolved: default taken; a non-purchaser's `summon_log` and `diamond_ledger` rows are deleted with the account, a purchaser's are re-pointed to the tombstone account (13.2), unless legal later says otherwise (issue #32).
 
 ## Acceptance criteria

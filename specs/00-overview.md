@@ -4,7 +4,7 @@ Working title: **Whisker Hero**. Genre reference: *Cat Hero: Idle RPG* (Gameduo)
 
 This document is the contract every other spec in `specs/` builds on. If another spec disagrees with a name, number or rule here, this file wins and the other spec is wrong. Fix the other spec.
 
-Sibling project: `/local/home/kjew/idle-rng-game/specs/` is an earlier, narrower prototype of the same genre. Its validated constants and its patterns for RNG streams, save migrations and bot harnesses are reused here where the structure matches. Names differ; the names in this file are the ones to use.
+Sibling project: `idle-rng-game` (a separate repo) is an earlier, narrower prototype of the same genre. Its validated constants and its patterns for RNG streams, save migrations and bot harnesses are reused here where the structure matches. Names differ; the names in this file are the ones to use.
 
 ## 1. Product pitch and design pillars
 
@@ -388,8 +388,8 @@ herocat/
     09-content-data-pipeline.md        table schemas, exporter, validation, ContentDb, localization
     10-testing-release-and-ops.md      test pyramid, bots, CI/CD, store release, KPIs, runbooks, roadmap
   tools/
-    power_curve_model.py               (to write) greedy F2P bot across all layers, prints the day table
-    gacha_model.py                     (copy from idle-rng-game, rename streams) pity distribution; --vectors writes Fixtures/Summon/vectors.json
+    power_curve_model.py               (sibling copy; rewrite to 03 section 8.6) greedy F2P bot across all layers, prints the day table
+    gacha_model.py                     (sibling copy; rename streams, 04 section 14) pity distribution; --vectors writes Fixtures/Summon/vectors.json
     fish_model.py                      (to write) tank/merge throughput, coin and DPS income per active minute
     export_content.py                  sheet exporter, verb CLI (pull/build/check/diff/...), spec 09
 ```
@@ -460,7 +460,7 @@ These were open or contradictory across the writer-produced specs and are now se
 28. **`IDEMPOTENCY_TTL_H = 24`**; a pending summon older than that executes fresh rather than replaying (02, 08).
 29. **Soft-launch markets**: Philippines and Canada, with a New Zealand technical launch (10). Belgium paid-summon handling is deferred to soft launch (08 open question 5).
 
-Known stale spots left for the next pass rather than patched blind: early-day stage numbers in 06 and 07 worked examples (written against day 1 = stage 90); 03 section 10's summon-stream migration sentence (decision 14); 04's banner-level thresholds, pending the tool-computed cadence (decision 70); 05 lacks `MoveFish` (decision 22); the Fish Coin Dungeon reward `50 * f` may overshoot the 25-50% income share band and `tools/fish_model.py` must decide between it and `50 * f^0.7` (06 open question).
+Known stale spots left for the next pass rather than patched blind: early-day stage numbers in 06 and 07 worked examples (written against day 1 = stage 90); 04's banner-level thresholds, pending the tool-computed cadence (decision 70); 05 lacks `MoveFish` (decision 22); the Fish Coin Dungeon reward `50 * f` may overshoot the 25-50% income share band and `tools/fish_model.py` must decide between it and `50 * f^0.7` (06 open question).
 
 ### 12.2 Decisions made after the spec rewrite
 

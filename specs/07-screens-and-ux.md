@@ -317,7 +317,7 @@ Purpose: 40-skill collection, six auto-cast slots, slot order.
 
 | Element | `SkillsVm` field or command |
 |---|---|
-| Slot x6 | `Slots[i]`: `SkillId?`, `IconId`, `Rarity`, `Level`, `CooldownSec`; tap with a selection: `cmd EquipSkill(slot, id)`; tap without: `cmd UnequipSkill(slot)`; drag slot onto slot (MVP): reorder is sent as `cmd EquipSkill` calls for the two slots (04 section 6: the sim only sees `EquipSkill`) |
+| Slot x6 | `Slots[i]`: `SkillId?`, `IconId`, `Rarity`, `Level`, `CooldownSec`; tap with a selection: `cmd EquipSkill(slot, id)`; tap without: `cmd UnequipSkill(slot)`; drag slot onto slot (MVP): reorder is sent as `cmd EquipSkill` calls for the two slots (04 section 7.2: the sim only sees `EquipSkill`) |
 | Auto-equip | `AutoEquipWouldChange` dot; `cmd AutoEquipBestSkills` (04 ordering rule) |
 | Tiles x40 | as weapons plus `DpsPct`, `CooldownTicks`, `CastType` (instant / dot / buff) glyph |
 | Selected panel | `[Equip to slot v]` lists the six slots with current occupant; disabled when unowned |

@@ -22,8 +22,8 @@ Tools (Python 3.9+, stdlib only unless noted):
 
 | Tool | Status | Does |
 |---|---|---|
-| `tools/power_curve_model.py` | to write (spec 03 section 8.6) | Greedy F2P bot across all power layers; prints the day table and layer shares; validates the `S` constants 03 lists |
-| `tools/gacha_model.py` | copy from `idle-rng-game/tools/`, rename streams, add banner levels (spec 04) | Exact pity distribution and consolidated rates per banner level; the oracle for the server summon test |
+| `tools/power_curve_model.py` | in repo as the sibling's model; rewrite to spec 03 section 8.6 | Greedy F2P bot across all power layers; prints the day table and layer shares; validates the `S` constants 03 lists |
+| `tools/gacha_model.py` | in repo (from the sibling); rename streams, add banner levels and `--vectors` (spec 04 section 14) | Exact pity distribution and consolidated rates per banner level; the oracle for the server summon test |
 | `tools/fish_model.py` | to write (spec 05) | Tank and merge throughput, Fish Coin and DPS income per active minute for attentive and lazy policies |
 | `tools/export_content.py` | `build` / `check` / `gen-dtos` landed (spec 09, issue #121); table rules #122, versioning #123, `pull` #132, translator verbs #213 to come | Sheet -> `content_src/*.csv` -> validated `content/*.json` + `manifest.json` + the Sim's generated DTOs; translator CSV round trip; pseudo-localization |
 | `tools/content.py` | to write (spec 09 section 11) | Loader the three models use so they read the same JSON the game ships |
@@ -36,4 +36,4 @@ Milestones (spec 00 section 11):
 - **P1**: runes, research expansion, tower, guild, rewarded ads, events, leaderboards, coupons, auto merge; scheduled by soft-launch data.
 - **P2**: siege, raid, costumes; not scheduled.
 
-Sibling project: `/local/home/kjew/idle-rng-game/` is the earlier, narrower prototype whose validated constants and patterns (RNG streams, save migrations, bot harness, content pipeline) this project reuses under new names.
+Sibling project: `idle-rng-game` (a separate repo) is the earlier, narrower prototype whose validated constants and patterns (RNG streams, save migrations, bot harness, content pipeline) this project reuses under new names.

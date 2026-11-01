@@ -13,7 +13,7 @@ Depends on: 00 (sections 6.6, 8, 11), 01 (`SessionRunner`, network layer, error 
 | Sim unit | `src/HeroCat.Sim.Tests` (NUnit) | ~420 | every PR | < 20 s |
 | Runtime unit | `src/HeroCat.Runtime.Tests` | ~180 | every PR | < 20 s |
 | Server unit + integration | `src/HeroCat.Server.Tests` (Testcontainers Postgres + Redis) | ~160 | every PR touching `src/HeroCat.Server` or Sim | < 3 min |
-| Bot acceptance + golden | `src/HeroCat.Bots.Tests` | 6 ACs + 4 goldens + 28 unit | every PR touching Sim, content or bots | < 4 min |
+| Bot acceptance + golden | `src/HeroCat.Bots.Tests` | 11 ACs (3.6) + 4 goldens + replay (section 2) + 28 unit | every PR touching Sim, content or bots | < 4 min |
 | Client core (engine-free) | `unity/HeroCatClient/Assets/HeroCat.Client/Core/`, compiled into `src/HeroCat.Runtime.Tests` | ~60 (view-model binding, formatting, `ScreenRouter`, modal queue, back mapping, reveal sequencer, board interaction, tap throttle, damage pool, badges, tutorial steps) | every PR | < 20 s |
 | Unity EditMode | `unity/HeroCatClient/Assets/Tests/EditMode` | layout, rect and prefab checks only (07 ACs marked Unity-only, issue #23) | every PR touching `unity/`, once the Unity CI job exists | < 2 min |
 | Unity PlayMode smoke | `unity/HeroCatClient/Assets/Tests/PlayMode` | 4 | nightly and release builds | < 6 min |
@@ -274,15 +274,15 @@ Targets are read from `ContentDb.ProgressTargets` (09 section 5.31) and `Content
 | AC10 | Wall time of the whole sweep under `timeBudgetSeconds` | section 3.3 |
 | AC11 | For each seed: every Awakening rank whose `AWAKEN_STAGES` gate is reached by the last day is bought within `awakening_targets.max_days_after_gate` days of the day the gate is first reached (issue #43) | 03, 06 AC18, `awakening_targets` (09) |
 
-The CLI prints one `PASS`/`FAIL` line per check with the measured numbers and exits 1 on any failure. `content.yml` runs it (through `./check.sh --content`) on every PR that touches `content/`, `content_src/`, `tools/`, `src/HeroCat.Sim` or `src/HeroCat.Bots`; a failing AC blocks merge. The example output format is the sibling's (`PASS AC1 day 7: median stage 371 in 304..456 (target 380)`), which reviewers already read.
+The CLI prints one `PASS`/`FAIL` line per check with the measured numbers and exits 1 on any failure. `content.yml` runs it (through `./check.sh --content`) on every PR that touches `content/`, `content_src/`, `tools/`, `src/HeroCat.Sim` or `src/HeroCat.Bots`; a failing AC blocks merge. The example output format is the sibling's (`PASS AC1 day 7: median stage 427 in 344..516 (target 430)`), which reviewers already read.
 
 Acceptance table (printed by `acceptance --table`; the columns the brief asks for), illustrative shape only:
 
 ```
 # herocat acceptance table   bot=greedy-f2p seeds=1-20 days=30 content=2026.11.03/3f9c1a2e
 day  stageMed  goldEarnedMed  diaEarnedMed  diaSpentMed  pulls  highestRarity  fishLvlMed  longestWallH
-  1        88        1.2e+04         1540         1500     16        EPIC             5          0.3
-  7       371        9.8e+06         4180         4000     46        LEGENDARY        8          6.5
+  1       238        1.2e+04         1540         1500     16        EPIC             5          0.3
+  7       427        9.8e+06         4180         4000     46        LEGENDARY        8          6.5
  30       548        3.1e+12        13900        13800    139        MYTHIC          11         31.0
 ```
 

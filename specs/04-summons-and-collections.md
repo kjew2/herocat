@@ -2,7 +2,7 @@
 
 This spec owns the four `Banner`s, the exact pull algorithm and its pity rules, banner levels, the dupe economy including limit breaks, and the three collectible kinds the banners feed: `Weapon`, `Skill`, `Companion` (and the P1 `Rune` outline). It fixes the data each collectible carries, how the tick loop in 03 consumes it, what the collection screens need from the model, the `ISummonService` seam between the M0 local roll and the MVP server roll, the analytics events, and how `tools/gacha_model.py` is extended for banner levels. The server-side implementation of the same algorithm (audit log, idempotency, published rate endpoint) is 08's.
 
-Tiers covered: M0 (`WEAPON` and `SKILL` banners with a local roll, dupes to level 10, weapon passive, 6 skill slots), MVP (`COMPANION` banner, banner levels, limit breaks, server roll, analytics), P1 (`RUNE` banner, manual skill cast, rate-up and event banners).
+Tiers covered: M0 (`WEAPON` and `SKILL` banners with a local roll, dupes to level 10, weapon passive, 6 skill slots, and the banner-level mechanic, since the one pull algorithm evaluates banner level per pull, 00 decision 56), MVP (`COMPANION` banner, banner levels as a tuned feature (00 section 2.1, decision 70), limit breaks, server roll, analytics), P1 (`RUNE` banner, manual skill cast, rate-up and event banners).
 
 Depends on: 00 (section 6.3 constants, section 5 names), 02 (`GameState` collection fields), 03 (tick loop, `MarkDpsDirty`, Rock Candy), 06 (diamond and ticket income, Rock Candy income), 08 (server summon endpoint).
 
@@ -214,7 +214,7 @@ A limit break does not require level 10 first; it is a flat +1 effective level, 
 
 Content home (issue #37): `LIMIT_BREAK_RANKS` is a scalar in 09's `constants`; `LIMIT_BREAK_COST[r]` is the per-rarity column `rarities.limit_break_cost` and `DUPE_OVERFLOW_ROCK_CANDY[r]` (section 5.3) is `rarities.dupe_overflow_rock_candy`. All three are in 09's `REQUIRED_CONSTANTS`.
 
-Limit breaks apply to weapons, skills and companions (and runes in P1). Companions have no 00 mention as a Rock Candy sink; this spec includes them for symmetry and lists it as an open question.
+Limit breaks apply to weapons, skills and companions (and runes in P1); 00 decision 13 names companions as a Rock Candy sink.
 
 ### 5.3 Overflow past 160 copies
 
@@ -466,7 +466,7 @@ It must print, in this order: the pity block (section 3.1 numbers), the soft ram
 
 ## 15. Open questions
 
-1. **Limit breaks on companions.** 00 section 5.2 names weapon and skill limit breaks only. Default: include companions; drop if 00 says the sink is weapons and skills only.
+1. **Limit breaks on companions.** Resolved: companions are included (00 decision 13).
 2. **Tickets before diamonds** on the diamond button. Default: yes, with the button label showing which; 07 may prefer two buttons.
 3. **Rate-up banners share pity with the parent** (industry norm for standard pools, not for limited banners). Owner: 06/08 for P1 events. Default: shared.
 4. **Auto-equip after summon** for skills and companions too, or weapons only? Default: weapons only; skills and companions show a "better skill available" badge, since slot order is a player choice.
@@ -484,7 +484,7 @@ It must print, in this order: the pity block (section 3.1 numbers), the soft ram
 5. Levels: copies 1, 3, 6, 10, 16, 25, 40, 64, 100, 160 give levels 1..10; `LevelMult` at level 10 is 2.8 and at level 10 with 5 limit breaks is 3.8.
 6. `LimitBreak` is rejected for an unowned item, at 5 ranks, and with insufficient Rock Candy (nothing charged); otherwise charges `LIMIT_BREAK_COST[r] * (rank + 1)` with reason `LIMIT_BREAK` and raises the item's contribution by exactly 20% of its level-1 value.
 7. Copy 161 of any item adds `DUPE_OVERFLOW_ROCK_CANDY[r]` Rock Candy with reason `SUMMON` and leaves `Copies == 160`.
-8. `weaponMult` for a fixture (equipped L at level 3, owned 10 C at level 2, 4 R at level 1) equals `1 + (300 * 1.4 + 10 * 1 * 1.2 + 4 * 2 * 1.0) / 100 = 5.4` within 1e-12; unequipping is impossible (there is no unequip command for weapons) and `AutoEquipBestWeapon` after pulling an M switches the equipped weapon and publishes `ItemEquipped(..., auto: true)`.
+8. `weaponMult` for a fixture (equipped L at level 3, owned 10 C at level 2, 4 R at level 1) equals `1 + (300 * 1.4 + 8 * 1.4 + 10 * 1 * 1.2 + 4 * 2 * 1.0) / 100 = 5.512` within 1e-12 (the passive sum includes the equipped L, section 6.1); unequipping is impossible (there is no unequip command for weapons) and `AutoEquipBestWeapon` after pulling an M switches the equipped weapon and publishes `ItemEquipped(..., auto: true)`.
 9. A level-1 Epic `INSTANT` skill with cooldown 100 deals exactly `4.0 * SkillUnit` per cast (`== 4.0 * HeroHit` at speed 1, no crit; issue #10), fires on the first `Fighting` tick after its cooldown expires, and over a 600-tick fight with one enemy deals `40%` of hero damage within 1% (hero at speed 1, no crit).
 10. Two `BUFF` effects active at once apply only the stronger; the weaker's expiry does not end the stronger.
 11. With `MP_REGEN0 = 2`, four `DAMAGE` companions at cost 10 / cooldown 100 fire 12 +/- 1 abilities per minute; replacing one with an E `MP_REGEN` companion (restores 16 per cast) raises the other three to 15.6 +/- 1 abilities per minute in total (supply 120 + 36 MP a minute at 10 MP per cast; issue #39), matching `mpSufficiency` from section 8.2 within 1%.
