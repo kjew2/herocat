@@ -1,0 +1,1212 @@
+## 02 - Domain Model and Persistence
+
+Defines every field the game remembers: the `GameState` tree the sim owns, the account-level `Profile` it does not, the save schema v1 and its serializer, forward-only migrations with fixtures, the local save store, the cloud save client and its conflict rules, the integrity envelope, the clock seam, the server-side relational schema, data retention and deletion, and the analytics schema for economy events. Feature specs (03-06) say what each field means in play; this spec says its type, its default, its invariants, and where it lives.
+
+Tiers covered: M0 (GameState, local save, FakeClock, local-only Profile), MVP (cloud save, ServerClock, integrity envelope, server schema, GDPR, analytics), P1 (guild and leaderboard tables as stubs).
+
+Depends on: 00 (sections 4, 5, 6, 8), 01 (SessionRunner, flows, command payloads), 03 (Stat and Training semantics), 04 (collection semantics), 05 (board semantics), 06 (quests, dungeons, offline), 08 (API contracts the save client calls).
+
+## 1. Placement and design goals
+
+| Thing | Assembly | Why |
+|---|---|---|
+| `GameState` and every record under it, `RngStreamState`, `Catchup.Compute` | `Whisker.Sim` | The sim reads and writes them; pure data, no serializer attributes. |
+| `Profile`, `SaveSerializer`, `SaveMigrations`, `SaveValidator`, `LocalSaveStore`, `CloudSaveClient`, `ServerClock`, `FakeClock`, `IntegrityEnvelope` | `Whisker.Runtime` | Need Newtonsoft, IO, HTTP, clocks. |
+| Relational schema, retention jobs, GDPR flow | `Whisker.Server` | |
+
+Goals, in priority order:
+
+1. A save survives a kill, crash or power loss at any instant; the player loses at most `AUTOSAVE_INTERVAL_SEC` (01) of progress and never a profile.
+2. Loading a save changes no future RNG result: every stream is `(seed, counter)` in the save and draw `k` is a pure function of both.
+3. A save written by any shipped build loads in every later build through forward-only migrations with a fixture per version.
+4. The server copy is the save of record (00 section 4); the device is a cache. Conflicts resolve by rule, with the player asked only when the rule would discard visible progress.
+5. Server time is the only trusted time. A backwards clock grants nothing twice.
+6. Anything a cheater can gain by editing the save is bounded and detectable by the plausibility checks in 08; money-adjacent values (diamonds from IAP, summon results) are server-authoritative so editing them is pointless.
+
+## 2. Constants
+
+Engineering constants in `Whisker.Runtime.SaveConfig` (code, not `ContentDb`; migrations must not depend on content). All are `S` unless marked `I` (same role in the sibling project). None is a balance number; 10's fault-injection and perf tests are the check.
+
+| Name | Value | Tag | Meaning |
+|---|---|---|---|
+| `SAVE_SCHEMA_VERSION` | 1 | I | Current JSON schema version. |
+| `SAVE_KEEP_COUNT` | 2 | I | `slot0.sav` and `slot0.prev.sav`. |
+| `SAVE_REPAIR_MAX` | 20 | I | Repairs on one load above which the file is treated as corrupt. |
+| `CORRUPT_KEEP_DAYS` | 7 | I | Quarantined files older than this are deleted at startup. |
+| `CONFLICT_KEEP_DAYS` | 30 | S | Rejected conflict candidates kept as `slot0.conflict-*.sav`. |
+| `CLOUD_UPLOAD_MIN_SEC` | 60 | I | Upload coalescing window (01 section 8.10). |
+| `CLOUD_FETCH_TIMEOUT_S` | 5 | I | Boot-time cloud meta fetch. |
+| `CONFLICT_PROGRESS_MARGIN` | 0.10 | S | Loser must have `progressScore` more than 10% above the winner to trigger the conflict modal. |
+| `CLOCK_RESYNC_SEC` | 900 | I | Foreground resync cadence when no API call has happened. |
+| `CLOCK_JUMP_WARN_SEC` | 300 | I | Resync delta above which `clock_anomaly` is emitted. |
+| `CLOCK_MAX_SKEW_ACCEPT_S` | 120 | S | Server rejects a save whose `lastSavedServerTime` is more than this ahead of server now. |
+| `HMAC_KEY_BYTES` | 32 | S | Device key length. |
+| `SAVE_BLOB_MAX_BYTES` | 262144 | S | 256 KiB; server rejects larger uploads (a legitimate save is 20-60 KB). |
+| `CMDLOG_UPLOAD_MAX_BYTES` | 1 MiB | S | Matches `CMDLOG_MAX_BYTES` (01). |
+| `GDPR_DELETE_GRACE_DAYS` | 14 | S | Account recoverable for this long after a delete request. |
+| `RETENTION_INACTIVE_DAYS` | 730 | S | Inactive accounts purged after 2 years. |
+| `ANALYTICS_BATCH_MAX` | 100 | I | Events per upload batch. |
+| `ANALYTICS_QUEUE_MAX` | 10000 | I | Offline queue cap, oldest dropped. |
+| `CURRENCY_AGG_SEC` | 60 | I | `KILL` currency deltas are aggregated per minute before emission. |
+
+## 3. `GameState`
+
+### 3.1 Tree
+
+Records are `sealed`, mutable via `set` where the sim writes them, `init` where only profile creation does. Collections default to empty. Every `double` is finite and non-negative by invariant; every id is a content id string (09). Comments give unit, range and owner spec.
+
+```csharp
+namespace Whisker.Sim.State;
+
+public sealed class GameState
+{
+    public int    SchemaVersion   { get; set; } = SaveSchema.Current;   // SAVE_SCHEMA_VERSION; the only version field in the body
+    public string ContentVersion  { get; set; } = "";                   // ContentDb.Version active at last write (09)
+    public Guid   PlayerId        { get; init; }                        // server playerId; Guid.Empty for an unlinked local guest (01 open question 7)
+    public Guid   DeviceId        { get; set; }                         // install id of the device that wrote this save; cloud-save lineage (9.3)
+    public long   SaveSeq         { get; set; }                         // +1 per write; same-device tiebreak
+
+    public TimeState        Time        { get; init; } = new();
+    public HeroState        Hero        { get; init; } = new();
+    public TrainingState    Training    { get; init; } = new();
+    public Wallet           Wallet      { get; init; } = new();
+    public CollectionState  Weapons     { get; init; } = new();
+    public CollectionState  Skills      { get; init; } = new();
+    public CollectionState  Companions  { get; init; } = new();
+    public CollectionState  Runes       { get; init; } = new();          // P1; empty in MVP, present so no schema bump
+    public LoadoutState     Loadout     { get; init; } = new();
+    public FishBoardState   Fish        { get; init; } = new();
+    public Dictionary<Banner, BannerState> Banners { get; init; } = new();   // one entry per Banner the player has ever seen
+    public CombatState      Combat      { get; init; } = new();
+    public ProgressState    Progress    { get; init; } = new();
+    public QuestState       Quests      { get; init; } = new();
+    public DungeonState     Dungeons    { get; init; } = new();
+    public ResearchState    Research    { get; init; } = new();
+    public InboxState       Inbox       { get; init; } = new();
+    public OfflineState     Offline     { get; init; } = new();
+    public PendingState     Pending     { get; init; } = new();
+    public TutorialState    Tutorial    { get; init; } = new();
+    public Dictionary<string, RngStreamState> Rng { get; init; } = new();   // key: stream name (3.4)
+    public LifetimeStats    Stats       { get; init; } = new();
+    public bool             DebugTainted { get; set; }                  // any debug command sets it; excluded from tuning data
+}
+
+public sealed class TimeState
+{
+    public long Tick                 { get; set; }        // sim ticks since profile creation; monotone
+    public long LastSavedServerTime  { get; set; }        // unix s; stamped by SaveStamp on every write
+    public long LastTickServerTime   { get; set; }        // unix s; catch-up anchor; stamped when ticking stops and when Catchup.Compute runs (01 section 8.7)
+    public long CreatedServerTime    { get; init; }       // unix s
+    public int  DayKey               { get; set; }        // floor(serverSeconds / DAY_SECONDS) at last rollover (06)
+    public int  WeekKey              { get; set; }        // floor((serverSeconds - WEEK_EPOCH_OFFSET) / (7 * DAY_SECONDS)) at last weekly rollover
+    public int  LoginDayKey          { get; set; }        // DayKey on which LOGIN_DIAMONDS was last granted
+}
+
+public sealed class HeroState
+{
+    public int    Level        { get; set; } = 1;         // >= 1; 03 HERO_LVL_EXP curve
+    public double Exp          { get; set; }              // HERO_EXP toward next level; reset on level up
+    public int    AwakenRank   { get; set; }              // 0..AWAKEN_STAGES.Length; 03
+}
+
+public sealed class TrainingState
+{
+    // Index by Stat enum ordinal: ATK, HP, DEF, CRIT_RATE, CRIT_DMG, ATK_SPD, GOLD_GAIN, EXP_GAIN. Length always 8.
+    public int[] Level { get; set; } = new int[8];        // each 0..TRAIN_MAX_LVL[stat] (03)
+}
+
+public sealed class Wallet
+{
+    public double Gold          { get; set; }             // GOLD; double because it passes 2^53 by stage ~700
+    public long   Diamond       { get; set; }             // DIAMOND; long, server-reconciled in MVP
+    public double FishCoin      { get; set; }             // FISH_COIN
+    public long   RockCandy     { get; set; }             // ROCK_CANDY
+    public double HeroExp       => 0;                     // HERO_EXP is not a balance; it is Hero.Exp. Present in CurrencyDelta only.
+    public int[]  DungeonTicket { get; set; } = new int[3];      // index by Dungeon ordinal: FISH_COIN, ROCK_CANDY, EXP
+    public int[]  SummonTicket  { get; set; } = new int[4];      // index by Banner ordinal: WEAPON, SKILL, COMPANION, RUNE
+    public long   GuildCoin     { get; set; }             // P1
+    // Every change goes through Wallet.Apply(CurrencyDelta, CurrencyReason) (00 section 8.6), which clamps at 0, rejects NaN/inf, and emits CurrencyChanged.
+}
+
+public sealed class CollectionState
+{
+    // key: content id (e.g. "wpn_017"). Absent key == not owned.
+    public Dictionary<string, OwnedItem> Items { get; init; } = new();
+    public HashSet<string> NewBadges { get; init; } = new();   // ids acquired since the collection screen was last opened (07); cleared by the view-model via MarkSeen command
+}
+
+public sealed class OwnedItem
+{
+    public int Copies { get; set; }        // total copies ever received, >= 1
+    public int Level  { get; set; }        // derived from Copies via DUPE_LVL_CUM but persisted so a table change does not silently re-level (04)
+    public int Overflow { get; set; }      // copies beyond DUPE_LVL_CUM[10]; 04 decides shards vs Rock Candy conversion
+    public long FirstAcquiredServerTime { get; init; }
+}
+
+public sealed class LoadoutState
+{
+    public string?  Weapon     { get; set; }                          // equipped weapon id or null
+    public string?[] Skills    { get; set; } = new string?[6];        // SKILL_SLOTS; null = empty slot; order = auto-cast priority (04)
+    public string?[] Companions { get; set; } = new string?[4];       // COMPANION_SLOTS
+    public string?[] Runes     { get; set; } = new string?[6];        // RUNE_SLOTS, P1
+}
+
+public sealed class FishBoardState
+{
+    public int[]  Cells          { get; set; } = new int[20];     // FISH_BOARD_W * FISH_BOARD_H, row-major; 0 = empty, n >= 1 = fish level
+    public int    TankCount      { get; set; }                   // fish in the Magic Tank, 0..TankCap
+    public int    TankRefillTick { get; set; }                   // ticks accumulated toward the next tank fish; 0..refillTicks-1
+    public HashSet<int> DiscoveredLevels { get; init; } = new(); // levels ever created; drives FISH_DISCOVERY_COINS
+    public int    HighestLevel   { get; set; }                   // max of DiscoveredLevels, cached for the HUD
+    public long   TotalMerges    { get; set; }
+    public bool   AutoMergeEnabled { get; set; }                 // P1
+}
+
+public sealed class BannerState
+{
+    public int  Pity          { get; set; }      // pulls since last L+, 0..PITY_HARD-1. MVP: mirror of the server value, overwritten on every result.
+    public int  Level         { get; set; } = 1; // banner level (04)
+    public int  Exp           { get; set; }      // banner EXP toward next level
+    public long TotalPulls    { get; set; }
+    public int  TenPullsSinceEplus { get; set; } // informational; the 10-pull guarantee is per batch, not cumulative
+}
+
+public enum CombatMode { Stage, Dungeon }
+
+public sealed class CombatState
+{
+    public CombatMode Mode          { get; set; } = CombatMode.Stage;
+    public int    Stage             { get; set; } = 1;     // current farming stage, >= 1, <= STAGE_CAP
+    public int    KillsInStage      { get; set; }          // 0..KILLS_PER_STAGE-1
+    public bool   BossActive        { get; set; }
+    public int    BossTicksLeft     { get; set; }          // 0..BOSS_TIME_TICKS
+    public double Mp                { get; set; }          // shared MP pool (04); regen per tick from Research
+    public int    TapsThisSecond    { get; set; }          // TAP_ZAP_MAX_PER_SEC guard; reset each 10 ticks
+    public int[]  SkillCooldowns    { get; set; } = new int[6];   // ticks left per slot
+    public DungeonRunState? DungeonRun { get; set; }       // non-null only while Mode == Dungeon
+    // Not persisted: current enemy HP, spawn delay, queued missiles/taps. On load the player faces a fresh mob (3.3).
+}
+
+public sealed class DungeonRunState
+{
+    public Dungeon Kind        { get; init; }
+    public int     Floor       { get; init; }
+    public ulong   Seed        { get; init; }              // server-issued (MVP) or from the `dungeon` stream (M0)
+    public string  GrantId     { get; init; } = "";        // server grant id (MVP) for plausibility correlation; "" in M0
+    public int     EnemyIndex  { get; set; }               // position in the floor's enemy sequence
+    public int     TicksLeft   { get; set; }
+}
+
+public sealed class ProgressState
+{
+    public int  HighestCleared     { get; set; }           // highest stage whose KILLS_PER_STAGE (or boss) was completed
+    public int  HighestFirstClearBoss { get; set; }        // highest boss stage that paid first-clear diamonds; first-clear set = multiples of BOSS_EVERY <= this
+    public HashSet<int> FirstClearExtra { get; init; } = new();   // boss stages cleared out of order via JumpToStage (MVP SCR_STAGE_SELECT); normally empty
+    public int  StageCapReached    { get; set; }           // 0 or the tick at which STAGE_CAP was hit
+}
+
+public sealed class QuestState
+{
+    public int DayKey  { get; set; }                                     // day the Daily map belongs to
+    public int WeekKey { get; set; }
+    public Dictionary<string, QuestProgress> Daily       { get; init; } = new();   // key: quest id from quests_daily (09); rebuilt on rollover
+    public Dictionary<string, QuestProgress> Weekly      { get; init; } = new();
+    public Dictionary<string, QuestProgress> Achievement { get; init; } = new();   // key: achievement id; never reset
+    public bool DailyAllBonusClaimed  { get; set; }
+    public bool WeeklyAllBonusClaimed { get; set; }
+}
+
+public sealed class QuestProgress
+{
+    public long Progress { get; set; }     // counter toward target; clamped at target
+    public int  Tier     { get; set; }     // achievements: ladder tier reached (0-based); daily/weekly: always 0
+    public bool Claimed  { get; set; }     // achievements: whether the current Tier's reward is claimed
+}
+
+public sealed class DungeonState
+{
+    public int   TicketDayKey  { get; set; }                 // day the daily ticket grant was last applied
+    public int[] BestFloor     { get; set; } = new int[3];   // per Dungeon ordinal; 0 = never cleared
+    public int[] EntriesToday  { get; set; } = new int[3];   // informational for the HUD; tickets are the real limiter
+    public int[] SweepsToday   { get; set; } = new int[3];
+}
+
+public sealed class ResearchState
+{
+    public Dictionary<string, int> Level { get; init; } = new();   // key: research id (09), value: level >= 1; absent = 0
+}
+
+public sealed class InboxState
+{
+    public HashSet<string> ClaimedIds { get; init; } = new();   // server inbox item ids claimed by this save; the server is authoritative, this prevents a double-apply on replay
+    public long LastFetchedServerTime { get; set; }
+}
+
+public sealed class OfflineState
+{
+    public CatchupResult? Pending { get; set; }   // non-null between Catchup.Compute and ClaimOfflineReward (01 section 8.7)
+    public long LifetimeOfflineSecCredited { get; set; }
+}
+
+public sealed record CatchupResult(long ElapsedSec, long CreditedSec, bool Capped, double Gold, double Exp, int TankFill, int Stage, double KillTimeSec, long ComputedServerTime);
+
+public sealed class PendingState
+{
+    public PendingSummon?        Summon   { get; set; }                  // one in flight (01 section 8.5)
+    public PendingDungeonSeed?   Dungeon  { get; set; }
+    public List<PendingReceipt>  Receipts { get; init; } = new();        // zero or more (01 section 8.9)
+}
+
+public sealed record PendingSummon(string RequestId, Banner Banner, int Count, string Payment, long RequestedServerTime);
+public sealed record PendingDungeonSeed(string RequestId, Dungeon Kind, int Floor, long RequestedServerTime);
+public sealed record PendingReceipt(string RequestId, string Platform, string Sku, string TransactionId, string Payload, long RequestedServerTime);
+
+public sealed class TutorialState
+{
+    public int  Step      { get; set; }        // 0..TUTORIAL_DONE (07)
+    public bool Skipped   { get; set; }
+    public bool TutorialDiamondsGranted { get; set; }
+}
+
+public sealed class RngStreamState
+{
+    public string Seed    { get; init; } = "";   // exactly 16 lowercase hex chars (a ulong); string so JSON tooling never rounds it
+    public long   Counter { get; set; }          // draws consumed so far, >= 0
+}
+
+public sealed class LifetimeStats
+{
+    public long Kills, BossKills, BossFails, Taps, Pulls, Merges, FishReleased, DungeonClears, TrainingLevelsBought;
+    public long ActiveSeconds;                    // ticked time; analytics only
+    public double GoldEarned, GoldSpent, FishCoinEarned;
+    public long DiamondsEarned, DiamondsSpent, DiamondsPurchased;
+}
+```
+
+### 3.2 Field notes
+
+- **`Training.Level` is an array indexed by `Stat` ordinal**, not a dictionary, so the hot path (DPS evaluation every tick) has no hashing. The `Stat` enum order is fixed in 00 section 5.1 and a reorder is a schema change.
+- **`Wallet` uses `long` for `DIAMOND` and `ROCK_CANDY`** (server-reconciled integers) and `double` for `GOLD` and `FISH_COIN` (exponential soft currencies). `HERO_EXP` is `Hero.Exp`, not a wallet balance; `CurrencyDelta` still names it so `CurrencyChanged` events and analytics are uniform.
+- **`OwnedItem.Level` is persisted** although derivable from `Copies` via `DUPE_LVL_CUM`. If the table changes, the validator recomputes and emits `save_repaired{P14}` so the change is visible rather than silent.
+- **`Fish.Cells` is a flat `int[]`** of levels; the board is 20 cells and a cell is fully described by its level. Row-major: `index = y * FISH_BOARD_W + x`.
+- **`Banners[b].Pity` in MVP is a mirror.** The server holds the authoritative pity per banner (08 section 4). The client value is overwritten by every `SummonResultPayload` and exists for display and for the M0/bot path.
+- **`Combat.DungeonRun` is persisted** so a kill mid-run is detected at load and refunded (01 section 8.8 step 6), not so the run can resume.
+- **Quest maps are keyed by id**, not positional (sibling open decision 2 resolved here): a content reorder is harmless; a removed quest id is dropped by the validator.
+- **`FirstClearExtra`** exists only because `SCR_STAGE_SELECT` (MVP) lets a player jump back and challenge a boss out of order. In the common case the first-clear set is `{BOSS_EVERY, 2*BOSS_EVERY, ..., HighestFirstClearBoss}`.
+- **Timestamps** are `long` unix seconds UTC from `IClock`, named `*ServerTime`.
+- **`PlayerId == Guid.Empty`** marks a local guest that has never reached the server (01 open question 7). The first successful guest auth sets it and uploads.
+
+### 3.3 Deliberately not saved
+
+- Current enemy HP, spawn delay, queued fish missiles and tap zaps. On load the player faces a fresh normal mob at `Combat.Stage`; a boss attempt in progress is abandoned at no cost (the boss timer is the only cost).
+- The `Event` buffer and the `Snapshot`.
+- Derived values: DPS, kill time, board passive DPS%, weapon passive total, next training cost, `FISH_BOARD_DPS_PCT`. All recomputed from `ContentDb`, so a retune reflows every save without a migration.
+- Content tables; the save stores ids and counters plus `ContentVersion`.
+- Auth tokens, device key, config cache: Runtime files outside the save (section 8.4).
+
+### 3.4 RNG streams
+
+| Name | Consumer | Draws per event | Tier | Invariant checked by validator |
+|---|---|---|---|---|
+| `combat` | enemy spawn variance, skill proc ordering ties (03) | fixed per tick, 03 states it | M0 | none (per-tick consumption) |
+| `crit` | crit roll per hero hit | 1 per hit | M0 | none |
+| `fish_spawn` | `ReleaseFish` cell pick | 1 per release | M0 | `Counter == Stats.FishReleased` |
+| `dungeon` | M0 dungeon seed derivation; MVP unused for new runs | 1 per M0 run | M0 | none |
+| `loot` | boss Rock Candy drop, any drop table | 1 per kill | M0 | `Counter == Stats.Kills` |
+| `summon_weapon`, `summon_skill`, `summon_companion` | `LocalSummonService` only (M0 and bots) | 3 per pull (rarity, item, guarantee reroll; 04) | M0 | `Counter == 3 * Banners[b].TotalPulls` in Local mode; ignored in Remote mode |
+
+Seed derivation at profile creation: `seed(name) = first 8 bytes of SHA-256(PlayerId.ToByteArray() ++ UTF8(name))` little-endian, computed in `Whisker.Runtime.ProfileFactory` (the sim has no hashing). For a local guest with `PlayerId == Guid.Empty`, a random `Guid` is used as the hashing input and stored as `DeviceId`; seeds are never re-derived when `PlayerId` is later assigned. Generator: SplitMix64 stateless derive, `Derive(seed, k)` (03 owns the code; same as the sibling).
+
+Summon streams exist in the save so M0, bots and the server-side re-simulator (which runs in Local mode against a save) share one schema. In Remote mode their counters stay at whatever M0 left (or 0) and the validator does not check them.
+
+## 4. `Profile` (account level, not in sim)
+
+```csharp
+namespace Whisker.Runtime.Account;
+
+public sealed record Profile(
+    Guid     PlayerId,
+    string   DisplayName,              // 2..16 chars, server-filtered; default "Cat#" + last 4 of PlayerId
+    string   AvatarId,                 // content id; default "avatar_default"
+    long     CreatedServerTime,
+    LinkedPlatform[] Links,            // zero or more
+    bool     IsGuest,                  // Links.Length == 0
+    string   Region,                   // ISO 3166-1 alpha-2 from the store account or IP at creation; drives loot-box disclosure rules (08)
+    int      AgeGate,                  // 0 unknown, 1 under-13 (COPPA mode), 2 adult; set once at first launch (08 compliance)
+    long     LastLoginServerTime);
+
+public sealed record LinkedPlatform(string Provider /* "apple" | "google_play" */, string ProviderUserIdHash, long LinkedServerTime);
+```
+
+Stored server-side in `accounts` (section 12) and cached in `persistentDataPath/profile.json`. The sim never reads it; `SCR_PROFILE` and `SCR_SETTINGS` bind to it through `AccountViewModel`. Display name and avatar are not in `GameState` so a cloud-save conflict cannot rename the player.
+
+## 5. Save schema v1
+
+### 5.1 File layout
+
+```
+WHISKER-SAVE v=1 fmt=json crc32=7f3a19c2 len=38127 hmac=<64 hex>\n
+{ ...exactly len bytes of UTF-8 JSON... }
+```
+
+- `v` is the container version (not the schema version; `SchemaVersion` in the body is authoritative).
+- `crc32` (IEEE) of the body bytes, for corruption detection.
+- `hmac` is HMAC-SHA256 of the body with the device key (section 10). Absent in Local mode builds that have no key (`hmac=-`).
+- The loader reads the header, exactly `len` bytes, and rejects on: malformed header, byte count mismatch, CRC mismatch, JSON parse failure. HMAC mismatch is **not** a local reject (a restored OS backup from another device legitimately fails it); it is recorded as `hmacValid = false` and the server decides (08).
+
+### 5.2 Full example
+
+A real day-9 save, abbreviated only in repeated collection entries. 41 KB formatted, 23 KB minified.
+
+```json
+{
+  "SchemaVersion": 1,
+  "ContentVersion": "2026.11.03",
+  "PlayerId": "6b1f2c40-9d1e-4a7b-8f3e-2c1a9b7d5e01",
+  "DeviceId": "0f9e8d7c-6b5a-4433-9211-aabbccddeeff",
+  "SaveSeq": 1874,
+  "Time": {
+    "Tick": 7842110, "LastSavedServerTime": 1793667200, "LastTickServerTime": 1793667200,
+    "CreatedServerTime": 1792890000, "DayKey": 20760, "WeekKey": 2965, "LoginDayKey": 20760
+  },
+  "Hero": { "Level": 143, "Exp": 48211.5, "AwakenRank": 2 },
+  "Training": { "Level": [312, 140, 95, 61, 58, 44, 120, 77] },
+  "Wallet": {
+    "Gold": 1.8423371e12, "Diamond": 1240, "FishCoin": 38400.0, "RockCandy": 412,
+    "DungeonTicket": [1, 0, 2], "SummonTicket": [3, 0, 1, 0], "GuildCoin": 0
+  },
+  "Weapons": {
+    "Items": {
+      "wpn_003": { "Copies": 41, "Level": 7, "Overflow": 0, "FirstAcquiredServerTime": 1792890400 },
+      "wpn_017": { "Copies": 2,  "Level": 1, "Overflow": 0, "FirstAcquiredServerTime": 1793001200 },
+      "wpn_028": { "Copies": 1,  "Level": 1, "Overflow": 0, "FirstAcquiredServerTime": 1793402210 }
+    },
+    "NewBadges": ["wpn_028"]
+  },
+  "Skills": { "Items": { "skl_001": { "Copies": 18, "Level": 6, "Overflow": 0, "FirstAcquiredServerTime": 1792890500 } }, "NewBadges": [] },
+  "Companions": { "Items": { "cmp_012": { "Copies": 4, "Level": 2, "Overflow": 0, "FirstAcquiredServerTime": 1793100000 } }, "NewBadges": [] },
+  "Runes": { "Items": {}, "NewBadges": [] },
+  "Loadout": {
+    "Weapon": "wpn_028",
+    "Skills": ["skl_001", "skl_014", "skl_022", null, null, null],
+    "Companions": ["cmp_012", null, null, null],
+    "Runes": [null, null, null, null, null, null]
+  },
+  "Fish": {
+    "Cells": [3, 0, 1, 1, 0,  5, 2, 0, 0, 1,  0, 0, 7, 0, 0,  1, 0, 0, 2, 0],
+    "TankCount": 4, "TankRefillTick": 23,
+    "DiscoveredLevels": [1, 2, 3, 4, 5, 6, 7, 8], "HighestLevel": 8, "TotalMerges": 2214, "AutoMergeEnabled": false
+  },
+  "Banners": {
+    "WEAPON":    { "Pity": 23, "Level": 4, "Exp": 12, "TotalPulls": 412, "TenPullsSinceEplus": 0 },
+    "SKILL":     { "Pity": 61, "Level": 3, "Exp": 7,  "TotalPulls": 180, "TenPullsSinceEplus": 0 },
+    "COMPANION": { "Pity": 4,  "Level": 1, "Exp": 40, "TotalPulls": 40,  "TenPullsSinceEplus": 0 }
+  },
+  "Combat": {
+    "Mode": "Stage", "Stage": 412, "KillsInStage": 6, "BossActive": false, "BossTicksLeft": 0,
+    "Mp": 84.0, "TapsThisSecond": 0, "SkillCooldowns": [0, 31, 0, 0, 0, 0], "DungeonRun": null
+  },
+  "Progress": { "HighestCleared": 411, "HighestFirstClearBoss": 410, "FirstClearExtra": [], "StageCapReached": 0 },
+  "Quests": {
+    "DayKey": 20760, "WeekKey": 2965,
+    "Daily": {
+      "dq_kill_500":   { "Progress": 500, "Tier": 0, "Claimed": true },
+      "dq_clear_10":   { "Progress": 7,   "Tier": 0, "Claimed": false },
+      "dq_summon_wpn": { "Progress": 10,  "Tier": 0, "Claimed": true },
+      "dq_merge_30":   { "Progress": 30,  "Tier": 0, "Claimed": false }
+    },
+    "Weekly": { "wq_kill_5000": { "Progress": 3120, "Tier": 0, "Claimed": false } },
+    "Achievement": {
+      "ach_stage": { "Progress": 412, "Tier": 5, "Claimed": true },
+      "ach_merges": { "Progress": 2214, "Tier": 3, "Claimed": false }
+    },
+    "DailyAllBonusClaimed": false, "WeeklyAllBonusClaimed": false
+  },
+  "Dungeons": { "TicketDayKey": 20760, "BestFloor": [9, 6, 8], "EntriesToday": [1, 1, 0], "SweepsToday": [0, 1, 0] },
+  "Research": { "Level": { "rs_mp_pool": 3, "rs_mp_regen": 2, "rs_tank_cap": 4, "rs_tank_refill": 2, "rs_fish_cap": 1 } },
+  "Inbox": { "ClaimedIds": ["ibx_01HZX3K9Q8", "ibx_01HZY0A2M1"], "LastFetchedServerTime": 1793667100 },
+  "Offline": { "Pending": null, "LifetimeOfflineSecCredited": 391200 },
+  "Pending": { "Summon": null, "Dungeon": null, "Receipts": [] },
+  "Tutorial": { "Step": 14, "Skipped": false, "TutorialDiamondsGranted": true },
+  "Rng": {
+    "combat":           { "Seed": "9f86d081884c7d65", "Counter": 7842110 },
+    "crit":             { "Seed": "3a1c0b8e55f2d7aa", "Counter": 1203944 },
+    "fish_spawn":       { "Seed": "0c7e2b9d4411fa63", "Counter": 4460 },
+    "dungeon":          { "Seed": "d41d8cd98f00b204", "Counter": 0 },
+    "loot":             { "Seed": "e3b0c44298fc1c14", "Counter": 184502 },
+    "summon_weapon":    { "Seed": "7b2e4f1a9c3d5e60", "Counter": 0 },
+    "summon_skill":     { "Seed": "1d9c8b7a6f5e4d30", "Counter": 0 },
+    "summon_companion": { "Seed": "a5b4c3d2e1f00918", "Counter": 0 }
+  },
+  "Stats": {
+    "Kills": 184502, "BossKills": 41, "BossFails": 9, "Taps": 8120, "Pulls": 632, "Merges": 2214, "FishReleased": 4460,
+    "DungeonClears": 23, "TrainingLevelsBought": 907, "ActiveSeconds": 61420,
+    "GoldEarned": 9.12e12, "GoldSpent": 7.28e12, "FishCoinEarned": 61200.0,
+    "DiamondsEarned": 5020, "DiamondsSpent": 4980, "DiamondsPurchased": 1200
+  },
+  "DebugTainted": false
+}
+```
+
+Size grows with collection count (max 30 + 40 + 50 + runes) and quest count; it is bounded at roughly 60 KB with every item owned. `SAVE_BLOB_MAX_BYTES` leaves 4x headroom.
+
+## 6. Serializer
+
+### 6.1 Settings
+
+Newtonsoft.Json 13.x (`com.unity.nuget.newtonsoft-json` in Unity; the NuGet package elsewhere). One `JsonSerializerSettings` instance in `SaveSerializer`:
+
+| Setting | Value | Why |
+|---|---|---|
+| Property naming | As declared (PascalCase) | Matches the C# tree; no contract resolver reflection surprises under IL2CPP. |
+| `NullValueHandling` | `Include` | Empty loadout slots are explicit `null`s; `Pending.Summon: null` is meaningful. |
+| `DefaultValueHandling` | `Include` | A `0` is written so a fixture is complete and diffable. |
+| `MissingMemberHandling` | `Ignore` | Unknown fields (newer dev build, removed field) are skipped. See 6.3. |
+| `FloatParseHandling` | `Double` | Never `Decimal`. |
+| `FloatFormatHandling` | `String` for NaN/Infinity on write (then rejected by the validator); default otherwise | Writing `NaN` as a bare token would make the file unparseable by other tools. |
+| Double formatting | Round-trip ("R" semantics; Json.NET default) | A `Gold` value survives bit-exactly. Shortest round-trippable string, so `1.8423371e12` not `1842337100000.0`. |
+| Enums | `StringEnumConverter` | `"Mode": "Stage"`, `"WEAPON"` keys. Integers accepted on read. A saved member is never renamed in place; a rename is a migration. |
+| `Guid` | Default 36-char lowercase string | |
+| `Dictionary<Banner, BannerState>` | Keys as enum names via the converter | |
+| `HashSet<int>` / `HashSet<string>` | JSON arrays, written sorted | Sorted so two saves with equal state are byte-equal (determinism test, 10). |
+| `Formatting` | `None` release, `Indented` development | |
+| Encoding | UTF-8 without BOM | |
+| `TypeNameHandling` | `None` | Never emit `$type`. |
+| `ReferenceLoopHandling` | `Error` | The tree has no cycles; a cycle is a bug. |
+
+IL2CPP: every record in section 3 is referenced from a `[Preserve]`d `SaveTypes.Touch()` method and `link.xml` preserves `Whisker.Sim.State` so stripping cannot remove a setter.
+
+### 6.2 API
+
+```csharp
+public static class SaveSerializer
+{
+    public static byte[] Encode(GameState s, byte[]? deviceKey);                  // header + body; computes crc32 and hmac
+    public static SaveFile Decode(byte[] file, byte[]? deviceKey);                // throws SaveCorruptException on header/len/crc/parse failure
+    public static GameState Materialize(JObject bodyAtCurrentVersion);            // Json.NET deserialize with the settings above
+}
+
+public sealed record SaveFile(int SchemaVersion, JObject Body, bool HmacPresent, bool HmacValid, string Sha256);
+```
+
+### 6.3 Unknown-field tolerance
+
+- Unknown properties on any object are ignored on read and therefore **dropped on the next write**. This is correct for a downgrade-then-upgrade within a dev cycle and for a removed field; it is wrong for a field a newer schema version added, which is why a newer `SchemaVersion` is refused outright (7.1) rather than loaded leniently.
+- Unknown keys in `Banners` (a P1 `RUNE` banner, an event banner) and `Rng` (a new stream) are preserved: both are dictionaries, so Json.NET keeps them. The validator drops unknown `Rng` names with a log (they cost nothing to keep but a stale stream could be mistaken for a live one) and keeps unknown `Banners`.
+- Unknown item ids in `Weapons/Skills/Companions/Runes.Items` and unknown quest or research ids are a **content** question, handled by the validator (rules P10, P12, P13), not by the serializer.
+
+### 6.4 Validation and repair
+
+Runs on the materialized `GameState` against the loaded `ContentDb` and `now`. Reject rules throw `SaveInvalidException` and the loader tries the next file. Repair rules fix the field, record the rule id, and emit `save_repaired{rule}`. More than `SAVE_REPAIR_MAX` distinct rule hits is a reject.
+
+Reject:
+
+| Id | Condition |
+|---|---|
+| R1 | Header, length or CRC mismatch, or JSON parse failure (from `Decode`). |
+| R2 | `SchemaVersion` missing or `< 1`. |
+| R3 | Any root section `null` after migration. |
+| R4 | `Rng` lacks any of `combat`, `crit`, `fish_spawn`, `dungeon`, `loot`, or any `Seed` is not 16 hex chars, or any `Counter < 0`. Summon streams may be absent (Remote-mode save) and are re-derived if so. |
+| R5 | `Training.Level.Length != 8`, `Fish.Cells.Length != FISH_BOARD_W * FISH_BOARD_H`, `Wallet.DungeonTicket.Length != 3`, `Wallet.SummonTicket.Length != 4`. These are structural, not content-driven, so a mismatch means a corrupted or foreign file. |
+
+Repair:
+
+| Id | Condition | Repair |
+|---|---|---|
+| P1 | `Combat.Stage < 1` or `> STAGE_CAP`; `KillsInStage` outside `[0, KILLS_PER_STAGE-1]`; `BossTicksLeft` outside `[0, BOSS_TIME_TICKS]` | Clamp. `BossActive = false`. |
+| P2 | Any wallet balance negative, NaN or infinite; `Hero.Exp` likewise | Set to 0. |
+| P3 | `Hero.Level < 1`; `AwakenRank` outside `[0, AWAKEN_STAGES.Length]` | Clamp. |
+| P4 | `Training.Level[i]` outside `[0, TRAIN_MAX_LVL[i]]` | Clamp. |
+| P5 | `Progress.HighestCleared < Combat.Stage - 1` | Set to `Stage - 1` (you cannot farm a stage you have not reached). |
+| P6 | `HighestFirstClearBoss` not a multiple of `BOSS_EVERY`, negative, or `> HighestCleared` | Floor to a multiple; clamp. |
+| P7 | `Loadout.Skills.Length != SKILL_SLOTS`, `Companions.Length != COMPANION_SLOTS`, `Runes.Length != RUNE_SLOTS` | Pad with `null` / truncate. |
+| P8 | Equipped id not owned, unknown to content, wrong kind, or duplicated across slots | Set slot to `null` (keep the first duplicate). `Loadout.Weapon` null -> auto-equip the highest-rarity owned weapon (04 rule). |
+| P9 | `Fish.Cells[i] < 0` or `> FISH_MAX_LVL` (current cap incl. Research) | Clamp to cap. `DiscoveredLevels` gains any level present on the board. `HighestLevel` recomputed. |
+| P9b | `TankCount` outside `[0, TankCap]`; `TankRefillTick` outside `[0, refillTicks-1]` | Clamp. |
+| P10 | `Items` key unknown to content, or `Copies <= 0` | Remove the entry. Rock Candy refund per 04's dupe rule for removed items (04 decides). |
+| P11 | `Banners[b].Pity` outside `[0, PITY_HARD-1]`; `Level < 1`; `Exp < 0` | Clamp. Missing banner for a banner the content defines -> add default. |
+| P12 | Quest id unknown to content; `Quests.DayKey != Time.DayKey` | Drop the entry; if the day key mismatches, clear `Daily` (the rollover rebuilds it). |
+| P13 | `Research.Level` key unknown or value `< 1` or `> maxLevel` | Remove / clamp. |
+| P14 | `OwnedItem.Level != levelFor(Copies)` per `DUPE_LVL_CUM` | Recompute from `Copies`. Emitted so a table change is visible. |
+| P15 | Stream counter invariants (3.4): `loot.Counter != Stats.Kills`, `fish_spawn.Counter != Stats.FishReleased`, Local mode `summon_x.Counter != 3 * TotalPulls` | Set the counter from the stat. The player-visible count is the source of truth for "which draw is next". |
+| P16 | `Combat.DungeonRun != null` on load | `Mode = Stage`, `DungeonRun = null`, emit `DungeonAbandoned`. No refund: tickets are debited on clear only (06 section 6), so an abandoned run never spent one. |
+| P17 | `Pending.Summon` or `Pending.Dungeon` older than `PENDING_STALE_DAYS = 7` | Clear it (the server's idempotency record is gone after 24 h anyway; a 7-day-old intent is dead). Receipts are never auto-cleared. |
+| P18 | `Offline.Pending != null` and `ComputedServerTime > now` | Clear it (clock went backwards after compute; nothing was credited). |
+| P19 | `ContentVersion` empty | Set to `db.Version`. |
+| P20 | `SaveSeq < 0`; `DeviceId == Guid.Empty` | Set to 0; set to this install's id. |
+
+Left alone on purpose: `Time.DayKey > dayKey(now)` and `LastSavedServerTime > now` (backwards clock; section 11 handles them), `CreatedServerTime > now` (cosmetic), `HighestCleared > Stage` (jumped back via `SCR_STAGE_SELECT`; legitimate).
+
+## 7. Migrations
+
+### 7.1 Driver
+
+```csharp
+public static class SaveSchema
+{
+    public const int  Current  = 1;       // SAVE_SCHEMA_VERSION
+    public const bool V1Frozen = false;   // set true the day a build ships to anyone outside the team; never set back
+}
+
+public static class SaveMigrations
+{
+    // Steps[i] migrates version i+1 to i+2. Invariant: Steps.Length == SaveSchema.Current - 1.
+    static readonly Func<JObject, JObject>[] Steps = { };
+
+    public static JObject Migrate(int v, JObject body, IMigrationLog log)
+    {
+        if (v > SaveSchema.Current) throw new SaveTooNewException(v, SaveSchema.Current);
+        for (; v < SaveSchema.Current; v++)
+        {
+            body = Steps[v - 1](body);
+            body["SchemaVersion"] = v + 1;
+            log.Applied(v, v + 1);
+        }
+        return body;
+    }
+}
+```
+
+`SaveTooNewException` aborts the load: the client shows `SAVE_TOO_NEW` ("This save was made by a newer version. Please update.") and must not fall through to `slot0.prev.sav` (which might be older and loadable, silently discarding progress) and must not write anything. Only happens on a downgrade (TestFlight / internal track).
+
+### 7.2 Rules for a step
+
+1. A step is a pure function `JObject -> JObject`. No `ContentDb`, no `IClock`, no file, no current C# type. Any value it needs is a literal frozen inside the step, because content and code keep changing after the step is written and the step must produce the same output forever.
+2. A step tolerates absent optional fields (dev builds mid-version) and never throws on a shape it can plausibly meet; it fills defaults.
+3. A step does not set `SchemaVersion`; the driver does.
+4. Forward only. No down-migration; a newer save is refused.
+5. Renames are expressed as a rename, never drop-and-add. A field may be dropped only when nothing in current code can use it.
+6. A new RNG stream is inserted as `{ "Seed": "", "Counter": 0 }`; the step cannot hash (rule 1), so R4 is relaxed for that name and the loader re-derives the seed from `PlayerId`/`DeviceId` on first load. Record the exemption in the step's comment.
+7. What is a schema change: adding, removing, renaming or retyping a serialized property; renaming an enum member; changing a dictionary key format; changing the required stream set; changing a field's meaning (seconds -> ticks, remaining -> used). What is not: content changes, new keys in `Banners`/`Rng`/`Items`, new values in existing fields.
+
+### 7.3 Fixtures and the test
+
+Directory `src/Whisker.Runtime.Tests/Fixtures/Saves/`:
+
+```
+v1.json                      a real save at v1 taken from a device or the bot the day v1 froze
+v1.sha256                    hash of v1.json, asserted when V1Frozen
+v1.to.v2.expected.json       (when v2 exists) exact output of Steps[0](v1.json)
+v2.json                      a real v2 save
+...
+```
+
+Tests (`MigrationTests.cs`), each required to pass in CI:
+
+| Id | Assertion |
+|---|---|
+| M1 | `Steps.Length == SaveSchema.Current - 1`. |
+| M2 | For each `n < Current`: `Migrate(n, v{n}.json)` applied one step equals `v{n}.to.v{n+1}.expected.json` ignoring whitespace. |
+| M3 | For each fixture `v{n}.json`, `n = 1..Current`: `Migrate` to `Current`, `Materialize`, `Validate` produces zero repairs and zero rejects. **Every fixture migrates to current.** |
+| M4 | Each step runs with `ContentDb` and `IClock` replaced by throwing stubs (purity). |
+| M5 | When `V1Frozen`, SHA-256 of `v1.json` equals `v1.sha256`. |
+| M6 | `Materialize(Migrate(...))` then `Encode` then `Decode` then `Materialize` yields a value-equal state (idempotent after migration). |
+| M7 | A body with `SchemaVersion = Current + 1` raises `SaveTooNewException` and the store does not consult `prev`. |
+
+Illustrative future step, to fix the style (hypothetical v1 -> v2 adding Rune sockets and a `rune_roll` stream):
+
+```csharp
+// v1 -> v2: rune sockets on weapons (04 P1) and the rune_roll stream.
+static JObject V1ToV2(JObject j)
+{
+    foreach (var item in j["Weapons"]!["Items"]!.Children<JProperty>())
+        ((JObject)item.Value)["Sockets"] ??= new JArray(null, null);           // literal 2, not RUNE_SOCKETS (rule 1)
+    ((JObject)j["Rng"]!)["rune_roll"] ??= new JObject { ["Seed"] = "", ["Counter"] = 0 };   // rule 6 exemption
+    return j;
+}
+```
+
+### 7.4 Freeze rule
+
+v1 is frozen the day a build ships to anyone whose save the team is not willing to delete (external TestFlight / Play test track, or any playtester outside the dev team). On that day: set `V1Frozen = true`, commit `v1.json` and `v1.sha256`. Before the freeze, `GameState` changes freely and a dev save that no longer fits is quarantined and the dev gets a new profile.
+
+## 8. `LocalSaveStore`
+
+### 8.1 Interface
+
+```csharp
+public enum SaveTrigger { Periodic, Pause, Quit, Resume, Summon, Inbox, Dungeon, Debug, Conflict }
+public enum LoadStatus  { Loaded, LoadedFromPrev, NewProfile, Conflict, TooNew }
+
+public sealed record LoadResult(LoadStatus Status, GameState? State, GameState? Other, IReadOnlyList<string> Repairs, SaveMeta? LocalMeta, SaveMeta? RemoteMeta);
+
+public interface ISaveStore
+{
+    Task<LoadResult> LoadAsync(long nowServerSec, ContentDb db, CancellationToken ct);
+    void Save(GameState state, SaveTrigger trigger);             // synchronous; must complete inside OnApplicationPause
+    Task ResolveConflictAsync(GameState chosen, GameState rejected, CancellationToken ct);   // local: archives rejected
+}
+```
+
+### 8.2 Stamp and write
+
+```
+Save(state, trigger):
+  SaveStamp.Apply(state, clock.NowServerSeconds, db.Version, installId)
+      // LastSavedServerTime = now; SaveSeq += 1; ContentVersion = db.Version; DeviceId = installId
+      // if ticks are running: LastTickServerTime = now as well (the window up to now has been ticked, not idle)
+  bytes = SaveSerializer.Encode(state, deviceKey)
+  using fs = new FileStream(slot0.tmp, Create, Write, FileShare.None)
+      fs.Write(bytes); fs.Flush(flushToDisk: true)
+  if exists(slot0.sav): File.Move(slot0.sav, slot0.prev.sav, overwrite: true)     // rename(2), atomic on APFS/ext4/f2fs
+  File.Move(slot0.tmp, slot0.sav, overwrite: true)
+```
+
+Directory: `Application.persistentDataPath/saves/`. Files: `slot0.sav`, `slot0.prev.sav`, `slot0.tmp`, plus quarantine `slot0.corrupt-<unix>.sav` and conflict archives `slot0.conflict-<unix>.sav`. One slot in MVP; the prefix leaves room.
+
+Properties: at every instant at least one of `slot0.sav`/`slot0.prev.sav` is complete and CRC-valid; a crash during the `tmp` write leaves `sav`/`prev` untouched; startup deletes stray `slot0.tmp`. Failure throws `SaveWriteException`; the caller keeps memory state and retries at the next trigger (01 section 3.1). `SaveStamp` has already run, so memory carries a newer `LastSavedServerTime` than disk; the consequence is one bounded double-credit window (8.5).
+
+### 8.3 Load and corruption recovery order
+
+```
+LoadAsync(now, db):
+  delete slot0.tmp if present; delete slot0.corrupt-* older than CORRUPT_KEEP_DAYS; delete slot0.conflict-* older than CONFLICT_KEEP_DAYS
+  for file in [slot0.sav, slot0.prev.sav]:
+      if not exists: continue
+      try:
+          sf    = SaveSerializer.Decode(read(file), deviceKey)
+          if sf.SchemaVersion > SaveSchema.Current: throw SaveTooNewException    // propagates; never falls to prev
+          body  = SaveMigrations.Migrate(sf.SchemaVersion, sf.Body, log)
+          state = SaveSerializer.Materialize(body)
+          reps  = SaveValidator.Run(state, now, db)                               // throws SaveInvalidException
+          if file is prev: analytics save_fallback
+          return Loaded / LoadedFromPrev
+      catch SaveCorruptException | SaveInvalidException | JsonException: analytics save_reject{file, reason}; continue
+  if either file existed: rename each to slot0.corrupt-{now}.sav; analytics save_corrupt
+  return NewProfile(ProfileFactory.Create(playerId, now, db))
+```
+
+Recovery order, from best to worst outcome: (1) `slot0.sav`, (2) `slot0.prev.sav` (at most one autosave interval older), (3) cloud copy if `CloudSaveClient` is active (9.2 covers the merge), (4) new profile with the corrupt files quarantined for `CORRUPT_KEEP_DAYS` so support can recover them. A bug in the loader therefore never destroys a player's data; it quarantines it.
+
+### 8.4 Other local files (not the save)
+
+| File | Content | Backed up by OS? |
+|---|---|---|
+| `saves/slot0*.sav` | The save | Excluded from iCloud/Android auto-backup (`NSURLIsExcludedFromBackupKey`, `android:allowBackup` with exclusion rules). Cloud save is the backup; an OS-restored save on a new device would carry the old device's key and lineage and confuse conflict resolution. |
+| `install_id` | `DeviceId` GUID | Excluded. A restored install is a new device. |
+| `device_key` | 32 random bytes for HMAC (section 10) | Secure storage (Keychain / Android Keystore-wrapped), excluded from backup. |
+| `tokens.json` | JWTs | Secure storage. |
+| `profile.json` | `Profile` cache | Included; harmless. |
+| `config_cache.json` | last remote config | Included. |
+| `content/<version>/` | downloaded bundles | Excluded (re-downloadable). |
+| `saves/cmdlog.ndjson` | command log (01 section 2.6) | Excluded. |
+| `analytics/queue.ndjson` | pending events | Excluded. |
+
+### 8.5 Known double-credit window
+
+If the `Save` after `Catchup.Compute` fails (disk full) and the app then dies, disk holds the old `LastTickServerTime` and the next load computes the same window again, bounded by `OFFLINE_CAP_H` of gold and EXP at `OFFLINE_RATE`. Accepted in M0; in MVP the server copy carries the newer anchor and the plausibility check `OFFLINE_WINDOW_OVERLAP` (08) flags a save whose credited windows overlap.
+
+## 9. `CloudSaveClient` (MVP)
+
+### 9.1 Metadata
+
+Sent with every upload and returned by `GET /v1/save/meta`:
+
+```json
+{
+  "playerId": "6b1f2c40-...", "deviceId": "0f9e8d7c-...", "saveSeq": 1874,
+  "lastSavedServerTime": 1793667200, "schemaVersion": 1, "contentVersion": "2026.11.03",
+  "clientVersion": "1.4.2+318", "sizeBytes": 23811, "sha256": "ab12...",
+  "hmac": "9c7e...", "clockAuthoritative": true,
+  "progressScore": 41200.5,
+  "summary": { "stage": 412, "heroLevel": 143, "diamonds": 1240, "totalPulls": 632, "highestFish": 8, "awakenRank": 2 }
+}
+```
+
+`progressScore` is a single monotone-ish number the conflict rule compares:
+
+```
+progressScore = HighestCleared * 100
+              + Hero.Level * 10
+              + sum(Training.Level) * 1
+              + sum over collections of Copies * 5
+              + Fish.HighestLevel * 50
+              + AwakenRank * 2000
+              + Stats.DungeonClears * 20
+```
+
+It deliberately excludes currency balances (spending lowers them) and includes only things that only go up. Weights are engineering constants in `SaveConfig`; they only need to make "clearly more progress" visible.
+
+### 9.2 Upload
+
+| Trigger | Behaviour |
+|---|---|
+| `Periodic` | Coalesced: at most one upload per `CLOUD_UPLOAD_MIN_SEC`; the queue holds one item (the latest bytes). |
+| `Pause`, `Quit`, `Summon`, `Inbox`, `Dungeon`, `Conflict` | Immediate. `Quit` and `Pause` get a 3 s budget then abandon (the local write already succeeded; the upload retries at next launch). |
+| Offline | Latest bytes stay queued; retried on reconnect, resume, and next trigger. |
+
+Request: `PUT /v1/save` with `If-Match: <etag>` of the last server version this device observed (empty on first upload), JSON metadata, the raw file bytes (header + body) as the body (08 section 5). Server validates header, CRC, HMAC against the device's registered key, `sizeBytes <= SAVE_BLOB_MAX_BYTES`, `lastSavedServerTime <= serverNow + CLOCK_MAX_SKEW_ACCEPT_S`, runs plausibility checks (08), stores the blob in S3 keyed `saves/{playerId}/{saveSeq}.sav`, updates `saves` row, returns `{etag, serverTime, flags[]}`.
+
+Keep the last `SAVE_HISTORY_KEEP = 10` blobs per player server-side for support rollback.
+
+### 9.3 Conflict rules
+
+Inputs: `L` local candidate (8.3), `R` remote candidate (`GET /v1/save` blob, fetched when `GET /v1/save/meta` differs from the last etag seen or at boot). Applied at boot, at resume (meta only, blob on demand), and on a `409` from `PUT`.
+
+```
+Resolve(L, R):
+  1. only one exists                 -> use it. R only: write locally. Status Loaded.
+  2. L.sha256 == R.sha256            -> use L.
+  3. L.deviceId == R.deviceId        -> higher saveSeq wins, silently (same lineage; the other is just older).
+  4. different devices:
+       winner = higher lastSavedServerTime
+       if !L.clockAuthoritative && R.clockAuthoritative: winner = R   (a non-authoritative stamp never beats an authoritative one)
+       if !R.clockAuthoritative && L.clockAuthoritative: winner = L
+       tie: higher saveSeq, then R
+       loser = the other
+       if loser.progressScore > winner.progressScore * (1 + CONFLICT_PROGRESS_MARGIN)
+          or loser.summary.totalPulls > winner.summary.totalPulls
+          or loser.summary.diamonds >= winner.summary.diamonds + PULL_COST[WEAPON]:
+            Status Conflict, both states returned; the client shows the modal with `winner` preselected
+       else: use winner silently; analytics cloud_autoresolved{winnerSide}
+```
+
+Why last-writer-wins with a progress override and not a merge: the save is a single RNG lineage and a single pity history. Two devices that both made pull `k` may have gotten different server results; merging copy counts would double-count and merging counters is undefined. One lineage is kept, the other discarded, and the player is asked only when the discard would be felt.
+
+### 9.4 Conflict modal rules (owned here, rendered by 07)
+
+- Two cards, "This device" and "Other device" (device model name from `devices`, 08), each showing: stage, hero level, diamonds, total pulls, highest fish, last played (relative time). The rule's winner is preselected and labelled "Recommended".
+- Shown only on `SCR_MAIN` idle: never during a boss, a reveal, a dungeon run or over another modal. Until shown, the game runs on `L` and **does not upload** (uploads are suspended while a conflict is unresolved so the loser is not overwritten by a periodic save).
+- `ResolveConflictAsync(chosen, rejected)`: write `chosen` locally, archive `rejected` as `slot0.conflict-<now>.sav` for `CONFLICT_KEEP_DAYS`, upload `chosen` with `If-Match: R.etag`. If that PUT also 409s (a third device), resolve again from the top.
+- Choosing the other device's save replaces the running `Simulation` (the runner is rebuilt; the current session's unsaved progress since `L` was loaded is the price, and the modal says so: "Progress on this device since <time> will be lost").
+- Analytics `cloud_conflict{winnerSide, chosenSide, scoreL, scoreR, secondsApart}`.
+
+## 10. Integrity envelope
+
+### 10.1 Device key and HMAC
+
+At first launch `Whisker.Runtime.DeviceKey.Create()` generates `HMAC_KEY_BYTES` random bytes, stores them in platform secure storage, and registers the public half of the device record with `POST /v1/devices` (08): `{deviceId, keyId, model, os, clientVersion}` plus the key itself over TLS. The server stores the key in `devices.hmac_key` (encrypted at rest). Every save header carries `hmac = HMAC-SHA256(deviceKey, body)`.
+
+What it is for: the server can tell a save written by this client build on this registered device from a hand-edited blob. What it is not: protection against a rooted device, which can extract the key. The key makes casual editing fail and makes a cheater's edits attributable to a device; the plausibility checks make them detectable.
+
+Local mode (M0) has no key; `hmac=-`. Bots write no files.
+
+### 10.2 Server plausibility checks (named here, specified in 08)
+
+The server runs these on every upload and attaches `flags[]` to the response. The client only logs flags; the server acts (08 action matrix).
+
+| Check name | What it tests |
+|---|---|
+| `HMAC_INVALID` | Envelope does not verify against the device's key. |
+| `SEQ_REGRESSION` | `saveSeq` lower than the stored one for the same `deviceId`. |
+| `CLOCK_AHEAD` | `lastSavedServerTime > serverNow + CLOCK_MAX_SKEW_ACCEPT_S`. |
+| `STAGE_VS_TIME` | `HighestCleared` exceeds the bot-curve stage for `(now - CreatedServerTime)` by more than the 08 bound. |
+| `DPS_VS_STAGE` | DPS re-derived via `Whisker.Sim` from the uploaded state cannot clear `HighestCleared`'s boss in `BOSS_TIME_TICKS`. |
+| `GOLD_DELTA_BOUND` | Gold gained since the previous upload exceeds the maximum the sim could produce in the elapsed time at `HighestCleared`. |
+| `DIAMOND_LEDGER_MISMATCH` | `Wallet.Diamond` exceeds the server ledger (grants - spends) by more than the per-day F2P cap times days. |
+| `ITEM_WITHOUT_PULL` | A collection copy count exceeds what `summon_log` plus inbox grants account for. |
+| `PITY_MISMATCH` | Client `Banners[b].Pity` differs from server pity (informational; the server value is used regardless). |
+| `DUPLICATE_REQUEST_ID` | A `requestId` seen on a different player. |
+| `OFFLINE_WINDOW_OVERLAP` | Lifetime offline credited exceeds wall-clock gaps observable from upload timestamps. |
+| `STREAM_COUNTER_MISMATCH` | `loot.Counter != Stats.Kills` etc. after the client's own validator should have repaired them. |
+| `TAINTED` | `DebugTainted == true` on a release build. |
+
+## 11. The clock seam
+
+### 11.1 Interface and implementations
+
+```csharp
+namespace Whisker.Runtime.Time;
+
+public interface IClock
+{
+    long NowServerSeconds { get; }     // unix seconds UTC, anchored to server time
+    bool IsAuthoritative  { get; }     // true once anchored to a server observation in this process
+}
+
+public sealed class ServerClock : IClock
+{
+    readonly ITimeApi? api;            // null in Local mode
+    long?  offsetSec;                  // serverNow - monotonicNow at last observation
+    long   floorSec;                   // Time.LastSavedServerTime at load; time never reads below this
+    long   lastSyncMono;
+    static long Mono() => Stopwatch.GetTimestamp() / Stopwatch.Frequency;
+
+    public bool IsAuthoritative => offsetSec.HasValue;
+    public long NowServerSeconds => Math.Max(floorSec, offsetSec is long o ? Mono() + o : DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+
+    public void SetFloor(long lastSavedServerTime) => floorSec = lastSavedServerTime;
+
+    // Called by ApiClient on every response with X-Server-Time (01 section 5.1), and by SyncAsync.
+    public void Observe(long serverTimeSec, long rttMs)
+    {
+        long estimate = serverTimeSec + rttMs / 2000;
+        long newOffset = estimate - Mono();
+        if (offsetSec is long old && Math.Abs(newOffset - old) > CLOCK_JUMP_WARN_SEC) analytics.Track(new ClockAnomaly("resync", newOffset - old));
+        offsetSec = newOffset; lastSyncMono = Mono();
+    }
+
+    public async Task SyncAsync(CancellationToken ct)      // GET /v1/time; used at resume and every CLOCK_RESYNC_SEC if no other call happened
+    { if (api == null) return; long t0 = Mono(); var t = await api.GetServerTimeAsync(ct); Observe(t, (Mono() - t0) * 1000); }
+}
+
+public sealed class FakeClock : IClock
+{
+    public long NowServerSeconds { get; private set; }
+    public bool IsAuthoritative  => true;
+    public void Set(long t) => NowServerSeconds = t;
+    public void Advance(long dt) => NowServerSeconds += dt;
+}
+```
+
+### 11.2 Rules
+
+1. Nothing in `Whisker.Sim` reads a clock. The sim receives `now` through `ApplyServerTime` and `Catchup.Compute(state, now, db)`. In `Whisker.Runtime`, only `ServerClock.cs` and `SessionRunner.cs` may touch `DateTimeOffset.UtcNow` or `Stopwatch`. CI grep (10).
+2. Consumers of `IClock`: `SaveStamp`, `ApplyServerTime` (day/week keys, login grant), `Catchup.Compute`, `Pending*` timestamps, analytics timestamps, cloud-save metadata. Combat ticks never read the clock; the monotonic accumulator in `SessionRunner` drives them.
+3. Between observations time advances by the monotonic clock, so a device clock change mid-session has no effect once `IsAuthoritative`.
+4. Until the first observation (offline launch), the device clock is served floored at `LastSavedServerTime`, so time cannot run backwards past the last save. `IsAuthoritative = false` flows into the save metadata and into the conflict rule (9.3 step 4).
+
+### 11.3 Backwards-clock rules
+
+| Situation | Behaviour |
+|---|---|
+| `now < Time.LastTickServerTime` at resume | `Catchup.Compute` returns `ElapsedSec = 0`; nothing credited; `clock_anomaly{backwards}` once per session. |
+| `dayKey(now) < Time.DayKey` | `ApplyServerTime` does nothing (`if newKey <= DayKey return`). Dailies are not reset; login diamonds not re-granted. |
+| `now < Offline.Pending.ComputedServerTime` at load | P18 clears the pending reward (it was never credited). |
+| `now < Pending.Summon.RequestedServerTime` | Irrelevant; the server's idempotency store decides. |
+| Resync shows the server is *ahead* of the extrapolation by more than `CLOCK_JUMP_WARN_SEC` | Extra elapsed time is credited as a second catch-up window (01 section 8.2 step 2), capped by the 24 h sum. |
+| Resync shows the server is *behind* | Nothing is taken back; `clock_anomaly{resync, negative}`; the save's `LastTickServerTime` keeps its larger value, which simply shortens the next window. |
+| Device clock set years ahead, then back (offline) | At most one `OFFLINE_CAP_H` window and one daily reset were gained while unauthoritative; the next authoritative upload carries `CLOCK_AHEAD` and the server's ledger reconciliation (08) corrects diamonds. |
+
+## 12. Server-side relational schema (PostgreSQL 15)
+
+All timestamps `timestamptz`, all ids `uuid` unless noted. Money is never stored as float: prices are `integer` minor units plus `char(3)` currency. Row-level comments give the owning API (08).
+
+```sql
+create table accounts (
+  player_id         uuid primary key,
+  display_name      text not null,
+  avatar_id         text not null default 'avatar_default',
+  region            char(2) not null,
+  age_gate          smallint not null default 0,          -- 0 unknown, 1 under-13, 2 adult
+  created_at        timestamptz not null default now(),
+  last_login_at     timestamptz,
+  status            text not null default 'active',       -- active | soft_flagged | banned | delete_pending | deleted
+  status_reason     text,
+  delete_requested_at timestamptz,
+  tutorial_diamonds_granted boolean not null default false
+);
+
+create table account_links (                               -- Apple / Google Play Games identities
+  provider          text not null,                         -- 'apple' | 'google_play'
+  provider_user_id  text not null,                         -- opaque id from the provider; hashed with a server pepper
+  player_id         uuid not null references accounts on delete cascade,
+  linked_at         timestamptz not null default now(),
+  primary key (provider, provider_user_id)
+);
+create index on account_links (player_id);
+
+create table devices (
+  device_id         uuid primary key,                      -- GameState.DeviceId
+  player_id         uuid not null references accounts on delete cascade,
+  hmac_key_enc      bytea not null,                        -- envelope-encrypted with KMS; never logged
+  model             text, os text, client_version text,
+  first_seen_at     timestamptz not null default now(),
+  last_seen_at      timestamptz not null default now(),
+  push_token        text                                   -- P1 notifications
+);
+create index on devices (player_id);
+
+create table refresh_tokens (
+  token_hash        bytea primary key,                     -- sha256 of the token
+  player_id         uuid not null references accounts on delete cascade,
+  device_id         uuid not null references devices,
+  issued_at         timestamptz not null, expires_at timestamptz not null, revoked_at timestamptz
+);
+
+create table saves (                                       -- one row per player: current save of record
+  player_id         uuid primary key references accounts on delete cascade,
+  save_seq          bigint not null,
+  device_id         uuid not null references devices,
+  schema_version    integer not null,
+  content_version   text not null,
+  client_version    text not null,
+  last_saved_server_time bigint not null,                  -- as stamped by the client; see clock_authoritative
+  clock_authoritative boolean not null,
+  size_bytes        integer not null,
+  sha256            bytea not null,
+  hmac_valid        boolean not null,
+  blob_key          text not null,                         -- s3://whisker-saves-<env>/saves/{player_id}/{save_seq}.sav
+  etag              text not null,                         -- opaque; changes on every write; used for If-Match
+  progress_score    double precision not null,
+  summary           jsonb not null,                        -- the "summary" object from 9.1
+  flags             text[] not null default '{}',          -- plausibility flags from the last upload
+  uploaded_at       timestamptz not null default now()
+);
+
+create table save_history (                                -- last SAVE_HISTORY_KEEP blobs per player, for support rollback
+  player_id uuid not null references accounts on delete cascade,
+  save_seq  bigint not null, device_id uuid not null, blob_key text not null, sha256 bytea not null,
+  progress_score double precision not null, uploaded_at timestamptz not null default now(),
+  primary key (player_id, save_seq)
+);
+
+create table diamond_ledger (                              -- server-authoritative hard currency; the sum is the truth
+  id            bigserial primary key,
+  player_id     uuid not null references accounts on delete cascade,
+  delta         integer not null,
+  reason        text not null,                             -- CurrencyReason enum name: IAP, MAIL, SUMMON, REFUND, ADMIN, QUEST (reconciled), ...
+  ref_type      text, ref_id text,                         -- 'purchase' | 'inbox_item' | 'summon' | 'save_reconcile'
+  request_id    text,                                      -- client requestId when client-originated
+  created_at    timestamptz not null default now()
+);
+create index on diamond_ledger (player_id, created_at);
+create unique index on diamond_ledger (player_id, request_id) where request_id is not null;
+
+create table idempotency (                                 -- 00 section 8.13: every mutating request, 24 h
+  player_id   uuid not null,
+  request_id  text not null,
+  route       text not null,
+  status_code smallint not null,
+  response    jsonb not null,
+  created_at  timestamptz not null default now(),
+  primary key (player_id, request_id)
+);
+create index on idempotency (created_at);                  -- purge job deletes rows older than IDEMPOTENCY_TTL_H = 24
+
+create table purchases (
+  purchase_id       uuid primary key,
+  player_id         uuid not null references accounts on delete cascade,
+  platform          text not null,                         -- 'apple' | 'google_play'
+  sku               text not null,
+  transaction_id    text not null,                         -- Apple transactionId / Google purchaseToken hash
+  original_transaction_id text,                            -- Apple; for restores
+  price_minor       integer, currency char(3),
+  status            text not null,                         -- pending | granted | already_granted | invalid | refunded | chargeback
+  raw_receipt_key   text,                                  -- S3 key of the signed payload (retained 7 years for tax/fraud; not in PG)
+  inbox_item_id     uuid,
+  granted_at        timestamptz, refunded_at timestamptz,
+  created_at        timestamptz not null default now(),
+  unique (platform, transaction_id)
+);
+create index on purchases (player_id, created_at);
+
+create table inbox_items (
+  inbox_item_id  uuid primary key,
+  player_id      uuid not null references accounts on delete cascade,
+  kind           text not null,                            -- iap | mail | compensation | coupon | refund | admin
+  title_key      text not null, body_key text not null, params jsonb not null default '{}',
+  grants         jsonb not null,                           -- [{"kind":"currency","id":"DIAMOND","amount":1200}, {"kind":"item","id":"wpn_017","amount":1}]
+  source_ref     text,                                     -- purchase_id | mail_blast_id | coupon_code
+  created_at     timestamptz not null default now(),
+  expires_at     timestamptz,                              -- null = never
+  claimed_at     timestamptz, claimed_request_id text
+);
+create index on inbox_items (player_id) where claimed_at is null;
+
+create table summon_log (                                  -- one row per pull (not per batch): 08 audit requirement
+  id              bigserial primary key,
+  player_id       uuid not null references accounts on delete cascade,
+  request_id      text not null,
+  banner          text not null,                           -- WEAPON | SKILL | COMPANION | RUNE
+  batch_index     smallint not null,                       -- 0..9
+  item_id         text not null, rarity char(1) not null,
+  pity_before     smallint not null, pity_after smallint not null,
+  banner_level    smallint not null,
+  guarantee       boolean not null,                        -- slot-10 E+ reroll applied
+  rate_table_hash bytea not null,                          -- hash of the published rate table used (compliance)
+  roll_u          double precision not null,               -- the uniform draw, for audit reproduction
+  payment         text not null,                           -- DIAMOND | TICKET
+  created_at      timestamptz not null default now()
+);
+create index on summon_log (player_id, created_at);
+create index on summon_log (request_id);
+
+create table banner_pity (                                 -- server-held pity, authoritative in MVP
+  player_id  uuid not null references accounts on delete cascade,
+  banner     text not null,
+  pity       smallint not null default 0,
+  level      smallint not null default 1, exp integer not null default 0,
+  total_pulls bigint not null default 0,
+  updated_at timestamptz not null default now(),
+  primary key (player_id, banner)
+);
+
+create table dungeon_seeds (
+  grant_id   uuid primary key,
+  player_id  uuid not null references accounts on delete cascade,
+  request_id text not null,
+  kind       text not null, floor integer not null, day_key integer not null,
+  seed       bigint not null,                              -- ulong stored as signed; cast on read
+  issued_at  timestamptz not null default now(), expires_at timestamptz not null,
+  result     text,                                         -- null | cleared | failed (filled from the next save upload)
+  unique (player_id, request_id)
+);
+
+create table config_versions (                             -- remote config and content manifest history (08)
+  id serial primary key, env text not null, payload jsonb not null, min_client_version text not null,
+  content_version text not null, rollout_pct smallint not null default 100,
+  active boolean not null default false, created_at timestamptz not null default now(), created_by text not null
+);
+
+create table mail_blasts (                                 -- live ops (08)
+  mail_blast_id uuid primary key, title_key text not null, body_key text not null, grants jsonb not null,
+  audience jsonb not null,                                 -- {"all":true} | {"region":["JP"]} | {"playerIds":[...]} | {"minStage":100}
+  send_at timestamptz not null, expires_at timestamptz, created_by text not null, sent_count integer not null default 0
+);
+
+create table moderation_actions (                          -- anti-cheat action matrix (08)
+  id bigserial primary key, player_id uuid not null references accounts on delete cascade,
+  action text not null,                                    -- log | soft_flag | rollback | ban | unban | appeal_granted
+  flags text[] not null, detail jsonb, actor text not null, created_at timestamptz not null default now()
+);
+
+-- P1 stubs: shape fixed so MVP foreign keys and the GDPR delete job already know about them.
+create table guilds (guild_id uuid primary key, name text not null unique, created_at timestamptz not null default now(), leader_id uuid references accounts);
+create table guild_members (guild_id uuid references guilds on delete cascade, player_id uuid references accounts on delete cascade, role text not null, joined_at timestamptz not null default now(), primary key (guild_id, player_id));
+create table guild_chat (id bigserial primary key, guild_id uuid references guilds on delete cascade, player_id uuid references accounts on delete set null, body text not null, created_at timestamptz not null default now());
+```
+
+Redis structures (P1 leaderboards, MVP rate limits and sessions):
+
+| Key | Type | Content | TTL |
+|---|---|---|---|
+| `lb:stage:{weekKey}` | ZSET | member `playerId`, score `HighestCleared * 1e6 + (1e6 - secondsIntoWeek/60)` so ties favour the earlier clear | 14 days |
+| `lb:fish:{weekKey}` | ZSET | score `HighestFish` | 14 days |
+| `lb:name:{playerId}` | STRING | display name + avatar for leaderboard rows | 1 day |
+| `rl:{route}:{playerId}` | STRING (counter) | sliding-window rate limit (08 per-endpoint limits) | window length |
+| `sess:{playerId}` | HASH | last device, last ip hash, last activity | 1 h |
+| `summon:lock:{playerId}` | STRING | per-player mutex for the summon handler | 10 s |
+| `maint` | STRING | maintenance JSON | none |
+
+## 13. Data retention and GDPR/CCPA delete
+
+### 13.1 Retention
+
+| Data | Retention | Mechanism |
+|---|---|---|
+| Current save blob + `saves` row | While account active | |
+| `save_history` | Last `SAVE_HISTORY_KEEP = 10` blobs per player | Trigger on insert deletes the oldest; S3 lifecycle removes orphaned keys after 7 days |
+| `idempotency` | `IDEMPOTENCY_TTL_H = 24` | Hourly purge job |
+| `summon_log`, `diamond_ledger` | 7 years (financial audit; loot-box disclosure disputes) | Partitioned by month |
+| `purchases` + raw receipts | 7 years | Tax law in several launch regions |
+| `dungeon_seeds` | 30 days | Daily purge |
+| `refresh_tokens` | 60 days from issue or until revoked | |
+| Inactive accounts | Purged after `RETENTION_INACTIVE_DAYS = 730` with no login | Monthly job runs the delete flow below; players with any purchase are exempt from auto-purge (the receipts obligation) and instead have the save blob removed only |
+| Analytics raw events | 25 months in the warehouse, aggregated tables indefinitely | Warehouse policy |
+| Server logs | 30 days hot, 1 year cold | |
+
+### 13.2 Delete flow
+
+```mermaid
+sequenceDiagram
+    participant U
+    participant C as Client
+    participant API
+    participant Job as Nightly job
+    U->>C: SCR_SETTINGS "Delete account" (confirm twice, type DELETE)
+    C->>API: POST /v1/account/delete {requestId}
+    API->>API: accounts.status = delete_pending, delete_requested_at = now; revoke all refresh_tokens
+    API-->>C: {graceUntil}
+    C->>C: wipe local saves, tokens, device key; restart to SCR_TITLE
+    Note over U,API: within GDPR_DELETE_GRACE_DAYS the player can sign in with a linked platform and cancel (POST /v1/account/delete/cancel)
+    Job->>Job: for accounts with delete_requested_at < now - grace: hard delete
+```
+
+Hard delete, in one transaction per account:
+1. Delete S3 objects `saves/{playerId}/*`.
+2. `delete from accounts where player_id = ?` cascades to `account_links`, `devices`, `refresh_tokens`, `saves`, `save_history`, `inbox_items`, `banner_pity`, `dungeon_seeds`, `guild_members`, `moderation_actions`, `diamond_ledger`, `summon_log`.
+3. **Exception**: `purchases` rows and `summon_log`/`diamond_ledger` rows for players who ever purchased are retained with `player_id` replaced by a one-way tombstone id (`sha256(player_id || server_pepper)`) so financial records survive without a link to the person. This is the legal-obligation basis under GDPR art. 17(3)(b).
+4. Analytics: publish `player_deleted{playerIdHash}` to the warehouse; the warehouse job removes raw events for that hash within 30 days.
+5. `guild_chat.player_id` is set null by the cascade; message bodies remain (they are the guild's record, and contain no identifier).
+
+Export (`POST /v1/account/export`): assembles `accounts`, `account_links` (provider only), `devices` (model/os), current save JSON, `purchases`, `inbox_items`, `diamond_ledger`, `summon_log`, `moderation_actions` into one JSON file in S3 with a 7-day presigned link mailed to the linked platform email or shown in `SCR_SETTINGS`. Rate limit one per 7 days.
+
+## 14. Analytics event schema (economy events)
+
+Envelope on every event, added by the sink: `ts` (server seconds), `sessionId` (GUID per process), `playerIdHash` (sha256 of playerId with a per-environment salt; never raw), `deviceId`, `clientVersion`, `contentVersion`, `schemaVersion`, `debugTainted`, `clockAuthoritative`, `dayIndex = (ts - CreatedServerTime) / DAY_SECONDS`, `stage` (current).
+
+Names snake_case; properties camelCase. Economy events go to the backend `events` table (00 section 3) as well as Firebase so they can be joined with `purchases` and `saves`.
+
+| Event | Properties | Emitted by | Notes |
+|---|---|---|---|
+| `session_start` | `offlineElapsedSec`, `offlineCredited`, `coldBoot` (bool), `bootMs` | Runtime at `SCR_MAIN` shown | |
+| `session_end` | `durationSec`, `stageStart`, `stageEnd`, `kills`, `ticks`, `trigger` (pause/quit/gap) | Runtime on pause/quit | |
+| `currency_changed` | `currency` (code from 00 section 5.2), `delta` (double), `balanceAfter`, `reason` (closed enum, 00 section 8.6), `refId` (item/quest/banner id when applicable) | Sim `Wallet.Apply` -> sink | `KILL` and `BOSS` reasons are summed per currency over `CURRENCY_AGG_SEC` and emitted once; all other reasons per occurrence. |
+| `item_acquired` | `kind` (WEAPON/SKILL/COMPANION/RUNE), `itemId`, `rarity`, `isNew`, `copiesAfter`, `levelBefore`, `levelAfter`, `source` (SUMMON/MAIL/QUEST/ADMIN), `requestId` | Sim on `ItemAcquired` | One per item. |
+| `summon` | `banner`, `count`, `payment`, `costDiamonds`, `ticketsUsed`, `rarities[]`, `lplusCount`, `pityBefore`, `pityAfter`, `bannerLevel`, `guaranteeApplied`, `requestId`, `latencyMs` | Runtime after `ApplySummonResult` | One per batch; per-pull detail is in `item_acquired` and `summon_log`. |
+| `summon_pending` / `summon_resolved` | `requestId`, `banner`, `count`; resolved adds `latencySec`, `outcome` (replayed/executed/rejected) | Runtime | |
+| `stage_cleared` | `stage`, `isBoss`, `firstClear`, `diamondsGranted`, `attempts` (for a boss), `ticksOnStage`, `dps` | Sim | Feeds the 00 section 6.6 day table. |
+| `boss_failed` | `stage`, `bossHpLeftPct`, `attempt`, `voluntary` | Sim | Wall detection: first `boss_failed` on a stage = `wall_hit`. |
+| `wall_broken` | `stage`, `wallSec`, `activeSecDuringWall`, `attempts`, `layersChangedDuringWall[]` | Sim | |
+| `training` | `stat`, `levelFrom`, `levelTo`, `goldCost` | Sim | |
+| `level_up` | `heroLevel` | Sim | |
+| `awakened` | `rank`, `stage`, `rockCandyCost` | Sim | |
+| `research_bought` | `researchId`, `level`, `fishCoinCost` | Sim | |
+| `fish_merged` | `level`, `discovered`, `coinsEarned`, `missilePct` | Sim | Per merge. |
+| `fish_session` | `releases`, `merges`, `discoveries`, `coinsEarned`, `activeSec` | Runtime, per session | Throughput for 05's model. |
+| `quest_completed` / `quest_claimed` | `questId`, `kind`, `tier`, `rewards[]` | Sim | |
+| `dungeon_run` | `kind`, `floor`, `outcome` (cleared/failed/swept/abandoned), `ticksUsed`, `rewards[]`, `grantId` | Sim/Runtime | |
+| `offline_catchup` | `elapsedSec`, `creditedSec`, `capped`, `gold`, `exp`, `tankFill`, `stage`, `claimed` (bool, false if cleared by P18) | Runtime | |
+| `daily_rollover` | `dayKey`, `skippedDays`, `loginDiamonds` | Sim | |
+| `iap` | `sku`, `platform`, `priceMinor`, `currency`, `status` (initiated/store_ok/validated/granted/invalid/refunded), `transactionIdHash`, `firstPurchase`, `latencyMs` | Runtime + server | Server emits `validated`/`granted`/`refunded`; client emits the rest. |
+| `inbox_claimed` | `inboxItemId`, `kind`, `grants[]`, `ageSec` | Runtime | |
+| `cloud_save_uploaded` | `saveSeq`, `sizeBytes`, `trigger`, `latencyMs`, `flags[]` | Runtime | |
+| `cloud_conflict` / `cloud_autoresolved` | 9.4 | Runtime | |
+| `save_fallback`, `save_corrupt`, `save_repaired{rule}`, `save_reject{file, reason}`, `save_write_failed{consecutive}`, `migration_applied{from, to}` | | Runtime | Save health. |
+| `clock_anomaly` | `kind` (backwards/gap/resync), `seconds` | Runtime | |
+| `plausibility_flag` | `flags[]`, `action` | Server | Mirrors the server's decision for the warehouse. |
+
+The warehouse `events` table: `(ts timestamptz, name text, player_id_hash bytea, session_id uuid, day_index int, stage int, props jsonb, env text)` partitioned by day, with a materialized `currency_daily (player_id_hash, day_index, currency, reason, sum_delta)` rebuilt nightly for the 06 source/sink dashboards.
+
+## Open questions
+
+1. **Summon streams in Remote-mode saves.** Keep `summon_*` in every save (uniform schema, bots and re-simulator share it) or drop them from Remote-mode saves and re-derive in Local mode. Owner: 04/08. Default: keep; the validator ignores their counters in Remote mode.
+2. **`progressScore` weights** (9.1). Owner: 06. Default: as written; revisit after closed beta conflict telemetry.
+3. **Conflict modal replacing a running sim** (9.4). Alternative: defer applying the other device's save to the next cold boot. Owner: 07. Default: replace immediately with the warning line, because deferring makes the modal's choice feel ignored.
+4. **`OwnedItem.Overflow` semantics** past level 10. Owner: 04. Default: field exists, 04 decides shards vs Rock Candy conversion; whichever it is, the conversion happens in `ApplySummonResult`, not on load.
+5. **OS backup exclusion** (8.4). Excluding saves means a player who loses a phone before linking an account loses progress unless cloud save (guest accounts upload too). Owner: 08. Default: exclude; guest cloud save covers it.
+6. **`PENDING_STALE_DAYS = 7` vs `IDEMPOTENCY_TTL_H = 24`.** A pending summon older than 24 h cannot be replayed; the server will execute it fresh. Is that acceptable (the player did intend it) or should the client ask first. Owner: 08. Default: execute fresh silently up to 7 days, since the diamonds were never charged.
+7. **Week start** (`WEEK_EPOCH_OFFSET`). Monday 00:00 UTC assumed. Owner: 06.
+8. **Tombstone retention for non-purchasers' `summon_log`.** Loot-box regulators may ask for odds evidence beyond the player's lifetime. Owner: legal/08. Default: delete with the account unless the player purchased.
+
+## Acceptance criteria
+
+1. Round trip: a `GameState` with every field non-default (including `null` slots, empty collections, a non-null `Pending.Summon`, a non-null `Offline.Pending`, a non-null `Combat.DungeonRun`) encodes and decodes to a value-equal object (deep equality test).
+2. Determinism after round trip: for each stream in 3.4, the next `Derive` after save/load equals the next draw of the un-restored copy.
+3. Byte stability: two encodes of value-equal states are byte-identical (sorted sets, round-trip doubles).
+4. Header: wrong CRC, `len` off by one in either direction, missing newline, truncated body each raise `SaveCorruptException`; an HMAC mismatch does **not** (loads with `HmacValid = false`).
+5. Rotation: after two writes, `slot0.tmp` absent, `slot0.sav` is write 2, `slot0.prev.sav` is write 1, `SaveSeq == 2`.
+6. Fallback: a flipped body byte in `slot0.sav` loads `prev` and emits `save_fallback`; both corrupt yields a new profile with two quarantined files; quarantined files older than `CORRUPT_KEEP_DAYS` are deleted on the next load.
+7. Fault injection between the two renames: `slot0.sav` absent, `prev` present, load succeeds from `prev`.
+8. `SaveTooNewException` on `SchemaVersion = Current + 1`; no file renamed; `prev` not consulted.
+9. Every repair rule P1-P20 and reject rule R2-R5 has a table-driven test asserting the repaired value or the exception and the emitted rule id; `SAVE_REPAIR_MAX + 1` distinct rule hits is a reject.
+10. Migrations M1-M7 pass; in particular every `Fixtures/Saves/v{n}.json` migrates to `Current` with zero repairs.
+11. `Catchup.Compute` leaves every field except `Offline.Pending` and `Time.LastTickServerTime` value-equal; then `ClaimOfflineReward` changes only `Wallet.Gold`, `Hero.Exp`/`Hero.Level`, `Fish.TankCount`, `Offline.*`, `Stats.*`.
+12. Conflict rules: a table of `(L, R)` metadata pairs covering each branch of 9.3 produces the expected winner and `Status`; a non-authoritative local stamp 1 h ahead loses to an authoritative remote stamp.
+13. Uploads are suspended while `Status == Conflict` is unresolved (no `PUT` observed by a fake API during that window).
+14. `ServerClock`: `Observe` makes `IsAuthoritative` true; a device clock change of +1 day between observations changes `NowServerSeconds` by the monotonic elapsed only; before any observation, `NowServerSeconds >= floor`.
+15. Backwards clock: `dayKey(now) < DayKey` resets nothing and emits `clock_anomaly`; `now < LastTickServerTime` credits zero.
+16. The server schema applies from empty with `dotnet ef database update` (or the SQL migration set) and a GDPR hard delete of a player with purchases leaves exactly the tombstoned `purchases`, `summon_log`, `diamond_ledger` rows and nothing else referencing the id.
+17. `currency_changed` events for one simulated hour with `KILL` reason number at most `60 / CURRENCY_AGG_SEC * 60 = 60` per currency, and the sum of their deltas equals the wallet delta.
+18. No `UnityEngine`, `DateTime*.Now`, `Stopwatch` in `Whisker.Sim`; in `Whisker.Runtime` only `ServerClock.cs` and `SessionRunner.cs` reference the clock APIs (CI grep).
+19. IL2CPP build: a save produced by the editor loads on an ARM64 device build and vice versa with zero repairs (device-farm test, 10).
+
+## Constants introduced
+
+| Name | Value | Tag | Section |
+|---|---|---|---|
+| `SAVE_SCHEMA_VERSION` | 1 | I | 2 |
+| `SAVE_KEEP_COUNT` | 2 | I | 2 |
+| `SAVE_REPAIR_MAX` | 20 | I | 2 |
+| `CORRUPT_KEEP_DAYS` | 7 | I | 2 |
+| `CONFLICT_KEEP_DAYS` | 30 | S | 2 |
+| `CONFLICT_PROGRESS_MARGIN` | 0.10 | S | 9.3 |
+| `CLOCK_RESYNC_SEC` | 900 | I | 11 |
+| `CLOCK_JUMP_WARN_SEC` | 300 | I | 11 |
+| `CLOCK_MAX_SKEW_ACCEPT_S` | 120 | S | 9.2 |
+| `HMAC_KEY_BYTES` | 32 | S | 10 |
+| `SAVE_BLOB_MAX_BYTES` | 262144 | S | 9.2 |
+| `SAVE_HISTORY_KEEP` | 10 | S | 9.2, 13 |
+| `PENDING_STALE_DAYS` | 7 | S | 6.4 P17 |
+| `IDEMPOTENCY_TTL_H` | 24 | I (from 00 section 8.13) | 12 |
+| `GDPR_DELETE_GRACE_DAYS` | 14 | S | 13 |
+| `RETENTION_INACTIVE_DAYS` | 730 | S | 13 |
+| `ANALYTICS_BATCH_MAX` | 100 | I | 14 |
+| `ANALYTICS_QUEUE_MAX` | 10000 | I | 14 |
+| `CURRENCY_AGG_SEC` | 60 | I | 14 |
+| `progressScore` weights | 100 / 10 / 1 / 5 / 50 / 2000 / 20 | S | 9.1 |
+
+All are engineering constants (code-resident). None needs the tuning tool; 10's fault-injection, conflict-table and perf tests are the check.
+
+Used from 00 by name: `TICK_HZ`, `KILLS_PER_STAGE`, `BOSS_EVERY`, `BOSS_TIME_TICKS`, `STAGE_CAP`, `TAP_ZAP_MAX_PER_SEC`, `DAY_SECONDS`, `OFFLINE_RATE`, `OFFLINE_CAP_H`, `OFFLINE_MIN_S`, `LOGIN_DIAMONDS`, `TUTORIAL_DIAMONDS`, `DIAMONDS_PER_DAY_F2P`, `PULL_COST[*]`, `PITY_HARD`, `SKILL_SLOTS`, `COMPANION_SLOTS`, `RUNE_SLOTS`, `DUPE_LVL_CUM`, `FISH_BOARD_W`, `FISH_BOARD_H`, `FISH_MAX_LVL0`, `TANK_CAP0`, `TANK_REFILL_S0`, `AWAKEN_STAGES`. From 01: `AUTOSAVE_INTERVAL_SEC`, `CMDLOG_MAX_BYTES`, `WEEK_EPOCH_OFFSET`. From 03 (declared there): `TRAIN_MAX_LVL[stat]`.

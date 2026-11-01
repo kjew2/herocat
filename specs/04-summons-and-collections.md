@@ -1,0 +1,495 @@
+## 04 - Summons and Collections
+
+This spec owns the four `Banner`s, the exact pull algorithm and its pity rules, banner levels, the dupe economy including limit breaks, and the three collectible kinds the banners feed: `Weapon`, `Skill`, `Companion` (and the P1 `Rune` outline). It fixes the data each collectible carries, how the tick loop in 03 consumes it, what the collection screens need from the model, the `ISummonService` seam between the M0 local roll and the MVP server roll, the analytics events, and how `tools/gacha_model.py` is extended for banner levels. The server-side implementation of the same algorithm (audit log, idempotency, published rate endpoint) is 08's.
+
+Tiers covered: M0 (`WEAPON` and `SKILL` banners with a local roll, dupes to level 10, weapon passive, 6 skill slots), MVP (`COMPANION` banner, banner levels, limit breaks, server roll, analytics), P1 (`RUNE` banner, manual skill cast, rate-up and event banners).
+
+Depends on: 00 (section 6.3 constants, section 5 names), 02 (`GameState` collection fields), 03 (tick loop, `MarkDpsDirty`, Rock Candy), 06 (diamond and ticket income, Rock Candy income), 08 (server summon endpoint).
+
+## 1. Design goals
+
+1. Published odds are the odds. Banner levels only move weight between C, R and E; the L and M rates printed on `SCR_SUMMON` are the same on day 1 and day 300.
+2. Hard pity is a guarantee, not a lever. The experience is tuned by the soft ramp; `PITY_HARD = 80` exists for the disclosure text (P99 to L+ is 62).
+3. Every copy is worth something: dupes level the item, overflow converts to Rock Candy, and every owned weapon contributes passively whether equipped or not.
+4. Nothing the client holds can change a result. After M0 the seed never leaves the server; in M0 the local stream is `(seed, counter)` so a reloaded save re-receives the same results.
+5. The cheapest banner is the one with the collection hook. Weapons cost 100 because the passive makes every weapon pull progress; skills and companions cost more because their value is concentrated in the equipped few.
+
+## 2. Banners
+
+| Banner | Tier | Pull cost (`PULL_COST`) | Ticket | Pool | Slots fed | Dupe effect |
+|---|---|---|---|---|---|---|
+| `WEAPON` | M0 | 100 `DIAMOND` | `TICKET_SUMMON_WEAPON` | 30 | 1 equipped + passive from all owned | level raises equipped pct and passive pct |
+| `SKILL` | M0 | 200 `DIAMOND` | `TICKET_SUMMON_SKILL` | 40 | `SKILL_SLOTS = 6` | level raises `dpsPct` |
+| `COMPANION` | MVP | 300 `DIAMOND` | `TICKET_SUMMON_COMPANION` | 50 | `COMPANION_SLOTS = 4` (slots 2-4 unlock with Awakening, 03 section 5.3) | level raises ability magnitude |
+| `RUNE` | P1 | 300 `DIAMOND` | `TICKET_SUMMON_RUNE` | 36 | `RUNE_SLOTS = 6` | level raises stat value |
+
+A 10-pull costs exactly `10 * PULL_COST` or 10 tickets of the banner; there is no diamond discount (00 section 6.2). Mixed payment is not allowed: a pull is paid with one ticket or with diamonds; a 10-pull with ten tickets or with diamonds. Tickets are spent before diamonds when the player presses the diamond button and has tickets (the button label shows which will be used, 07). The pull command is one request whether it is 1 or 10 pulls:
+
+```csharp
+public enum SummonPayment { Diamonds, Tickets }
+public sealed record SummonRequest(Guid RequestId, Banner Banner, int Count /* 1 or 10 */, SummonPayment Payment);
+```
+
+Each banner has its own `BannerState` in `GameState` (02): `PityCounter`, `TotalPulls`, `BannerExp`, and in M0 a stream name. Pity does not carry across banners.
+
+## 3. The pull algorithm
+
+### 3.1 Rates and pity
+
+Base rates at banner level 1 (00 section 6.3): C 0.60, R 0.28, E 0.09, L 0.025, M 0.005. `L+` means L or M; base `P(L+) = 0.03`; `P(M | L+) = M_SHARE_OF_LPLUS = 1/6`.
+
+`n` is the number of pulls since the last L+ on this banner, counting the current pull.
+
+```
+PityRate(n) = 1.0                                        if n >= PITY_HARD (80)
+            = min(1.0, 0.03 + PITY_SOFT_STEP * (n - 50))  if 50 < n < 80          PITY_SOFT_STEP = 0.0325
+            = 0.03                                        if n <= PITY_SOFT_START (50)
+```
+
+When the L+ check fails, the tier is drawn from the banner level's C/R/E weights renormalised to sum to 1 (section 4). When it succeeds, M with probability 1/6 else L, and the counter resets to 0, including on L+ results that came out of the 10-pull guarantee.
+
+Exact distribution (closed form over the counter, from `gacha_model.py`; identical for every banner and every banner level because levels never touch L or M):
+
+```
+expected pulls per L+       : 27.35
+consolidated L+ rate        : 3.657%
+consolidated M rate         : 0.609%   (one Mythic per 164 pulls)
+P50 / P90 / P99 pulls to L+ : 23 / 56 / 62
+P(no L+ in first 50)        : 0.218
+P(reach hard pity at 80)    : < 1e-4
+```
+
+### 3.2 One pull
+
+Three uniform draws per pull, always consumed, in this order, so the audit log (08) and the M0 stream counter are `3 * TotalPulls`:
+
+1. `u1` against `PityRate(n)` for the L+ check.
+2. `u2` for the tier inside the branch (M vs L; or C/R/E renormalised; or forced E).
+3. `u3` for the item index inside the tier's pool, uniform.
+
+```csharp
+public readonly record struct PullResult(
+    Banner Banner, string ItemId, Rarity Rarity, bool IsNew,
+    int CopiesAfter, int LevelBefore, int LevelAfter, int OverflowRockCandy, int PityAfter, int BannerLevelAfter);
+
+// Shared by LocalSummonService (M0, Whisker.Runtime) and the server (MVP, Whisker.Server). Lives in Whisker.Sim.Summons.
+public static PullResult Pull(BannerDef def, BannerState st, CollectionState col, IUniformSource rng, bool forceEplus)
+{
+    st.PityCounter += 1; st.TotalPulls += 1; st.BannerExp += def.BannerExpPerPull;
+    double u1 = rng.Next(), u2 = rng.Next(), u3 = rng.Next();
+    int level = BannerLevel(def, st.BannerExp);
+    Rarity rarity;
+    bool lplus = u1 < PityRate(def, st.PityCounter);
+    if (lplus)            { rarity = u2 < def.MythicShareOfLplus ? Rarity.M : Rarity.L; st.PityCounter = 0; }
+    else if (forceEplus)  { rarity = Rarity.E; }
+    else                  { rarity = SampleCRE(def.RateTable(level), u2); }        // walks C, R, E cumulative weights / (1 - 0.03)
+    var pool = def.Pool[rarity];
+    string itemId = pool[(int)(u3 * pool.Count)];
+
+    var owned = col.GetOrAdd(itemId);
+    int before = Level(owned.Copies);
+    bool isNew = owned.Copies == 0;
+    int overflow = 0;
+    if (owned.Copies >= DUPE_LVL_CUM[^1]) overflow = DUPE_OVERFLOW_ROCK_CANDY[(int)rarity];   // copy 161+ converts, section 5.3
+    else owned.Copies += 1;
+    int after = Level(owned.Copies);
+    return new PullResult(def.Banner, itemId, rarity, isNew, owned.Copies, before, after, overflow, st.PityCounter, level);
+}
+
+public static PullResult[] Pull10(BannerDef def, BannerState st, CollectionState col, IUniformSource rng)
+{
+    var r = new PullResult[10];
+    for (int i = 0; i < 9; i++) r[i] = Pull(def, st, col, rng, forceEplus: false);
+    bool anyEplus = r.Take(9).Any(x => x.Rarity >= Rarity.E);
+    r[9] = Pull(def, st, col, rng, forceEplus: !anyEplus);
+    return r;
+}
+
+static double PityRate(BannerDef d, int n) =>
+    n >= d.PityHard ? 1.0 : Math.Min(1.0, d.BaseLplus + d.PitySoftStep * Math.Max(0, n - d.PitySoftStart));
+```
+
+`SampleCRE(rates, u)` walks C then R then E with each weight divided by `(rates.C + rates.R + rates.E) = 0.97` and returns the first tier whose cumulative weight exceeds `u`; it returns E if rounding leaves `u` above the last boundary. The forced E+ slot still runs the L+ check first, so a 10-pull's last slot can be L or M; if the check fails it is E, never a renormalised draw over E/L/M. This matches the sibling's implementation and keeps "at least one E+" literally true without changing the L+ distribution.
+
+Wallet and quest effects are applied by the caller (`Simulation.ApplySummonResult`, section 10), not inside `Pull`, so the same function runs on the server with no wallet in scope.
+
+### 3.3 10-pull guarantee numbers
+
+`P(guarantee fires) = (1 - P(E+))^9`. At banner level 1, `P(E+) = 0.12`, so the slot-10 upgrade fires in 31.6% of 10-pulls and expected E+ per 10-pull rises from 1.20 to 1.48. At banner level 10, `P(E+) = 0.192`, it fires in 14.7% and expected E+ per 10-pull is 2.04. The guarantee never lowers anyone's odds.
+
+### 3.4 Test vectors
+
+`Whisker.Sim.Tests/SummonTests.cs` and `Whisker.Server.Tests/SummonAlgorithmTests.cs` run the same vectors; the Python model prints them with `--vectors`.
+
+| # | Setup | Expect |
+|---|---|---|
+| 1 | `PityRate(n)` for n = 1, 50, 51, 55, 60, 65, 70, 75, 79, 80, 81 | 0.03, 0.03, 0.0625, 0.1925, 0.355, 0.5175, 0.68, 0.8425, 0.9725, 1.0, 1.0 |
+| 2 | Level-1 rates, `u1 = 0.5, u2 = 0.0, u3 = 0.0`, pity 1 | C, first item of C pool, pity 2 |
+| 3 | Level-1 rates, `u2 = 0.60/0.97 - 1e-9` and `0.60/0.97` | C then R (boundary is strict) |
+| 4 | `u2 = 0.88/0.97 - 1e-9` and `0.88/0.97`, `u1 = 0.5` | R then E |
+| 5 | Pity 79, `u1 = 0.9725 - 1e-9` and `0.9725` | L+ then not L+ |
+| 6 | Pity 80, `u1 = 0.999999`, `u2 = 1/6 - 1e-9` | M, pity reset to 0 |
+| 7 | Pity 80, `u1 = 0.999999`, `u2 = 1/6` | L, pity 0 |
+| 8 | `Pull10` with `u1 = 0.99` for all, `u2 = 0.0` | slots 1-9 C, slot 10 E |
+| 9 | `Pull10` with slot 3 scripted to E, otherwise as 8 | slot 10 C (guarantee did not fire) |
+| 10 | `Pull10` with slots 1-9 C and slot 10 `u1 = 0.0` | slot 10 is L+ (L+ check runs before the forced E) |
+| 11 | Draw count after 1,000 pulls | stream advanced by exactly 3,000; `TotalPulls == 1000`; `BannerExp == 1000` |
+| 12 | Copies 1, 2, 3, 6, 10, 160, 161 | levels 1, 1, 2, 3, 4, 10, 10; copy 161 returns `OverflowRockCandy == DUPE_OVERFLOW_ROCK_CANDY[r]` and `CopiesAfter == 160` |
+| 13 | Monte Carlo 1,000,000 pulls, seed 7, level 1 | L+ frequency within 0.1 pp of 3.657%; M within 0.03 pp of 0.609%; C/R/E split within 0.3 pp of 0.60/0.28/0.09 of non-L+ |
+| 14 | Monte Carlo 1,000,000 pulls at banner level 10 | C/R/E split within 0.3 pp of 0.42/0.388/0.162 of non-L+; L+ unchanged |
+| 15 | Same seed and counter on two `BannerState`s | identical 1,000-pull sequences; after a save/load round-trip the next pull equals the un-restored copy's |
+| 16 | Banner level thresholds | `BannerExp` 0, 49, 50, 2999, 3000, 10000 give levels 1, 1, 2, 9, 10, 10 |
+
+## 4. Banner level
+
+Each pull on a banner grants `BANNER_EXP_PER_PULL = 1` EXP to that banner, paid or ticket, single or 10-pull slot. Level is the count of thresholds reached:
+
+| Level | `BANNER_LVL_EXP` (cumulative pulls) | C | R | E | L | M | P(E+) |
+|---|---|---|---|---|---|---|---|
+| 1 | 0 | 0.600 | 0.280 | 0.090 | 0.025 | 0.005 | 0.120 |
+| 2 | 50 | 0.580 | 0.292 | 0.098 | 0.025 | 0.005 | 0.128 |
+| 3 | 150 | 0.560 | 0.304 | 0.106 | 0.025 | 0.005 | 0.136 |
+| 4 | 300 | 0.540 | 0.316 | 0.114 | 0.025 | 0.005 | 0.144 |
+| 5 | 500 | 0.520 | 0.328 | 0.122 | 0.025 | 0.005 | 0.152 |
+| 6 | 800 | 0.500 | 0.340 | 0.130 | 0.025 | 0.005 | 0.160 |
+| 7 | 1200 | 0.480 | 0.352 | 0.138 | 0.025 | 0.005 | 0.168 |
+| 8 | 1700 | 0.460 | 0.364 | 0.146 | 0.025 | 0.005 | 0.176 |
+| 9 | 2300 | 0.440 | 0.376 | 0.154 | 0.025 | 0.005 | 0.184 |
+| 10 | 3000 | 0.420 | 0.388 | 0.162 | 0.025 | 0.005 | 0.192 |
+
+Rule: per level above 1, `C -= BANNER_LVL_C_SHIFT (0.020)`, `R += BANNER_LVL_R_SHIFT (0.012)`, `E += BANNER_LVL_E_SHIFT (0.008)`; L and M never change. Every row sums to 1.0 within 1e-9 and the content validator (09) rejects a `banner_levels` table that does not. The table is content, not code: the sim reads the row for the current level; the shift constants exist only so the sheet can regenerate the rows.
+
+What the player sees: `SCR_SUMMON` shows the current level's full rate table, the next threshold ("12 pulls to level 4"), and a note "Legendary and Mythic rates do not change with level". The F2P bot in 03 reaches weapon banner level 4 around day 25 (about 12 weapon pulls a day with tickets), skill banner level 3 around day 20, companion banner level 2 around day 14. A whale buying 3,000 pulls reaches level 10 on one banner; its E+ rate is 1.6x the F2P player's, its L+ rate identical. That is the intended shape of the paid edge on summons: more dupes and more Epics, not more Mythics per pull.
+
+Banner level is a per-banner integer derived from `BannerExp` and is not reset by anything. P1 rate-up banners (section 9) share the parent banner's level and pity.
+
+## 5. Dupe economy
+
+### 5.1 Levels from copies
+
+```
+DUPE_LVL_CUM = [1, 3, 6, 10, 16, 25, 40, 64, 100, 160]       # total copies for level 1..10, all collectible kinds
+Level(copies)        = count of thresholds <= copies            # 0 if unowned, 1..10
+EffectiveLevel(item) = Level(copies) + limitBreaks              # 1..15
+LevelMult(item)      = 1 + DUPE_LVL_BONUS * (EffectiveLevel - 1) # DUPE_LVL_BONUS = 0.20; level 10 = 2.8x, level 15 = 3.8x
+```
+
+`LevelMult` scales a weapon's equipped pct and passive pct, a skill's `dpsPct` and per-cast numbers, a companion's ability magnitude, a rune's stat value. Level is derived from copies at read time and never stored (02), so retuning `DUPE_LVL_CUM` reflows every save.
+
+Expected pace, F2P at the 03 bot's cadence (about 12 weapon, 5 skill, 3 companion pulls a day including tickets): a specific Common weapon (10 in the pool, 0.60 rate) gains a copy every 1.4 days, so it reaches level 5 (16 copies) in about three weeks and level 10 in about seven months. A specific Legendary weapon (4 in the pool, 0.025 rate plus pity) gains a copy every 13 days: level 3 by day 80. L and M leveling is the long tail; C/R/E leveling is the daily visible progress. That is the same split the sibling tuned and it is why the pools are small.
+
+### 5.2 Limit breaks (MVP, Rock Candy sink)
+
+Past level 10 a copy cannot raise the level. The reference game's answer is a limit break, and 00 section 5.2 already names "weapon/skill limit breaks" as a Rock Candy sink.
+
+```
+LimitBreak(itemId):                                         # command, from SCR_ITEM_DETAIL
+  item = col[itemId]
+  if item.Copies == 0:                           return Rejected(ItemNotOwned)
+  if item.LimitBreaks >= LIMIT_BREAK_MAX (5):    return Rejected(LimitBreakMaxed)
+  cost = LIMIT_BREAK_COST[item.Rarity] * (item.LimitBreaks + 1)
+  if Wallet[ROCK_CANDY] < cost:                  return Rejected(NotEnoughRockCandy)
+  Wallet.Apply(-cost ROCK_CANDY, TRAINING)
+  item.LimitBreaks += 1; MarkDpsDirty()
+  publish ItemLimitBroken(itemId, item.LimitBreaks, cost)
+```
+
+| Rarity | `LIMIT_BREAK_COST[r]` per rank (x rank) | Ranks 1-5 total |
+|---|---|---|
+| C | 10 | 150 |
+| R | 20 | 300 |
+| E | 40 | 600 |
+| L | 80 | 1200 |
+| M | 150 | 2250 |
+
+A limit break does not require level 10 first; it is a flat +1 effective level, which is what makes it useful on a level-1 Mythic weapon (+20% of 700% = +140% ATK for 150 candy). With the 03 bot's assumed 100 Rock Candy a day and Awakening taking 400 by day 2 and 800 by day 5, limit breaks start around day 6 and the bot has 20-25 of them by day 30, almost all on the equipped Mythic or Legendary weapon and the top two skills. They are the main reason the summon layers keep growing after the pools saturate (03 section 8.2), so `LIMIT_BREAK_COST` is an `S` constant that `power_curve_model.py` validates: the bot must buy at least one limit break a day from day 10, and limit breaks must stay under 60% of its Rock Candy spend over 30 days (Awakening must still happen).
+
+Limit breaks apply to weapons, skills and companions (and runes in P1). Companions have no 00 mention as a Rock Candy sink; this spec includes them for symmetry and lists it as an open question.
+
+### 5.3 Overflow past 160 copies
+
+A copy received when `Copies == 160` is not stored; it converts to Rock Candy immediately at pull time:
+
+| Rarity | `DUPE_OVERFLOW_ROCK_CANDY[r]` |
+|---|---|
+| C | 1 |
+| R | 2 |
+| E | 5 |
+| L | 20 |
+| M | 50 |
+
+Decision: Rock Candy conversion, not shards. 00 has no shard currency and adding one adds a wallet column, a shop and a migration for a currency that would only matter to players with 160 copies of something (a Common weapon after about seven months of F2P play). Rock Candy already has two sinks the overflow feeds (Awakening and limit breaks). The `PullResult.OverflowRockCandy` field and the `ItemAcquired` event carry it so `SCR_SUMMON_RESULT` can show "+1 Rock Candy (max copies)".
+
+## 6. Weapons
+
+### 6.1 Pool
+
+30 weapons. Rarity split and the two percentages each carries:
+
+| Rarity | Count | `WEAPON_ATK_PCT[r]` (equipped, at level 1) | `WEAPON_PASSIVE_PCT[r]` (owned, at level 1) |
+|---|---|---|---|
+| C | 10 | 20 | 1 |
+| R | 8 | 50 | 2 |
+| E | 6 | 120 | 4 |
+| L | 4 | 300 | 8 |
+| M | 2 | 700 | 16 |
+
+Weapon layer in the power formula (03 section 7):
+
+```
+equippedWeaponPct = WEAPON_ATK_PCT[equipped.Rarity] * LevelMult(equipped)            # 0 if nothing equipped
+weaponPassivePct  = sum over owned weapons w of WEAPON_PASSIVE_PCT[w.Rarity] * LevelMult(w)   # equipped weapon included
+weaponMult        = 1 + (equippedWeaponPct + weaponPassivePct) / 100
+```
+
+A weapon's `weapons` table row (09): `id`, `rarity`, `name_key`, `icon`, `atk_pct` (defaults to the rarity value; a row may override for flavour within +/-10%), `passive_pct` (same), `element` (cosmetic in MVP).
+
+### 6.2 Why the passive exists and what it is worth
+
+The equipped pct is a step function of luck: the player's best weapon. The passive is a sum over everything they have ever pulled, so every weapon pull moves it. Worked numbers:
+
+| Collection state | equipped | passive | `weaponMult` |
+|---|---|---|---|
+| Day 1 after the tutorial 10-pull (typical: 6 C, 3 R, 1 E) | 120 (E) | 6 + 6 + 4 = 16 | x2.36 |
+| Day 7 bot (36 pulls: all 10 C owned at level 2-3, 6 R, 3 E, 1 L) | 300 (L) | ~24 + 16 + 12 + 8 = 60 | x4.6 |
+| Day 30 bot (94 pulls, 1 M at level 1 plus 3 limit breaks, full C and R sets at level 3-4) | 700 x 1.6 = 1120 | ~40 + 25 + 20 + 16 + 16 = 117 | x13.4 |
+| Complete collection, every weapon level 10 | 700 x 2.8 = 1960 | 319 | x23.8 |
+| Complete collection, every weapon level 15 | 700 x 3.8 = 2660 | 433 | x31.9 |
+
+The passive is 10-25% of the weapon layer for most of the first month and it is the part that moves every day. A pull that lands a duplicate level-3 Common still adds 0.2% ATK, which `SCR_SUMMON_RESULT` shows as "+0.2% ATK (collection)". Low rarities also matter because the C and R sets are the bulk of the passive at level 4+: the 10 Commons at level 10 are 28% ATK, more than a level-1 Legendary.
+
+### 6.3 Equip
+
+`EquipWeapon(weaponId)` requires `Copies > 0`, sets `Hero.EquippedWeaponId`, marks DPS dirty, publishes `ItemEquipped(WEAPON, slot 0, weaponId)`. `AutoEquipBestWeapon()` picks the owned weapon with the highest `WEAPON_ATK_PCT * LevelMult`, ties broken by rarity then `id` ordinal, and is called automatically after every summon result in M0 and MVP (the player can switch manually; the next summon that finds a strictly better weapon switches back and says so in a toast). There is no unequipped state after the tutorial: the tutorial grants `TUTORIAL_WEAPON_ID` (a fixed Common) before the first pull so `equippedWeaponPct` is never 0.
+
+## 7. Skills
+
+### 7.1 Pool and data
+
+40 skills: C 14, R 11, E 8, L 5, M 2. Each row in `skills` (09):
+
+| Column | Type | Meaning |
+|---|---|---|
+| `id` | string | `skill_<rarity>_<nn>` |
+| `rarity` | C..M | |
+| `dps_pct` | double | Rated average DPS as % of hero DPS at level 1; defaults `SKILL_DPS_PCT[r]` = C 10 / R 20 / E 40 / L 80 / M 160 |
+| `cast_type` | `INSTANT`, `DOT`, `BUFF` | |
+| `cooldown_ticks` | int | 30..300 (3 s to 30 s) |
+| `duration_ticks` | int | `DOT` and `BUFF` only; <= `cooldown_ticks` |
+| `buff_pct` | double | `BUFF` only: ATK buff while active |
+| `name_key`, `icon`, `vfx` | string | presentation |
+
+Derived per-cast numbers, so a skill's rated `dpsPct` is exactly what it delivers on an infinitely long fight:
+
+```
+INSTANT: damagePctPerCast = dps_pct * cooldown_ticks / ATTACK_INTERVAL_TICKS            # in % of one hero hit (one hit = 1 s of hero DPS at speed 1)
+DOT:     damagePctPerTick = dps_pct * cooldown_ticks / duration_ticks / ATTACK_INTERVAL_TICKS
+BUFF:    dps_pct is informational = buff_pct * duration_ticks / cooldown_ticks           # the buff multiplies hero hits while active
+```
+
+Example: `skill_E_03`, E, `dps_pct 40`, `INSTANT`, cooldown 100 ticks (10 s). One cast every 10 s must deliver 40% of 10 s of hero DPS = 4 hero hits' worth of damage, so `damagePctPerCast = 400` (% of one hit). At level 10 the cast does 1,120% of a hit. A `BUFF` skill with `buff_pct 60`, duration 50, cooldown 150 has an informational `dps_pct` of 20.
+
+Mix in the pool: about 60% `INSTANT`, 25% `DOT`, 15% `BUFF`. `BUFF` skills do not stack with each other (03 section 2.3: strongest active applies) so the content validator warns if more than two `BUFF` skills share a rarity.
+
+### 7.2 Slots and auto-cast order
+
+`SKILL_SLOTS = 6`. `EquipSkill(slot, skillId)` requires ownership and that the skill is not in another slot; `UnequipSkill(slot)`; `AutoEquipBestSkills()` fills the six slots with the highest `dps_pct * LevelMult`, ties by rarity then id. Auto-cast order is slot order (03 section 2.3): slot 0 is checked first every tick, so the player's slot arrangement is the priority. `AutoEquipBestSkills` places the highest-rated skill in slot 0. `SCR_SKILLS` offers drag-to-reorder; the sim only sees `EquipSkill` calls.
+
+Skill layer: `skillMult = 1 + sum over equipped of dps_pct * LevelMult / 100`. With the bot's day-30 loadout (2 L at level 1-2, 3 E at level 2-3, 1 R) that is about x5.5.
+
+Manual cast (P1): `CastSkill(slot)` fires a ready skill immediately, bypassing the one-cast-per-tick limit for that tick; cooldown rules unchanged. M0 and MVP have no manual cast; the tap target during a boss is Tap Zap.
+
+## 8. Companions (MVP)
+
+### 8.1 Pool and data
+
+50 companions: C 18, R 14, E 10, L 6, M 2. Each row in `companions` (09):
+
+| Column | Type | Meaning |
+|---|---|---|
+| `id` | string | `comp_<rarity>_<nn>` |
+| `rarity` | C..M | |
+| `ability_type` | `DAMAGE`, `BUFF_ATK`, `BUFF_GOLD`, `MP_REGEN` | |
+| `dps_pct` | double | Rated contribution at full MP uptime, level 1; defaults `COMPANION_DPS_PCT[r]` = C 16 / R 32 / E 64 / L 128 / M 256 |
+| `mp_cost` | int | default 10 |
+| `cooldown_ticks` | int | default 100 (10 s) |
+| `duration_ticks` | int | `BUFF_*` only |
+| `magnitude` | double | type-specific, derived from `dps_pct` as below |
+
+```
+DAMAGE:    damagePctPerCast = dps_pct * cooldown_ticks / ATTACK_INTERVAL_TICKS   # like an INSTANT skill, in % of one hero hit
+BUFF_ATK:  buff_pct = dps_pct * cooldown_ticks / duration_ticks                 # hero ATK buff while active; strongest active wins (shared with skill buffs)
+BUFF_GOLD: gold_buff_pct = 2 * dps_pct * cooldown_ticks / duration_ticks        # gold from kills while active; no DPS; rated dps_pct is a value proxy
+MP_REGEN:  mp_restored = dps_pct / 4 per cast                                  # e.g. E restores 16 MP for 10 MP spent; dps_pct counts as 0 in the formula
+```
+
+Mix: 50% `DAMAGE`, 20% `BUFF_ATK`, 15% `BUFF_GOLD`, 15% `MP_REGEN`. `MP_REGEN` companions are what lets a player run three `DAMAGE` companions at full uptime before Research catches up; the bot values them through `mpSufficiency`.
+
+### 8.2 Slots and MP
+
+`COMPANION_SLOTS = 4`; slot 1 is open from the start, slots 2-4 unlock at Awakening ranks 1-3 (03 section 5.3). `EquipCompanion(slot, id)`, `UnequipCompanion(slot)`, `AutoEquipBestCompanions()` as for skills, except that auto-equip reserves one slot for the best `MP_REGEN` companion whenever `mpSufficiency < 1` with the pure-damage loadout.
+
+Companion layer: `companionMult = 1 + mpSufficiency * sum over equipped of dps_pct * LevelMult / 100`, with `mpSufficiency = min(1, mpRegen / sum(mp_cost / cooldownSeconds))` plus the MP restored by `MP_REGEN` companions counted as regen. MP pool and regen come from Research (03 section 6). The pool is drained at spawn by whichever abilities are ready (one per tick), so a full pool at `MP_POOL0 = 100` fires all four abilities in the first four ticks of a boss fight; the pool's size is burst, the regen is uptime.
+
+## 9. Runes (P1) and other banners
+
+Runes: 36 in the pool (C 12, R 10, E 8, L 4, M 2), `RUNE_SLOTS = 6` unlocked three at Awakening rank 4 and three at rank 5. Each rune carries one `Stat` and a value: `ATK_PCT`, `CRIT_RATE`, `CRIT_DMG`, `ATK_SPD` (uncapped by Training caps, capped by its own `RUNE_CAP`), `GOLD_GAIN`, `EXP_GAIN`. `runePct` in 03's formula is the sum of equipped `ATK_PCT` runes; the other stats add to their Training counterparts. Same pity, dupe, limit break and banner-level machinery; a fourth `BannerState`. Nothing in MVP code needs to change beyond a new `Banner` enum value and a new collection dictionary, both of which 02's schema reserves.
+
+Rate-up banners (P1): a child banner with the parent's pool, pity and level, plus a `featured` list that takes `RATE_UP_SHARE = 0.5` of each rarity's weight. Costumes (P2) are not summoned; they are shop items.
+
+## 10. Applying a result in the sim
+
+Whether the result came from the local M0 roll or the server, the sim applies it the same way:
+
+```
+ApplySummonResult(SummonRequest req, SummonResult res):     # Whisker.Sim, called by Whisker.Runtime.SummonClient
+  if Applied.Contains(req.RequestId): return                 # idempotent against retries (01, 08)
+  pay: Tickets  -> Wallet.Apply(-req.Count TICKET_SUMMON_<banner>, SUMMON)
+       Diamonds -> Wallet.Apply(-req.Count * PULL_COST[banner] DIAMOND, SUMMON)
+  banner.PityCounter = res.PityAfter; banner.TotalPulls += req.Count; banner.BannerExp = res.BannerExpAfter
+  for r in res.Results:
+    col[r.ItemId].Copies = r.CopiesAfter
+    if r.OverflowRockCandy > 0: Wallet.Apply(+r.OverflowRockCandy ROCK_CANDY, SUMMON)
+    publish ItemAcquired(banner, r.ItemId, r.Rarity, r.IsNew, r.LevelBefore, r.LevelAfter, r.OverflowRockCandy)
+  Quests.OnSummon(banner, req.Count)                          # 06
+  if banner == WEAPON: AutoEquipBestWeapon()
+  MarkDpsDirty(); Applied.Add(req.RequestId)
+```
+
+In MVP the server has already debited diamonds or tickets on its side and returns the new wallet balances in `res.Wallet`; the client applies the same delta and asserts equality, reconciling to the server value on mismatch (01 error taxonomy). In M0 the local service and the sim run in the same process and the wallet check in `Pull` is the only one: `NotEnoughDiamonds` / `NotEnoughTickets` are rejected before any draw.
+
+## 11. Collection screen data
+
+`SCR_WEAPONS`, `SCR_SKILLS`, `SCR_COMPANIONS` (and `SCR_RUNES` in P1) bind to one view-model shape built from `Query`, never from `GameState` directly (00 section 8 item 8):
+
+```csharp
+public sealed record CollectibleVm(
+    string Id, Rarity Rarity, string NameKey, string Icon,
+    bool Owned, int Copies, int Level, int LimitBreaks, int EffectiveLevel,
+    int CopiesToNextLevel,            // 0 at level 10
+    int NextLimitBreakCost,           // Rock Candy; 0 when maxed or unowned
+    double ValueNow, double ValueNextLevel,   // the kind's headline number: equipped pct / dps_pct / ability magnitude, after LevelMult
+    double PassiveNow,                // weapons only
+    bool Equipped, int? Slot,
+    bool IsNew);                      // set by ItemAcquired(IsNew) until the player opens SCR_ITEM_DETAIL for it; stored in Profile UI state (02), not in sim state
+
+public sealed record CollectionVm(
+    Banner Banner, IReadOnlyList<CollectibleVm> Items,
+    int OwnedCount, int PoolCount,                     // "23 / 30"
+    double LayerMult,                                  // weaponMult / skillMult / companionMult from Query
+    double PassiveTotal,                               // weapons: sum of passive pct
+    int NewCount,                                      // red-dot badge
+    int BannerLevel, int PullsToNextLevel);
+```
+
+Sort options (client-side, over the VM): rarity desc then level desc (default), level, newest acquired, name. Filters: owned / all, rarity chips. Locked (unowned) items render as silhouettes with rarity colour and "?" name, so the pool size is always visible, which is what makes "23 / 30" a goal. `SCR_ITEM_DETAIL` adds the per-cast numbers from sections 7.1 and 8.1 and the two buttons `Equip` and `Limit break (N Rock Candy)`.
+
+## 12. `ISummonService`: M0 local roll, MVP server roll
+
+```csharp
+namespace Whisker.Runtime.Summons
+{
+    public sealed record SummonResultDto(
+        Guid RequestId, Banner Banner, PullResult[] Results,
+        int PityAfter, int BannerExpAfter, int BannerLevelAfter,
+        WalletSnapshot Wallet,                 // server-authoritative balances after debit (MVP); local balances in M0
+        long ServerTimeMs);
+
+    public enum SummonError { None, NotEnoughDiamonds, NotEnoughTickets, BannerClosed, RateLimited, Network, Replayed }
+
+    public interface ISummonService
+    {
+        Task<Result<SummonResultDto, SummonError>> PullAsync(SummonRequest request, CancellationToken ct);
+        Task<RateTableDto> GetRateTableAsync(Banner banner, CancellationToken ct);     // published odds for SCR_SUMMON; cached per content version
+    }
+}
+```
+
+**M0: `LocalSummonService`** (`Whisker.Runtime`). Holds a reference to the `GameState`, runs `Whisker.Sim.Summons.Pull` on the banner's local stream `summon_<banner>` (`summon_weapon`, `summon_skill`; `summon_companion` is created unused), checks the wallet before drawing, returns synchronously-completed tasks. The stream is `(seed, counter)` in the save like every other stream (02); its counter invariant is `3 * TotalPulls`. The MVP migration (02) removes `summon_*` streams and ignores them if present. The algorithm, pity state and result shape are identical to the server's, so M0 saves carry forward with no re-roll.
+
+**MVP: `RemoteSummonService`**. POSTs `SummonRequest` to 08's summon endpoint with the auth header and `requestId`; on a network error it retries with backoff (01) using the same `requestId`, and the server replays the stored result (00 section 8 item 13). The UI (07) shows a spinner on the summon button, disables summon-again until the result is applied, and after a timeout shows "Checking your summon..." rather than an error, because the pull may have landed. The client never holds a seed or sees `u1..u3`; it receives `PullResult[]` and applies it (section 10). The server's pity state is authoritative; `ApplySummonResult` overwrites the local `PityCounter` with `PityAfter`.
+
+**Server plausibility (08)** needs only `TotalPulls`, `PityCounter` and `BannerExp` per banner from the uploaded save, which it compares with its own summon log.
+
+## 13. Analytics events
+
+All carry `playerId`, `serverTime`, `contentVersion`, `clientVersion`, `sessionId` (02 common envelope).
+
+| Event | Fields | When |
+|---|---|---|
+| `summon` | `requestId`, `banner`, `count`, `payment` (DIAMOND/TICKET), `diamondsSpent`, `ticketsSpent`, `pityBefore`, `pityAfter`, `bannerLevelBefore`, `bannerLevelAfter`, `results[]` of `{itemId, rarity, isNew, levelBefore, levelAfter, overflowRockCandy}`, `guaranteeFired` (bool), `source` (LOCAL/SERVER) | once per request, after `ApplySummonResult` |
+| `item_acquired` | `banner`, `itemId`, `rarity`, `isNew`, `copiesAfter`, `levelAfter`, `acquireReason` (SUMMON/MAIL/TUTORIAL) | once per result item (also for non-summon grants) |
+| `item_equipped` | `banner`, `slot`, `itemId`, `previousItemId`, `auto` (bool) | on equip |
+| `limit_break` | `banner`, `itemId`, `rarity`, `rankAfter`, `rockCandySpent` | on `ItemLimitBroken` |
+| `currency_changed` | 02 schema with `reason = SUMMON` | per wallet delta |
+
+Dashboards 10 wants from these: L+ frequency per banner vs the published 3.657% (alarm outside +/-0.3 pp over 100k pulls), guarantee fire rate per banner level, pulls per DAU per banner, first-L+ day distribution, limit-break adoption.
+
+## 14. `tools/gacha_model.py`
+
+Copied from `idle-rng-game/tools/gacha_model.py` into `whisker-hero/tools/` and extended. It remains closed-form (no simulation) except for the optional Monte Carlo cross-check.
+
+Changes:
+
+1. Read rates, pity constants, pool sizes, `DUPE_LVL_CUM`, `BANNER_LVL_EXP` and the shift constants from `content/*.json` (09) instead of module constants; `--override` for sweeps as in `power_curve_model.py`.
+2. `--banner WEAPON|SKILL|COMPANION|RUNE` selects the pool; the pity math is shared.
+3. `rate_table(level)` applies the section 4 shifts and asserts each row sums to 1 within 1e-9; `--levels` prints the ten rows exactly as the `banner_levels` table should contain them, so the sheet can be checked against the tool.
+4. Per level: `P(E+)`, `P(guarantee fires) = (1 - P(E+))^9`, expected E+ per 10-pull, expected new items per pull given an owned set (collection fill curve: expected pulls to own all C, all R, all E of the banner at level 1 and at level 10).
+5. F2P cadence from the 03 bot's inputs: `--pulls-per-day` per banner (default W 6, S 3, C 2.3 including tickets) prints expected days to first L+, to first M, P90 days to first L+, and expected level of a specific C/R/E/L item at days 7, 30, 90.
+6. `--vectors` prints the section 3.4 vectors 1-7 and 12 and 16 as a JSON array the C# tests load, so the tests and the tool cannot drift.
+7. `--mc N --seed S` runs N pulls on the Python SplitMix64 reference (sibling 03 section 5.4) with the exact `Pull` logic and prints observed C/R/E/L/M frequencies, guarantee fire rate and the L+ gap histogram, for vectors 13 and 14.
+
+It must print, in this order: the pity block (section 3.1 numbers), the soft ramp table, the ten-row rate table with `P(E+)` and guarantee numbers per level, the collection fill curve, the cadence block. `S` constants it validates: `BANNER_EXP_PER_PULL` and `BANNER_LVL_EXP` (F2P reaches weapon level 4 between day 20 and day 35), the shift constants (level 10 `P(E+) <= 0.20` so the paid E+ edge stays under 1.7x), pool sizes (a specific Common reaches level 5 inside 30 days of F2P weapon pulls; a specific Legendary does not reach level 3 inside 60 days), `COMPANION_SLOTS` and the companion `dps_pct` defaults (together with `power_curve_model.py`, the companion layer passes 5% by day 7), `WEAPON_PASSIVE_PCT` (passive is between 10% and 40% of the weapon layer on days 7 and 30).
+
+## 15. Open questions
+
+1. **Limit breaks on companions.** 00 section 5.2 names weapon and skill limit breaks only. Default: include companions; drop if 00 says the sink is weapons and skills only.
+2. **Tickets before diamonds** on the diamond button. Default: yes, with the button label showing which; 07 may prefer two buttons.
+3. **Rate-up banners share pity with the parent** (industry norm for standard pools, not for limited banners). Owner: 06/08 for P1 events. Default: shared.
+4. **Auto-equip after summon** for skills and companions too, or weapons only? Default: weapons only; skills and companions show a "better skill available" badge, since slot order is a player choice.
+5. **Tutorial grants**: `TUTORIAL_WEAPON_ID` and whether the 1,500 tutorial diamonds are pre-spent as a scripted weapon 10-pull (fixed results for a controlled first minute) or rolled. Owner: 07. Default: rolled on the real algorithm, with the 10-pull guarantee making an Epic certain.
+6. **Soft-pity disclosure**: show the exact ramp or "rates increase after 50 pulls". Default: show the ramp on the rate table screen; it is friendlier and simplifies the Japan and Belgium notes in 08.
+7. **`DUPE_OVERFLOW_ROCK_CANDY` values** are placeholders; nobody reaches 160 copies in the 30-day window, so the tool cannot validate them. Default: keep until live data.
+
+## 16. Acceptance criteria
+
+1. All 16 test vectors in section 3.4 pass in `Whisker.Sim.Tests` and `Whisker.Server.Tests` against the same JSON produced by `gacha_model.py --vectors`.
+2. Every row of the `banner_levels` table sums to 1.0 within 1e-9; L and M columns are constant across rows; the content validator fails otherwise.
+3. `PityRate` is monotone non-decreasing in `n` for every banner; `PityCounter` is always in `0..PITY_HARD-1` after any pull.
+4. A `Pull10` whose first nine results are below E yields an E+ in slot 10; a `Pull10` with an E+ in slots 1-9 rolls slot 10 normally; across 100,000 scripted 10-pulls at level 1 the guarantee fires in 31.6% +/- 0.5 pp.
+5. Levels: copies 1, 3, 6, 10, 16, 25, 40, 64, 100, 160 give levels 1..10; `LevelMult` at level 10 is 2.8 and at level 10 with 5 limit breaks is 3.8.
+6. `LimitBreak` is rejected for an unowned item, at 5 ranks, and with insufficient Rock Candy (nothing charged); otherwise charges `LIMIT_BREAK_COST[r] * (rank + 1)` with reason `TRAINING` and raises the item's contribution by exactly 20% of its level-1 value.
+7. Copy 161 of any item adds `DUPE_OVERFLOW_ROCK_CANDY[r]` Rock Candy with reason `SUMMON` and leaves `Copies == 160`.
+8. `weaponMult` for a fixture (equipped L at level 3, owned 10 C at level 2, 4 R at level 1) equals `1 + (300 * 1.4 + 10 * 1 * 1.2 + 4 * 2 * 1.0) / 100 = 5.4` within 1e-12; unequipping is impossible (there is no unequip command for weapons) and `AutoEquipBestWeapon` after pulling an M switches the equipped weapon and publishes `ItemEquipped(..., auto: true)`.
+9. A level-1 Epic `INSTANT` skill with cooldown 100 deals exactly `4.0 * HitDamage` per cast, fires on the first `Fighting` tick after its cooldown expires, and over a 600-tick fight with one enemy deals `40%` of hero damage within 1% (hero at speed 1, no crit).
+10. Two `BUFF` effects active at once apply only the stronger; the weaker's expiry does not end the stronger.
+11. With `MP_REGEN0 = 2`, four `DAMAGE` companions at cost 10 / cooldown 100 fire 12 +/- 1 abilities per minute; replacing one with an E `MP_REGEN` companion (restores 16 per cast) raises the other three to full uptime (18 per minute).
+12. `ApplySummonResult` with a repeated `requestId` changes nothing; with a new one debits exactly the request's cost once, updates pity and banner EXP to the result's values, publishes one `ItemAcquired` per result and one `summon` analytics event.
+13. `LocalSummonService` over 1,000 pulls advances `summon_weapon.Counter` by exactly 3,000; a save/load round-trip between pulls 500 and 501 yields the same pull 501.
+14. `RemoteSummonService` retrying a timed-out request with the same `requestId` receives the original result and applies it once (08's replay test with a stubbed server).
+15. `gacha_model.py --mc 1000000 --seed 7` reports L+ within 0.1 pp of 3.657% and, with `--level 10`, C/R/E within 0.3 pp of 0.42/0.388/0.162 of non-L+ results.
+16. `CollectionVm.OwnedCount / PoolCount` equals the number of distinct owned ids over the pool size for a fixture; `NewCount` drops to zero after `SCR_ITEM_DETAIL` is opened for each new item (07 PlayMode test).
+
+## 17. Constants introduced
+
+| Name | Value | Kind | Section | Note |
+|---|---|---|---|---|
+| `BANNER_LVL_EXP` | 0, 50, 150, 300, 500, 800, 1200, 1700, 2300, 3000 | S | 4 | Cumulative pulls for levels 1..10. |
+| `BANNER_LVL_C_SHIFT`, `BANNER_LVL_R_SHIFT`, `BANNER_LVL_E_SHIFT` | 0.020, 0.012, 0.008 per level | S | 4 | Generate the `banner_levels` rows; L/M fixed. |
+| `LIMIT_BREAK_MAX` | 5 | S | 5.2 | Per item. |
+| `LIMIT_BREAK_COST[r]` | C 10 / R 20 / E 40 / L 80 / M 150, times rank | S | 5.2 | Rock Candy. Validated by `power_curve_model.py`. |
+| `DUPE_OVERFLOW_ROCK_CANDY[r]` | C 1 / R 2 / E 5 / L 20 / M 50 | S | 5.3 | Copy 161+. |
+| Weapon pool split | C 10 / R 8 / E 6 / L 4 / M 2 | S | 6.1 | Sums to 30. |
+| `WEAPON_ATK_PCT[r]` | C 20 / R 50 / E 120 / L 300 / M 700 | S | 6.1 | Equipped weapon ATK% at level 1. |
+| `TUTORIAL_WEAPON_ID` | a fixed Common | - | 6.3 | Granted before the first pull. |
+| Skill pool split | C 14 / R 11 / E 8 / L 5 / M 2 | S | 7.1 | Sums to 40. |
+| `SKILL_DPS_PCT[r]` | C 10 / R 20 / E 40 / L 80 / M 160 | I | 7.1 | Same values as the sibling's skill table. |
+| Skill cast-type mix | 60% INSTANT / 25% DOT / 15% BUFF | S | 7.1 | Content guideline, validated by the content validator as a warning. |
+| Companion pool split | C 18 / R 14 / E 10 / L 6 / M 2 | S | 8.1 | Sums to 50. |
+| `COMPANION_DPS_PCT[r]` | C 16 / R 32 / E 64 / L 128 / M 256 | S | 8.1 | Rated at full MP uptime. |
+| Companion defaults | `mp_cost 10`, `cooldown_ticks 100` | S | 8.1 | |
+| Companion ability mix | 50% DAMAGE / 20% BUFF_ATK / 15% BUFF_GOLD / 15% MP_REGEN | S | 8.1 | |
+| Rune pool split (P1) | C 12 / R 10 / E 8 / L 4 / M 2 | S | 9 | Sums to 36. |
+| `RATE_UP_SHARE` (P1) | 0.5 | S | 9 | |
+| `summon_weapon`, `summon_skill`, `summon_companion` streams | M0 only | - | 12 | Removed by the MVP migration. |
+| F2P pulls per day assumed | W 6 / S 3 / C 2.3 | input from 06 and 03 | 14 | Tool input, not a game constant. |
