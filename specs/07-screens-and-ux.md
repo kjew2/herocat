@@ -54,7 +54,7 @@ graph TD
     MAIN -->|network error taxonomy from 01| ERROR
 ```
 
-Two screens are added beyond 5.3 and should be lifted into 00: `SCR_CONFIRM` (generic two-button confirmation with a cost line) and `SCR_ERROR` (blocking or non-blocking error card driven by 01's error taxonomy). Both are M0 because the boot path and the Awakening confirm need them.
+Two screens were added here and are now in 00 section 5.3: `SCR_CONFIRM` (generic two-button confirmation with a cost line) and `SCR_ERROR` (blocking or non-blocking error card driven by 01's error taxonomy). Both are M0 because the boot path and the Awakening confirm need them.
 
 Stack rules:
 
@@ -174,7 +174,7 @@ Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them
 +----------------------------------------------+
 | [G] 3.72M  [D] 1,240  [F] 812   (av) [in] [*]|  HUD
 +----------------------------------------------+
-| Stage 100  Ch.2  v        kills 9/10   WALL  |
+| Stage 240  Ch.5  v        kills 9/10   WALL  |
 |                                              |
 |        (cat)                 (boss)          |
 |        ~~~~                  ~~~~~~          |
@@ -206,7 +206,7 @@ Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them
 | Avatar | `Profile.AvatarId` | tap: push `SCR_PROFILE` |
 | Inbox icon | `Inbox.UnclaimedCount` badge | tap: push `SCR_INBOX` |
 | Settings gear | | tap: push `SCR_SETTINGS` |
-| Stage label | `Combat.Stage`, `Combat.Chapter`, `Combat.Selected` | tap: push `SCR_STAGE_SELECT` (MVP; M0 no-op); while farming a side stage it reads "Farming 95 · frontier 100" (issue #35) |
+| Stage label | `Combat.Stage`, `Combat.Chapter`, `Combat.Selected` | tap: push `SCR_STAGE_SELECT` (MVP; M0 no-op); while farming a side stage it reads "Farming 235 · frontier 240" (issue #35) |
 | Kill counter | `Combat.KillsInStage / KILLS_PER_STAGE` | red when `IsWalled` |
 | WALL badge | `Combat.IsWalled` | |
 | Enemy sprite, HP bar | `Combat.EnemyId`, `EnemyIsBoss`, `EnemyHp`, `EnemyMaxHp` | HP bar text "1.2M / 1.7M" |
@@ -239,12 +239,10 @@ Purpose: all gold and Rock Candy sinks on the hero: Training per stat, Hero Leve
 +----------------------------------------------+
 | <  Hero                        DPS 3.72K     |
 | (cat)  Lv 32  |=========     | 4.2K / 9.8K   |
-| Awakening I   next: stage 150  [ Awaken ]    |  MVP
+| Awakening I   rank II at stage 150 [ Awaken ]|  MVP
 | Loadout: [wpn] [s1][s2][s3][s4][s5][s6] [c1][c2][c3][c4] |
 | Training              [x1] [x10] [x100] [Max]|
 | ATK      Lv 64  x4.20   cost 3.80K  [ + ]    |
-| HP       Lv 12  x1.60   cost 112    [ + ]    |
-| DEF      Lv 10  ...                          |
 | CRIT_RATE Lv 5  12.5%   cost 70     [ + ]    |
 | CRIT_DMG Lv 3   +45%                         |
 | ATK_SPD  Lv 8   +16%                         |
@@ -261,12 +259,12 @@ Purpose: all gold and Rock Candy sinks on the hero: Training per stat, Hero Leve
 | Awakening row (MVP) | `Awaken.Rank`, `Awaken.NextStage`, `Awaken.NextCost`, `Awaken.CanAfford`, `Awaken.StageReached`; `[Awaken]` opens `SCR_CONFIRM` with cost and balance-after, then `cmd Awaken` |
 | Loadout icons | `Loadout.Weapon`, `Loadout.Skills[6]`, `Loadout.Companions[4]`; tap: `SCR_ITEM_DETAIL`; empty slot tap: push the matching collection screen |
 | Bulk step selector | `Training.Step` in `TRAIN_BULK_STEPS` {1, 10, 100, Max}; persisted in `ClientPrefs.TrainStep` (issue #47) |
-| Per-stat row x8 | `Training.Rows[stat]`: `Level`, `EffectText` (from 03 per-stat formatter), `Cost` (bulk cost for the selected step), `Count` (levels the step buys; Max computes affordable), `CanAfford`, `AtCap`; `[+]` sends `cmd TrainStat(stat, count)` all-or-nothing |
+| Per-stat row x6 | one row per trainable stat (`stats.trainable`, 09; `HP` and `DEF` are not trainable in MVP, 00 decision 10): `Training.Rows[stat]`: `Level`, `EffectText` (from 03 per-stat formatter), `Cost` (bulk cost for the selected step), `Count` (levels the step buys; Max computes affordable), `CanAfford`, `AtCap`; `[+]` sends `cmd TrainStat(stat, count)` all-or-nothing |
 | Research button (MVP) | `Badges.ResearchAffordable`; push `SCR_RESEARCH` |
 
 Events: `StatTrained(stat, count, cost)` (row flash, "+5%" float), `LevelUp`, `Awakened` (rank glyph animates), `CurrencyChanged(GOLD)` (re-evaluate `CanAfford`).
 
-States: a stat at its cap (03) shows "MAX" in place of the cost and a disabled button. Awakening before the stage gate: button disabled with "Reach stage 150". First-time: coach mark on ATK `[+]`. The `Max` step shows "Buy 37 levels for 3.71M" so the player knows what they are tapping.
+States: a stat at its cap (03) shows "MAX" in place of the cost and a disabled button. Awakening before the stage gate: button disabled with "Reach stage {AWAKEN_STAGES[rank]}", e.g. "Reach stage 50" for rank I (`AWAKEN_STAGES[0]`) and "Reach stage 150" for rank II as in the sketch. First-time: coach mark on ATK `[+]`. The `Max` step shows "Buy 37 levels for 3.71M" so the player knows what they are tapping.
 
 ### 4.5 `SCR_WEAPONS` (Full, M0)
 
@@ -505,10 +503,10 @@ Purpose: farm a cleared side stage (an easier stage for `GOLD_GAIN`-tuned kill r
 ```
 +----------------------------------------------+
 | Stages                                [ X ]  |
-| Highest cleared: 99  Frontier: 100 (walled)  |
-| Chapter 2  (51-100)   v                      |
-|  [91] [92] [93] [94] [95] [96] [97] [98] [99]|
-|  [100 boss]  <- frontier     Farming: 95     |
+| Highest cleared: 239  Frontier: 240 (walled) |
+| Chapter 5  (201-250)   v                     |
+|  [231][232][233][234][235][236][237][238]    |
+|  [239]  [240 boss] <- frontier  Farming: 235 |
 | [ Return to frontier ]  [ Challenge boss ]   |
 +----------------------------------------------+
 ```
@@ -520,7 +518,7 @@ Purpose: farm a cleared side stage (an easier stage for `GOLD_GAIN`-tuned kill r
 | Return to frontier | `cmd SelectStage(null)`; shown while `Combat.Selected != null` |
 | Challenge boss | `cmd AttemptBoss` for the frontier boss only (only when walled) |
 
-Rules the modal makes visible: offline gold and dungeon floor difficulty read `Progress.HighestCleared` and first-clear diamonds read `Progress.HighestFirstClearBoss`, never the selected stage (06, 03 and 02; issue #35), so a lower stage is never a loophole; the modal says "Rewards for offline time use your highest stage". Events: `StageChanged` (from `SelectStage`), `StageCleared`; the selected stage is read from the snapshot (`Combat.Selected`, null = frontier), there is no `StageSelected` event (issue #11).
+Rules the modal makes visible: offline gold and EXP use the frontier `Combat.Stage` (06 section 7.1), the Dungeons unlock reads `Progress.HighestCleared` and first-clear diamonds read `Progress.HighestFirstClearBoss`, never the selected stage (06, 03 and 02; issue #35), so a lower stage is never a loophole; the modal says "Rewards for offline time use your highest stage". Events: `StageChanged` (from `SelectStage`), `StageCleared`; the selected stage is read from the snapshot (`Combat.Selected`, null = frontier), there is no `StageSelected` event (issue #11).
 
 ### 4.15 `SCR_QUESTS` (Full, MVP)
 
@@ -609,13 +607,15 @@ Content is defined in 06 section 7.3. Layout:
 |  Welcome back!                               |
 |  Away for 12h 04m                            |
 |  Rewards for 12h 04m                         |   "(capped at 26h)" when Capped; the cap shown is the effective one
-|   [G] +997K gold                             |
-|   [E] +1.2M EXP                              |
+|   [G] +15.0M gold                            |
+|   [E] +11.6M EXP                             |
 |   [T] Magic Tank refilled (+10 fish)         |
-|  Farmed stage 90 at 23/s                     |
+|  Farmed stage 240 at 344/s                   |
 |            [ Claim ]        [ Claim x2 ]     |   x2 is P1, hidden in MVP
 +----------------------------------------------+
 ```
+
+Sketch values: a 12h 04m gap at the day-1 target stage 240 (00 section 6.6), a 3.5 s kill time and no `GOLD_GAIN`/`EXP_GAIN` training, i.e. 43,440 s x `OFFLINE_RATE` 0.5 x (2 x 1.03^240 gold, 5 x 1.025^240 EXP) / 3.5 s (06 section 7.2); the rate is `Gold / CreditedSec`.
 
 `OfflineRewardVm` is the `OfflineReward` record plus formatted strings. Rules (issue #21): ticks do not run while this modal is open, so the numbers shown are exactly what is credited; the cap is the effective cap `OFFLINE_CAP_H` plus the `RES_OFFLINE_CAP` Research extension; a second gap while a reward is pending is summed into the same record, and the "Farmed stage" line shows the latest stage and rate; the tank line is the `CatchUpTank` count over credited ticks, applied at claim. `[Claim]` sends `cmd ClaimOfflineReward`; the modal then plays a gold burst into the HUD chip and pops. Not dismissible by scrim or back button. If `Pending` is null at show time (double-show race) the modal pops silently.
 
@@ -1096,10 +1096,6 @@ Release build
 2. **Modal deferral during bosses.** Rule 4 in section 10 delays player-invoked modals during a 30 s boss. Owner: UX. Default: shift the modal down over the Fish Board region instead of delaying, except `SCR_OFFLINE_REWARD`, which is never shown mid-boss (boot and resume happen before the first tick anyway).
 3. **Screen reader support.** uGUI has no built-in accessibility tree. Owner: client lead. Default: ship MVP without, add Unity Accessibility package labels in P1.
 4. **CJK number ladders.** ja/ko/zh players expect 万/億 grouping. Owner: localization. Default: K/M/B everywhere in MVP; revisit with soft-launch feedback.
-5. **Stage select farming.** Resolved (issue #35): side-stage farming as in section 4.14; the frontier is kept, kills on a selected stage never advance, and offline, dungeon and first-clear rewards are bound to `Progress.HighestCleared` / `HighestFirstClearBoss`.
-6. **`MoveFish` command.** Resolved: `MoveFish(src, dst)` is in 00's command vocabulary (00 decision 22); 07 sends it on a drop onto an empty cell.
-7. **New-item badges and client prefs.** Resolved (issues #7, #47): new badges, coach marks, sort/filter/step choices and settings toggles stay out of the sim (no sim command) and persist in the Runtime `ClientPrefs` local JSON store next to the save, not cloud-synced, so they never affect state hashes or replays.
-8. **Added screens.** `SCR_CONFIRM` and `SCR_ERROR` should be lifted into 00 section 5.3 as M0 modals.
 
 ## Acceptance criteria
 
@@ -1145,5 +1141,4 @@ How each criterion runs (issue #23): **[core]** criteria test logic in `HeroCat.
 | `UI_BACK_EXIT_WINDOW_SEC` | 2 | S | |
 | `UI_QUEST_EXPIRY_WARN_SEC` | 3600 | S | 06 Open question 2 |
 | Rarity palette, shape glyphs | section 8 | S | Contrast table |
-| Screens added | `SCR_CONFIRM`, `SCR_ERROR` (Modal, M0) | | Lift into 00 section 5.3 |
 | Commands and events | 00 section 5.1 names, plus owner-spec names 00 adds (issue #11): `UnequipSkill`, `UnequipCompanion`, `AutoEquipBestSkills` (04), `ClaimAllInbox`, `QuestClaimed`, `QuestsBulkClaimed`, `WeekRolledOver`, `DungeonFloorFirstCleared`, `OfflineRewardComputed` (01/06), `BannerLeveledUp` (01/04), `EnemySpawned`, `BossCleared`, `StageCapReached`, `StatTrained` (03/01); P1 `EquipRune`, `UnequipRune` | | 07 follows the sim owners; no UI-only commands or events |
