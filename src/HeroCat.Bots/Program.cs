@@ -53,10 +53,8 @@ namespace HeroCat.Bots
             "  acceptance   --seeds 1-20 --days N --time-budget-s 180 --targets path --verbose --content dir\n" +
             "  golden       --check|--update --golden-dir path --content dir\n" +
             "  save-fixture --check|--update --out path --content dir\n" +
-            "  summon-stream --check|--update --out path --content dir
-" +
-            "  bench        --ticks N [--stage N] --max-ms N
-";
+            "  summon-stream --check|--update --out path --content dir\n" +
+            "  bench        --ticks N [--stage N] --max-ms N\n";
 
         public static int Main(string[] argv)
         {
