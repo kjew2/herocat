@@ -8,6 +8,9 @@
                                           [--ui-keys FILE] [--strict-warnings]
     python3 tools/export_content.py gen-dtos [--dto-out PATH]
     python3 tools/export_content.py diff --a <old content dir> --b <new content dir>
+    python3 tools/export_content.py translator-csv --locale ja --out strings_ja.csv [--missing-only] [--src DIR]
+    python3 tools/export_content.py import-translations --csv strings_ja.csv --locale ja [--src DIR]
+    python3 tools/export_content.py pseudo --out content_pseudo [--locale xx] [--src DIR]
 
 `build` parses, validates and emits every table plus the manifest (09 sections 6.1, 6.2) and regenerates the C#
 DTO file (`HeroCat.Sim.Content.Dto`, 09 section 9.1) from SCHEMA, so the Python and C# shapes cannot drift.
@@ -18,13 +21,15 @@ DTO file (`HeroCat.Sim.Content.Dto`, 09 section 9.1) from SCHEMA, so the Python 
 `pull` fetches every workbook tab named as a table (or `meta`) to content_src/<tab>.csv in one canonical CSV form, so a
 pull of an unchanged sheet leaves no git diff (7.1, issue #132). `--service-account` uses Sheets API v4 batchGet and
 needs the optional google-api-python-client (imported only by pull); `--csv-export` uses the gviz CSV URL.
+`translator-csv` / `import-translations` are the translator round trip (13.2, E076); `pseudo` writes the normal build
+plus localization.xx.json with every en string pseudo-localized (13.3) to a dir that is never the shipped content/.
 
 Implemented: SCHEMA for every 09 section 5 table, column types (3.2), ENUMS (3.3), REQUIRED_CONSTANTS (5.1),
 SCREEN_IDS (00 section 5.3), structural codes E001-E003, E010, E011, E020-E022, E070, E071, E094, constants
 E040-E043, the table rules of 8.4 and warnings W010-W013 (RULES, issue #122), versioning E090-E093 / W030 / W031 /
-hot_apply / diff (issue #123), localization E072-E075 / W020 / W021 (issue #128). Fixtures for every code live in
-tests/content_fixtures/ (tools/content_fixtures.py, issue #124), pull (issue #132). Not yet: translator-csv,
-import-translations (E076) and pseudo (13.2, 13.3).
+hot_apply / diff (issue #123), localization E072-E075 / W020 / W021 (issue #128), pull (issue #132), translator-csv,
+import-translations (E076) and pseudo (13.2, 13.3; issue #213). Fixtures for every code live in
+tests/content_fixtures/ (tools/content_fixtures.py, issue #124).
 
 Exit codes: 0 ok, 1 validation errors (all listed) or drift, 2 usage / IO / network / auth error. Python 3.9+, stdlib
 only except `pull --service-account`.
@@ -1299,6 +1304,28 @@ def key_cells(tables):
                         yield f"{r['_loc']}.{name}", r[name]
 
 
+def text_errors(r, locale, text):
+    """[(code, message)] for one locale's text of localization row r: E075 (the ICU plural branches the locale needs,
+    13.2) or else E074 (length budget). Shared by rule_localization and import-translations.
+    TODO(#260): nothing checks that the text keeps the en message's ICU arguments."""
+    try:
+        parts = icu_parse(text)
+    except ValueError as e:
+        parts = None
+        if r["plural"]:
+            return [("E075", f"plural message must have 'one' and 'other' branches: {locale} {e}")]
+    if r["plural"]:
+        plurals = plural_args(parts)
+        missing = [c for c in PLURAL_CATEGORIES[locale] if not plurals or any(c not in p[2] for p in plurals)]
+        if missing:
+            detail = f"{locale} has no plural argument" if not plurals else f"{locale} lacks {', '.join(missing)}"
+            return [("E075", f"plural message must have 'one' and 'other' branches: {detail}")]
+    n = rendered_len(parts) if parts is not None else len(text)
+    if r["max_chars"] and n > r["max_chars"]:
+        return [("E074", f"{locale} text is {n} chars, budget {r['max_chars']}")]
+    return []
+
+
 @rule
 def rule_localization(ctx):
     """E072-E075 and W020-W021 (09 sections 5.30, 8.2, 8.6, 13.1; acceptance 14)."""
@@ -1326,23 +1353,8 @@ def rule_localization(ctx):
             text = r.get(col)
             if text is None:
                 continue
-            try:
-                parts = icu_parse(text)
-            except ValueError as e:
-                parts = None
-                if r["plural"]:
-                    ctx.err("E075", f"{r['_loc']}.{col}", f"plural message must have 'one' and 'other' branches: {locale} {e}")
-                    continue
-            if r["plural"]:
-                plurals = plural_args(parts)
-                missing = [c for c in PLURAL_CATEGORIES[locale] if not plurals or any(c not in p[2] for p in plurals)]
-                if missing:
-                    detail = f"{locale} has no plural argument" if not plurals else f"{locale} lacks {', '.join(missing)}"
-                    ctx.err("E075", f"{r['_loc']}.{col}", f"plural message must have 'one' and 'other' branches: {detail}")
-                    continue
-            n = rendered_len(parts) if parts is not None else len(text)
-            if r["max_chars"] and n > r["max_chars"]:
-                ctx.err("E074", f"{r['_loc']}.{col}", f"{locale} text is {n} chars, budget {r['max_chars']}")
+            for code, msg in text_errors(r, locale, text):
+                ctx.err(code, f"{r['_loc']}.{col}", msg)
     for locale, col in LOCALE_COLUMNS.items():
         if locale == "en" or locale in ship:
             continue
@@ -2072,17 +2084,284 @@ Plain text in an en-US workbook (--csv-export blanks mixed-type cells otherwise)
 missing optional dependency (pip install google-api-python-client google-auth)."""
 
 
+# ---------------------------------------------------------------- translator round trip and pseudo-loc (13.2, 13.3)
+TRANSLATOR_COLUMNS = ["key", "en", None, "max_chars", "context"]   # None = the target locale's localization column
+TRANSLATIONS_LOC = "translations"   # 8.1 location for defects in the returned file itself (header, duplicate rows)
+PSEUDO_LOC_PAD_PCT = 0.40   # 09 constants, 07 section 12: a pseudo string renders >= (1 + this) x its en length
+PSEUDO_OPEN, PSEUDO_CLOSE, PSEUDO_FILL = "[!!! ", " !!!]", "~"
+PSEUDO_LOCALE_RE = re.compile(r"^[a-z]{2,3}(-[A-Za-z0-9]+)?$")
+# One precomposed code point per letter, so accenting never changes a length (07's sample: Test -> Ţêšţ).
+PSEUDO_ACCENTS = dict(zip("AaCcDdEeGgHhIiJjKkLlNnOoRrSsTtUuWwYyZz", "ÅåÇçÐðÊêĜĝĤĥÎîĴĵĶķĻļÑñÖöŔŕŠšŢţÛûŴŵÝýŽž"))
+
+
+def read_localization(src):
+    """(typed rows, raw csv rows, errs) of <src>/localization.csv; the raw rows keep #context and every cell as written."""
+    path = os.path.join(src, "localization.csv")
+    errs = Errors()
+    if not os.path.exists(path):
+        errs.add("E001", "localization", "missing required table 'localization'")
+        return [], [], errs
+    rows = read_table(path, "localization", SCHEMA["localization"], errs)
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        raw = list(csv.reader(f))
+    return rows, raw, errs
+
+
+def target_column(locale):
+    """The localization column a translator fills, or raises ValueError (en is the source; xx is pseudo, never real)."""
+    if locale not in LOCALE_COLUMNS:
+        raise ValueError(f"'{locale}' is not a valid Locale (allowed: {', '.join(ENUMS['Locale'])})")
+    if locale == "en":
+        raise ValueError("en is the source text, not a translation target")
+    return LOCALE_COLUMNS[locale]
+
+
+def translator_csv(src, locale, missing_only=False):
+    """13.2: the CSV text a translator fills: key, en, <locale column>, max_chars, context (#context). Returns (text, errs)."""
+    col = target_column(locale)
+    rows, raw, errs = read_localization(src)
+    if errs:
+        return None, errs
+    header = [h.strip() for h in raw[0]]
+    ctx_i = header.index("#context") if "#context" in header else None
+    out = io.StringIO()
+    w = csv.writer(out, lineterminator="\n")
+    w.writerow([c or col for c in TRANSLATOR_COLUMNS])
+    for r in rows:
+        if missing_only and r.get(col) is not None:
+            continue
+        cells = raw[r["_row"]]
+        context = cells[ctx_i].strip() if ctx_i is not None and ctx_i < len(cells) else ""
+        w.writerow([r["key"], r["en"], r.get(col) or "", r["max_chars"], context])
+    return out.getvalue(), errs
+
+
+def import_translations(src, csv_path, locale):
+    """13.2: merges a returned translator CSV into <src>/localization.csv. A row is refused (and listed) when its key
+    is unknown (E072), its en changed since the export (E076), it lacks the ICU plural branches the locale needs (E075)
+    or it is over budget (E074); every other filled row is merged. Empty cells never clear a translation.
+    Returns (merged count, errs)."""
+    col = target_column(locale)
+    rows, raw, errs = read_localization(src)
+    if errs:
+        return 0, errs
+    by_key = {r["key"]: r for r in rows}
+    with open(csv_path, newline="", encoding="utf-8-sig") as f:
+        back = list(csv.reader(f))
+    header = [h.strip() for h in back[0]] if back else []
+    for name in ("key", "en", col):
+        if name not in header:
+            errs.add("E002", TRANSLATIONS_LOC, f"missing required column '{name}'")
+    if errs:
+        return 0, errs
+    ki, ei, ti = header.index("key"), header.index("en"), header.index(col)
+    updates, first_seen = {}, {}
+    for n, cells in enumerate(back[1:], start=1):
+        cell = lambda i: cells[i].strip() if i < len(cells) else ""   # noqa: E731
+        key, exported_en, text = cell(ki), cell(ei), cell(ti)
+        if not text:
+            continue
+        if key in first_seen:
+            errs.add("E020", f"{TRANSLATIONS_LOC} row {n}", f"duplicate key '{key}' (first seen at row {first_seen[key]})")
+            continue
+        first_seen[key] = n
+        r = by_key.get(key)
+        if r is None:
+            errs.add("E072", f"{TRANSLATIONS_LOC} row {n}", f"key '{key}' has no row in localization")
+            continue
+        loc = f"{r['_loc']}.{col}"
+        if exported_en != r["en"]:
+            errs.add("E076", loc, f"en text changed since this translation was exported ('{exported_en}' -> '{r['en']}')")
+            continue
+        found = text_errors(r, locale, text)
+        for code, msg in found:
+            errs.add(code, loc, msg)
+        if not found and text != r.get(col):
+            updates[key] = text
+    if updates:
+        head = [h.strip() for h in raw[0]]
+        kc, tc = head.index("key"), head.index(col)
+        for cells in raw[1:]:
+            if len(cells) > kc and cells[kc].strip() in updates:
+                cells.extend([""] * (tc + 1 - len(cells)))
+                cells[tc] = updates[cells[kc].strip()]
+        out = io.StringIO()
+        csv.writer(out, lineterminator="\n").writerows(raw)
+        with open(os.path.join(src, "localization.csv"), "w", encoding="utf-8", newline="") as f:
+            f.write(out.getvalue())
+    return len(updates), errs
+
+
+def pseudo_icu(text):
+    """Accents the literal text of an ICU message (icu_parse's grammar) and copies every argument name, type, style,
+    selector, `#` and quote verbatim, so the result parses to the same argument structure."""
+    pos, out = 0, []
+
+    def word():
+        nonlocal pos
+        start = pos
+        while pos < len(text) and text[pos].isspace():
+            pos += 1
+        while pos < len(text) and text[pos] not in ",{} \t\n":
+            pos += 1
+        w = text[start:pos].strip()
+        while pos < len(text) and text[pos].isspace():
+            pos += 1
+        return w
+
+    def message():
+        nonlocal pos
+        while pos < len(text):
+            ch = text[pos]
+            if ch == "'" and text.startswith("''", pos):
+                out.append("''")
+                pos += 2
+            elif ch == "'" and pos + 1 < len(text) and text[pos + 1] in "{}#":
+                end = text.index("'", pos + 1)
+                out.append("'" + accent(text[pos + 1:end]) + "'")
+                pos = end + 1
+            elif ch == "{":
+                argument()
+            elif ch == "}":
+                return
+            else:
+                out.append(PSEUDO_ACCENTS.get(ch, ch))
+                pos += 1
+
+    def argument():
+        nonlocal pos
+        start = pos
+        pos += 1
+        word()
+        if text[pos] == "}":
+            pos += 1
+            out.append(text[start:pos])
+            return
+        pos += 1
+        kind = word()
+        if kind == "number":
+            pos = text.index("}", pos) + 1
+            out.append(text[start:pos])
+            return
+        pos += 1   # the ',' before the branches
+        out.append(text[start:pos])
+        while True:
+            s = pos
+            sel = word()
+            if sel.startswith("offset:"):
+                sel = word()
+            out.append(text[s:pos])
+            if not sel:
+                break
+            out.append("{")
+            pos += 1
+            message()
+            out.append("}")
+            pos += 1
+        out.append("}")
+        pos += 1
+
+    message()
+    return "".join(out)
+
+
+def accent(s):
+    return "".join(PSEUDO_ACCENTS.get(ch, ch) for ch in s)
+
+
+def pseudo_text(en):
+    """13.3: [!!! accented en~~~ !!!], padded so its rendered length (E074's measure) is at least
+    ceil((1 + PSEUDO_LOC_PAD_PCT) x) the en one. ICU arguments and plural syntax are kept intact."""
+    try:
+        n = rendered_len(icu_parse(en))
+        body = pseudo_icu(en)
+    except ValueError:   # not an ICU message (a stray brace in plain text): everything is literal
+        n, body = len(en), accent(en)
+    pct = round(PSEUDO_LOC_PAD_PCT * 100)
+    target = n + (n * pct + 99) // 100
+    pad = max(0, target - n - len(PSEUDO_OPEN) - len(PSEUDO_CLOSE))
+    return PSEUDO_OPEN + body + PSEUDO_FILL * pad + PSEUDO_CLOSE
+
+
+def pseudo_build(src, locale="xx"):
+    """13.3: the normal build of src plus localization.<locale>.json (every en string pseudo-localized), listed in the
+    manifest's localization block and folded into content_hash. Returns (files or None, errs)."""
+    if locale in ENUMS["Locale"] or not PSEUDO_LOCALE_RE.match(locale):
+        raise ValueError(f"'{locale}' must be a pseudo locale such as xx, not a shipping Locale "
+                         f"({', '.join(ENUMS['Locale'])})")
+    result, errs = build(src)
+    if result is None:
+        return None, errs
+    files, tables, manifest = result
+    rows = [{"key": r["key"], "text": pseudo_text(r["en"])} for r in tables.get("localization", [])]
+    data = dumps({"table": "localization", "locale": locale, "rows": rows}).encode("utf-8")
+    fname = f"localization.{locale}.json"
+    files[fname] = data
+    manifest["localization"][locale] = {"file": fname, "rows": len(rows), "sha256": hashlib.sha256(data).hexdigest()}
+    shas = [e["sha256"] for e in list(manifest["tables"].values()) + list(manifest["localization"].values())]
+    manifest["content_hash"] = hashlib.sha256("".join(shas).encode("ascii")).hexdigest()
+    files["manifest.json"] = dumps(manifest).encode("utf-8")
+    return files, errs
+
+
+def localization_verb(args):
+    """translator-csv, import-translations and pseudo (7.1)."""
+    try:
+        if args.verb == "translator-csv":
+            if not args.out or not args.locale:
+                raise ValueError("translator-csv needs --locale <locale> --out <file>")
+            text, errs = translator_csv(args.src, args.locale, args.missing_only)
+        elif args.verb == "import-translations":
+            if not args.csv or not args.locale:
+                raise ValueError("import-translations needs --csv <file> --locale <locale>")
+            merged, errs = import_translations(args.src, args.csv, args.locale)
+        else:
+            if not args.out:
+                raise ValueError("pseudo needs --out <dir> (never the shipped content/)")
+            shipped = os.path.realpath(os.path.join(args.src, os.pardir, "content"))
+            if os.path.realpath(args.out) in (shipped, os.path.realpath(args.src)):
+                raise ValueError(f"pseudo must not write into the shipped content dir {args.out}")
+            files, errs = pseudo_build(args.src, args.locale or "xx")
+    except (OSError, ValueError) as e:
+        print(f"{args.verb}: {e}", file=sys.stderr)
+        return 2
+    for e in errs:
+        print(e, file=sys.stderr)
+    if args.verb == "import-translations":
+        print(f"merged {merged} {args.locale} translations into {os.path.join(args.src, 'localization.csv')}"
+              f"{f'; refused {len(errs)} rows' if errs else ''}" +
+              ("; rebuild content/ and bump meta.content_version" if merged else ""))
+        return 1 if errs else 0
+    if errs:
+        return 1
+    if args.verb == "translator-csv":
+        with open(args.out, "w", encoding="utf-8", newline="") as f:
+            f.write(text)
+        print(f"wrote {args.out} ({len(list(csv.reader(io.StringIO(text)))) - 1} rows)")
+        return 0
+    os.makedirs(args.out, exist_ok=True)
+    for f in os.listdir(args.out):
+        if f.endswith(".json") and f not in files:
+            os.remove(os.path.join(args.out, f))
+    for fname, data in files.items():
+        with open(os.path.join(args.out, fname), "wb") as f:
+            f.write(data)
+    print(f"wrote {args.out}/ with localization.{args.locale or 'xx'}.json ({len(files)} files)")
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0], epilog=WORKFLOW_HELP,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("verb", choices=["pull", "build", "check", "gen-dtos", "diff"])
+    ap.add_argument("verb", choices=["pull", "build", "check", "gen-dtos", "diff", "translator-csv",
+                                     "import-translations", "pseudo"])
     ap.add_argument("--sheet", help="pull: the Google Sheet id (the part of its URL after /d/)")
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--service-account", metavar="CREDS_JSON",
                       help="pull: Sheets API v4 with this service-account key file (needs google-api-python-client)")
     mode.add_argument("--csv-export", action="store_true", help="pull: the gviz CSV URL (link-readable sheets only)")
     ap.add_argument("--src", default="content_src")
-    ap.add_argument("--out", default="content")
+    ap.add_argument("--out", help="content dir (default content); translator-csv: the CSV file; pseudo: required dir")
     ap.add_argument("--dto-out", default=DTO_PATH)
     ap.add_argument("--previous", help="previous build dir: version rules E090-E093, W030, W031 and hot_apply (6.3)")
     ap.add_argument("--ui-keys", help="the client's ui_keys.txt for E072 / W021 (13.1)")
@@ -2090,7 +2369,14 @@ def main(argv=None):
     ap.add_argument("--emit-invalid", action="store_true", help=argparse.SUPPRESS)   # content fixtures only
     ap.add_argument("--a", help="diff: the old content dir")
     ap.add_argument("--b", help="diff: the new content dir")
+    ap.add_argument("--locale", help="translator-csv / import-translations: ja, ko or zh-Hans; pseudo: default xx")
+    ap.add_argument("--missing-only", action="store_true", help="translator-csv: only rows with no text in --locale")
+    ap.add_argument("--csv", help="import-translations: the translator's returned CSV")
     args = ap.parse_args(argv)
+    if args.verb in ("translator-csv", "import-translations", "pseudo"):
+        return localization_verb(args)
+    if args.out is None:
+        args.out = "content"
 
     if args.verb == "pull":
         if not args.sheet or not (args.service_account or args.csv_export):
