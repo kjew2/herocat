@@ -63,8 +63,12 @@ namespace HeroCat.Sim.Power
             return unit + (int)Math.Round(bonus, MidpointRounding.AwayFromZero);
         }
 
-        /// <summary>goldMult = 1 + TRAIN_PER_LVL[GOLD_GAIN] * n. TODO(#158): times Research's res_gold_gain factor (MVP).</summary>
-        public static double GoldMult(ContentDb db, GameState s) => 1.0 + PerLvl(db, Stat.GOLD_GAIN) * Level(s, Stat.GOLD_GAIN);
+        /// <summary>
+        /// goldMult = (1 + TRAIN_PER_LVL[GOLD_GAIN] * n) * (1 + 0.05 k): Training times Research's res_gold_gain, one factor
+        /// for the node, not one per level (03 section 6). The Research factor is exactly 1 at level 0 and in M0 content.
+        /// </summary>
+        public static double GoldMult(ContentDb db, GameState s) =>
+            (1.0 + PerLvl(db, Stat.GOLD_GAIN) * Level(s, Stat.GOLD_GAIN)) * (1.0 + ResearchEffectTotal(db, s, ResearchEffect.GOLD_MULT));
 
         /// <summary>expMult = 1 + TRAIN_PER_LVL[EXP_GAIN] * n.</summary>
         public static double ExpMult(ContentDb db, GameState s) => 1.0 + PerLvl(db, Stat.EXP_GAIN) * Level(s, Stat.EXP_GAIN);
@@ -178,8 +182,8 @@ namespace HeroCat.Sim.Power
 
         // ================================================================================================ Research, Runes, Awakening
 
-        /// <summary>TODO(#158): sum of res_atk effects (MVP). 0 in M0.</summary>
-        public static double ResearchPct(ContentDb db, GameState s) => 0.0;
+        /// <summary>researchPct: res_atk's 0.05 per level as a fraction (03 sections 6 and 7.2; 0.35 at level 7). 0 in M0.</summary>
+        public static double ResearchPct(ContentDb db, GameState s) => ResearchEffectTotal(db, s, ResearchEffect.RESEARCH_PCT);
 
         /// <summary>P1 (TODO(#227)). 0 until then.</summary>
         public static double RunePct(ContentDb db, GameState s) => 0.0;

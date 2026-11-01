@@ -15,13 +15,13 @@ namespace HeroCat.Sim.Fish
 
         /// <summary>
         /// TankCap = TANK_CAP0 + RES_TANK_CAP_PER_LVL * research[RES_TANK_CAP].
-        /// TODO(#167): the Research term; M0 content has no research table, so this is TANK_CAP0.
+        /// TODO(#167): switch to ResearchRules.TankCap (the Research term, issue #158); until then this is TANK_CAP0.
         /// </summary>
         public static int TankCap(GameState s, ContentDb db) => db.Tank.Cap0;
 
         /// <summary>
         /// TankRefillTicks = round(max(TANK_REFILL_FLOOR_S, TANK_REFILL_S0 - RES_TANK_REFILL_PER_LVL * research) * TICK_HZ).
-        /// TODO(#167): the Research term; at Research 0 this is the exporter-validated whole-tick value.
+        /// TODO(#167): switch to ResearchRules.TankRefillTicks (issue #158); until then the Research-0 whole-tick value.
         /// </summary>
         public static int TankRefillTicks(GameState s, ContentDb db) => db.Tank.RefillTicks0;
 
@@ -68,7 +68,7 @@ namespace HeroCat.Sim.Fish
 
         // ---------------------------------------------------------------------------------------- board
 
-        /// <summary>FishMaxLvl = FISH_MAX_LVL0 + research[RES_FISH_CAP], never above the table (FISH_MAX_LVL_HARD). TODO(#167).</summary>
+        /// <summary>FishMaxLvl = FISH_MAX_LVL0 + research[RES_FISH_CAP], never above the table (FISH_MAX_LVL_HARD). TODO(#167): switch to ResearchRules.FishMaxLvl.</summary>
         public static int FishMaxLvl(GameState s, ContentDb db)
         {
             int cap = db.Constants.FishMaxLvl0;

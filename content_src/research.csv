@@ -1,0 +1,9 @@
+id,effect,effect_per_level,effect_floor,max_level,cost0,cost_g,unlock_awaken_rank,layout_row,layout_col,tier,name_key,desc_key,icon
+res_atk,RESEARCH_PCT,0.05,,50,150.0,1.2,1,3,1,MVP,research.res_atk.name,research.res_atk.desc,icon_res_atk
+res_gold_gain,GOLD_MULT,0.05,,20,250.0,1.4,1,3,2,MVP,research.res_gold_gain.name,research.res_gold_gain.desc,icon_res_gold_gain
+res_mp_pool,MP_POOL,20.0,,10,200.0,1.5,1,2,1,MVP,research.res_mp_pool.name,research.res_mp_pool.desc,icon_res_mp_pool
+res_mp_regen,MP_REGEN,0.5,,10,300.0,1.5,1,2,2,MVP,research.res_mp_regen.name,research.res_mp_regen.desc,icon_res_mp_regen
+res_tank_cap,TANK_CAP,5.0,,10,200.0,1.5,1,1,1,MVP,research.res_tank_cap.name,research.res_tank_cap.desc,icon_res_tank_cap
+res_tank_refill,TANK_REFILL,0.4,2.0,10,300.0,1.6,1,1,2,MVP,research.res_tank_refill.name,research.res_tank_refill.desc,icon_res_tank_refill
+res_fish_cap,FISH_CAP,1.0,,10,2500.0,2.0,1,2,3,MVP,research.res_fish_cap.name,research.res_fish_cap.desc,icon_res_fish_cap
+res_offline_cap,OFFLINE_CAP,2.0,,6,500.0,1.5,1,1,3,MVP,research.res_offline_cap.name,research.res_offline_cap.desc,icon_res_offline_cap

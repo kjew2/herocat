@@ -215,7 +215,7 @@ namespace HeroCat.Sim
                 HeroLevel = s.Hero.Level,
                 AwakenRank = s.Hero.AwakenRank,
                 Mp = s.Combat.Mp,
-                MpMax = k.MpPool0,
+                MpMax = ResearchRules.MpPoolMax(Db, s),
                 TankFish = s.Fish.TankCount,
                 TankCap = FishTankCap,
                 TankRefillTicksLeft = FishTankRefillTicks - s.Fish.TankRefillTick,

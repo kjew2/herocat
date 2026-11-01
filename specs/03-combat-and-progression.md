@@ -383,20 +383,22 @@ As built (issue #157): the rows are the `awakening` table (09), rank `r` is row 
 
 Research is a flat list of nodes, each with independent levels, costs and caps. No tree edges in MVP: the reference game's tree is mostly presentation, and edges are one more table to validate. `SCR_RESEARCH` shows the nodes as a tree drawn from a `layoutRow`/`layoutCol` column in the `research` table (09); the sim ignores layout.
 
-Cost of level `k -> k+1` of node `x` is `RES_COST0[x] * RES_COST_G[x]^k` Fish Coins, evaluated from a per-node `GeometricTable`.
+Cost of level `k -> k+1` of node `x` is `RES_COST0[x] * RES_COST_G[x]^k` Fish Coins, evaluated from a per-node `GeometricTable` and charged unrounded (Fish Coins are a `double`, like Training's gold; the UI floors the display). The last column is `RES_COST0 * RES_COST_G^(max - 1)` to three significant figures.
 
 | Node id | Effect per level | Max level | `RES_COST0` | `RES_COST_G` | Cost of last level | Why it exists |
 |---|---|---|---|---|---|---|
-| `res_atk` | `researchPct += 0.05` | 50 | 150 | 1.20 | 1.1e6 | Direct DPS; makes Fish Coins matter to a player who ignores companions. |
-| `res_gold_gain` | `goldMult *= 1 + 0.05 k` (one factor, not per level) | 20 | 250 | 1.40 | 1.5e5 | Second gold-gain source so gold income is not only a Training decision. |
-| `res_mp_pool` | `MpPoolMax += 20` | 10 | 200 | 1.50 | 7.7e3 | Burst at spawn: more abilities fire before regen matters. |
-| `res_mp_regen` | `MpRegen += 0.5 /s` | 10 | 300 | 1.50 | 1.2e4 | Companion uptime; the node every companion player wants first. |
-| `res_tank_cap` | `TankCap += 5` | 10 | 200 | 1.50 | 7.7e3 | Bigger buffer between sessions (05). |
-| `res_tank_refill` | `TankRefillS -= 0.4` (floor 2.0 s) | 10 | 300 | 1.60 | 2.1e4 | More fish per active minute (05). |
-| `res_fish_cap` | `FishMaxLvl += 1` | 10 | 2500 | 2.00 | 1.3e6 | Opens the next fish level and its discovery payout; the Fish Board's growth engine (05 section 8). |
-| `res_offline_cap` | `OfflineCapH += 2` | 6 | 500 | 1.50 | 3.8e3 | Only matters to players who skip a day; cheap on purpose. |
+| `res_atk` | `researchPct += 0.05` | 50 | 150 | 1.20 | 1.14e6 | Direct DPS; makes Fish Coins matter to a player who ignores companions. |
+| `res_gold_gain` | `goldMult *= 1 + 0.05 k` (one factor, not per level) | 20 | 250 | 1.40 | 1.49e5 | Second gold-gain source so gold income is not only a Training decision. |
+| `res_mp_pool` | `MpPoolMax += 20` | 10 | 200 | 1.50 | 7.69e3 | Burst at spawn: more abilities fire before regen matters. |
+| `res_mp_regen` | `MpRegen += 0.5 /s` | 10 | 300 | 1.50 | 1.15e4 | Companion uptime; the node every companion player wants first. |
+| `res_tank_cap` | `TankCap += 5` | 10 | 200 | 1.50 | 7.69e3 | Bigger buffer between sessions (05). |
+| `res_tank_refill` | `TankRefillS -= 0.4` (floor 2.0 s) | 10 | 300 | 1.60 | 2.06e4 | More fish per active minute (05). |
+| `res_fish_cap` | `FishMaxLvl += 1` | 10 | 2500 | 2.00 | 1.28e6 | Opens the next fish level and its discovery payout; the Fish Board's growth engine (05 section 8). |
+| `res_offline_cap` | `OfflineCapH += 2` | 6 | 500 | 1.50 | 3.80e3 | Only matters to players who skip a day; cheap on purpose. |
 
-Research effects are read by the sim through `Query` (`MpPoolMax`, `MpRegenPerTick`, `TankCap`, `TankRefillTicks`, `FishMaxLvl`, `OfflineCapH`, `GoldMult`, `ResearchPct`). Node ids are the `research` table's lowercase `res_*` ids (09; issue #11). `Research(nodeId)` buys one level: rejects `Capped`/`RESEARCH_MAXED`, `Locked`/`RESEARCH_LOCKED` (before Research's `feature_unlocks` gate (09), seeded at Awakening rank 1 per 00 decision 11; issue #45), `CannotAfford`/`NOT_ENOUGH_FISH_COIN`; charges with reason `RESEARCH`; publishes `ResearchLeveled(nodeId, newLevel, cost)`; marks DPS dirty when the node affects it.
+Research effects are read by the sim through `Query` (`MpPoolMax`, `MpRegenPerTick`, `TankCap`, `TankRefillTicks`, `FishMaxLvl`, `OfflineCapH`, `GoldMult`, `ResearchPct`). Node ids are the `research` table's lowercase `res_*` ids (09; issue #11). `Research(nodeId)` buys one level: rejects, in this order, `InvalidTarget`/`UNKNOWN_RESEARCH` (no such node in the content tier), `Locked`/`RESEARCH_LOCKED` (before Research's `feature_unlocks` gate (09), seeded at Awakening rank 1 per 00 decision 11, or before the node's `unlock_awaken_rank`; issue #45), `Capped`/`RESEARCH_MAXED`, `CannotAfford`/`NOT_ENOUGH_FISH_COIN`; charges with reason `RESEARCH`; publishes `ResearchLeveled(nodeId, newLevel, cost)`; marks DPS dirty when the node affects it.
+
+As built (issue #158): `Locked` is checked before `Capped` so every call before rank 1 is `Locked` (acceptance 13), even for a node an odd save holds at its max. `ResearchRules` holds the pure rules and effect formulas for the command, `Query` and the bots. `Query` exposes `ResearchLevelOf(nodeId)`, `NextResearchCost(nodeId)` (0 when unknown or maxed), `CanResearch(nodeId)`, `ResearchEffectTotal(effect)`, `MpPoolMax`, `MpRegenPerTick`, `OfflineCapH` (read by catch-up), `GoldMult` (Training's factor times `1 + 0.05 k`) and `ResearchPct`. The three Fish Board effects are exposed as `ResearchTankCap`, `ResearchTankRefillTicks` (floor 2.0 s) and `ResearchFishMaxLvl`; the board itself keeps the Research-0 values until 05's issue #167 switches `TankCap`, `TankRefillTicks` and `FishMaxLvl` to them. A tier without the rows (M0) has no nodes, so every `Research` call is `InvalidTarget` there and every effect is its Research-0 value. No quest goal reads Research. `greedy-f2p` does not buy Research yet (issue #214; the cadence is decision #249).
 
 `res_offline_cap` extends the 24 h base cap from 00 decision 3; it does not change the base. Catch-up (06) and 08's `OFFLINE_WINDOW_OVERLAP` check use the effective cap `OFFLINE_CAP_H + 2 h * res_offline_cap level` (issue #21).
 

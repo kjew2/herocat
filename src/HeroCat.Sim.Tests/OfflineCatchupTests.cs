@@ -29,22 +29,8 @@ namespace HeroCat.Sim.Tests
             return sim;
         }
 
-        /// <summary>The M0 content plus a res_offline_cap row (+2 h per level, 6 levels: 03 section 6), built at MVP.</summary>
-        static readonly Lazy<ContentDb> WithResearch = new Lazy<ContentDb>(() =>
-        {
-            var dtos = ContentLoader.LoadDtos(new FileContentSource(TestContent.Dir));
-            var rows = new List<ResearchRowDto>(dtos.Research ?? Array.Empty<ResearchRowDto>())
-            {
-                new ResearchRowDto
-                {
-                    Id = "res_offline_cap", Effect = "OFFLINE_CAP", EffectPerLevel = 2.0, MaxLevel = 6, Cost0 = 500, CostG = 1.5,
-                    UnlockAwakenRank = 1, LayoutRow = 1, LayoutCol = 1, Tier = "MVP",
-                    NameKey = "research.res_offline_cap.name", DescKey = "research.res_offline_cap.desc", Icon = "icon_res_offline_cap",
-                },
-            };
-            dtos.Research = rows.ToArray();
-            return ContentDb.Build(dtos, Tier.MVP);
-        });
+        /// <summary>The shipped content built at MVP: it has the res_offline_cap row (+2 h per level, 6 levels: 03 section 6).</summary>
+        static readonly Lazy<ContentDb> WithResearch = new Lazy<ContentDb>(() => TestContent.Mvp);
 
         static double Expected(Simulation sim, long creditedSec, bool gold)
         {

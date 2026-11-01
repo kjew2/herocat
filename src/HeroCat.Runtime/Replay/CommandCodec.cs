@@ -53,6 +53,8 @@ namespace HeroCat.Runtime.Replay
             // Quest claims (06 section 5.5; issue #170).
             (typeof(ClaimQuest), "ClaimQuest"),
             (typeof(ClaimAllQuests), "ClaimAllQuests"),
+            // Research (03 section 6; issue #158).
+            (typeof(Research), "Research"),
         };
 
         static readonly object Lock = new object();

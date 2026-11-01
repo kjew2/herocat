@@ -392,7 +392,16 @@ namespace HeroCat.Sim.Content
         {
             Id = id; Effect = effect; EffectPerLevel = effectPerLevel; EffectFloor = effectFloor; MaxLevel = maxLevel;
             Cost0 = cost0; CostG = costG; UnlockAwakenRank = unlockAwakenRank; Tier = tier;
+            _cost = new CurveDef("research_cost_" + id, cost0, costG, 0, maxLevel < 0 ? 1 : maxLevel + 1);
         }
+
+        readonly CurveDef _cost;
+
+        /// <summary>
+        /// Fish Coins for level <paramref name="level"/> -> level + 1: <c>RES_COST0 * RES_COST_G^level</c> (03 section 6), from
+        /// the node's precomputed GeometricTable (repeated multiplication, never Math.Pow; 00 section 3). Unrounded.
+        /// </summary>
+        public double Cost(int level) => _cost.Eval(level < 0 ? 0 : level);
 
         public string Id { get; }
         public ResearchEffect Effect { get; }

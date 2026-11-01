@@ -263,6 +263,21 @@ namespace HeroCat.Bots.Tests
         }
 
         [Test]
+        public void Research_BuysALevelOnlyWhenTheCommandWouldAccept()   // 03 section 8.3 step 4 hook (#158; ranking is #214)
+        {
+            var ctx = BotRunner.CreateContext(Content.Mvp, 7);
+            ctx.Runner.Start();
+            ctx.State.Wallet.FishCoin = 300;
+            Assert.That(GreedyF2PBot.TryResearch(ctx, "res_mp_regen"), Is.False, "locked before Awakening rank 1");
+            ctx.State.Hero.AwakenRank = 1;
+            Assert.That(GreedyF2PBot.TryResearch(ctx, "res_mp_regen"), Is.True);
+            Assert.That(ctx.State.Research.Level["res_mp_regen"], Is.EqualTo(1));
+            Assert.That(ctx.State.Wallet.FishCoin, Is.EqualTo(0));
+            Assert.That(GreedyF2PBot.TryResearch(ctx, "res_mp_regen"), Is.False, "450 coins short");
+            Assert.That(GreedyF2PBot.TryResearch(ctx, "res_nope"), Is.False);
+        }
+
+        [Test]
         public void Diamonds_TenPullPreferredWhenAffordable()
         {
             var ctx = Started();

@@ -392,15 +392,20 @@ namespace HeroCat.Runtime.Save
                 return changed;
             }
 
-            // P13: research levels. A value < 1 is removed (absent reads as level 0).
-            // TODO(#158): unknown research ids and the per-node maxLevel (no research table in ContentDb yet).
+            // P13: research levels. An id the content does not define, or a value < 1, is removed (absent reads as level 0);
+            // a value above the node's max_level is clamped to it (09 section 6.3: content may lower a cap, nothing refunded).
             void P13()
             {
                 List<string> drop = null;
+                List<KeyValuePair<string, int>> clamp = null;
                 foreach (var kv in s.Research.Level)
-                    if (kv.Value < 1) (drop ??= new List<string>()).Add(kv.Key);
-                if (drop == null) return;
-                foreach (var id in drop) s.Research.Level.Remove(id);
+                {
+                    if (kv.Value < 1 || !db.Research.TryGetValue(kv.Key, out var node)) (drop ??= new List<string>()).Add(kv.Key);
+                    else if (kv.Value > node.MaxLevel) (clamp ??= new List<KeyValuePair<string, int>>()).Add(new KeyValuePair<string, int>(kv.Key, node.MaxLevel));
+                }
+                if (drop == null && clamp == null) return;
+                if (drop != null) foreach (var id in drop) s.Research.Level.Remove(id);
+                if (clamp != null) foreach (var kv in clamp) s.Research.Level[kv.Key] = kv.Value;
                 Hit("P13");
             }
 
