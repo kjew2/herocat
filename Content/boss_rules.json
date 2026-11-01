@@ -1,0 +1,25 @@
+{
+  "table": "boss_rules",
+  "rows": [
+    {
+      "id": "intro",
+      "from_stage": 1,
+      "hp_mult": 4.0,
+      "time_ticks": 200,
+      "gold_mult": 3.0,
+      "gear_drop_p": 0.1,
+      "gear_min_rarity": "R",
+      "first_clear_gems": 10
+    },
+    {
+      "id": "default",
+      "from_stage": 60,
+      "hp_mult": 10.0,
+      "time_ticks": 200,
+      "gold_mult": 3.0,
+      "gear_drop_p": 0.1,
+      "gear_min_rarity": "R",
+      "first_clear_gems": 10
+    }
+  ]
+}

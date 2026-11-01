@@ -1,0 +1,4 @@
+# Content JSON is hashed byte-for-byte by the manifest; keep LF everywhere.
+Content/*.json text eol=lf
+content_src/*.csv text eol=lf
+golden/** text eol=lf

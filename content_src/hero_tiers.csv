@@ -1,0 +1,6 @@
+tier,display_color,name_key,shard_value
+C,#9E9E9E,hero_tier.c.name,1
+R,#3498DB,hero_tier.r.name,5
+E,#9B59B6,hero_tier.e.name,25
+L,#F39C12,hero_tier.l.name,100
+M,#E74C3C,hero_tier.m.name,500

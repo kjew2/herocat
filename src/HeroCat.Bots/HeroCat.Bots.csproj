@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>HeroCat.Bots</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- specs/09 section 2 also lists HeroCat.Runtime (save round-trip); not referenced in the POC. -->
+    <ProjectReference Include="../HeroCat.Sim/HeroCat.Sim.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Acceptance/acceptance-targets.json" LogicalName="acceptance-targets.json" />
+  </ItemGroup>
+</Project>

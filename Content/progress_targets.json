@@ -1,0 +1,25 @@
+{
+  "table": "progress_targets",
+  "rows": [
+    {
+      "day": 1,
+      "stage": 90
+    },
+    {
+      "day": 3,
+      "stage": 240
+    },
+    {
+      "day": 7,
+      "stage": 380
+    },
+    {
+      "day": 14,
+      "stage": 480
+    },
+    {
+      "day": 30,
+      "stage": 550
+    }
+  ]
+}

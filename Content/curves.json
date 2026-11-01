@@ -1,0 +1,20 @@
+{
+  "table": "curves",
+  "rows": [
+    {
+      "id": "enemy_hp",
+      "base": 20.0,
+      "growth": 1.07
+    },
+    {
+      "id": "gold_per_kill",
+      "base": 2.0,
+      "growth": 1.05
+    },
+    {
+      "id": "stat_cost",
+      "base": 50.0,
+      "growth": 1.07
+    }
+  ]
+}

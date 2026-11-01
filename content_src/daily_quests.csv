@@ -1,0 +1,5 @@
+id,type,target,reward_gems,sort_order,name_key,#notes
+daily_login,login,1,50,0,quest.daily_login.name,
+daily_kills,kill_mobs,500,30,1,quest.daily_kills.name,
+daily_boss,clear_boss,1,30,2,quest.daily_boss.name,counts boss fights STARTED (specs/00 7.2)
+daily_pulls,do_pulls,3,30,3,quest.daily_pulls.name,free pulls count

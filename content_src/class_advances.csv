@@ -1,0 +1,5 @@
+id,index,stage,mult,name_key,icon_id
+class_1,1,50,1.5,class.class_1.name,icon_class_1
+class_2,2,150,1.5,class.class_2.name,icon_class_2
+class_3,3,300,1.5,class.class_3.name,icon_class_3
+class_4,4,500,1.5,class.class_4.name,icon_class_4

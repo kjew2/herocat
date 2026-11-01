@@ -1,0 +1,135 @@
+{
+  "table": "constants",
+  "rows": [
+    {
+      "key": "TICK_HZ",
+      "type": "int",
+      "value": 10
+    },
+    {
+      "key": "BASE_ATK",
+      "type": "double",
+      "value": 20.0
+    },
+    {
+      "key": "ATTACK_INTERVAL_TICKS",
+      "type": "int",
+      "value": 10
+    },
+    {
+      "key": "KILLS_PER_STAGE",
+      "type": "int",
+      "value": 10
+    },
+    {
+      "key": "SPAWN_DELAY_TICKS",
+      "type": "int",
+      "value": 5
+    },
+    {
+      "key": "BOSS_EVERY",
+      "type": "int",
+      "value": 10
+    },
+    {
+      "key": "STAGE_CAP",
+      "type": "int",
+      "value": 9000
+    },
+    {
+      "key": "STAT_PER_LVL",
+      "type": "double",
+      "value": 0.05
+    },
+    {
+      "key": "GEMS_PER_DAY_F2P",
+      "type": "int",
+      "value": 300
+    },
+    {
+      "key": "OFFLINE_RATE",
+      "type": "double",
+      "value": 0.5
+    },
+    {
+      "key": "OFFLINE_CAP_H",
+      "type": "double",
+      "value": 8.0
+    },
+    {
+      "key": "OFFLINE_MIN_GAP_S",
+      "type": "int",
+      "value": 60
+    },
+    {
+      "key": "DAY_SECONDS",
+      "type": "int",
+      "value": 86400
+    },
+    {
+      "key": "GEAR_DROP_P",
+      "type": "double",
+      "value": 0.005
+    },
+    {
+      "key": "TIER_WIDTH",
+      "type": "int",
+      "value": 10
+    },
+    {
+      "key": "GEAR_SLOT_G",
+      "type": "double",
+      "value": 1.0074
+    },
+    {
+      "key": "GEAR_SELL_KILLS",
+      "type": "double",
+      "value": 5.0
+    },
+    {
+      "key": "ENH_MAX",
+      "type": "int",
+      "value": 15
+    },
+    {
+      "key": "ENH_PER_LVL",
+      "type": "double",
+      "value": 0.05
+    },
+    {
+      "key": "ENH_SUCCESS_FLOOR",
+      "type": "double",
+      "value": 0.3
+    },
+    {
+      "key": "ENH_SUCCESS_STEP",
+      "type": "double",
+      "value": 0.05
+    },
+    {
+      "key": "ENH_COST_GOLD_MULT",
+      "type": "double",
+      "value": 20.0
+    },
+    {
+      "key": "HERO_SLOTS",
+      "type": "int",
+      "value": 6
+    },
+    {
+      "key": "HERO_LVL_BONUS",
+      "type": "double",
+      "value": 0.2
+    },
+    {
+      "key": "IDLE_CHEST_HOURS",
+      "type": "double",
+      "value": 4.0
+    },
+    {
+      "key": "IDLE_CHEST_GEMS",
+      "type": "int",
+      "value": 50
+    }
+  ]
+}

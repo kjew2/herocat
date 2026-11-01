@@ -1,0 +1,35 @@
+{
+  "table": "hero_tiers",
+  "rows": [
+    {
+      "tier": "C",
+      "display_color": "#9E9E9E",
+      "name_key": "hero_tier.c.name",
+      "shard_value": 1
+    },
+    {
+      "tier": "R",
+      "display_color": "#3498DB",
+      "name_key": "hero_tier.r.name",
+      "shard_value": 5
+    },
+    {
+      "tier": "E",
+      "display_color": "#9B59B6",
+      "name_key": "hero_tier.e.name",
+      "shard_value": 25
+    },
+    {
+      "tier": "L",
+      "display_color": "#F39C12",
+      "name_key": "hero_tier.l.name",
+      "shard_value": 100
+    },
+    {
+      "tier": "M",
+      "display_color": "#E74C3C",
+      "name_key": "hero_tier.m.name",
+      "shard_value": 500
+    }
+  ]
+}

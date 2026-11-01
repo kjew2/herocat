@@ -1,0 +1,491 @@
+{
+  "table": "heroes",
+  "rows": [
+    {
+      "id": "hero_c_01",
+      "tier": "C",
+      "pool_id": "hero_standard",
+      "name_key": "hero.c_01.name",
+      "desc_key": "hero.c_01.desc",
+      "icon_id": "icon_hero_placeholder_c",
+      "base_pct": 10.0
+    },
+    {
+      "id": "hero_c_02",
+      "tier": "C",
+      "pool_id": "hero_standard",
+      "name_key": "hero.c_02.name",
+      "desc_key": "hero.c_02.desc",
+      "icon_id": "icon_hero_placeholder_c",
+      "base_pct": 10.0
+    },
+    {
+      "id": "hero_c_03",
+      "tier": "C",
+      "pool_id": "hero_standard",
+      "name_key": "hero.c_03.name",
+      "desc_key": "hero.c_03.desc",
+      "icon_id": "icon_hero_placeholder_c",
+      "base_pct": 10.0
+    },
+    {
+      "id": "hero_c_04",
+      "tier": "C",
+      "pool_id": "hero_standard",
+      "name_key": "hero.c_04.name",
+      "desc_key": "hero.c_04.desc",
+      "icon_id": "icon_hero_placeholder_c",
+      "base_pct": 10.0
+    },
+    {
+      "id": "hero_c_05",
+      "tier": "C",
+      "pool_id": "hero_standard",
+      "name_key": "hero.c_05.name",
+      "desc_key": "hero.c_05.desc",
+      "icon_id": "icon_hero_placeholder_c",
+      "base_pct": 10.0
+    },
+    {
+      "id": "hero_c_06",
+      "tier": "C",
+      "pool_id": "hero_standard",
+      "name_key": "hero.c_06.name",
+      "desc_key": "hero.c_06.desc",
+      "icon_id": "icon_hero_placeholder_c",
+      "base_pct": 10.0
+    },
+    {
+      "id": "hero_c_07",
+      "tier": "C",
+      "pool_id": "hero_standard",
+      "name_key": "hero.c_07.name",
+      "desc_key": "hero.c_07.desc",
+      "icon_id": "icon_hero_placeholder_c",
+      "base_pct": 10.0
+    },
+    {
+      "id": "hero_c_08",
+      "tier": "C",
+      "pool_id": "hero_standard",
+      "name_key": "hero.c_08.name",
+      "desc_key": "hero.c_08.desc",
+      "icon_id": "icon_hero_placeholder_c",
+      "base_pct": 10.0
+    },
+    {
+      "id": "hero_c_09",
+      "tier": "C",
+      "pool_id": "hero_standard",
+      "name_key": "hero.c_09.name",
+      "desc_key": "hero.c_09.desc",
+      "icon_id": "icon_hero_placeholder_c",
+      "base_pct": 10.0
+    },
+    {
+      "id": "hero_c_10",
+      "tier": "C",
+      "pool_id": "hero_standard",
+      "name_key": "hero.c_10.name",
+      "desc_key": "hero.c_10.desc",
+      "icon_id": "icon_hero_placeholder_c",
+      "base_pct": 10.0
+    },
+    {
+      "id": "hero_c_11",
+      "tier": "C",
+      "pool_id": "hero_standard",
+      "name_key": "hero.c_11.name",
+      "desc_key": "hero.c_11.desc",
+      "icon_id": "icon_hero_placeholder_c",
+      "base_pct": 10.0
+    },
+    {
+      "id": "hero_c_12",
+      "tier": "C",
+      "pool_id": "hero_standard",
+      "name_key": "hero.c_12.name",
+      "desc_key": "hero.c_12.desc",
+      "icon_id": "icon_hero_placeholder_c",
+      "base_pct": 10.0
+    },
+    {
+      "id": "hero_c_13",
+      "tier": "C",
+      "pool_id": "hero_standard",
+      "name_key": "hero.c_13.name",
+      "desc_key": "hero.c_13.desc",
+      "icon_id": "icon_hero_placeholder_c",
+      "base_pct": 10.0
+    },
+    {
+      "id": "hero_c_14",
+      "tier": "C",
+      "pool_id": "hero_standard",
+      "name_key": "hero.c_14.name",
+      "desc_key": "hero.c_14.desc",
+      "icon_id": "icon_hero_placeholder_c",
+      "base_pct": 10.0
+    },
+    {
+      "id": "hero_c_15",
+      "tier": "C",
+      "pool_id": "hero_standard",
+      "name_key": "hero.c_15.name",
+      "desc_key": "hero.c_15.desc",
+      "icon_id": "icon_hero_placeholder_c",
+      "base_pct": 10.0
+    },
+    {
+      "id": "hero_c_16",
+      "tier": "C",
+      "pool_id": "hero_standard",
+      "name_key": "hero.c_16.name",
+      "desc_key": "hero.c_16.desc",
+      "icon_id": "icon_hero_placeholder_c",
+      "base_pct": 10.0
+    },
+    {
+      "id": "hero_c_17",
+      "tier": "C",
+      "pool_id": "hero_standard",
+      "name_key": "hero.c_17.name",
+      "desc_key": "hero.c_17.desc",
+      "icon_id": "icon_hero_placeholder_c",
+      "base_pct": 10.0
+    },
+    {
+      "id": "hero_c_18",
+      "tier": "C",
+      "pool_id": "hero_standard",
+      "name_key": "hero.c_18.name",
+      "desc_key": "hero.c_18.desc",
+      "icon_id": "icon_hero_placeholder_c",
+      "base_pct": 10.0
+    },
+    {
+      "id": "hero_c_19",
+      "tier": "C",
+      "pool_id": "hero_standard",
+      "name_key": "hero.c_19.name",
+      "desc_key": "hero.c_19.desc",
+      "icon_id": "icon_hero_placeholder_c",
+      "base_pct": 10.0
+    },
+    {
+      "id": "hero_c_20",
+      "tier": "C",
+      "pool_id": "hero_standard",
+      "name_key": "hero.c_20.name",
+      "desc_key": "hero.c_20.desc",
+      "icon_id": "icon_hero_placeholder_c",
+      "base_pct": 10.0
+    },
+    {
+      "id": "hero_r_01",
+      "tier": "R",
+      "pool_id": "hero_standard",
+      "name_key": "hero.r_01.name",
+      "desc_key": "hero.r_01.desc",
+      "icon_id": "icon_hero_placeholder_r",
+      "base_pct": 20.0
+    },
+    {
+      "id": "hero_r_02",
+      "tier": "R",
+      "pool_id": "hero_standard",
+      "name_key": "hero.r_02.name",
+      "desc_key": "hero.r_02.desc",
+      "icon_id": "icon_hero_placeholder_r",
+      "base_pct": 20.0
+    },
+    {
+      "id": "hero_r_03",
+      "tier": "R",
+      "pool_id": "hero_standard",
+      "name_key": "hero.r_03.name",
+      "desc_key": "hero.r_03.desc",
+      "icon_id": "icon_hero_placeholder_r",
+      "base_pct": 20.0
+    },
+    {
+      "id": "hero_r_04",
+      "tier": "R",
+      "pool_id": "hero_standard",
+      "name_key": "hero.r_04.name",
+      "desc_key": "hero.r_04.desc",
+      "icon_id": "icon_hero_placeholder_r",
+      "base_pct": 20.0
+    },
+    {
+      "id": "hero_r_05",
+      "tier": "R",
+      "pool_id": "hero_standard",
+      "name_key": "hero.r_05.name",
+      "desc_key": "hero.r_05.desc",
+      "icon_id": "icon_hero_placeholder_r",
+      "base_pct": 20.0
+    },
+    {
+      "id": "hero_r_06",
+      "tier": "R",
+      "pool_id": "hero_standard",
+      "name_key": "hero.r_06.name",
+      "desc_key": "hero.r_06.desc",
+      "icon_id": "icon_hero_placeholder_r",
+      "base_pct": 20.0
+    },
+    {
+      "id": "hero_r_07",
+      "tier": "R",
+      "pool_id": "hero_standard",
+      "name_key": "hero.r_07.name",
+      "desc_key": "hero.r_07.desc",
+      "icon_id": "icon_hero_placeholder_r",
+      "base_pct": 20.0
+    },
+    {
+      "id": "hero_r_08",
+      "tier": "R",
+      "pool_id": "hero_standard",
+      "name_key": "hero.r_08.name",
+      "desc_key": "hero.r_08.desc",
+      "icon_id": "icon_hero_placeholder_r",
+      "base_pct": 20.0
+    },
+    {
+      "id": "hero_r_09",
+      "tier": "R",
+      "pool_id": "hero_standard",
+      "name_key": "hero.r_09.name",
+      "desc_key": "hero.r_09.desc",
+      "icon_id": "icon_hero_placeholder_r",
+      "base_pct": 20.0
+    },
+    {
+      "id": "hero_r_10",
+      "tier": "R",
+      "pool_id": "hero_standard",
+      "name_key": "hero.r_10.name",
+      "desc_key": "hero.r_10.desc",
+      "icon_id": "icon_hero_placeholder_r",
+      "base_pct": 20.0
+    },
+    {
+      "id": "hero_r_11",
+      "tier": "R",
+      "pool_id": "hero_standard",
+      "name_key": "hero.r_11.name",
+      "desc_key": "hero.r_11.desc",
+      "icon_id": "icon_hero_placeholder_r",
+      "base_pct": 20.0
+    },
+    {
+      "id": "hero_r_12",
+      "tier": "R",
+      "pool_id": "hero_standard",
+      "name_key": "hero.r_12.name",
+      "desc_key": "hero.r_12.desc",
+      "icon_id": "icon_hero_placeholder_r",
+      "base_pct": 20.0
+    },
+    {
+      "id": "hero_r_13",
+      "tier": "R",
+      "pool_id": "hero_standard",
+      "name_key": "hero.r_13.name",
+      "desc_key": "hero.r_13.desc",
+      "icon_id": "icon_hero_placeholder_r",
+      "base_pct": 20.0
+    },
+    {
+      "id": "hero_r_14",
+      "tier": "R",
+      "pool_id": "hero_standard",
+      "name_key": "hero.r_14.name",
+      "desc_key": "hero.r_14.desc",
+      "icon_id": "icon_hero_placeholder_r",
+      "base_pct": 20.0
+    },
+    {
+      "id": "hero_r_15",
+      "tier": "R",
+      "pool_id": "hero_standard",
+      "name_key": "hero.r_15.name",
+      "desc_key": "hero.r_15.desc",
+      "icon_id": "icon_hero_placeholder_r",
+      "base_pct": 20.0
+    },
+    {
+      "id": "hero_e_01",
+      "tier": "E",
+      "pool_id": "hero_standard",
+      "name_key": "hero.e_01.name",
+      "desc_key": "hero.e_01.desc",
+      "icon_id": "icon_hero_placeholder_e",
+      "base_pct": 40.0
+    },
+    {
+      "id": "hero_e_02",
+      "tier": "E",
+      "pool_id": "hero_standard",
+      "name_key": "hero.e_02.name",
+      "desc_key": "hero.e_02.desc",
+      "icon_id": "icon_hero_placeholder_e",
+      "base_pct": 40.0
+    },
+    {
+      "id": "hero_e_03",
+      "tier": "E",
+      "pool_id": "hero_standard",
+      "name_key": "hero.e_03.name",
+      "desc_key": "hero.e_03.desc",
+      "icon_id": "icon_hero_placeholder_e",
+      "base_pct": 40.0
+    },
+    {
+      "id": "hero_e_04",
+      "tier": "E",
+      "pool_id": "hero_standard",
+      "name_key": "hero.e_04.name",
+      "desc_key": "hero.e_04.desc",
+      "icon_id": "icon_hero_placeholder_e",
+      "base_pct": 40.0
+    },
+    {
+      "id": "hero_e_05",
+      "tier": "E",
+      "pool_id": "hero_standard",
+      "name_key": "hero.e_05.name",
+      "desc_key": "hero.e_05.desc",
+      "icon_id": "icon_hero_placeholder_e",
+      "base_pct": 40.0
+    },
+    {
+      "id": "hero_e_06",
+      "tier": "E",
+      "pool_id": "hero_standard",
+      "name_key": "hero.e_06.name",
+      "desc_key": "hero.e_06.desc",
+      "icon_id": "icon_hero_placeholder_e",
+      "base_pct": 40.0
+    },
+    {
+      "id": "hero_e_07",
+      "tier": "E",
+      "pool_id": "hero_standard",
+      "name_key": "hero.e_07.name",
+      "desc_key": "hero.e_07.desc",
+      "icon_id": "icon_hero_placeholder_e",
+      "base_pct": 40.0
+    },
+    {
+      "id": "hero_e_08",
+      "tier": "E",
+      "pool_id": "hero_standard",
+      "name_key": "hero.e_08.name",
+      "desc_key": "hero.e_08.desc",
+      "icon_id": "icon_hero_placeholder_e",
+      "base_pct": 40.0
+    },
+    {
+      "id": "hero_e_09",
+      "tier": "E",
+      "pool_id": "hero_standard",
+      "name_key": "hero.e_09.name",
+      "desc_key": "hero.e_09.desc",
+      "icon_id": "icon_hero_placeholder_e",
+      "base_pct": 40.0
+    },
+    {
+      "id": "hero_e_10",
+      "tier": "E",
+      "pool_id": "hero_standard",
+      "name_key": "hero.e_10.name",
+      "desc_key": "hero.e_10.desc",
+      "icon_id": "icon_hero_placeholder_e",
+      "base_pct": 40.0
+    },
+    {
+      "id": "hero_l_01",
+      "tier": "L",
+      "pool_id": "hero_standard",
+      "name_key": "hero.l_01.name",
+      "desc_key": "hero.l_01.desc",
+      "icon_id": "icon_hero_placeholder_l",
+      "base_pct": 80.0
+    },
+    {
+      "id": "hero_l_02",
+      "tier": "L",
+      "pool_id": "hero_standard",
+      "name_key": "hero.l_02.name",
+      "desc_key": "hero.l_02.desc",
+      "icon_id": "icon_hero_placeholder_l",
+      "base_pct": 80.0
+    },
+    {
+      "id": "hero_l_03",
+      "tier": "L",
+      "pool_id": "hero_standard",
+      "name_key": "hero.l_03.name",
+      "desc_key": "hero.l_03.desc",
+      "icon_id": "icon_hero_placeholder_l",
+      "base_pct": 80.0
+    },
+    {
+      "id": "hero_l_04",
+      "tier": "L",
+      "pool_id": "hero_standard",
+      "name_key": "hero.l_04.name",
+      "desc_key": "hero.l_04.desc",
+      "icon_id": "icon_hero_placeholder_l",
+      "base_pct": 80.0
+    },
+    {
+      "id": "hero_l_05",
+      "tier": "L",
+      "pool_id": "hero_standard",
+      "name_key": "hero.l_05.name",
+      "desc_key": "hero.l_05.desc",
+      "icon_id": "icon_hero_placeholder_l",
+      "base_pct": 80.0
+    },
+    {
+      "id": "hero_l_06",
+      "tier": "L",
+      "pool_id": "hero_standard",
+      "name_key": "hero.l_06.name",
+      "desc_key": "hero.l_06.desc",
+      "icon_id": "icon_hero_placeholder_l",
+      "base_pct": 80.0
+    },
+    {
+      "id": "hero_m_01",
+      "tier": "M",
+      "pool_id": "hero_standard",
+      "name_key": "hero.m_01.name",
+      "desc_key": "hero.m_01.desc",
+      "icon_id": "icon_hero_placeholder_m",
+      "base_pct": 160.0
+    },
+    {
+      "id": "hero_m_02",
+      "tier": "M",
+      "pool_id": "hero_standard",
+      "name_key": "hero.m_02.name",
+      "desc_key": "hero.m_02.desc",
+      "icon_id": "icon_hero_placeholder_m",
+      "base_pct": 160.0
+    },
+    {
+      "id": "hero_m_03",
+      "tier": "M",
+      "pool_id": "hero_standard",
+      "name_key": "hero.m_03.name",
+      "desc_key": "hero.m_03.desc",
+      "icon_id": "icon_hero_placeholder_m",
+      "base_pct": 160.0
+    }
+  ]
+}

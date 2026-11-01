@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HeroCat Prototype</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Layout: one phone-height column. HUD, always-visible combat strip, scrolling tab panel, tab bar (specs/07 section 5).
+   Single dark look on purpose: the palette is specs/07 section 10.1, mirrored as tokens. */
+:root {
+  --bg: #121212; --panel: #1e1e1e; --panel-2: #262626; --line: #333333;
+  --text: #eeeeee; --muted: #9e9e9e;
+  --gold: #ffd54f; --gems: #4dd0e1; --ok: #66bb6a; --bad: #ef5350;
+  --r-C: #9e9e9e; --r-R: #42a5f5; --r-E: #ab47bc; --r-L: #ffa726; --r-M: #ef5350;
+  --cls-0: #bdbdbd; --cls-1: #81c784; --cls-2: #64b5f6; --cls-3: #ba68c8; --cls-4: #ffb74d;
+  --font-display: 'Chakra Petch', 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Barlow', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --gutter-l: max(16px, env(safe-area-inset-left, 0px));
+  --gutter-r: max(16px, env(safe-area-inset-right, 0px));
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.35 var(--font-body);
+  -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:disabled { opacity: .4; cursor: default; }
+button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--gems); outline-offset: 2px; }
+.num { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.gold { color: var(--gold); } .gems { color: var(--gems); } .ok { color: var(--ok); } .bad { color: var(--bad); }
+
+#app { height: 100%; max-width: 560px; margin: 0 auto; display: flex; flex-direction: column; background: var(--bg); }
+
+/* HUD */
+#hud { display: flex; align-items: center; gap: 12px; padding: 8px var(--gutter-r) 8px var(--gutter-l);
+  background: var(--panel); border-bottom: 1px solid var(--line); }
+.cur { display: flex; align-items: baseline; gap: 5px; font-family: var(--font-display); font-weight: 600; font-size: 17px; white-space: nowrap; }
+.cur small { font-family: var(--font-body); font-size: 11px; color: var(--muted); font-weight: 500; letter-spacing: .06em; text-transform: uppercase; }
+#hud .spacer { flex: 1; }
+.chip { border: 1px solid var(--line); background: var(--panel-2); border-radius: 6px; padding: 6px 10px; font-size: 13px; white-space: nowrap; }
+.chip.ready { border-color: var(--gems); color: var(--gems); font-weight: 600; }
+.tag.speed { color: var(--gold); border: 1px solid var(--gold); }
+.ico { width: 11px; height: 11px; flex: none; align-self: center; }
+.ico.coin { border-radius: 50%; background: var(--gold); box-shadow: inset -2px -2px 0 rgba(0,0,0,.25); }
+.ico.gem { background: var(--gems); transform: rotate(45deg) scale(.85); border-radius: 2px; }
+.icon-btn { width: 36px; height: 36px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel-2); display: grid; place-items: center; padding: 0; }
+.pulse { animation: pulse .25s ease-out; }
+@keyframes pulse { 50% { transform: scale(1.12); } }
+
+/* Combat strip */
+#strip { padding: 8px var(--gutter-r) 10px var(--gutter-l); background: linear-gradient(#181818, #141414); border-bottom: 1px solid var(--line); }
+.strip-top, .strip-bottom { display: flex; align-items: center; gap: 8px; }
+.strip-top { font-family: var(--font-display); font-weight: 600; }
+#stageEl { font-size: 20px; }
+.tag { font-size: 11px; font-weight: 700; letter-spacing: .08em; padding: 2px 6px; border-radius: 4px; }
+.tag.boss { background: var(--r-L); color: #111; }
+.tag.wall { background: var(--bad); color: #fff; }
+#killsEl { margin-left: auto; color: var(--muted); font-size: 13px; }
+#killsEl.walled { color: var(--bad); }
+.arena { position: relative; height: 128px; display: flex; align-items: center; justify-content: space-between; margin: 6px 0; }
+.side { display: flex; align-items: center; gap: 10px; }
+.party { display: grid; grid-template-columns: repeat(3, 30px); gap: 4px; }
+.sprite { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+.arena { border-radius: 8px; padding: 0 8px; }
+.pslot { width: 30px; height: 30px; border-radius: 4px; display: grid; place-items: center; border: 1px dashed rgba(255,255,255,.15); transition: transform .1s; }
+.pslot.filled { border: 0; border-bottom: 3px solid var(--slot-col, transparent); }
+.pslot .sprite { width: 28px; height: 28px; }
+.pslot.flash { transform: translateY(-4px); }
+.player { width: 72px; height: 72px; display: grid; place-items: center; }
+.player .sprite { width: 68px; height: 68px; }
+.enemy { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; font: 600 12px/1.1 var(--font-display); color: var(--text); text-shadow: 0 1px 2px #000; transition: transform .08s, opacity .12s; }
+.enemy .sprite { width: 76px; height: 76px; transform: scaleX(-1); }
+.enemy.boss .sprite { width: 100px; height: 100px; }
+.enemy.boss { color: var(--r-L); }
+.enemy.hit { transform: translateX(4px); }
+.enemy.dead { opacity: .2; }
+#floaters { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.floater { position: absolute; right: 30px; top: 40px; font: 700 15px var(--font-display); color: var(--gold); text-shadow: 0 1px 2px #000; animation: floatUp .7s ease-out forwards; }
+@keyframes floatUp { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-40px); opacity: 0; } }
+.bar { position: relative; height: 18px; border-radius: 4px; background: #424242; overflow: hidden; }
+.bar .fill { position: absolute; inset: 0 auto 0 0; background: var(--bad); width: 100%; }
+.bar span { position: relative; display: block; text-align: center; font: 600 12px/18px var(--font-display); text-shadow: 0 1px 2px #000; }
+.bar.timer { height: 12px; margin-top: 4px; }
+.bar.timer .fill { background: var(--gold); }
+.bar.timer span { font-size: 10px; line-height: 12px; color: #111; text-shadow: none; }
+.strip-bottom { margin-top: 6px; font-size: 13px; min-height: 32px; }
+.strip-bottom .num { font-size: 14px; }
+#bossBtn { margin-left: auto; border: 1px solid var(--line); background: var(--panel-2); border-radius: 6px; padding: 6px 10px; font-weight: 600; font-size: 13px; }
+#bossBtn.clearable { border-color: var(--ok); color: var(--ok); }
+
+/* Panel and tabs */
+#panelWrap { position: relative; flex: 1; min-height: 0; }
+#panel { height: 100%; overflow-y: auto; padding: 12px var(--gutter-r) 20px var(--gutter-l); -webkit-overflow-scrolling: touch; }
+.tab { display: flex; flex-direction: column; gap: 12px; }
+.tab[hidden] { display: none; }
+h2 { margin: 0; font: 600 18px var(--font-display); letter-spacing: .02em; text-wrap: balance; }
+h3 { margin: 0; font: 600 12px var(--font-body); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.row { display: flex; align-items: center; gap: 10px; }
+.row.between { justify-content: space-between; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.card.wall { border-color: var(--bad); }
+.btn { border: 1px solid var(--line); background: var(--panel-2); border-radius: 8px; padding: 10px 14px; font-weight: 600; min-height: 44px; }
+.btn.primary { background: #2e3b2e; border-color: var(--ok); }
+.btn.gemsy { background: #1d3438; border-color: var(--gems); }
+.btn.small { min-height: 34px; padding: 6px 10px; font-size: 13px; }
+#tabs { display: grid; grid-template-columns: repeat(6, 1fr); background: var(--panel); border-top: 1px solid var(--line);
+  padding: 0 var(--gutter-r) env(safe-area-inset-bottom, 0px) var(--gutter-l); }
+#tabs button { position: relative; border: 0; background: none; padding: 12px 0 13px; font: 600 12px var(--font-display); letter-spacing: .04em; color: var(--muted); }
+#tabs button[aria-selected="true"] { color: var(--text); box-shadow: inset 0 3px 0 var(--gems); }
+.dot { position: absolute; top: 7px; right: 22%; width: 7px; height: 7px; border-radius: 50%; background: var(--gems); }
+
+/* Fight tab */
+.feed { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.feed li { padding: 3px 0; border-bottom: 1px solid #222; }
+.quest { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; font-size: 14px; }
+.quest .num { font-size: 13px; }
+.quest.done { color: var(--muted); }
+.quest.done .q-reward::before { content: '\2713  '; color: var(--ok); }
+.life { font-size: 12px; color: var(--muted); }
+
+/* Stats tab */
+.stat-row { display: grid; grid-template-columns: 76px 1fr; gap: 12px; align-items: center; }
+.stat-row .btn { width: 100%; }
+.stat-info { display: flex; flex-direction: column; font-size: 13px; }
+.big { font: 700 26px var(--font-display); }
+
+/* Gear tab */
+.gear-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.tile { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 8px; text-align: left; display: flex; flex-direction: column; gap: 4px; min-height: 84px; }
+.tile.sel { border-color: var(--gems); box-shadow: 0 0 0 1px var(--gems); }
+.tile .slotname { font-size: 12px; color: var(--muted); }
+.rtag { display: inline-block; font: 700 11px var(--font-display); padding: 1px 6px; border-radius: 4px; color: #111; }
+.rtag.r1, .rtag.r0, .rtag.r3 { color: #111; } .rtag.r2, .rtag.r4 { color: #fff; }
+.bg-r0 { background: var(--r-C); } .bg-r1 { background: var(--r-R); } .bg-r2 { background: var(--r-E); } .bg-r3 { background: var(--r-L); } .bg-r4 { background: var(--r-M); }
+.fg-r0 { color: var(--r-C); } .fg-r1 { color: var(--r-R); } .fg-r2 { color: var(--r-E); } .fg-r3 { color: var(--r-L); } .fg-r4 { color: var(--r-M); }
+
+/* Heroes */
+.hero-head { display: flex; gap: 12px; align-items: center; }
+.hero-head .sprite { width: 56px; height: 56px; flex: none; border-radius: 8px; padding: 4px; }
+.glyph { width: 46px; height: 46px; border-radius: 50%; display: grid; place-items: center; font: 700 13px var(--font-display); color: #111; position: relative; border: 0; padding: 0; }
+.glyph .sprite { width: 34px; height: 34px; }
+.glyph.r2, .glyph.r4 { color: #fff; }
+.glyph.unowned { opacity: .28; }
+.glyph.sel { box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px var(--gems); }
+.glyph .lv { position: absolute; bottom: -4px; right: -6px; background: #000; color: #fff; font-size: 9px; padding: 1px 4px; border-radius: 6px; }
+.glyph .inparty { position: absolute; top: -3px; left: -3px; width: 10px; height: 10px; border-radius: 50%; background: var(--ok); border: 2px solid var(--bg); }
+.hero-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); gap: 12px 6px; justify-items: center; }
+.party-row { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; justify-items: center; }
+.empty-slot { width: 46px; height: 46px; border-radius: 50%; border: 1px dashed var(--line); background: none; color: var(--muted); font-size: 11px; }
+
+/* Summon */
+.pity { position: relative; height: 14px; border-radius: 4px; background: #2b2b2b; overflow: hidden; }
+.pity .fill { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, var(--r-E), var(--r-L)); }
+.pity .mark { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--text); opacity: .6; }
+.pull-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pull-btns .btn { display: flex; flex-direction: column; align-items: center; gap: 2px; min-height: 64px; }
+.pull-btns .btn small { font-weight: 500; font-size: 12px; }
+.last { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* Class */
+.ms { display: grid; grid-template-columns: 22px 70px 1fr auto; gap: 8px; align-items: center; font-size: 14px; }
+.ms .chk { width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--line); }
+.ms.got .chk { background: var(--ok); border-color: var(--ok); }
+
+/* Layers */
+#modal { position: absolute; inset: 0; background: rgba(10,10,10,.92); padding: 14px var(--gutter-r) 14px var(--gutter-l); overflow-y: auto; z-index: 5; }
+#modal .card { gap: 10px; }
+.reveal-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.reveal-grid.one { grid-template-columns: minmax(0, 140px); justify-content: center; }
+.rcard { position: relative; aspect-ratio: 3 / 4; max-width: 100%; animation: flip .6s var(--d) both; }
+.rcard .face { position: absolute; inset: 0; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; text-align: center; padding: 4px; }
+.rcard .back { background: #3a3a3a; font: 700 22px var(--font-display); color: var(--muted); animation: hideAt .6s var(--d) both; }
+.rcard .front { animation: showAt .6s var(--d) both; color: #111; }
+.rcard .front.r2, .rcard .front.r4 { color: #fff; }
+.rcard .front b { font: 700 13px var(--font-display); }
+.rcard .front .sprite { width: 70%; max-width: 64px; aspect-ratio: 1; height: auto; }
+.rcard .front small { font-size: 10px; font-weight: 600; }
+.rcard.glow .back { box-shadow: 0 0 14px 3px var(--r-L); }
+@keyframes flip { 0% { transform: scaleX(1); } 50% { transform: scaleX(0); } 100% { transform: scaleX(1); } }
+@keyframes hideAt { 0%, 49.9% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@keyframes showAt { 0%, 49.9% { opacity: 0; } 50%, 100% { opacity: 1; } }
+.reveal-grid.skip .rcard, .reveal-grid.skip .face { animation: none; }
+.reveal-grid.skip .back { opacity: 0; }
+.reveal-grid.skip .front { opacity: 1; }
+table.rates { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.rates td, table.rates th { padding: 4px 6px; border-bottom: 1px solid #2a2a2a; text-align: right; }
+table.rates td:first-child, table.rates th:first-child { text-align: left; }
+.dbg { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.dbg label { font-size: 12px; color: var(--muted); width: 54px; }
+.seg button[aria-pressed="true"] { border-color: var(--gold); color: var(--gold); }
+textarea { width: 100%; min-height: 90px; background: #0d0d0d; color: var(--text); border: 1px solid var(--line); border-radius: 6px; font: 11px/1.3 ui-monospace, monospace; padding: 6px; }
+input[type=number] { width: 90px; background: #0d0d0d; color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 6px; font: inherit; }
+
+#toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(64px + env(safe-area-inset-bottom, 0px)); width: min(520px, calc(100% - 24px)); display: flex; flex-direction: column; gap: 6px; pointer-events: none; z-index: 10; }
+.toast { padding: 8px 12px; border-radius: 6px; font-size: 13px; font-weight: 600; color: var(--text); box-shadow: 0 4px 12px rgba(0,0,0,.5); animation: tin .2s ease-out; }
+.toast:not([class*='bg-r']) { background: #333; }
+.toast.r0, .toast.r1, .toast.r3 { color: #111; }
+.toast.r2, .toast.r4 { color: #fff; }
+@keyframes tin { from { transform: translateY(8px); opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .rcard, .rcard .face, .floater, .pulse, .toast { animation: none !important; }
+  .rcard .back { opacity: 0; } .rcard .front { opacity: 1; }
+}
+@media (max-width: 440px) {
+  .cur small { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  #hud { gap: 10px; }
+}
+@media (max-width: 360px) { .cur { font-size: 15px; } .chip { padding: 6px 8px; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="hud">
+    <div class="cur"><span class="ico coin" aria-hidden="true"></span><small>Gold</small><span id="goldEl" class="gold">0</span></div>
+    <div class="cur"><span class="ico gem" aria-hidden="true"></span><small>Gems</small><span id="gemsEl" class="gems">0</span></div>
+    <div class="spacer"></div>
+    <button id="chestBtn" class="chip" type="button">Chest</button>
+    <button id="cogBtn" class="icon-btn" type="button" aria-label="Settings and debug">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+    </button>
+  </header>
+
+  <section id="strip" aria-label="Combat">
+    <div class="strip-top">
+      <span id="stageEl" class="num">Stage 1</span>
+      <span id="bossTag" class="tag boss" hidden>BOSS</span>
+      <span id="wallTag" class="tag wall" hidden>WALL</span>
+      <span id="speedChip" class="tag speed" hidden>x1</span>
+      <span id="killsEl" class="num">0/10</span>
+    </div>
+    <div class="arena">
+      <div class="side">
+        <div class="party" id="partyStrip"></div>
+        <div class="player" id="playerEl"><canvas class="sprite" id="playerCv" aria-label="You"></canvas></div>
+      </div>
+      <div class="enemy" id="enemyEl"><canvas class="sprite" id="enemyCv" aria-hidden="true"></canvas><span id="enemyLabel"></span></div>
+      <div id="floaters"></div>
+    </div>
+    <div class="bar hp"><div class="fill" id="hpFill"></div><span id="hpText" class="num">-</span></div>
+    <div class="bar timer" id="timerBar" hidden><div class="fill" id="timerFill"></div><span id="timerText"></span></div>
+    <div class="strip-bottom">
+      <span>DPS <b id="dpsEl" class="num">0</b></span>
+      <span id="hitInfo" class="muted num"></span>
+      <button id="bossBtn" type="button" hidden>Boss</button>
+    </div>
+  </section>
+
+  <div id="panelWrap">
+    <main id="panel"></main>
+    <div id="modal" hidden></div>
+  </div>
+
+  <nav id="tabs" role="tablist"></nav>
+  <div id="toasts" aria-live="polite"></div>
+</div>
+<script src="format.js"></script>
+<script src="engine.js"></script>
+<script src="sprites.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

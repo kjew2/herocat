@@ -1,0 +1,6 @@
+rarity,weight,mult,display_color,name_key
+C,0.6,1.0,#9E9E9E,rarity.c.name
+R,0.28,1.2,#3498DB,rarity.r.name
+E,0.09,1.5,#9B59B6,rarity.e.name
+L,0.025,2.0,#F39C12,rarity.l.name
+M,0.005,3.0,#E74C3C,rarity.m.name

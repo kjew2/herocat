@@ -1,0 +1,14 @@
+{
+  "stageTargets": { "1": 90, "3": 240, "7": 380, "14": 480, "30": 550 },
+  "stageTolerance": 0.20,
+  "stageCheckDays": [1, 7, 30],
+  "shareCheckDays": [1, 7, 30],
+  "shareMin": 0.03,
+  "shareMax": 0.80,
+  "firstWallMinStage": 60,
+  "firstWallMaxStage": 200,
+  "maxWallHoursThroughDay": 14,
+  "maxWallHours": 48.0,
+  "statLevelSlope": 0.95,
+  "statLevelIntercept": 50
+}

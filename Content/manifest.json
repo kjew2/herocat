@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "content_version": "1.0",
+  "source_revision": "2026-10-30 poc placeholder content",
+  "tables": {
+    "banners": {
+      "file": "banners.json",
+      "sha256": "a78e2a216430016e8e8ce2fc91ec8a2cfca80ff0659fd83bcc7723d2dc7925a8"
+    },
+    "boss_rules": {
+      "file": "boss_rules.json",
+      "sha256": "e64c9c0323f51839c6b61a3171671611740d52cc1be0d28ecae4b94530d34819"
+    },
+    "class_advances": {
+      "file": "class_advances.json",
+      "sha256": "4af71f54d31a0f5924195de091aca1bf16edd1f32448360ad9a6177e767d0c4f"
+    },
+    "constants": {
+      "file": "constants.json",
+      "sha256": "ad10ddcd3eb9c032b4bf40f7c8676af142cb24779e4eb598806d18c64a712e43"
+    },
+    "curves": {
+      "file": "curves.json",
+      "sha256": "875108fdf0912e9ae96fd2805398eeaf0f39dc0a2beeeaaf414ed230acb1d7bd"
+    },
+    "daily_quests": {
+      "file": "daily_quests.json",
+      "sha256": "dba939ba5239c991dfd1f9d1680946bb14bab566a8df9b8d7bbc6361bbbbec1e"
+    },
+    "gear_rarity": {
+      "file": "gear_rarity.json",
+      "sha256": "6f122fddf5720f3934e4fa33cb38639cf11d8311c245fcd41b2d6f291ba605e9"
+    },
+    "gear_slots": {
+      "file": "gear_slots.json",
+      "sha256": "2b59742376651d0e391bb2c6e06293a9c09fd6eac3a61d4eab48ef5e7962bf3c"
+    },
+    "hero_level_thresholds": {
+      "file": "hero_level_thresholds.json",
+      "sha256": "79e8d8cb1b90b2d2ba49ef7771f969642c1d52d69bfb9e4e6d73b8ecda29c355"
+    },
+    "hero_tiers": {
+      "file": "hero_tiers.json",
+      "sha256": "5f23118379c092c0a159ac6984d623c86c81ebd3259eda3c83d153b6c12b5a0e"
+    },
+    "heroes": {
+      "file": "heroes.json",
+      "sha256": "a84d690e2900643e38fb4be2e34ec251329490de85706083f1bd2587ea6e91b7"
+    },
+    "progress_targets": {
+      "file": "progress_targets.json",
+      "sha256": "c947fa0265ac656ef89935de88b265e69bb849932c0ecc7dc16b6a4787011d99"
+    },
+    "strings": {
+      "file": "strings.json",
+      "sha256": "8d0621d5ee19658ef02e981600a56e51475c0e3adffdde1be0c0904e9edef9e5"
+    },
+    "tutorial_grants": {
+      "file": "tutorial_grants.json",
+      "sha256": "b8fd786ff1dbe8ae39e66404fe579a93b490673daba4754c7d44b84602bc8ae4"
+    }
+  },
+  "content_hash": "c370193e9029c39d0204606693fe28cb9cf8cf451d6939fb4d15c5fe7c5f1573"
+}

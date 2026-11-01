@@ -1,0 +1,45 @@
+{
+  "table": "hero_level_thresholds",
+  "rows": [
+    {
+      "level": 1,
+      "cum_copies": 1
+    },
+    {
+      "level": 2,
+      "cum_copies": 3
+    },
+    {
+      "level": 3,
+      "cum_copies": 6
+    },
+    {
+      "level": 4,
+      "cum_copies": 10
+    },
+    {
+      "level": 5,
+      "cum_copies": 16
+    },
+    {
+      "level": 6,
+      "cum_copies": 25
+    },
+    {
+      "level": 7,
+      "cum_copies": 40
+    },
+    {
+      "level": 8,
+      "cum_copies": 64
+    },
+    {
+      "level": 9,
+      "cum_copies": 100
+    },
+    {
+      "level": 10,
+      "cum_copies": 160
+    }
+  ]
+}

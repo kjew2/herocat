@@ -1,0 +1,27 @@
+key,type,value,#notes
+TICK_HZ,int,10,1 tick = 100 ms
+BASE_ATK,double,20,POC tuning: was 10 (specs/00); compensates discrete-hit kill time (specs/09 section 14)
+ATTACK_INTERVAL_TICKS,int,10,one hit per second
+KILLS_PER_STAGE,int,10,
+SPAWN_DELAY_TICKS,int,5,
+BOSS_EVERY,int,10,
+STAGE_CAP,int,9000,double range guard
+STAT_PER_LVL,double,0.05,
+GEMS_PER_DAY_F2P,int,300,tuning target only
+OFFLINE_RATE,double,0.5,
+OFFLINE_CAP_H,double,8,
+OFFLINE_MIN_GAP_S,int,60,specs/03 open decision 2
+DAY_SECONDS,int,86400,
+GEAR_DROP_P,double,0.005,
+TIER_WIDTH,int,10,
+GEAR_SLOT_G,double,1.0074,
+GEAR_SELL_KILLS,double,5,
+ENH_MAX,int,15,
+ENH_PER_LVL,double,0.05,
+ENH_SUCCESS_FLOOR,double,0.3,
+ENH_SUCCESS_STEP,double,0.05,
+ENH_COST_GOLD_MULT,double,20,
+HERO_SLOTS,int,6,
+HERO_LVL_BONUS,double,0.2,
+IDLE_CHEST_HOURS,double,4,
+IDLE_CHEST_GEMS,int,50,

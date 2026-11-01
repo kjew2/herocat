@@ -1,0 +1,2 @@
+id,kind,name_key,pool_id,rate_c,rate_r,rate_e,rate_l,rate_m,pity_soft_start,pity_soft_step,pity_hard,mythic_share_of_lplus,guarantee_batch_size,guarantee_min_tier,pull_cost_gems,free_pulls_per_day,rng_stream,enabled
+hero_standard,hero,banner.hero_standard.name,hero_standard,0.6,0.28,0.09,0.025,0.005,50,0.0325,80,0.16666666666666666,10,E,100,3,gacha_hero,true

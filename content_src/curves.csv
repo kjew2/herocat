@@ -1,0 +1,4 @@
+id,base,growth
+enemy_hp,20,1.07
+gold_per_kill,2,1.05
+stat_cost,50,1.07

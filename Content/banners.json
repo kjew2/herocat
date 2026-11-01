@@ -1,0 +1,28 @@
+{
+  "table": "banners",
+  "rows": [
+    {
+      "id": "hero_standard",
+      "kind": "hero",
+      "name_key": "banner.hero_standard.name",
+      "pool_id": "hero_standard",
+      "rates": {
+        "C": 0.6,
+        "R": 0.28,
+        "E": 0.09,
+        "L": 0.025,
+        "M": 0.005
+      },
+      "pity_soft_start": 50,
+      "pity_soft_step": 0.0325,
+      "pity_hard": 80,
+      "mythic_share_of_lplus": 0.16666666666666666,
+      "guarantee_batch_size": 10,
+      "guarantee_min_tier": "E",
+      "pull_cost_gems": 100,
+      "free_pulls_per_day": 3,
+      "rng_stream": "gacha_hero",
+      "enabled": true
+    }
+  ]
+}
