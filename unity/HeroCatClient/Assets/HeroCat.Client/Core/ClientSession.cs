@@ -10,27 +10,53 @@ using HeroCat.Sim.State;
 
 namespace HeroCat.Client.Core
 {
+    /// <summary>Client-side options for <see cref="ClientSession.Start"/> (all optional).</summary>
+    public sealed class ClientOptions
+    {
+        public ILocalizer Localizer { get; set; }
+        public IClientPrefs Prefs { get; set; }
+        public string BuildHash { get; set; }
+    }
+
     /// <summary>
-    /// The client's engine-free session host (07 section 17.3; issue #65): runs Runtime's BootFlow, then forwards the
-    /// Unity callbacks to the SessionRunner, the one tick driver shared with bots and tests. GameRoot is a thin forwarder
-    /// over this. The composition root wraps its clock in an <see cref="OffsetClock"/> (ServicesOptions.WrapClock) for the
-    /// debug clock cheats, so saves, summons and the runner all read the same time.
+    /// The client's engine-free session host (07 section 17.3; issue #65): runs Runtime's BootFlow (driving
+    /// <see cref="BootVm"/> for SCR_BOOT), then forwards the Unity callbacks to the SessionRunner, the one tick driver shared
+    /// with bots and tests. GameRoot is a thin forwarder over this. The composition root wraps its clock in an
+    /// <see cref="OffsetClock"/> (ServicesOptions.WrapClock) for the debug clock cheats, so saves, summons and the runner all
+    /// read the same time. Ticks stay off while SCR_OFFLINE_REWARD is open (01 section 8.7): BootFlow starts them disabled
+    /// when a reward is pending and the modal's Claim turns them back on.
     /// </summary>
     public sealed class ClientSession
     {
-        ClientSession(BootResult boot, OffsetClock clock)
+        ClientSession(BootResult boot, OffsetClock clock, BootVm bootVm, IMonoClock mono, ClientOptions options)
         {
             Boot = boot;
             Clock = clock;
-            if (boot.Outcome != BootOutcome.Ready) return;
-            // TODO(#118, #108): SCR_OFFLINE_REWARD and ClaimOfflineReward. Until that screen exists nothing could turn the
-            // ticks back on, so the session keeps ticking (the M0 sim stores no Offline.Pending yet).
-            boot.Runner.TicksEnabled = true;
-            Vm = new GameViewModel(boot.Runner, clock, "runtime save (" + (boot.IsNewProfile ? "new profile, " : "") + boot.LoadStatus + ")");
+            BootVm = bootVm;
+            if (boot.Outcome != BootOutcome.Ready)
+            {
+                BootError = new ErrorVm(options?.Localizer, null);
+                BootError.Show(boot.Error, bootFailure: true);
+                return;
+            }
+            BootVm.OnDone();
+            Vm = new GameViewModel(boot.Runner, clock, new GameVmOptions
+            {
+                Localizer = options?.Localizer,
+                Prefs = options?.Prefs,
+                Now = () => mono.Ticks / (double)mono.Frequency,
+                SaveDescription = "runtime save (" + (boot.IsNewProfile ? "new profile, " : "") + boot.LoadStatus + ")",
+            });
         }
 
         /// <summary>The boot outcome; on Fatal or Blocked, <see cref="BootResult.Error"/> says what SCR_BOOT shows.</summary>
         public BootResult Boot { get; }
+
+        /// <summary>SCR_BOOT's progress, step key and version caption.</summary>
+        public BootVm BootVm { get; }
+
+        /// <summary>The blocking SCR_ERROR for a failed boot (code, Retry, Update or Contact support); null when ready.</summary>
+        public ErrorVm BootError { get; }
 
         public bool IsReady => Boot.Outcome == BootOutcome.Ready;
         public OffsetClock Clock { get; }
@@ -47,11 +73,14 @@ namespace HeroCat.Client.Core
         /// </summary>
         public static ClientSession Start(IReadOnlyList<Func<ContentDb>> content,
                                           Func<ContentDb, Func<GameState>, Func<IClock, IClock>, GameServices> services,
-                                          ICommandLog commandLog = null, SessionRunnerOptions runner = null, string clientVersion = null)
+                                          ICommandLog commandLog = null, SessionRunnerOptions runner = null, string clientVersion = null,
+                                          ClientOptions options = null)
         {
             if (services == null) throw new ArgumentNullException(nameof(services));
             OffsetClock clock = null;
             Func<IClock, IClock> wrap = inner => clock = new OffsetClock(inner);
+            var bootVm = new BootVm(options?.Localizer);
+            IMonoClock mono = runner?.Mono ?? StopwatchMonoClock.Instance;
             var boot = BootFlow.Run(new BootOptions
             {
                 Content = content,
@@ -59,8 +88,9 @@ namespace HeroCat.Client.Core
                 CommandLog = commandLog,
                 Runner = runner,
                 ClientVersion = clientVersion,
-            });
-            return new ClientSession(boot, clock);
+            }, bootVm.OnStep);
+            bootVm.SetVersions(clientVersion, boot.Content?.Version, options?.BuildHash);
+            return new ClientSession(boot, clock, bootVm, mono, options);
         }
 
         /// <summary>Once per rendered frame. Returns the ticks run.</summary>
@@ -69,12 +99,25 @@ namespace HeroCat.Client.Core
             if (!IsReady) return 0;
             int ticks = Runner.OnFrame();
             if (Vm.ConsumeSaveRequest()) Runner.SaveNow(SaveTrigger.Debug);
+            Vm.Frame();
             if (ticks > 0 | Vm.ConsumeDirty()) Vm.Refresh();
             return ticks;
         }
 
-        public void OnPause() { if (IsReady) Runner.OnPause(); }
-        public void OnResume() { if (IsReady) Runner.OnResume(); }
+        public void OnPause()
+        {
+            if (!IsReady) return;
+            Vm.OnPause();
+            Runner.OnPause();
+        }
+
+        public void OnResume()
+        {
+            if (!IsReady) return;
+            Runner.OnResume();
+            Vm.OnResume();
+        }
+
         public void OnQuit() { if (IsReady) Runner.OnQuit(); }
         public void OnLowMemory() { if (IsReady) Runner.OnLowMemory(); }
 

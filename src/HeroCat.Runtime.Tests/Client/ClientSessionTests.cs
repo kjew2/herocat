@@ -59,7 +59,8 @@ namespace HeroCat.Runtime.Tests
             var cs = Start(new FakeClock(TestContent.T0), new MemorySaveStore(), new FakeMonoClock());
             var r = cs.Vm.Apply(new ApplyServerTime(-1));
             Assert.That(r.Ok, Is.False);
-            Assert.That(cs.Vm.Toasts.Current(0), Does.Contain(ErrorClassifier.RejectKey(r)));
+            Assert.That(cs.Vm.Toasts.Current(0), Does.Contain(LocKeys.Reject(r)), "reject.<reason_lower> (issue #248)");
+            Assert.That(LocKeys.Reject(r), Is.EqualTo("reject.bad_server_time"));
         }
 
         [Test]
