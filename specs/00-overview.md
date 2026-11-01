@@ -390,7 +390,7 @@ herocat/
   tools/
     power_curve_model.py               (sibling copy; rewrite to 03 section 8.6) greedy F2P bot across all layers, prints the day table
     gacha_model.py                     (sibling copy; rename streams, 04 section 14) pity distribution; --vectors writes Fixtures/Summon/vectors.json
-    fish_model.py                      (to write) tank/merge throughput, coin and DPS income per active minute
+    fish_model.py                      tank/merge throughput, coin and DPS income per active minute
     export_content.py                  sheet exporter, verb CLI (pull/build/check/diff/...), spec 09
 ```
 

@@ -34,6 +34,9 @@ namespace HeroCat.Sim
         /// <summary>03 section 7.3. Also called by Apply after every accepted command.</summary>
         internal void MarkDpsDirty() => Query.MarkDirty();
 
+        /// <summary>The fish track's hook (Simulation.Fish.cs): a board change invalidates the DPS cache (05 section 12 rule 5).</summary>
+        partial void OnFishBoardDpsChanged() => MarkDpsDirty();
+
         /// <summary>The fought stage: the selected side stage, else the frontier (03 section 2.6; selection is MVP, #159).</summary>
         int FoughtStage => State.Combat.Selected ?? State.Combat.Stage;
 

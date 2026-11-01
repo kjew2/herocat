@@ -147,21 +147,8 @@ namespace HeroCat.Sim.Power
 
         // ================================================================================================ Fish Board (05 5)
 
-        /// <summary>FISH_BOARD_DPS_PCT = sum over occupied cells of BoardDpsPct[level] (05 section 5.2). Levels past the table use its last row.</summary>
-        public static double FishBoardDpsPct(ContentDb db, GameState s)
-        {
-            var cells = s.Fish.Cells;
-            var levels = db.FishLevels;
-            if (cells == null || levels.Count == 0) return 0.0;
-            double sum = 0.0;
-            for (int i = 0; i < cells.Length; i++)
-            {
-                int lv = cells[i];
-                if (lv <= 0) continue;
-                sum += levels[(lv > levels.Count ? levels.Count : lv) - 1].BoardDpsPct;
-            }
-            return sum;
-        }
+        /// <summary>FISH_BOARD_DPS_PCT (05 section 5.2). The fish track owns the sum and its floating-point order (05 section 12 rule 5).</summary>
+        public static double FishBoardDpsPct(ContentDb db, GameState s) => HeroCat.Sim.Fish.FishBoard.BoardDpsPct(s, db);
 
         /// <summary>
         /// 05 section 5.1's closed form: hero hits from missiles per released level-1 fish when every fish is merged up to

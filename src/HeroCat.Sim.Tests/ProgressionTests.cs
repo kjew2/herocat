@@ -294,6 +294,20 @@ namespace HeroCat.Sim.Tests
         }
 
         [Test]
+        public void FishBoardLayer_FollowsTheBoard_ThroughTheDpsCache()   // 05 section 12 rule 5, OnFishBoardDpsChanged
+        {
+            var sim = Combat.NewSim(hits: false);
+            double before = sim.Query.HeroHit;
+            Assert.That(sim.Query.Power.FishBoardDpsPct, Is.EqualTo(sim.FishBoardDpsPct));
+            sim.State.Fish.TankCount = 2;
+            Assert.That(sim.Apply(new ReleaseMax()).Ok, Is.True);
+            double pct = sim.FishBoardDpsPct;
+            Assert.That(pct, Is.GreaterThan(0));
+            Assert.That(sim.Query.Power.FishBoardDpsPct, Is.EqualTo(pct), "the cache saw the board change");
+            Assert.That(sim.Query.HeroHit, Is.EqualTo(before * (1 + pct / 100.0)).Within(1e-9 * before));
+        }
+
+        [Test]
         public void MissileDpsPct_ClosedForm_And_RatedWithMissiles()   // 05 section 5.1
         {
             var db = Combat.Db;
