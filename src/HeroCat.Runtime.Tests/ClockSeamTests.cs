@@ -77,6 +77,7 @@ namespace HeroCat.Runtime.Tests
             var session = TestSession.Open(clock, analytics: analytics);
             var state = session.Sim.State;
             clock.Advance(1000);
+            session.Runner.DebugAdvance(1000L * TestContent.Db.Constants.TickHz);   // the sim stamps the anchor as it ticks
             session.Runner.OnPause();                         // the window up to T0+1000 was ticked
             long anchor = state.Time.LastTickServerTime;
             Assert.That(anchor, Is.EqualTo(TestContent.T0 + 1000));
@@ -98,6 +99,7 @@ namespace HeroCat.Runtime.Tests
             var session = TestSession.Open(clock, analytics: analytics);
             int tol = TestContent.Db.Constants.ClockBackwardsToleranceS;
             clock.Advance(1000);
+            session.Runner.DebugAdvance(1000L * TestContent.Db.Constants.TickHz);   // ticked up to T0+1000
             session.Runner.OnPause();
             clock.Set(TestContent.T0 + 1000 - tol);
             session.Runner.OnResume();
