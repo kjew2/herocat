@@ -146,7 +146,7 @@ Request: headers `If-Match: <etag>` (or `*` for first upload), `X-Save-Meta: <js
 
 Server steps, in order: (1) parse header, verify `len`/CRC (`SAVE_MALFORMED` 400); (2) verify HMAC against `devices.hmac_key_enc` for `X-Device-Id` (record `hmac_valid`; not a rejection); (3) `If-Match` vs `saves.etag` (`SAVE_CONFLICT` 409 unless `*` and no row); (4) `saveSeq` must exceed the stored one for the same `deviceId` (`SEQ_REGRESSION` flag, accepted but flagged; a lower seq from the *same* device is rejected `SAVE_STALE` 409 because the device itself knows better); (5) `lastSavedServerTime <= now + CLOCK_MAX_SKEW_ACCEPT_S` (`CLOCK_AHEAD` flag); (5a) credit client-earned currency (issue #49, below); (6) plausibility checks (section 7) asynchronously *except* `DIAMOND_LEDGER_MISMATCH`, which runs inline because its reconciliation is in the response; (7) write blob to S3 `saves/{playerId}/{saveSeq}.sav`, upsert `saves`, insert `save_history`, trim to `SAVE_HISTORY_KEEP`; (8) P1: update leaderboard ZSETs from `summary`.
 
-**Crediting client-earned currency** (step 5a, issue #49). Diamonds and summon tickets earned in the client sim (login, quests, first clears, achievements, tutorial, daily gift, weekly grants) and diamonds spent client-side (`SHOP_EXCHANGE`) reach the server ledgers only through this step. The save carries cumulative per-reason counters (02 `Stats`): `Stats.DiamondsEarned[reason]`, `Stats.DiamondsSpent[reason]` and `Stats.TicketsEarned[ticket][reason]`, counting only client-originated reasons (server-originated reasons such as `IAP`, `MAIL`, `ADMIN`, `REFUND` and `SUMMON` are written by the server and excluded). For each `(currency, reason)` the server takes `delta = counter - sum(ledger rows with ref_type = save_reconcile for that reason)` and writes one ledger row per non-zero delta (`diamond_ledger` or `ticket_ledger`, that reason, `ref_type = save_reconcile`, `ref_id = saveSeq`), in the same transaction as step 7. Earned diamond credits for one upload are clamped to `clientSideAllowance` (section 7.2); a clamped excess is not credited and raises `DIAMOND_LEDGER_MISMATCH`. Summon ticket credits are clamped the same way to `TICKETS_PER_DAY_MAX * daysSinceLastUpload` per ticket. Dungeon tickets stay client-side and are not credited. A pull can spend only what has been credited, so the client uploads before a summon when it holds unsynced earnings (01 summon flow).
+**Crediting client-earned currency** (step 5a, issue #49). Diamonds and summon tickets earned in the client sim (login, quests, first clears, achievements, tutorial, daily gift, weekly grants) and diamonds spent client-side (`SHOP_EXCHANGE`) reach the server ledgers only through this step. The save carries cumulative per-reason counters (02 `Stats`): `Stats.DiamondsEarned[reason]`, `Stats.DiamondsSpent[reason]` and `Stats.TicketsEarned[ticket][reason]`, counting only client-originated reasons (server-originated reasons such as `IAP`, `MAIL`, `ADMIN`, `REFUND` and `SUMMON` are written by the server and excluded). For each `(currency, reason)` the server takes `delta = counter - sum(ledger rows with ref_type = save_reconcile for that reason)` and writes one ledger row per non-zero delta (`diamond_ledger` or `ticket_ledger`, that reason, `ref_type = save_reconcile`, `ref_id = saveSeq`), in the same transaction as step 7. Earned diamond credits for one upload are clamped to `clientSideAllowance` (section 7.2); a clamped excess is not credited and raises `DIAMOND_LEDGER_MISMATCH`. Summon ticket credits are clamped the same way, per ticket, to `maxTicketsPerDay(ticket) * daysSinceLastUpload`, where `maxTicketsPerDay` is the per-day share of that ticket's client-side sources in content (06); an excess is not credited. Dungeon tickets stay client-side and are not credited. A pull can spend only what has been credited, so the client uploads before a summon when it holds unsynced earnings (01 summon flow).
 
 **`GET /save/history`** -- `jwt` -- 10/min -> `[{ "saveSeq", "deviceId", "uploadedAt", "summary" }]` (last 10). Restoring one is a support action (`POST /admin/save/restore`), not self-service, because a self-service rollback is a free re-roll of anything client-side.
 
@@ -340,7 +340,7 @@ Webhooks, both `auth none` with signature verification, idempotent on the store'
 - **`POST /webhooks/apple`**: App Store Server Notifications V2 (`signedPayload` JWS, verified like a transaction). Handle `REFUND`, `REVOKE`, `CONSUMPTION_REQUEST` (answer with our consumption data: `POST /inApps/v1/transactions/consumption/{transactionId}` with `consumptionStatus` derived from whether the inbox item was claimed and the diamonds spent), `TEST`.
 - **`POST /webhooks/google`**: Pub/Sub push with the RTDN `oneTimeProductNotification` (`ONE_TIME_PRODUCT_CANCELED`) and a nightly poll of `purchases.voidedpurchases.list` as a backstop.
 
-On refund of purchase `P` granting `N` diamonds:
+On refund of purchase `P`:
 
 ```
 tx:
@@ -560,28 +560,7 @@ Metrics (Prometheus naming), by route where applicable:
 
 ### 9.5 Alarm list
 
-Each alarm has an owner rotation (the on-call) and a runbook id (10).
-
-| Alarm | Condition | Severity | Runbook |
-|---|---|---|---|
-| API 5xx rate | `5xx / total > 1%` over 5 min | page | RB-API-5XX |
-| API p99 latency | `p99 > 1 s` on `/summon/pull` or `/save` PUT over 10 min | page | RB-LATENCY |
-| Summon L+ rate drift | realised `lplus_rate_1h` outside `[0.028, 0.055]` with >= 2,000 pulls in the hour (expected ~0.037 with pity, 04 section 3.1) | page | RB-SUMMON-RATES |
-| Summon errors | `INSUFFICIENT_FUNDS` share `> 20%` of pulls over 15 min (client balance display broken) | ticket | RB-CLIENT-BALANCE |
-| IAP validation failures | `iap_validate_total{status=invalid}/total > 5%` over 30 min, or `STORE_UNAVAILABLE > 10` in 5 min | page | RB-IAP |
-| IAP grant lag | any `purchases.status = pending` older than 10 min | page | RB-IAP |
-| Refund spike | refunds in 24 h `> 3x` the 7-day median | ticket | RB-REFUND |
-| Save conflicts | `409 SAVE_CONFLICT / PUT > 5%` over 1 h | ticket | RB-SAVE-CONFLICT |
-| Save rejections | `SAVE_MALFORMED > 0.1%` of PUTs over 1 h (a client build writing bad files) | page | RB-SAVE-CORRUPT |
-| Plausibility flood | `save_flags_total{severity=certain} > 50/h` (a cheat tool, or a false-positive bound after a content change) | page | RB-ANTICHEAT |
-| Rollbacks | `moderation_actions_total{action=rollback} > 20/h` | page | RB-ANTICHEAT |
-| DB | CPU `> 80%` 10 min; free storage `< 20%`; replica lag `> 30 s`; pool exhaustion events `> 0` | page | RB-DB |
-| Redis | memory `> 80%`; evictions `> 0`; primary failover event | ticket / page | RB-REDIS |
-| Worker | any job failing 3 consecutive runs; mail blast `sent_count` stalled 15 min | ticket | RB-WORKER |
-| Config | active config changed (informational), content `sha256` mismatch at activation | notify / page | RB-CONFIG |
-| Certificate / key expiry | TLS, Apple `.p8`, JWT key `< 14 days` | ticket | RB-SECRETS |
-| Cost | daily AWS spend `> 1.5x` 30-day average | ticket | RB-COST |
-| Client-side (from analytics) | `save_corrupt` events `> 0.1%` of sessions/day; crash-free sessions `< 99.5%` | page | RB-SAVE-CORRUPT / RB-CLIENT-CRASH |
+10 section 10 owns the production alarm and runbook catalog, with its thresholds, owners and severities; this section keeps no table of its own (issue #59). It covers the alarms on the metrics of section 9.4 (API 5xx and latency, summon odds, IAP validation and grant lag, refund spike, save conflicts and rejections, plausibility flood and rollbacks, DB, Redis, worker, config, certificate and key expiry, cost, client crash-free and `save_corrupt`). Runbook ids are 08's stable `RB-*` ids (`RB-API-5XX`, `RB-LATENCY`, `RB-SUMMON-RATES`, `RB-CLIENT-BALANCE`, `RB-IAP`, `RB-REFUND`, `RB-SAVE-CONFLICT`, `RB-SAVE-CORRUPT`, `RB-ANTICHEAT`, `RB-DB`, `RB-REDIS`, `RB-WORKER`, `RB-CONFIG`, `RB-SECRETS`, `RB-COST`, `RB-CLIENT-CRASH`). Summon odds drift uses a sample-size-scaled rule, a Wilson interval per banner level and rarity (10), not a fixed band.
 
 ### 9.6 Cost estimate
 
@@ -627,7 +606,7 @@ The age gate value is never shown after it is set and cannot be changed by the p
 ### 10.2 GDPR / CCPA
 
 - Lawful basis: contract (saves, purchases, summons), legitimate interest (anti-cheat, analytics on hashed ids), consent (Firebase advertising features, off by default in the EU/UK/CA). Consent is recorded in `accounts` (`consent_analytics_at`, P1 column) and sent to the Firebase SDK before initialisation.
-- Export and delete: 02 section 13. `SCR_SETTINGS` -> Privacy -> "Download my data" / "Delete my account". Delete completes within `GDPR_DELETE_GRACE_DAYS + 1`, well inside the 30-day requirement. CCPA "Do not sell" is moot (nothing is sold) but the toggle exists and sets the Firebase ads flag off.
+- Export and delete: 02 section 13. Hard delete re-points a purchaser's `purchases`, `summon_log` and `diamond_ledger` rows to a tombstone `accounts` row (`player_id` = a UUID from the first 16 bytes of `sha256(player_id || pepper)`, `status = deleted`, PII blanked) before the real account row is deleted; those tables reference `accounts` with `on delete restrict`, so a job bug fails instead of destroying financial records. A non-purchaser's `summon_log` is deleted (issue #32). `SCR_SETTINGS` -> Privacy -> "Download my data" / "Delete my account". Delete completes within `GDPR_DELETE_GRACE_DAYS + 1`, well inside the 30-day requirement. CCPA "Do not sell" is moot (nothing is sold) but the toggle exists and sets the Firebase ads flag off.
 - Processors list in the privacy policy: AWS (hosting, US-East with EU replica P1), Google (Firebase Analytics, Play), Apple (App Store), the crash reporter.
 - Data minimisation: no email, no phone, no precise location; IP truncated to /24 in logs; `providerUserId` hashed with a pepper.
 
@@ -639,14 +618,14 @@ Summons are paid random rewards. Rules by jurisdiction, with what we do:
 |---|---|---|
 | Apple App Store (Guideline 3.1.1) | Disclose odds of receiving each type of item before purchase. | `SCR_SUMMON` "Rates" tab shows `/summon/rates` for the current banner level; the pull button is never reachable without the tab being one tap away. Pity and the 10-pull guarantee are stated in plain words. |
 | Google Play (Developer Policy, Loot boxes) | Disclose odds prior to purchase. Age rating questionnaire (IARC) answered "yes" to paid random items. | Same screen. The IARC answer is in the store checklist (10). |
-| Japan (JOGA / CESA guidelines; Act against Unjustifiable Premiums) | **Complete gacha (kompu gacha) prohibited**: a reward conditioned on collecting a specific set of random items. Publish rates; show expected cost to obtain a specific item; recommended monthly spend guidance for minors. | The weapon collection passive (`WEAPON_PASSIVE_PCT`) pays per owned item, never for completing a set; achievements reward *count* of collected items, never a named set (06 must keep this). Rates page shows "expected pulls to Legendary+" from `effective`. Display `PITY_HARD` cost in diamonds and local currency. |
+| Japan (JOGA / CESA guidelines; Act against Unjustifiable Premiums) | **Complete gacha (kompu gacha) prohibited**: a reward conditioned on collecting a specific set of random items. Publish rates; show expected cost to obtain a specific item; recommended monthly spend guidance for minors. | The weapon collection passive (`WEAPON_PASSIVE_PCT`) pays per owned item, never for completing a set; achievements reward *count* of collected items, never a named set (06 must keep this), and every `OWN_*` achievement `target` is strictly below the current pool size of its kind, so no rung means owning the whole pool (09 validator; issue #44). Rates page shows "expected pulls to Legendary+" from `effective`. Display `PITY_HARD` cost in diamonds and local currency. |
 | China (2017 MIIT rules, 2024 draft) | Publish names, odds and count of random items; no pay-to-reroll; minors' spend and time limits; real-name verification. | Not a launch market (00 section 11 soft launch markets exclude it). `/summon/rates` already provides the data; real-name and minor limits would be P2 if China is ever targeted. |
 | Belgium (Gaming Commission, 2018) | Paid loot boxes are gambling and require a licence. | Region `BE` (from store account country): diamond-paid summons disabled (`summonEnabled` kill switch by region in config; the server enforces via `BANNER_CLOSED` with `details.reason = REGION_RESTRICTED`); ticket summons from quests remain (not paid). Diamond packs remain purchasable for shop and research P1 sinks; if that is judged too close, the simpler option is to not list in Belgium. Decision at soft launch (open question 5). |
 | Netherlands | 2022 court ruling reversed the 2020 fine; currently permitted with disclosure. | Treated as default EU. |
 | South Korea (Game Industry Promotion Act amendment, 2024) | Odds disclosure in-game, on the store page, and in ads; pity systems must be disclosed; per-item odds. | Rates page per item (the `items[]` list with weights), pity text, and the store listing's odds page generated from the same JSON. |
 | UK / EU generally | Disclosure plus age rating (PEGI "In-Game Purchases (Includes Random Items)"). | PEGI/IARC answers in the store checklist. |
 
-Technical commitments that make the above checkable: every pull is logged with the `rate_table_hash` it used (4.4); the published rates endpoint serves the exact table in content with the same hash; a nightly job computes realised rarity frequencies per banner level over the trailing 30 days and alarms if any rarity deviates from the published rate by more than 3 standard errors (`RB-SUMMON-RATES`).
+Technical commitments that make the above checkable: every pull is logged with the `rate_table_hash` it used (4.4); the published rates endpoint serves the exact table in content with the same hash; a nightly job computes realised rarity frequencies per banner level over the trailing 30 days and alarms if any rarity's published rate falls outside the Wilson interval of its realised frequency at that level's sample size (10 section 10; `RB-SUMMON-RATES`; issue #59).
 
 ### 10.4 Privacy-policy data inventory
 
@@ -656,8 +635,8 @@ Technical commitments that make the above checkable: every pull is logged with t
 | Platform identity (hashed) | Login | Postgres | Account lifetime | Apple/Google (they issue it) |
 | Device HMAC key | Save integrity | Postgres (encrypted) | Device lifetime | none |
 | Save blobs | Cloud save | S3 | Current + last 10 | none |
-| Purchase records, receipts | Grant, refunds, tax | Postgres, S3 | 7 years | Apple/Google (verification) |
-| Summon log | Audit, odds compliance | Postgres | 7 years | none |
+| Purchase records, receipts | Grant, refunds, tax | Postgres, S3 | 7 years (under the tombstone id after account delete) | Apple/Google (verification) |
+| Summon log | Audit, odds compliance | Postgres | 7 years (purchasers, under the tombstone id); deleted with the account for non-purchasers | none |
 | Inbox items | Grants | Postgres | Until claimed/expired + 90 days | none |
 | Moderation actions | Anti-cheat, appeals | Postgres | Account lifetime | none |
 | Analytics events (hashed id) | Balancing, product analytics | Firebase, warehouse | 25 months raw | Google (Firebase) |
@@ -682,7 +661,7 @@ M0 has no server. Every service above is reached through an interface in `HeroCa
 
 ## Open questions
 
-1. **Summon tickets server-side.** Section 4.3 assumes summon tickets are a server ledger from MVP (so `PAYMENT_MISMATCH` can be decided server-side). 06 owns ticket sources; if it keeps tickets client-side, the server must trust the client's ticket count on `/summon/pull`, bounded by `TICKETS_PER_DAY_MAX`. Owner: 06. Default: server ledger for summon tickets; dungeon tickets stay client-side.
+1. **Summon tickets server-side.** Resolved: summon tickets are the server `ticket_ledger` from MVP; client-earned tickets and diamonds are credited on `PUT /save` (section 3.1 step 5a) and the client uploads before a pull with unsynced earnings; dungeon tickets stay client-side (issue #49).
 2. **`DPS_BOUND_MARGIN = 0.5`.** Tap zap, transient buffs and crit variance are not in the rated DPS the server re-derives (fish missiles are, through 05's closed form; issue #15). 0.5 may be too loose or too tight. Owner: 03 (provides `Query.RatedDps` and a "max burst multiplier" bound). Default: 0.5 until 10's bot harness reports the realised ratio of effective to formula DPS.
 3. **Refund item clawback.** Section 5.4 keeps items from a refunded pull. Owner: product. Default: keep items, escalate repeat refunds.
 4. **Diamond reconciliation on first mismatch** silently overwrites the client balance. Should the client show a notice? Owner: 07. Default: show a one-line toast with the delta the first time, nothing afterwards.
@@ -706,18 +685,19 @@ M0 has no server. Every service above is reached through an interface in `HeroCa
 10. Google: a `purchaseState = 1` (canceled) token returns `RECEIPT_INVALID`; a valid token is acknowledged within the handler; the RTDN `ONE_TIME_PRODUCT_CANCELED` path writes the `REFUND` ledger row and clamps a negative balance to 0 with the `refund_debt` recorded.
 11. `/inbox/claim` twice returns `409 INBOX_ALREADY_CLAIMED` carrying the original grants and writes exactly one ledger row.
 12. `PUT /save` with a stale `If-Match` returns `409 SAVE_CONFLICT` with `serverMeta`; with a lower `saveSeq` from the same device returns `409 SAVE_STALE`; with an invalid HMAC returns `200` with `HMAC_INVALID` in `flags`.
-13. Plausibility: a fixture save with `HighestCleared = 2000` at day 1 is flagged `STAGE_VS_TIME certain`; a fixture whose DPS cannot clear its highest boss within `BOSS_TIME_TICKS / DPS_BOUND_MARGIN` is flagged `DPS_VS_STAGE`; a fixture with `Wallet.Diamond = 99999` and an empty ledger returns `diamondReconcile.applied = true` and the next `GET /save/meta` summary shows the ledger balance.
+13. Plausibility: a fixture save with `HighestCleared = 2000` at day 1 is flagged `STAGE_VS_TIME certain`; a fixture whose DPS cannot clear its highest boss within `BOSS_TIME_TICKS / DPS_BOUND_MARGIN` is flagged `DPS_VS_STAGE`; a fixture with `Wallet.Diamond = 99999` and an empty ledger returns `diamondReconcile.applied = true` and the next `GET /save/meta` summary shows the ledger balance; a fixture with an empty ledger, `Stats.DiamondsEarned[TUTORIAL] = 1500` and 50 quest diamonds within the allowance writes `save_reconcile` credits totalling 1,550, raises no flag, and re-uploading the same counters credits nothing (issue #49).
 14. Re-simulation of a 2 h bot session's command log from its previous upload reproduces the uploaded state hash; mutating one `TrainStat` in the log produces `REPLAY_DIVERGENCE`.
 15. Action matrix: three `suspicious` flags within 7 days on a test account produce one `soft_flag` and an inbox notice; a `certain` `ITEM_WITHOUT_PULL` produces a `rollback` whose next `PUT` returns `409 SAVE_ROLLED_BACK` and whose `GET /save` serves the previous history entry.
-16. `GET /config` without a JWT omits `inBucket`; with a JWT, 1,000 synthetic players at `rolloutPct = 25` land in the bucket between 20% and 30% of the time, and the same player is in the same bucket on repeated calls.
+16. `GET /config` without a JWT omits `inBucket` and returns the non-rollout default content; with a JWT, 1,000 synthetic players at `rolloutPct = 25` land in the bucket between 20% and 30% of the time, and the same player is in the same bucket on repeated calls.
 17. Kill switch `summonEnabled.WEAPON = false` makes `/summon/pull` return `503 SUMMON_DISABLED` within 60 s of activation.
 18. Maintenance mode returns `503 MAINTENANCE` on `/summon/pull` and `200` on `/config` and `/time`.
 19. Refresh-token reuse: using a rotated-out refresh token returns `401 TOKEN_REUSED` and revokes the whole family (the current token also stops working).
-20. GDPR: after the grace period the nightly job leaves no row referencing a deleted non-purchaser's `playerId` in any table; for a purchaser, exactly `purchases`, `summon_log` and `diamond_ledger` rows remain under the tombstone id.
+20. GDPR: after the grace period the nightly job leaves no row referencing a deleted non-purchaser's `playerId` in any table; for a purchaser, exactly `purchases`, `summon_log` and `diamond_ledger` rows remain, re-pointed to the tombstone `accounts` row (`status = deleted`), and no row references the old id (issue #32).
 21. Load (10): `/summon/pull` at 500 rps and `PUT /save` at 200 rps on stage sizing hold p99 under 300 ms and 500 ms respectively for 10 minutes with zero 5xx.
-22. The realised-rate nightly job on 30 days of stage data reports every rarity within 3 standard errors of the published table; a deliberately mis-set `banner_levels` row in stage triggers `RB-SUMMON-RATES` within one job run.
+22. The realised-rate nightly job on 30 days of stage data reports every rarity's published rate inside the Wilson interval of its realised frequency (issue #59); a deliberately mis-set `banner_levels` row in stage triggers `RB-SUMMON-RATES` within one job run.
 23. Every error `code` named in this spec has a localization key (09 validator), and every endpoint has an OpenAPI entry generated from the controllers that matches the request/response JSON shown here (contract test).
 24. A Local-mode client build makes zero network calls during a 20-minute PlayMode session (network interceptor assertion), proving the M0 note.
+25. IAP: the first granted purchase of `diamonds_3` is doubled and a second is not, while the first purchase of another diamond pack is still doubled; a package is never doubled and creates one `inbox_items` row per scheduled portion at purchase, `GET /inbox` shows only the delivered portions plus the next one, and a refund expires every unclaimed portion (issues #50, #51).
 
 ## Constants introduced
 
@@ -742,8 +722,7 @@ Engineering/operational constants, code- or config-resident (`HeroCat.Server` `a
 | `SAVE_BLOB_MAX_BYTES` | 262144 | S (declared in 02) | 3.1 |
 | `SAVE_HISTORY_KEEP` | 10 | S (declared in 02) | 3.1 |
 | Rate limits | per endpoint, sections 2-5 | S | |
-| Alarm thresholds | section 9.5 | S | |
-| `RATE_DRIFT_SIGMA` | 3 | S | 10.3 |
+| Alarm thresholds | 10 section 10 (issue #59) | S | |
 | Age of digital consent default | 13 | S | 10.1 |
 
 Used from 00 by name: base rates, `PITY_SOFT_START`, `PITY_SOFT_STEP`, `PITY_HARD`, `M_SHARE_OF_LPLUS`, `BANNER_EXP_PER_PULL`, `PULL_COST[*]`, `DIAMONDS_PER_DAY_F2P`, `TUTORIAL_DIAMONDS`, `LOGIN_DIAMONDS`, `OFFLINE_CAP_H`, `RES_OFFLINE_CAP`, `BOSS_TIME_TICKS`, `TICK_HZ`, `DAY_SECONDS`, `WEAPON_PASSIVE_PCT`. From 01: `CONFIG_CACHE_MAX_AGE_S`, `MAINT_POLL_S`, `CLOUD_UPLOAD_MIN_SEC`. From 02: `GDPR_DELETE_GRACE_DAYS`, `RETENTION_INACTIVE_DAYS`.

@@ -58,6 +58,8 @@ Tick():
 
 State field names and shapes are 02's (section 3.1, issue #7): `Time.Tick`, `Combat.*`, `Progress.*`, `Loadout.*`, `Stats.*`. Everything this loop reads or writes lives in the in-memory `GameState`, so `DeepClone` and replay are exact. The save drops only the transient fight state 02 section 3.3 lists, which lives in `Combat.Fight` (02's `FightState`; the pseudocode below writes `Combat.EnemyHp`, `Combat.Phase`, `Combat.BossTicksLeft` and the like as shorthand for `Combat.Fight.EnemyHp` and so on): enemy HP, `Phase`, `SpawnTimer`, `AttackProgress`, `ActiveDots`, buffs, `PendingTaps`, `TapWindowTick`. It keeps `Combat.Boss`, `Combat.BossFailsOnStage`, `Combat.Selected`, `Combat.Mp`, the skill and companion cooldowns and `Combat.MissileQueue`. On load the player faces a fresh mob and a `Pending` boss respawns as the boss.
 
+Dungeon runs (MVP, 06) are ticked in this same loop, not resolved instantly (issue #42): `StartDungeon` switches `Combat.Mode = Dungeon` and the floor's single boss is fought with steps 1-9 above under the dungeon's time limit. In that mode the kill and timeout branches hand off to 06 (`DungeonCleared`, which debits the ticket and grants the reward, or `DungeonFailed`, which costs nothing; 00 decision 16) instead of `Kill()`/`BossFail()`, so no stage, loot, first-clear or wall state changes; the hero's crit draw comes from the temporary `dungeon_run` stream (section 10), and the frontier fight resumes unchanged when the run ends.
+
 `ATTACK_PROGRESS_UNIT = 100` (integer fixed point). At `ATK_SPD` level 0 the hero gains 100 units per tick and hits every `ATTACK_INTERVAL_TICKS = 10` ticks, one hit per second. At `ATK_SPD` level `n` the gain is `100 * (1 + TRAIN_PER_LVL[ATK_SPD] * n)` rounded to an integer, so level 100 (cap, +100%) is 200 units per tick and one hit every 5 ticks. Integer arithmetic keeps the hit schedule identical on every platform; a `double` accumulator would not (00 section 3, determinism row).
 
 ### 2.2 Hero hit and crit
@@ -76,7 +78,7 @@ CritRate = min(TRAIN_CAP[CRIT_RATE] * TRAIN_PER_LVL[CRIT_RATE], TRAIN_PER_LVL[CR
 CritDmg  = CRIT_DMG_BASE + TRAIN_PER_LVL[CRIT_DMG] * trainLvl[CRIT_DMG]                                       # 1.5 at level 0
 ```
 
-The `crit` stream is consumed once per hero hit, including hits at `CritRate == 0`, so `crit.Counter == Stats.HeroHits` holds for the validator and the server audit (02, 08; issue #8). Fish missiles, skills, companion abilities and Tap Zap do not crit and consume no `crit` draws.
+The `crit` stream is consumed once per hero hit, including hits at `CritRate == 0`, so `crit.Counter == Stats.HeroHits` holds for the validator and the server audit (02, 08; issue #8). Fish missiles, skills, companion abilities and Tap Zap do not crit and consume no `crit` draws. Hero hits in a dungeon fight draw from `dungeon_run` instead and do not count in `Stats.HeroHits` (section 2.1, issue #42).
 
 ### 2.3 Skills (auto-cast)
 
@@ -498,7 +500,7 @@ The bot is the reference player for every balance number. It plays `ACTIVE_MIN =
 6. **Boss**: the first attempt is automatic; when walled, retry at the start of every active minute (the real player presses the button; `AttemptBoss` is free).
 7. **Offline**: 22 h of catch-up at `OFFLINE_RATE` for gold and EXP at the current stage, capped by the effective `OfflineCapH` (`OFFLINE_CAP_H` plus `res_offline_cap`); the tank fills by 05's `CatchUpTank` over the credited ticks, which reaches capacity; nothing else moves (06, issue #21).
 
-Inputs the bot takes from other specs, with the values assumed for the numbers above: `DIAMONDS_PER_DAY_F2P = 400` and `TUTORIAL_DIAMONDS = 1500` (00); summon tickets per day `WEAPON 2, SKILL 1, COMPANION 1` (06 quests; **assumption to confirm**); `ROCK_CANDY_PER_DAY_ASSUMED = 100` and `FISH_COIN_PER_DAY_DUNGEON_ASSUMED = 1000` from the dungeons (06; **assumptions to confirm**). If 06 lands on different numbers the bot reruns and this section is regenerated.
+Inputs the bot takes from other specs: `DIAMONDS_PER_DAY_F2P = 400` and `TUTORIAL_DIAMONDS = 1500` (00); summon ticket income per banner from 06's ticket sources and Rock Candy income from 06's Rock Candy Dungeon floors, both read from content, never hand-entered (issues #38, #43); `FISH_COIN_PER_DAY_DUNGEON_ASSUMED = 1000` from the dungeons (06; **assumption to confirm**). Per-banner pull cadence (pulls per day per banner) is an output of this policy applied to that income, not an input; 04 retunes `BANNER_LVL_EXP` from it so the weapon banner reaches level 4 between day 20 and day 35 (issue #38; threshold values pending the tool). If 06's content changes the bot reruns and this section is regenerated.
 
 Pseudocode, as `HeroCat.Bots` will implement it on the real sim (10):
 
@@ -547,13 +549,13 @@ The two alternatives considered and rejected: keeping `HP_G = 1.07` and acceptin
 
 ### 8.5 Layer-share rule as a test
 
-The harness (10) computes `share[layer] = ln(factor[layer]) / ln(DPS / BASE_ATK)` from `Query.RatedDps`'s factors and asserts `share <= 0.40` for every layer on days 1, 7 and 30, and `share >= 0.05` on days 7 and 30 only (issue #12): day 1 is where a runaway layer shows first, but a day-1 floor mostly measures unlock timing. `Base` (`BASE_ATK`) is not a layer for the floor; crit and speed are. Runes are not checked before P1. Per-tier floor exemptions live in `src/HeroCat.Bots/Acceptance/acceptance-targets.json` and report `WARN` instead of failing; the ceiling always gates. M0 exempts Research, Companions and speed (the M0 harness runs without Companions and Research). The exemptions are removed when this section's retune lands.
+The harness (10) computes `share[layer] = ln(factor[layer]) / ln(DPS / BASE_ATK)` from `Query.RatedDps`'s factors and asserts `share <= 0.40` for every layer on days 1, 7 and 30, and `share >= 0.05` on days 7 and 30 only (issue #12): day 1 is where a runaway layer shows first, but a day-1 floor mostly measures unlock timing. `Base` (`BASE_ATK`) is not a layer for the floor; crit is. Speed is permanently exempt from the floor in every tier, because `ATK_SPD` is capped at x2 and its share can only fall (issue #36); the ceiling still applies to it. Runes are not checked before P1. Per-tier floor exemptions live in `src/HeroCat.Bots/Acceptance/acceptance-targets.json` and report `WARN` instead of failing; the ceiling always gates. M0 exempts Research and Companions (the M0 harness runs without Companions and Research). The tier exemptions are removed when this section's retune lands.
 
 ### 8.6 `tools/power_curve_model.py` for this repo
 
 A per-minute aggregate model, not the real sim, so it runs 30 days in under ten seconds and can sweep constants. It is the copy of `idle-rng-game/tools/power_curve_model.py` restructured as follows.
 
-Inputs: `content/*.json` via the same loader `tools/export_content.py` writes (09), so a constant exists in exactly one place; CLI flags `--seed N` (default 7), `--days 30`, `--active-min 120`, `--sessions 1|2`, `--override NAME=VALUE` (repeatable, for sweeps), `--tickets W,S,C`, `--rock-candy-per-day`, `--fish-coin-per-day`, `--policy greedy|lazy|spender20|whale` (10 defines the last three), `--m0` (drops Companions, Research, dungeons, tickets).
+Inputs: `content/*.json` via the same loader `tools/export_content.py` writes (09), so a constant exists in exactly one place; CLI flags `--seed N` (default 7), `--days 30`, `--active-min 120`, `--sessions 1|2`, `--override NAME=VALUE` (repeatable, for sweeps), `--fish-coin-per-day`, `--policy greedy|lazy|spender20|whale` (10 defines the last three), `--m0` (drops Companions, Research, dungeons, tickets).
 
 Model, per active minute: compute `dps()` from the section 7 formula using the closed-form `missileDpsPct` from 05; run kills at `killTime = ceil(hp / hitDamage) / speedFactor + SPAWN_S` with the boss check from section 2.8; apply the section 8.3 policy; once per day apply income grants, pulls (section 8.3 item 2, with the exact 04 algorithm including banner levels and the 10-pull guarantee), offline catch-up and tank fill. The Fish Board is simulated as a count per level with the attentive policy from 05 section 8 (not cell by cell; cell placement does not change throughput). Enemy and cost curves use `**` in Python; bit-exactness is the C# harness's job, not this tool's.
 
@@ -564,8 +566,9 @@ Outputs, printed and written as `tools/out/power_curve_<seed>.json`:
 3. Wall report: first wall stage, longest wall in active minutes and the day it started, total walled minutes.
 4. Economy report: cumulative gold earned and spent, diamonds spent per banner, Fish Coins earned (discovery, merges, dungeon) and spent per node, Rock Candy earned and spent.
 5. A compact line `DAYTABLE 1:240 3:330 7:430 14:480 30:550` for 00 section 6.6 to paste.
+6. Per-banner pull cadence: pulls per day on each banner (tickets and diamonds) and the day each banner level is reached, the input 04's `BANNER_LVL_EXP` retune and `gacha_model.py` read (issue #38).
 
-`S` constants it validates and what it checks: `HP_G`, `GOLD_G`, `EXP_G`, `HERO_LVL_MULT` (day table within tolerance, 40%/5% rule, longest wall under 14 days <= 240 active minutes); `TRAIN_PER_LVL[CRIT_RATE/CRIT_DMG/ATK_SPD/GOLD_GAIN/EXP_GAIN]` and `TRAIN_CAP[*]` (each stat receives between 5% and 50% of Training gold over 30 days; none is bought to zero); `BOSS_TIME_TICKS` (first wall between stage 60 and 200); `TAP_ZAP_*` (a tapping variant clears a wall at most 2.5x faster than the idle bot); `EXP0`/`HERO_LVL_EXP` (hero level between 0.25 s and 0.45 s at every reported day); `AWAKEN_STAGES[4]`, `AWAKEN_COST_ROCK_CANDY` (rank 3 by day 7, rank 4 not before day 21); `RES_*` costs (every node has at least one level bought by day 7 and `res_fish_cap` reaches 2 by day 10); `BOSS_ROCK_CANDY_P` (boss drops are under 20% of Rock Candy income). The Fish Board constants are `fish_model.py`'s (05); the summon constants are `gacha_model.py`'s (04); this tool consumes both tools' outputs as inputs where it needs them.
+`S` constants it validates and what it checks: `HP_G`, `GOLD_G`, `EXP_G`, `HERO_LVL_MULT` (day table within tolerance, 40%/5% rule, longest wall under 14 days <= 240 active minutes, longest wall opened on days 14-30 within the late-wall bound of acceptance 18); `TRAIN_PER_LVL[CRIT_RATE/CRIT_DMG/ATK_SPD/GOLD_GAIN/EXP_GAIN]` and `TRAIN_CAP[*]` (each stat receives between 5% and 50% of Training gold over 30 days; none is bought to zero); `BOSS_TIME_TICKS` (first wall between stage 60 and 200); `TAP_ZAP_*` (a tapping variant clears a wall at most 2.5x faster than the idle bot); `EXP0`/`HERO_LVL_EXP` (hero level between 0.25 s and 0.45 s at every reported day); `AWAKEN_STAGES`, `AWAKEN_COST_ROCK_CANDY` (every rank affordable within `awakening_targets.max_days_after_gate` days of reaching its gate; issue #43); `RES_*` costs (every node has at least one level bought by day 7 and `res_fish_cap` reaches 2 by day 10); `BOSS_ROCK_CANDY_P` (boss drops are under 20% of Rock Candy income). The Fish Board constants are `fish_model.py`'s (05); the summon constants are `gacha_model.py`'s (04); this tool consumes both tools' outputs as inputs where it needs them.
 
 Acceptance in CI (10): the median of 20 seeds within +/-20% of 00 section 6.6 on days 1, 7 and 30; the share rule; the wall rule.
 
@@ -590,17 +593,18 @@ Never change `HP_G` to fix a local problem; it moves every stage at once and eve
 | Stream | Draws | When | Counter invariant | Consumer rule |
 |---|---|---|---|---|
 | `combat` | 0 in MVP | reserved: P1 enemy variance, skill proc chances | `== 0` | Only `HeroCat.Sim.Combat` may draw. |
-| `crit` | 1 per hero hit | section 2.2, including hits at `critRate == 0` | `== Stats.HeroHits` | Only `HeroHit()`. Fish missiles, skills, companions and Tap Zap never draw. |
+| `crit` | 1 per stage hero hit | section 2.2, including hits at `critRate == 0` | `== Stats.HeroHits` | Only `HeroHit()`. Fish missiles, skills, companions and Tap Zap never draw. |
 | `loot` | 1 per boss kill | `BOSS_ROCK_CANDY_P` roll | `== Stats.BossKills` | Only `Kill()` on a boss. P1 drop tables add draws and a new invariant. |
 | `fish_spawn` | per 05 | release cell choice | 05 owns | Fish Board only. |
 | `dungeon` | 1 per M0 run (06) | dungeon run seed, drawn by the M0 local `IDungeonSeedService` (00 contract 11, issue #25) | 06 owns | Dungeon seed service only. |
+| `dungeon_run` | per dungeon fight (06) | temporary, reseeded from the run seed at `StartDungeon`; the hero's crit draws while `Combat.Mode == Dungeon` (issue #42) | none; discarded when the run ends | Dungeon fights only; `crit` and `Stats.HeroHits` are untouched by dungeon hits. |
 
 Summons are not a client stream (00 section 8 item 2). Draws are consumed even when the outcome is predetermined so the invariants above hold and the server can audit a save (08). These invariants are the validator's and 08's (02 section 3.4, issue #8). Stream seeds are derived in Runtime, not the sim: the first 8 bytes of SHA-256(`RngRoot` ++ UTF-8 stream name), where `RngRoot` is the immutable Guid set at profile creation (00 contract 2, issue #9); 02 persists `(seed, counter)` per name.
 
 ## 11. Open questions
 
 1. **Adopt the recommended curve?** `HP_G 1.04 / GOLD_G 1.03 / EXP_G 1.025 / HERO_LVL_MULT 1.02` and the new day table in section 8.4. Owner: 00. Default: yes; 03, 05, 06 and 10 write their worked numbers against it from now on, and 00 section 6.6 is replaced by the tool's `DAYTABLE` line once `tools/power_curve_model.py` exists.
-2. **Day-20 wall.** The scratch model shows a 460-active-minute wall starting around day 20 because the summon layers saturate. Candidate fixes, in order of preference: limit breaks priced so the bot buys one every day from day 10 (04 section 5), `res_atk` at 0.08 per level, more Awakening ranks at 50-stage spacing. Owner: 03 with 04. Default: ship M0 as is (the M0 exit criterion is two weeks), fix for MVP with the tool.
+2. **Day-20 wall.** Resolved (issue #36): ship M0 as is; for MVP, run `tools/power_curve_model.py` first and pick the levers from section 9 that clear both the day-20 wall and the 5% floor misses (candidates: `res_atk` at 0.08 per level, limit breaks priced so the bot buys one every day from day 10, 04 section 5). The lever choice and values are pending the tool. Acceptance 18 bounds walls on days 14-30; speed is permanently exempt from the floor.
 3. **Day 1 at 240 stages.** Fine for the genre; wrong if 07's tutorial or 06's first-clear diamond budget assumed ~90. Owner: 00. Default: keep; if 06 needs fewer first clears on day 1, raise `HP0` rather than `HP_G`.
 4. **`HP`/`DEF` trainable only in P1.** Owner: 00 (section 5.1 says Training is per stat). Default: as section 4; the enum keeps all eight.
 5. **`res_offline_cap` versus decision 3.** Resolved: the node extends the cap; catch-up uses the effective cap `OFFLINE_CAP_H + 2 h * level` (issue #21).
@@ -623,13 +627,15 @@ Summons are not a client stream (00 section 8 item 2). Draws are consumed even w
 11. A `Wallet.Apply(HERO_EXP)` crossing two thresholds in one grant raises the level by 2 and publishes two `LevelUp` events; `heroMult` equals `HERO_LVL_MULT^level` from the `GeometricTable` (bit-identical on x64, ARM64, IL2CPP per 10's golden-file test).
 12. `Awaken()` is rejected with `Locked`/`AWAKEN_STAGE_NOT_REACHED` at `Progress.HighestCleared == 49`, with `CannotAfford`/`NOT_ENOUGH_ROCK_CANDY` at stage 50 with 99 candy, succeeds at 100 candy charging exactly 100 with reason `AWAKENING`, and opens companion slot 2.
 13. `Research(res_fish_cap)` at level 0 charges 2,500 Fish Coins, at level 9 charges 1,280,000, at level 10 is rejected with `Capped`/`RESEARCH_MAXED`; before Awakening rank 1 every `Research` call is rejected with `Locked`/`RESEARCH_LOCKED`.
-14. With four companions equipped, `MP_REGEN0 = 2`, costs 10 and cooldowns 100 ticks, the sim fires 12 +/- 1 companion abilities per minute (not 24); after `res_mp_regen` level 4 it fires 24 per minute.
+14. With four companions equipped, `MP_REGEN0 = 2`, costs 10 and cooldowns 100 ticks, the sim fires 12 +/- 1 companion abilities per minute (not 24); after `res_mp_regen` level 4 it fires 24 per minute. Replacing one with an `MP_REGEN` companion that restores 16 MP per cast (same cost and cooldown), the other three fire 15.6 +/- 1 abilities per minute and `mpSufficiency` equals `2.6 / 3` (issue #39).
 15. Deterministic: two fresh profiles with seed 7, the same scripted commands and `Advance(1_000_000)` produce field-equal `GameState` graphs and identical event sequences; a `DeepClone` taken mid-boss continues identically.
 16. Bot: the median of 20 seeds from `tools/power_curve_model.py` lands within +/-20% of the section 8.4 table on days 1, 7 and 30; the C# bot (10) on the real sim lands within +/-15% of the Python model on the same days.
-17. Shares: on days 1, 7 and 30 no layer exceeds 40% of `ln(DPS / BASE_ATK)`; on days 7 and 30 every layer except `Base` is at or above 5%, except the tier's exemptions in `acceptance-targets.json`, which report `WARN` (M0: Research, Companions, speed; issue #12).
-18. Walls: first wall between stage 60 and 200 in every seed; no wall opened in the first 14 days exceeds 240 active minutes.
+17. Shares: on days 1, 7 and 30 no layer exceeds 40% of `ln(DPS / BASE_ATK)`; on days 7 and 30 every layer except `Base` and speed is at or above 5% (speed is permanently exempt, issue #36), except the tier's exemptions in `acceptance-targets.json`, which report `WARN` (M0: Research, Companions; issue #12).
+18. Walls: first wall between stage 60 and 200 in every seed; no wall opened in the first 14 days exceeds 240 active minutes; no wall opened on days 14-30 exceeds the late-wall bound in `acceptance-targets.json` (issue #36; the bound's value is set from the tool's output and pending).
 19. Perf: `Advance(1_000_000)` with `NullEventSink` from a stage-300 profile with six skills and four companions equipped completes in under 2 s in Release; `Advance(100_000)` with the default event mask allocates under 128 bytes per kill.
 20. Rated vs realised (issue #10): for a fixture with two `INSTANT` skills, one `DOT` skill, two `DAMAGE` companions at full MP, a static board (no merges, so no missiles), `ATK_SPD` 50 and `CRIT_RATE` 120 / `CRIT_DMG` 80 with hero-attack damage counted at its expected crit value, total damage dealt over a 100,000-tick fight against an unkillable enemy, divided by the fight's seconds, equals `Query.RatedDps` within 1%.
+21. Awakening cadence (issue #43): in the 20-seed sweep, every Awakening rank the bot's stage reaches within 30 days is bought no more than `awakening_targets.max_days_after_gate` days after the day its `AWAKEN_STAGES` gate is first reached; the tool and the bot read the same `awakening_targets` rows.
+22. Stage select (issue #35): at frontier stage 57 with `KillsInStage == 4`, `SelectStage(56)` succeeds and `SelectStage(58)` is rejected with `Locked`/`STAGE_NOT_CLEARED`; kills on stage 56 pay `Gold(56) * GoldMult` and `Exp(56) * ExpMult`, spawn no boss and leave `Combat.Stage`, `KillsInStage`, `Combat.Boss` and `Progress.HighestCleared` unchanged; `SelectStage(null)` resumes stage 57 at 4 kills; on a walled boss stage the `Walled` phase survives a select and return, and `AttemptBoss` while a side stage is selected clears `Combat.Selected` and spawns the frontier boss.
 
 ## 13. Constants introduced
 
@@ -658,7 +664,6 @@ Every constant this spec adds or changes, for lifting into 00 section 6. Tag `S`
 | `BOSS_AUTO_RETRY_S` | 60 (P1) | S | 2.7 | |
 | `AWAKEN_UNLOCKS` | companion slots 2/3/4 at ranks 1/2/3, Rune slots at 4/5 | - | 5.3 | |
 | `research` table (`res_*` nodes) | section 6 (8 nodes: cost0, growth, max, effect) | S | 6 | `res_fish_cap` validated jointly with 05's tool. |
-| `ROCK_CANDY_PER_DAY_ASSUMED` | 100 | input from 06 | 8.3 | Bot input, not a game constant. |
 | `FISH_COIN_PER_DAY_DUNGEON_ASSUMED` | 1000 | input from 06 | 8.3 | Bot input. |
-| Summon tickets per day assumed | W 2 / S 1 / C 1 | input from 06 | 8.3 | Bot input. |
+| `awakening_targets` table (`rank`, `max_days_after_gate`) | 2 for every rank | S | 5.3 | Awakening cadence target read by the tool, 06 and the bots (issue #43). Ticket and Rock Candy income are read from 06's content, not assumed (issues #38, #43). |
 | Day-stage targets | 240 / 330 / 430 / 480 / 550 | S | 8.4 | Replaces 00 section 6.6 once the tool confirms. |

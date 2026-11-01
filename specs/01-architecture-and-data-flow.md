@@ -151,7 +151,7 @@ Concrete commands (`VerbNoun`, 00 section 5.1) and the events they emit. Full fi
 | `MergeAll` | none | 05 | one `FishMerged` per merge |
 | `TapZap` | `int count` | 03 | `TapZapped`; taps above `TAP_ZAP_MAX_PER_SEC` are dropped |
 | `AttemptBoss` | none | 03 | `EnemySpawned` (the boss) |
-| `SelectStage` | `int? stage` (<= highest cleared; null returns to the frontier) | 03 | `StageChanged` |
+| `SelectStage` | `int? stage` (farm target `<= HighestCleared`, any completed stage per 02; null returns to the frontier; `Stage.Stage` stays the frontier and keeps its kills and boss phase, issue #35) | 03 | `StageChanged` |
 | `ClaimOfflineReward` | none | 06 | `OfflineRewardClaimed`, `CurrencyChanged(GOLD, OFFLINE)`, `CurrencyChanged(HERO_EXP, OFFLINE)` |
 | `StartDungeon` | `Dungeon kind, int floor, ulong seed, bool localSeed` | 06 | `DungeonStarted` |
 | `SweepDungeon` | `Dungeon kind` | 06 | `DungeonSwept`, `CurrencyChanged(..., DUNGEON)` |
@@ -267,7 +267,7 @@ This payload is the only summon contract (issue #13); 04 and 08 use it. `ApplySu
 
 ### 2.7 What is not in the sim
 
-`PendingInboxCount`, network state, download progress, and the tutorial's "has seen screen X" flags are Runtime or client state. They are injected into the snapshot or view-models by Runtime after the sim produced its snapshot. The rule: if the server or the OS is the source of truth for a value, it is not in `GameState`.
+`PendingInboxCount`, network state, download progress, and the tutorial's "has seen screen X" flags are Runtime or client state. Coach marks, new-item badges, sort/filter/step prefs and settings toggles live in the Runtime `ClientPrefs` store, a local JSON file next to the save that is never cloud-synced and never in `GameState` (issue #47). They are injected into the snapshot or view-models by Runtime after the sim produced its snapshot. The rule: if the server or the OS is the source of truth for a value, it is not in `GameState`.
 
 ## 3. `SessionRunner`
 
@@ -471,7 +471,7 @@ A mutating request is retried **only with the same `requestId`**. The server rep
 | Load | Local | Local after `CLOUD_FETCH_TIMEOUT_S = 5`; conflict check deferred | Bounded boot time. |
 | Summon | Works (local service) | **Blocked.** Button shows `SUMMON_NEEDS_NET`. A pending request resolves on reconnect. | Server holds the roll. No pre-issued results. |
 | Quest progress | Works | Works | Local counters. |
-| Quest claim (diamonds) | Works | Works; diamonds credited locally, reconciled on next save upload | Diamonds from quests are bounded per day (`DIAMONDS_PER_DAY_F2P`); the server re-derives the cap. |
+| Quest claim (diamonds) | Works | Works; diamonds credited locally, credited to the server ledger on the next save upload (8.5.2 step 1) | Diamonds from quests are bounded per day (`DIAMONDS_PER_DAY_F2P`); the server credits the per-reason delta clamped to that allowance (issue #49). |
 | Dungeon run | Works (local seed from the `dungeon` stream) | **Blocked** for a new run (needs server seed). Sweep works if the floor was already cleared. | 00 section 4: server-issued seed in MVP. |
 | Shop, IAP, inbox claim | Not available | **Blocked** with `NET_OFFLINE` | Server ledger. |
 | Remote config / content | Bundled | Last cached, else bundled | Content is always available. |
@@ -508,12 +508,13 @@ sequenceDiagram
     participant Sim
     participant Main as SCR_MAIN
     Boot->>RT: ContentLoader.LoadBundled()
-    RT->>API: GET /v1/config (3 s timeout)
+    RT->>API: GET /v1/config (3 s timeout; cached JWT if any)
     API-->>RT: config {minClientVersion, contentVersion, maintenance, killSwitches}
-    RT->>RT: compare content version; schedule download if newer
     RT->>API: POST /v1/auth/guest or /v1/auth/refresh
     API-->>RT: {accessJwt, refreshJwt, playerId, serverTime}
     RT->>RT: ServerClock.Observe
+    RT->>API: GET /v1/config again with the fresh JWT (background; server applies the rollout bucket)
+    RT->>RT: compare content version; schedule download if newer
     RT->>RT: LocalSaveStore.Load + CloudSaveClient.Fetch (5 s)
     RT->>RT: pick save (02 conflict rules) / migrate / validate
     RT->>Sim: new Simulation(state, db)
@@ -526,11 +527,11 @@ sequenceDiagram
 Steps:
 
 1. **Content load** (Runtime `ContentLoader`): read `StreamingAssets/content/manifest.json`, verify each table's hash, parse into DTOs, hand DTOs to `ContentDb.Build(dtos)` (sim). If a cached newer bundle exists in `persistentDataPath/content/<version>/` and its manifest hash verifies, use it instead. Failure of both -> `Fatal CONTENT_CORRUPT`. Target under 300 ms.
-2. **Config fetch** (`ConfigClient`): `GET /v1/config` with `CONFIG_FETCH_TIMEOUT_S = 3`. On success: if `minClientVersion > clientVersion` -> `CLIENT_TOO_OLD` block with store link; if `maintenance.active` -> `Maintenance` block; store kill switches; if `contentVersion` newer than loaded -> start background download (8.12). On timeout/offline: use cached config if under `CONFIG_CACHE_MAX_AGE_S = 86400`, else defaults (everything enabled, no gate). Local mode skips this step.
+2. **Config fetch** (`ConfigClient`): `GET /v1/config` with `CONFIG_FETCH_TIMEOUT_S = 3`, sending the cached access JWT if one exists (it may be expired). The server applies the content rollout bucket only for a valid JWT; without one it returns the non-rollout default (08; issue #31). After step 3 succeeds, `ConfigClient` re-fetches config once in the background with the fresh JWT; this fetch is off the boot critical path, and any newer bundle it names applies at the next cold boot (8.12). On success: if `minClientVersion > clientVersion` -> `CLIENT_TOO_OLD` block with store link; if `maintenance.active` -> `Maintenance` block; store kill switches; if `contentVersion` newer than loaded -> start background download (8.12). On timeout/offline: use cached config if under `CONFIG_CACHE_MAX_AGE_S = 86400`, else defaults (everything enabled, no gate). Local mode skips this step.
 3. **Auth** (`AuthClient`): if a refresh token exists, `POST /v1/auth/refresh`; else if no account at all, `POST /v1/auth/guest` with the device id. Store tokens in secure storage. On offline: continue with cached `playerId` if any; else create a local guest profile with `playerId = null` and link it on first successful connection (08 section 3). First `X-Server-Time` observation makes `ServerClock.IsAuthoritative = true`.
-4. **Save load** (`CloudSaveClient.LoadAsync`): local load per 02 section 6 in parallel with `GET /v1/save/meta` (5 s). Resolve per 02 section 7.3; a `Conflict` result shows the conflict modal before `SCR_MAIN`. No save anywhere -> `GameState.NewProfile(playerId, now)` with `TUTORIAL_DIAMONDS` granted via `Wallet.Apply(+1500 DIAMOND, TUTORIAL)`, tutorial step 0.
+4. **Save load** (`CloudSaveClient.LoadAsync`): local load per 02 section 6 in parallel with `GET /v1/save/meta` (5 s). Resolve per 02 section 7.3; a `Conflict` result shows the conflict modal before `SCR_MAIN`. No save anywhere -> `GameState.NewProfile(playerId, now)` with `TUTORIAL_DIAMONDS` granted via `Wallet.Apply(+1500 DIAMOND, TUTORIAL)` and the starter weapon `TUTORIAL_WEAPON_ID` (both from 09's `tut_welcome` grants; issue #46), tutorial step 0.
 5. **Offline catch-up**: issue the logged system commands `ApplyServerTime(now)` (day/week rollover first, so a new day's quests exist before anything is credited), then `ComputeOfflineCatchup(now)`, which runs `Catchup.Compute` inside `Apply`, stores or sums the result into `state.Offline.Pending` and stamps `LastTickServerTime = now` (8.7; issue #6). Save immediately.
-6. **Main screen**: `SCR_BOOT` hands over to `SCR_MAIN`; `SCR_MAIN` opens `SCR_OFFLINE_REWARD` if `Offline.Pending != null`, then the tutorial overlay if `Tutorial.Step < TUTORIAL_DONE`. Ticks start on the first `OnFrame` after `SCR_MAIN` is shown (not during the modal, so the modal's numbers are exactly what gets credited).
+6. **Main screen**: `SCR_BOOT` hands over to `SCR_MAIN`; `SCR_MAIN` opens `SCR_OFFLINE_REWARD` if `Offline.Pending != null`, then the tutorial overlay if `Tutorial.Step < TUTORIAL_DONE` (`TUTORIAL_DONE` = row count of `tutorial_steps`, 09; issue #46). Ticks start on the first `OnFrame` after `SCR_MAIN` is shown (not during the modal, so the modal's numbers are exactly what gets credited).
 
 Boot target: under 4 s to `SCR_MAIN` on the reference low device with warm cache (10). Failures in steps 2-4 degrade per section 6; only step 1 is fatal.
 
@@ -581,10 +582,10 @@ sequenceDiagram
 Per tick, in this order (03 owns the bodies):
 
 1. `Time.Tick++`; the virtual server clock advances with it and `EnsureDay` runs on the tick that crosses a day key (8.11). Boss timer decrement while a boss fight is on.
-2. Spawn: if no enemy and `SpawnDelayLeft == 0`, spawn for `Stage` (`HP0 * HP_G^Stage` by table lookup, x `BOSS_HP_MULT` for a boss).
+2. Spawn: if no enemy and `SpawnDelayLeft == 0`, spawn for `Selected ?? Stage` (a selected farm stage pays its own gold/EXP and never advances anything, issue #35) (`HP0 * HP_G^Stage` by table lookup, x `BOSS_HP_MULT` for a boss).
 3. Damage sources, fixed order: hero auto-attack (every `ATTACK_INTERVAL_TICKS` scaled by `ATK_SPD`), skill auto-casts, companion abilities (MP check), queued fish missiles, queued tap zaps (capped). Draws follow 03's fixed order so stream counters advance deterministically regardless of frame rate: one `crit` draw per hero hit (`crit.Counter == Stats.HeroHits`); `combat` is reserved and takes no draws in MVP (issue #8).
 4. Death: on a boss kill only, one `loot` draw (boss Rock Candy chance; `loot.Counter == Stats.BossKills`, issue #8); then `Wallet.Apply(GOLD, KILL)`, `Wallet.Apply(HERO_EXP, KILL)`, quest counters (`defeat monsters`), `KillsInStage++`.
-5. Stage advance / boss resolution; `StageCleared` carries `firstClear` and the diamond grant (reason `FIRST_CLEAR`) when `Stage % BOSS_EVERY == 0`.
+5. Stage advance / boss resolution (frontier only); `StageCleared` carries `firstClear` and the diamond grant (reason `FIRST_CLEAR`) when `Stage % BOSS_EVERY == 0` and `Stage > HighestFirstClearBoss` (02; issue #35).
 6. Magic Tank refill tick (05); passive `FISH_BOARD_DPS_PCT` is recomputed only when the board changes, not per tick.
 7. Snapshot refresh.
 
@@ -762,18 +763,18 @@ sequenceDiagram
     F->>API: {requestId, kind, floor, clientContentVersion}
     API-->>F: {seed, grantId, expiresAt}
     F->>Sim: Apply(StartDungeon{kind, floor, seed})
-    Sim->>Run: DungeonStarted; ticks run the fixed fight on the `dungeon` stream
-    Sim->>F: DungeonCleared{kind, floor, rewards} or DungeonFailed
-    F->>F: Pending = null; Save (ticket already spent at StartDungeon)
-    F->>API: (next save upload carries grantId + result for plausibility, 08)
+    Sim->>Run: DungeonStarted; main-loop ticks run the fight on the temporary `dungeon_run` stream
+    Sim->>F: DungeonCleared{kind, floor, rewards} (debits one ticket) or DungeonFailed (costs nothing)
+    F->>F: Pending = null; Save
+    F->>API: (next save upload carries Dungeon.RecentRuns for seed correlation, 08)
 ```
 
-1. Precondition in the view-model: ticket available (`Wallet.DungeonTicket[kind] >= 1`), floor unlocked (`floor <= Dungeons.BestFloor[kind] + 1`), no boss attempt active (the sim rejects `StartDungeon` with `NotAvailable` during a boss and the screen asks the player to finish the fight first; there is no `RetreatFromBoss` in MVP, issue #11).
+1. Precondition in the view-model: ticket available (`Wallet.DungeonTicket[kind] >= 1`), floor unlocked (`floor <= Dungeons.BestFloor[kind] + 1`), no boss attempt active (the sim rejects `StartDungeon` with `(NotAvailable, BOSS_ATTEMPT_ACTIVE)` during a boss and the screen asks the player to finish the fight first; there is no `RetreatFromBoss` in MVP, issue #11; confirmed by issue #42). `SCR_DUNGEONS` labels the floor "Clearable" from `Simulation.PreviewDungeon` (06), which runs the same fight headlessly on a cloned state.
 2. Seeds come from the `IDungeonSeedService` seam (issue #25). MVP (`DungeonSeedClient`): `POST /v1/dungeon/seed` returns a server seed bound to `(playerId, kind, floor, dayKey)` with `expiresAt = now + DUNGEON_SEED_TTL_S = 600`. The server records the issue in `dungeon_seeds` so the save upload can be checked (08). M0: `LocalDungeonSeedService` reads the next `dungeon` stream draw without advancing it and returns it with `localSeed = true`; `Apply(StartDungeon)` then consumes that one draw, so the service never writes state (as for summons, issue #6) and bots and M0 work without a server.
-3. `StartDungeon` (sim): reject `CannotAfford` without a ticket, `Locked` for a floor not yet unlocked, `NotAvailable` if a run is already active (06's reasons `NO_TICKETS`, `DUNGEON_FLOOR_NOT_UNLOCKED`, `DUNGEON_RUN_IN_PROGRESS`). Else spend the ticket (`Wallet.Apply(-1, DUNGEON)`), swap the combat context to the dungeon fight (`Combat.Mode = Dungeon`), reseed a *temporary* `dungeon_run` stream with the server seed (the persistent `dungeon` stream is untouched in MVP). `SCR_DUNGEON_RUN` replaces the combat viewport.
-4. The fight is a fixed enemy sequence from `dungeon_floors` (09) run by the normal tick loop with the dungeon's time limit. Outcome `DungeonCleared` grants the floor's reward table through `Wallet.Apply(..., DUNGEON)` and updates `Dungeons.BestFloor[kind]`; `DungeonFailed` grants nothing (ticket is consumed, matching the reference game; 06 may soften this). Either way `Combat.Mode = Stage` resumes at the same stage and kills.
-5. Sweep: `SweepDungeon(kind)` reruns the best cleared floor with no fight: rewards of `BestFloor` instantly, one ticket, no seed needed (deterministic by content). Works offline.
-6. Failure: seed request offline -> `NET_OFFLINE` banner, nothing spent. Seed request times out -> retry same `requestId`; the server replays the same seed. App dies mid-run -> on load `Combat.Mode == Dungeon` with a run in progress is abandoned: ticket refunded (`Wallet.Apply(+1, REFUND)`), mode reset. The server sees a seed issued with no result and ignores it (expiry).
+3. `StartDungeon` (sim; ticked run model, issue #42): reject with 06 section 6.2's reasons: `(Locked, DUNGEON_LOCKED)` before the dungeon unlock, `(Locked, DUNGEON_FLOOR_NOT_UNLOCKED)` for a floor not yet unlocked, `(CannotAfford, NOT_ENOUGH_TICKET_<kind>)` without a ticket (for example `NOT_ENOUGH_TICKET_FISH_COIN`; issue #244), `(NotAvailable, DUNGEON_RUN_IN_PROGRESS)` if a run is already active. Else validate only: no ticket is spent at start (00 decision 16). Swap the combat context to the dungeon fight (`Combat.Mode = Dungeon`, 02 `Combat.DungeonRun`), reseed a *temporary* `dungeon_run` stream with the server seed (the persistent `dungeon` stream is untouched in MVP). `SCR_DUNGEON_RUN` replaces the combat viewport. The Fish Board is hidden and frozen for the run (issue #40): passive `FISH_BOARD_DPS_PCT` only, no fish missiles or Tap Zap, the tank keeps refilling, and board commands are rejected while `Combat.Mode == Dungeon` (05 owns the reason).
+4. The fight is one boss enemy per floor from `dungeon_floors` (09; `DungeonRun.EnemyIndex` is always 0 in MVP) run by the normal tick loop for at most `BOSS_TIME_TICKS`. Outcome `DungeonCleared` debits one ticket (`Wallet.Apply(-1, DUNGEON)`), grants the floor's reward table through `Wallet.Apply(..., DUNGEON)` and updates `Dungeons.BestFloor[kind]`; `DungeonFailed` grants nothing and costs nothing (00 decision 16). Either way the run is appended to `Dungeon.RecentRuns` (`{grantId, kind, floor, cleared}`, 02; issue #52) and `Combat.Mode = Stage` resumes at the same stage and kills.
+5. Sweep: `SweepDungeon(kind)` grants `RewardOf(kind, BestFloor)` instantly with no fight and debits one ticket; no seed needed (deterministic by content). Rejected `(NotAvailable, NOTHING_TO_SWEEP)` when `BestFloor == 0` (06). Works offline.
+6. Failure: seed request offline -> `NET_OFFLINE` banner, nothing spent. Seed request times out -> retry same `requestId`; the server replays the same seed. App dies mid-run -> on load `Combat.Mode == Dungeon` with a run in progress is abandoned (02 recovery rule P16): mode reset, nothing to refund because no ticket was spent. The server sees a seed issued with no matching `RecentRuns` entry and ignores it (expiry). Validation is correlation only in MVP (08 `DUNGEON_WITHOUT_SEED`; no replay, issue #52): the server matches `RecentRuns` clears to issued seeds, and soft-currency rewards stay bounded by 08's `GOLD_DELTA_BOUND` and `RESEARCH_WITHOUT_COINS` checks.
 
 ### 8.9 IAP purchase -> receipt validation -> inbox -> claim
 
@@ -845,7 +846,7 @@ sequenceDiagram
     end
 ```
 
-1. Every `Save` writes locally first (02 section 6). Upload is coalesced to at most one per `CLOUD_UPLOAD_MIN_SEC = 60` except on `Pause`, `Quit`, after a summon apply and after an inbox claim, which upload immediately (the player saw something they must not lose).
+1. Every `Save` writes locally first (02 section 6). Upload is coalesced to at most one per `CLOUD_UPLOAD_MIN_SEC = 60` except on `Pause`, `Quit`, after a summon apply and after an inbox claim, which upload immediately (the player saw something they must not lose), and before a summon pull with unsynced earnings, which uploads and awaits the 200 (8.5.2 step 1, issue #49).
 2. `PUT /v1/save` carries `If-Match: <etag>` of the last server version this device saw, the metadata (`saveSeq`, `lastSavedServerTime`, `deviceId`, `schemaVersion`, `contentVersion`, `progressScore`, `sha256`) and the HMAC envelope (02 section 8). The blob goes to S3 via the API (08). Response returns the new `etag` and any plausibility `flags`.
 3. `409 SAVE_CONFLICT` means another device wrote since (`SAVE_STALE` and `SAVE_ROLLED_BACK` follow their 5.2 rows). Download the server blob and resolve per 02 section 7.3: same device lineage -> higher `saveSeq` wins silently; different devices -> higher `lastSavedServerTime` wins unless the loser's `progressScore` is higher by more than `CONFLICT_PROGRESS_MARGIN` (02), in which case the conflict modal shows both. The modal never appears during a boss or a reveal; it waits for `SCR_MAIN` idle.
 4. Download at boot (8.1 step 4) uses the same resolution with `L` = local and `R` = server.
@@ -870,7 +871,7 @@ sequenceDiagram
 
 1. Rollover is tick-driven (06): the tick whose virtual server time crosses a day key runs `EnsureDay`. `ApplyServerTime` is issued and logged only at sync points (3.1; issue #5); it re-anchors the virtual clock and runs the same key check, which handles a jump. Between syncs the check is a two-integer comparison per tick. `dayKey = floor(now / DAY_SECONDS)`, `weekKey = floor((now - WEEK_EPOCH_OFFSET) / (7 * DAY_SECONDS))` (06 fixes the week start; default Monday 00:00 UTC, `WEEK_EPOCH_OFFSET = 4 * DAY_SECONDS` because 1970-01-01 was a Thursday).
 2. Rollover is forward-only: `if newKey <= Time.DayKey return`. A backwards clock never resets the day (02 section 8.3).
-3. What resets: daily quest progress and claimed flags, dungeon tickets to the daily grant, daily free gift, login diamonds granted once per day key (`LOGIN_DIAMONDS` auto-granted with reason `LOGIN`, guarded by `Time.LoginDayKey`; `d_login` is a counting row that pays nothing, issue #20). What persists: everything else. A boss attempt or dungeon run in progress is not interrupted; the quest it would complete counts toward the new day.
+3. What resets: daily quest progress and claimed flags, dungeon tickets to the daily grant, daily free gift, login diamonds granted once per day key (`LOGIN_DIAMONDS` auto-granted with reason `LOGIN`, guarded by `Time.LoginDayKey`; `d_login` is a counting row that pays nothing, issue #20). What persists: everything else. A boss attempt or dungeon run in progress is not interrupted; the quest it would complete counts toward the new day, and a dungeon run that clears debits its ticket from the new day's allotment (06).
 4. A rollover during `SCR_QUESTS` re-renders the list in place with a toast `NEW_DAY`. A `ClaimQuest` for a stale quest id returns `StaleRequest` and the UI refreshes.
 5. Skipped days: a 3-day absence rolls once (the day key jumps); daily quests are not retroactively granted. Login diamonds are once per *key change*, not per day skipped.
 
@@ -884,18 +885,18 @@ sequenceDiagram
     participant CL as ContentLoader
     participant Sim
     Boot->>CC: Fetch()
-    CC->>API: GET /v1/config
-    API-->>CC: {contentVersion: "2026.11.10", contentUrl, sha256, minClientVersion, rolloutPct, killSwitches}
-    CC->>CC: in rollout bucket? (hash(playerId) % 100 < rolloutPct)
+    CC->>API: GET /v1/config (Authorization: cached JWT if any)
+    API->>API: apply rollout bucket server-side (JWT present) else non-rollout default
+    API-->>CC: {contentVersion: "2026.11.10", contentUrl, sha256, minClientVersion, rolloutPct, inBucket?, killSwitches, hotApplyTables}
     CC->>CL: DownloadAsync(contentUrl, sha256) (thread pool)
     CL-->>CC: bundle verified into content/2026.11.10/
     CC->>CC: mark "pending content"; apply at next cold boot
 ```
 
 1. Config is fetched at boot (8.1 step 2) and re-fetched every `CONFIG_REFRESH_S = 1800` in the foreground and on every resume. Kill switches (`shopEnabled`, `summonEnabled[banner]`, `dungeonsEnabled`, `cloudSaveEnabled`, `adsEnabled`) apply **immediately**: a view-model reads `IConfigService.Flags` and disables the button with `FEATURE_DISABLED`. A kill switch never touches `GameState`.
-2. Content bundles apply **only at the next cold boot**, never mid-session (sibling 08 section 7 rule 1): kill times, catch-up arithmetic and the wall condition would change under a running sim. The downloaded bundle is validated (manifest hash, per-table hash, 09 validator) on the thread pool and marked ready; `SCR_SETTINGS` shows "Update ready, restarts on next launch". Exception: a bundle whose manifest sets `hotApply: true` and changes only `localization` or `shop_products` is swapped at a safe point (no modal open, not in a boss) because neither table affects the sim.
+2. Content bundles apply **only at the next cold boot**, never mid-session (sibling 08 section 7 rule 1): kill times, catch-up arithmetic and the wall condition would change under a running sim. The downloaded bundle is validated (manifest hash, per-table hash, 09 validator) on the thread pool and marked ready; `SCR_SETTINGS` shows "Update ready, restarts on next launch". Exception: a bundle whose manifest sets `hot_apply: true` is swapped at a safe point (no modal open, not in a boss). The exporter (09) sets it only when the diff touches nothing but the four hot-apply tables of 00 contract 3: `localization`, `shop_products`, `shop_packages`, `inbox_templates` (issue #54). None is read by the sim; the Shop and Inbox view-models re-read their tables on swap. The manifest bool is the single source; config's `hotApplyTables` (08) only echoes the exporter's constant and the client does not act on it.
 3. `minClientVersion` above the running client -> `CLIENT_TOO_OLD` full block with store link, checked at boot and at every config refresh (a mid-session block waits for `SCR_MAIN` idle and saves first).
-4. `rolloutPct` buckets by `hash(playerId) % 100`; a player in the bucket stays in it for that version. `maintenance: {active, message, until}` blocks at boot and shows a banner mid-session with a countdown; at `until` the client re-fetches config.
+4. Rollout buckets are computed by the server only (issue #31): `GET /v1/config` returns the version for the caller's bucket when the request carries a valid JWT, and the non-rollout default otherwise. The client never hashes `playerId`; `rolloutPct` and `inBucket` in the response are informational. A guest with `playerId = null` gets the default until its first auth. `maintenance: {active, message, until}` blocks at boot and shows a banner mid-session with a countdown; at `until` the client re-fetches config.
 5. Server-side minimum content version per client version (09) means an old client is never handed a bundle it cannot parse.
 
 ### 8.13 Logout and account switch
@@ -929,12 +930,12 @@ sequenceDiagram
 
 ## Open questions
 
-1. **Ticks paused behind modals.** 8.7 pauses the tick loop while `SCR_OFFLINE_REWARD` is open. Should the tutorial overlay also pause ticks? Owner: 07. Default: yes for steps that point at the combat viewport, no otherwise.
+1. Resolved: the tutorial overlay keeps ticks running except during steps 1-2; `SetTutorialStep` advances `GameState.Tutorial.Step` when a step's `expect_event` has fired `expect_count` times (09 `tutorial_steps`; issue #46).
 2. **Second catch-up window after clock correction** (8.2 step 2). Credits extra time when the real gap was longer than the extrapolation. Owner: 06. Default: credit it into the same pending record, capped by the effective cap on the sum (8.7, issue #21), because the alternative punishes a player whose device clock drifted.
 3. **Command log upload policy.** 2.6 uploads only on server request. Should MVP upload the last 1 MiB with every save so plausibility checks can replay without a round trip? Owner: 08. Default: no; bandwidth at 100k DAU is not worth it until flags exceed 1%.
-4. **Hot-apply allowlist for content tables** (8.12 step 2). Owner: 09. Default: `localization`, `shop_products`, `shop_packages`, `inbox_templates` only.
+4. Resolved: hot-apply allowlist is 00 contract 3's four tables, carried by the manifest `hot_apply` bool (8.12 step 2; issue #54).
 5. **`TICK_BUDGET_MS` on high-end devices.** A fixed 8 ms is conservative on flagships. Owner: 10. Default: fixed; revisit if catch-up after a hitch is visibly slow.
-6. **Dungeon fail consumes the ticket** (8.8 step 4). Owner: 06. Default: consumed, as the reference game does; soften to "refund on first fail of a new floor" if closed beta complains.
+6. Resolved: a failed or abandoned dungeon run costs nothing; the ticket is debited on clear only (8.8 steps 3-4; 00 decision 16, issue #42).
 7. **Local guest with `playerId = null`** (8.1 step 3). Playing with no account until first connection complicates save upload lineage. Owner: 08. Default: allowed; the first successful guest auth adopts the local save as that player's first upload.
 
 ## Acceptance criteria

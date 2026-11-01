@@ -386,7 +386,7 @@ python3 tools/ci/test_counts.py --min-ratio 0.9                                 
 python3 tools/ci/no_literals.py src/HeroCat.Sim                                   # 09 acceptance 1
 ```
 
-`./check.sh --server` applies the plain versioned SQL migration set (02 section 12; no EF Core migrations, issue #33) to an empty Postgres container and runs 02 AC16 on it, then runs `dotnet test src/HeroCat.Server.Tests -c Release` against the Postgres and Redis containers. Plain `./check.sh` includes the migration step behind a "Postgres available" guard: without Docker or Postgres (cloud sessions) it prints `SKIP db-migrations: no Postgres` and does not count as passing.
+`./check.sh --server` applies the plain versioned SQL migration set (02 section 12; no EF Core migrations, issue #33) to an empty Postgres container and runs 02 AC16 on it, then runs `dotnet test src/HeroCat.Server.Tests -c Release` against the Postgres and Redis containers. Plain `./check.sh` includes the migration step behind a "Postgres available" guard: without Docker or Postgres (cloud sessions) it prints `SKIP db-migrations: no Postgres`, and the run must be reported as a partial check.
 
 `.github/workflows/content.yml` (PRs touching `content/`, `content_src/`, `tools/`, `src/HeroCat.Sim`, `src/HeroCat.Bots`; ~8 min) calls `./check.sh --content`, then uploads the artifacts (acceptance table, shares, golden diff, exporter diff, vectors diff) and runs `python3 tools/ci/pr_comment.py` (posts the acceptance table and the day-30 median into the PR). `--content` runs:
 
@@ -504,44 +504,44 @@ Decision rules: if D1 is under the floor after week 2, the tutorial and first-se
 
 ## 9. Live-ops runbooks
 
-Every runbook has the same four parts. "Communicate" always means: in-game mail via the Inbox (compensation template), a store listing note if players are affected for more than 24 h, and the team channel first. "Postmortem" is a one-page document within 5 working days with a timeline, root cause, and the test or alarm that would have caught it, which becomes a PR.
+Every runbook has a stable `RB-*` id (the link target alarms use, issue #59) and the same four parts. "Communicate" always means: in-game mail via the Inbox (compensation template), a store listing note if players are affected for more than 24 h, and the team channel first. "Postmortem" is a one-page document within 5 working days with a timeline, root cause, and the test or alarm that would have caught it, which becomes a PR.
 
-### 9.1 Bad content push
+### 9.1 Bad content or config push (`RB-CONFIG`)
 
 - **Detect**: alarm `content_update_failed` rate > 1% of boots, or `boot_ms` p95 up 50%, or the summon odds audit deviates, or support reports within 30 min of a publish. The publish time is annotated on every dashboard.
 - **Mitigate**: set `config.content.version` back to the previous version (clients fall back to the cached or bundled copy at next boot; `hot_apply` tables revert on the next config refresh). Takes effect in under `CONFIG_REFRESH_S`. Do not delete the bad version from the CDN (saves reference its hash). If the bad content changed a sim table, run the bots on it to quantify the damage window.
 - **Communicate**: mail "we fixed a data issue" with compensation sized by the bot delta (section 9.7 table).
 - **Postmortem**: which validator rule or acceptance check would have caught it; add it (09 section 8 or section 3.6).
 
-### 9.2 Save corruption wave
+### 9.2 Save corruption wave (`RB-SAVE-CORRUPT`)
 
 - **Detect**: `save_corrupt` analytics events > 0.1% of boots in an hour, or `SaveCorruptException` in Crashlytics, or save-loss tickets.
 - **Mitigate**: identify the client version and the write path; if a client bug, raise `minClientVersion` to block the version once a fix is live; if server-side, stop `PUT /save` accepting from that version via a kill switch (08). Recovery per player: server `save_history` (`SAVE_HISTORY_KEEP` versions) restored by support tooling; the local `prev` slot is tried first by the client automatically (02).
 - **Communicate**: in-app banner via config `notice`, mail with a restore instruction and compensation.
 - **Postmortem**: add the corruption shape as a `LocalSaveStore` fault-injection test.
 
-### 9.3 Summon rate misconfiguration
+### 9.3 Summon rate misconfiguration (`RB-SUMMON-RATES`)
 
-- **Detect**: the weekly odds audit (section 8) runs hourly for 24 h after any `banners` or `banner_levels` change; alarm when observed L+ rate differs from published by more than 0.5 pp over 10,000 pulls, or `rateTableHash` served by `/summon/rates` differs from the content's.
+- **Detect**: the Odds drift alarm (section 10: observed rate per rarity and banner level outside the Wilson interval around the published rate, so the threshold scales with the pulls observed; issue #59), or `rateTableHash` served by `/summon/rates` differs from the content's. For 24 h after any `banners` or `banner_levels` change the operator watches the hourly window.
 - **Mitigate**: kill switch `summonEnabled[banner] = false` (08) within one config refresh; content rollback as in 9.1. Compute per-player impact from `summon_log` (every pull has the rate table hash it was rolled under).
 - **Communicate**: this is a regulatory matter in several markets. If published odds were higher than actual: refund the diamond difference as "pulls at the published odds" (grant the missing expected L+ as a pity-counter reduction plus diamonds), publish a notice in-game and on the store listing. If actual odds were higher than published: no clawback; note it publicly.
 - **Postmortem**: why `E037` or the server's rate hash check did not fire.
 
-### 9.4 IAP grant failure
+### 9.4 IAP grant failure (`RB-IAP`)
 
 - **Detect**: `iap_completed` without a matching `inbox_items` row within 5 min > 0.5% of purchases; App Store Server Notifications / RTDN backlog > 100; support tickets tagged `missing-purchase`.
 - **Mitigate**: the client retries receipt validation every `RECEIPT_RETRY_S` and "Restore purchases" re-submits; if the validator is down, queue receipts and grant on recovery (idempotent by transaction id). Manual grant via the admin mail tool against the store transaction id when the store's API confirms the purchase.
 - **Communicate**: mail with the grant and a small apology grant; store review replies for anyone who left a one-star review about it.
 - **Postmortem**: which stub in `HeroCat.Server.Tests` receipt group was missing.
 
-### 9.5 Exploit found
+### 9.5 Exploit found (`RB-ANTICHEAT`)
 
 - **Detect**: plausibility flags clustering on one pattern (08 section 7), a leaderboard outlier (P1), a player report, or `STAGE_VS_TIME` flags (a save whose `HighestCleared` exceeds the `plausibility_stage_bound` row for its account age, issue #60).
 - **Mitigate**: confirm by re-simulating the save from its last trusted version plus command log (01 section 2.6); apply the 08 action matrix (rollback to last plausible save for first offence, ban for sale or repeat); close the hole with a server-side check first (no client release needed), then the client fix. Never ship a fix that punishes players who did not exploit.
 - **Communicate**: a short public notice only if the exploit was public; affected honest players (rollback false positives) get the appeal path (08) and compensation.
 - **Postmortem**: a new plausibility check with a test; a bot variant that reproduces the exploit, kept as a regression test.
 
-### 9.6 Store rejection
+### 9.6 Store rejection (`RB-STORE`)
 
 - **Detect**: App Review / Play Policy message.
 - **Mitigate**: triage in 2 hours: metadata-only fix (screenshots, age rating answers, privacy labels) resubmits same day; a binary fix goes through the release branch with the full RC gate; a policy dispute gets a written reply with the odds-disclosure screens attached. Keep the previous version live; never pull the app.
@@ -559,6 +559,26 @@ Every runbook has the same four parts. "Communicate" always means: in-game mail 
 
 Compensation is always an Inbox grant with an `inbox_templates` row and `Reason.MAIL`, never a direct wallet write, so it shows up in the economy analytics.
 
+### 9.8 Service runbooks
+
+Shorter runbooks for the remaining alarm targets; same four parts, with Communicate and Postmortem as in the preamble unless stated.
+
+| Id | Detect | Mitigate |
+|---|---|---|
+| `RB-API-5XX` | API 5xx alarm | check the last deploy annotation and roll back the task set (6.2); otherwise follow the failing dependency to `RB-DB` / `RB-REDIS` |
+| `RB-LATENCY` | summon or save latency alarm | scale the task set; check plausibility re-sim CPU (section 4) and DB / Redis; `PUT /save` kill switch for a single client version as last resort (08) |
+| `RB-AUTH` | auth failures alarm | check JWT key rotation and `/time` skew; roll back an auth deploy; never mass-revoke refresh tokens without a postmortem |
+| `RB-CLIENT-BALANCE` | summon `INSUFFICIENT_FUNDS` share alarm | compare client balance display with the ledger for sampled players; suspect the credit-on-upload path (08 section 3.1, issue #49) or a client build |
+| `RB-REFUND` | refund spike | check for a grant bug or fraud ring by SKU and region; refund debt handling per 08 section 5.4 |
+| `RB-SAVE-CONFLICT` | save conflict rate | check a client build for upload loops or a clock issue; conflict UI fixes ship as a client patch |
+| `RB-DUPLICATE-GRANT` | duplicate grant | disable the affected route's write path via kill switch; repair ledgers from `summon_log` / `purchases`; idempotency test gap goes into the postmortem |
+| `RB-DB` | DB alarm | failover or scale per the provider; pause worker jobs; check long queries from the last deploy |
+| `RB-REDIS` | Redis alarm | scale or fail over; check whether evictions dropped idempotency keys (00 section 8 item 13) during the window |
+| `RB-WORKER` | worker alarm | restart the job; mail blasts resume idempotently on `(mail_blast_id, player_id)` |
+| `RB-SECRETS` | certificate / key expiry | rotate the TLS cert, Apple `.p8` or JWT key on stage first, then prod |
+| `RB-COST` | cost alarm | find the service by cost tag; check for a retry storm or log volume; no player communication |
+| `RB-CLIENT-CRASH` | crash-free alarm | identify the version and stack in Crashlytics; halt the store rollout (section 7 item 16); hold `minClientVersion`; hotfix through the release branch |
+
 ## 10. Dashboards and alarms
 
 Dashboards (Grafana over the metrics store; analytics warehouse for the economy views):
@@ -569,30 +589,40 @@ Dashboards (Grafana over the metrics store; analytics warehouse for the economy 
 4. **Revenue**: ARPDAU, conversion, SKU mix, refund rate, first-purchase double usage.
 5. **Live ops**: current content version per client version, rollout percentage, kill switch states, maintenance flag, inbox grants outstanding.
 
-Alarms (PagerDuty P1 pages the on-call; P2 is a channel message and a ticket next morning):
+Alarms (PagerDuty P1 pages the on-call; P2 is a channel message and a ticket next morning). This is the single alarm catalog (issue #59): 08 section 9.4 defines the metrics, 08 section 9.5 points here, and where 08 and 10 had different thresholds this table's apply.
 
-| Alarm | Condition | Severity |
-|---|---|---|
-| API 5xx | > 1% of requests over 5 min | P1 |
-| Summon latency | `POST /summon/pull` p99 > 500 ms over 5 min | P1 |
-| Save latency | `PUT /save` p99 > 800 ms over 5 min | P2 |
-| Auth failures | 401/403 > 5% of requests over 10 min (token or clock issue) | P1 |
-| Receipt backlog | unprocessed notifications > 100 for 10 min | P1 |
-| IAP grant gap | purchases without inbox row > 0.5% over 30 min | P1 |
-| Odds drift | observed L+ vs published > 0.5 pp over 10k pulls | P1 |
-| Duplicate grant | any `requestId` with two wallet deltas | P1 |
-| Plausibility spike | flags > 1% of saves over 1 h | P2 |
-| Crash-free | < 99.0% over 1 h on any client version with > 500 sessions | P1 |
-| Content update failures | > 1% of boots over 30 min | P2 |
-| Save corruption | > 0.1% of boots over 1 h | P1 |
-| Boot time | `boot_ms` p95 > 6 s on the mid device class over 1 h | P2 |
-| DB | connections > 80% of pool, replication lag > 10 s, disk > 80% | P1 |
-| Redis | memory > 80%, evictions > 0 | P2 |
-| Cost | daily spend > 1.5x the 7-day average | P2 |
-| CDN | 4xx on `content/*` > 0.5% (a missing file after a publish) | P1 |
-| Rollout halt | any P1 during a staged rollout automatically freezes `rolloutPct` | - |
+| Alarm | Condition | Severity | Runbook |
+|---|---|---|---|
+| API 5xx | > 1% of requests over 5 min | P1 | `RB-API-5XX` |
+| Summon latency | `POST /summon/pull` p99 > 500 ms over 5 min | P1 | `RB-LATENCY` |
+| Save latency | `PUT /save` p99 > 800 ms over 5 min | P2 | `RB-LATENCY` |
+| Auth failures | 401/403 > 5% of requests over 10 min (token or clock issue) | P1 | `RB-AUTH` |
+| Odds drift | per banner level and rarity, the observed rate lies outside the Wilson score interval (`ODDS_ALARM_Z` = 3) around the published rate for the pulls observed, evaluated hourly on the trailing 1 h, 24 h and 7 d windows; replaces the fixed pp bands (issue #59) | P1 | `RB-SUMMON-RATES` |
+| Summon errors | `INSUFFICIENT_FUNDS` > 20% of pulls over 15 min (client balance display broken) | P2 | `RB-CLIENT-BALANCE` |
+| IAP validation failures | invalid receipts > 5% over 30 min, or `STORE_UNAVAILABLE` > 10 in 5 min | P1 | `RB-IAP` |
+| Receipt backlog | unprocessed notifications > 100 for 10 min | P1 | `RB-IAP` |
+| IAP grant gap | purchases without inbox row > 0.5% over 30 min, or any `purchases.status = pending` older than 10 min | P1 | `RB-IAP` |
+| Refund spike | refunds in 24 h > 3x the 7-day median | P2 | `RB-REFUND` |
+| Duplicate grant | any `requestId` with two wallet deltas | P1 | `RB-DUPLICATE-GRANT` |
+| Save conflicts | 409 conflict responses > 5% of `PUT /save` over 1 h | P2 | `RB-SAVE-CONFLICT` |
+| Save rejections | `SAVE_MALFORMED` > 0.1% of `PUT /save` over 1 h | P1 | `RB-SAVE-CORRUPT` |
+| Save corruption | `save_corrupt` > 0.1% of boots over 1 h | P1 | `RB-SAVE-CORRUPT` |
+| Plausibility spike | flags > 1% of saves over 1 h | P2 | `RB-ANTICHEAT` |
+| Plausibility flood | `certain` flags > 50/h | P1 | `RB-ANTICHEAT` |
+| Rollbacks | moderation rollbacks > 20/h | P1 | `RB-ANTICHEAT` |
+| Crash-free | < 99.0% over 1 h on any client version with > 500 sessions | P1 | `RB-CLIENT-CRASH` |
+| Content update failures | > 1% of boots over 30 min | P2 | `RB-CONFIG` |
+| Boot time | `boot_ms` p95 > 6 s on the mid device class over 1 h | P2 | `RB-CONFIG` |
+| CDN | 4xx on `content/*` > 0.5% (a missing file after a publish) | P1 | `RB-CONFIG` |
+| Config | active config changed (notify only); content sha256 mismatch at activation (P1) | - / P1 | `RB-CONFIG` |
+| DB | connections > 80% of pool or pool exhaustion events > 0, replication lag > 10 s, CPU > 80% over 10 min, disk > 80% | P1 | `RB-DB` |
+| Redis | memory > 80%, evictions > 0 (P2); primary failover (P1) | P2 / P1 | `RB-REDIS` |
+| Worker | any job failing 3 consecutive runs; mail blast `sent_count` stalled 15 min | P2 | `RB-WORKER` |
+| Certificate / key expiry | TLS, Apple `.p8` or JWT key < 14 days | P2 | `RB-SECRETS` |
+| Cost | daily spend > 1.5x the 7-day average | P2 | `RB-COST` |
+| Rollout halt | any P1 during a staged rollout automatically freezes `rolloutPct` | - | the P1's runbook |
 
-Every alarm links to the runbook section that handles it.
+Every alarm links to its `RB-*` runbook (section 9).
 
 ## 11. Roadmap: 12 months, M0 to P1
 
@@ -623,7 +653,7 @@ Risks that move the dates, in order of likelihood: Unity build infrastructure (b
 4. **Device farm vendor.** Firebase Test Lab (Android breadth, cheap) vs AWS Device Farm (iOS too). Default: Firebase for Android nightly, two physical iPhones on the self-hosted mac for iOS. Owner: eng.
 5. **Unity Cloud Build vs self-hosted mac.** Default: self-hosted mac mini for iOS (one-off cost, no per-minute billing, Xcode control); Cloud Build as a fallback when the mac is down. Owner: eng.
 6. **Soft-launch markets.** PH + CA defaults above; if UA budget is tight, PH only with CA replaced by a Canada-only iOS launch later. Owner: PM.
-7. **Odds audit statistical power.** 10,000 pulls per banner level per day is reachable at 10k DAU for level 1-3 only; higher levels audit over a rolling week. Default: alarm thresholds scale with sample size (Wilson interval), not a fixed pp. Owner: eng.
+7. **Odds audit statistical power.** Resolved: the Odds drift alarm uses a per-banner-level Wilson interval that scales with sample size, over 1 h, 24 h and 7 d windows, so low-volume levels are covered by the weekly window (issue #59).
 8. **Blue/green vs rolling for the server.** Blue/green doubles capacity during deploys. Default: blue/green at MVP (deploys are rare, capacity is cheap at this scale); revisit at 100k DAU. Owner: eng.
 
 ## Acceptance criteria
@@ -644,7 +674,7 @@ Risks that move the dates, in order of likelihood: Unity build infrastructure (b
 14. A content tag publishes to stage with every CDN object's sha256 verified and `manifest.json` uploaded last; a deliberately corrupted upload fails the verify step and leaves `config.content` unchanged.
 15. A server deploy to stage with a task set returning 5xx is rolled back automatically within 15 minutes with no manual action.
 16. Every item in the section 7 checklist has an owner and a link in the release ticket template; a release ticket cannot be closed with an unchecked item.
-17. Every alarm in section 10 exists in the alerting tool, links to a runbook section, and has fired at least once in a staged drill on stage before soft launch.
+17. Every alarm in section 10 exists in the alerting tool, links to its `RB-*` runbook, and has fired at least once in a staged drill on stage before soft launch.
 18. Every runbook in section 9 has been walked through in a tabletop drill with the on-call rota before soft launch; the drill notes are linked from the runbook.
 19. The soft-launch KPI dashboard shows every KPI in section 8 per market with the floor and exit lines drawn; the cohort stage curve overlays the bot curves.
 20. `docs/compat.md` is regenerated by `deploy.yml` on every prod deploy and lists every client version with more than 1% of sessions.
@@ -661,7 +691,7 @@ Harness and operations constants; none is game balance and none lives in `Conten
 | `SESSION_GAPS_H` | 11, 11 (odd days); 13.5, 8.5 (even days) | S | 3.2 | even-day evening session spans 00:00 UTC (issue #29) |
 | `DECISION_INTERVAL_S` | 60 | I | 3.2 | |
 | `DEFAULT_SEEDS` | `1-20` | I | 3.2 | |
-| `LIGHT_SPENDER_USD_PER_MONTH` | 20 | S | 3.2 | |
+| `LIGHT_SPENDER_USD_PER_MONTH` | 20 | S | 3.2 | the section 3.4 schedule spends $19.98 (issue #58) |
 | `WHALE_DAY1_USD` | 100 | S | 3.2 | AC7 band |
 | `SHARE_MIN`, `SHARE_MAX` | 0.05, 0.40 | I (00 section 7) | 3.6 | AC2 |
 | `FIRST_WALL_MIN_STAGE`, `FIRST_WALL_MAX_STAGE` | 60, 200 | I (03 section 8.6) | 3.6 | AC3; Open question 3 |
@@ -681,7 +711,9 @@ Harness and operations constants; none is game balance and none lives in `Conten
 | `BLUE_GREEN_RAMP_MIN` | 15 | S | 6.2 | criterion 15 |
 | `COMPAT_CLIENT_MINORS_BACK` | 2 | S | 6.3 | contract test |
 | Soft-launch KPI floors and exits | section 8 table | S (exits from 00 section 11) | 8 | weekly review |
-| Alarm thresholds | section 10 table | S | 10 | drill (criterion 17) |
+| Alarm thresholds | section 10 table (single catalog, issue #59) | S | 10 | drill (criterion 17) |
+| `ODDS_ALARM_Z` | 3 (Wilson score interval, matches 08's 3-standard-error nightly rule) | S | 10 | Odds drift alarm |
+| `STAGE_BOUND_SEEDS`, `STAGE_BOUND_DAYS`, `STAGE_BOUND_PERCENTILE` | 1-20, 60, p95 | S | 3.7 | `stage-bound --check` (issue #60) |
 | Compensation ladder | section 9.7 | S | 9.7 | |
 
 Used from 00 by name: `TICK_HZ`, `BOSS_EVERY`, `BOSS_TIME_TICKS`, `HP_G`, `STAGE_CAP`, `OFFLINE_RATE`, `OFFLINE_CAP_H`, `OFFLINE_MIN_S`, `DIAMONDS_PER_DAY_F2P`, `PULL_COST[*]`, `PITY_HARD`, `TUTORIAL_DIAMONDS`, the section 6.6 targets via `progress_targets`. From 01: `MAX_TICKS_PER_FRAME`, `WALL_CLOCK_SYNC_SEC`, `TICK_BUDGET_MS`, `IN_APP_GAP_SEC`, `AUTOSAVE_INTERVAL_SEC`, `CMDLOG_MAX_BYTES`, `EVENT_COALESCE_AT`, `HTTP_RETRY_*`, `CONFIG_REFRESH_S`, `RECEIPT_RETRY_S`, `DUNGEON_SEED_TTL_S`. From 02: `SAVE_SCHEMA_VERSION`, `SAVE_REPAIR_MAX`, `SAVE_FAIL_WARN_COUNT`, `CLOUD_UPLOAD_MIN_SEC`, `CONFLICT_PROGRESS_MARGIN`, `CLOCK_RESYNC_SEC`, `CLOCK_JUMP_WARN_SEC`, `CLOCK_MAX_SKEW_ACCEPT_S`, `SAVE_BLOB_MAX_BYTES`, `SAVE_HISTORY_KEEP`, `IDEMPOTENCY_TTL_H`, `GDPR_DELETE_GRACE_DAYS`, `ANALYTICS_BATCH_MAX`. From 06: `INBOX_EXPIRY_DAYS`. From 07: `UI_DAMAGE_LABEL_POOL`, `UI_MAX_PARTICLES`.

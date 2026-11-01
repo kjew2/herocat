@@ -4,14 +4,14 @@ This spec is the implementation of 00 section 8 item 3 ("content is data"): how 
 
 Tiers covered: **M0** (sheet, exporter, validator, bundled content, `ContentDb`, English strings), **MVP** (CDN delivery with hash verification and min-content-version gate, `hotApply` for sim-neutral tables, `en` plus one locale, pseudo-localization), **P1** (`runes` consumers, `content_migrations`, per-locale asset overrides).
 
-Depends on: 00 (sections 5, 6, 8), 01 (`ContentLoader`, boot flow 8.1, content hot update 8.12), 02 (`GameState.ContentVersion`, reconcile on load), 03 (stats, Research, curve evaluation), 04 (collectible columns, banner levels), 05 (fish levels, tank), 06 (quests, dungeons, shop, inbox), 07 (locales, length budgets, ICU plurals), 08 (`GET /config`, CDN layout), 10 (CI gate).
+Depends on: 00 (sections 5, 6, 8), 01 (`ContentLoader`, boot flow 8.1, content hot update 8.12), 02 (`GameState.ContentVersion` and `ContentHash`, the load validator that reconciles saves against content), 03 (stats, Research, curve evaluation), 04 (collectible columns, banner levels), 05 (fish levels, tank), 06 (quests, dungeons, shop, inbox), 07 (locales, length budgets, ICU plurals), 08 (`GET /config`, CDN layout), 10 (CI gate).
 
 ## 1. Principles
 
 1. **One source of truth.** One Google Sheet workbook, one tab per table. CSV, JSON, `ContentDb` and the Python models are derived. Nobody edits `content/*.json` by hand; CI rejects a commit whose JSON does not match what the exporter produces from the committed CSVs.
 2. **No balance literal in code.** `HeroCat.Sim` receives a `ContentDb` and reads typed properties and rows. Acceptance criterion 1 is a grep: the only numeric literals in `HeroCat.Sim` are 0, 1, -1, array indices and the `ATTACK_PROGRESS_UNIT` fixed-point scale that 03 declares.
 3. **Fail at export time, never in a tick.** The exporter rejects bad content with coded errors (section 8). `ContentDb.Build` re-runs the subset of rules that protect the sim (ids resolve, rates sum, curves monotonic, counts match) so a stale or hand-edited bundle fails at boot with a readable list, not inside `Simulation.Advance`.
-4. **Deterministic bytes.** Same CSV input produces byte-identical JSON and the same `content_hash`. The save (02) and every bot report (10) record `content_version` and `content_hash`, so a regression can be tied to the exact data it ran on.
+4. **Deterministic bytes.** Same CSV input produces byte-identical JSON and the same `content_hash`. The save (02: `ContentVersion`, `ContentHash`) and every bot report (10) record `content_version` and `content_hash`, so a regression can be tied to the exact data it ran on.
 5. **Sim stays JSON-free.** JSON parsing lives in `HeroCat.Runtime` (`ContentLoader`). It fills plain DTO classes and hands them to `ContentDb.Build(ContentDtos)` in `HeroCat.Sim`. No `Newtonsoft`, no reflection, no file IO in Sim (00 section 8 item 1).
 6. **Immutable after build.** Every `*Def` is a sealed class with get-only properties; collections are read-only wrappers over arrays. A content update builds a new `ContentDb`; the live one is never mutated, and the swap happens only where 01 section 8.12 allows.
 
@@ -95,9 +95,10 @@ Enums are defined once in C# (`HeroCat.Sim.Content.Enums`) and mirrored in `tool
 | `PackageLimit` | `ONCE`, `DAILY`, `WEEKLY`, `MONTHLY` | no |
 | `InboxKind` | `IAP`, `MAIL`, `COMPENSATION`, `COUPON`, `SYSTEM` | no |
 | `TutorialTrigger` | `PROFILE_CREATED`, `STAGE_REACHED`, `FIRST_BOSS_FAILED`, `SCREEN_OPENED`, `PREVIOUS_DONE` | no |
+| `FeatureCondition` | `ALWAYS`, `STAGE_HIGHEST`, `AWAKEN_RANK` | no (section 5.34, issue #45) |
 | `ConstantType` | `int`, `long`, `double`, `bool`, `intlist` | no |
 | `Tier` | `M0`, `MVP`, `P1`, `P2` | yes: a client built for tier T loads rows with `tier <= T` and hides the rest (section 9.5) |
-| `Locale` | `en`, `ja`, `ko`, `zh-Hans` | no; the MVP ship list is 07's |
+| `Locale` | `en`, `ja`, `ko`, `zh-Hans` | no; the MVP ship list is 07's. The exporter maps the enum value to the `snake_case` CSV column by a fixed rule (`zh-Hans` <-> `zh_hans`); file names use the enum form (`localization.zh-Hans.json`) (issue #57) |
 
 ### 3.4 Ids and keys
 
@@ -140,6 +141,8 @@ The exporter checks `constants` against this list (`E040` missing, `E042` unknow
 | `SKILL_SLOTS`, `COMPANION_SLOTS`, `RUNE_SLOTS` | `constants` | int |
 | `DUPE_LVL_CUM` | `dupe_levels.cum_copies` | int per row |
 | `DUPE_LVL_BONUS` | `constants` | double |
+| `LIMIT_BREAK_RANKS` | `constants` (issue #37) | int |
+| `LIMIT_BREAK_COST[r]`, `DUPE_OVERFLOW_ROCK_CANDY[r]` (04) | `rarities.limit_break_cost`, `.dupe_overflow_rock_candy` (issue #37) | long |
 | Pool sizes 30 / 40 / 50 | derived: row counts of `weapons`, `skills`, `companions`; pinned by `E034` against `banners.pool_size` | - |
 | `WEAPON_PASSIVE_PCT[r]` | `rarities.weapon_passive_pct`; per-row override in `weapons.passive_pct` | double |
 | `FISH_BOARD_W`, `FISH_BOARD_H` | `constants` | int |
@@ -153,8 +156,12 @@ The exporter checks `constants` against this list (`E040` missing, `E042` unknow
 | `HERO_LVL_EXP(l) = 100 * 1.08^l` | `hero_levels.exp0`, `.exp_g` | double |
 | `HERO_LVL_ATK_PCT` | `hero_levels.atk_pct_per_level` | double |
 | Section 6.6 day/stage targets | `progress_targets` | int, int |
+| Feature unlock gates (Research, Companions, Quests, Dungeons, Shop) | `feature_unlocks` (issue #45) | enum, int |
+| Awakening cadence target (03, 06) | `awakening_targets.max_days_after_gate` (issue #43) | int |
+| 08's `STAGE_VS_TIME` whale curve | `plausibility_stage_bound` (generated, issue #60) | int, int |
+| 06 section 2 reference-day parameters | `constants.REF_DAILIES_DONE`, `.REF_NEW_BOSSES` *(named here, issue #55)* | int |
 
-Constants other specs declare and this spec hosts (their owners' Constants introduced sections are the source): 03's `ATTACK_PROGRESS_UNIT`, `CRIT_DMG_BASE`, `MP_POOL0`, `MP_REGEN0`, `BOSS_ROCK_CANDY_P`, `TRAIN_CAP[*]` (in `stats.cap`), `RES_*` (in `research`); 04's `WEAPON_ATK_PCT[r]`, `SKILL_DPS_PCT[r]`, `COMPANION_DPS_PCT[r]` (in `rarities`), `BANNER_LVL_EXP` (in `banner_levels.exp_required`), `TUTORIAL_WEAPON_ID` (in `tutorial_steps`); 06's `QUEST_*`, `FIRST_CLEAR_DIAMONDS`, `DUNGEON_*`, `INBOX_EXPIRY_DAYS`, shop rows. `REQUIRED_CONSTANTS` in the exporter is the union; acceptance criterion 4 pins the C# `Constants` class to it.
+Constants other specs declare and this spec hosts (their owners' Constants introduced sections are the source): 03's `ATTACK_PROGRESS_UNIT`, `CRIT_DMG_BASE`, `MP_POOL0`, `MP_REGEN0`, `BOSS_ROCK_CANDY_P`, `TRAIN_CAP[*]` (in `stats.cap`), `RES_*` (in `research`); 04's `WEAPON_ATK_PCT[r]`, `SKILL_DPS_PCT[r]`, `COMPANION_DPS_PCT[r]` (in `rarities`), `BANNER_LVL_EXP` (in `banner_levels.exp_required`), `TUTORIAL_WEAPON_ID` (in `tutorial_steps`); 06's `FIRST_CLEAR_DIAMONDS`, `DUNGEON_*`, `INBOX_EXPIRY_DAYS`, shop rows. Quest diamond amounts live only in the quest rows' `reward_amount` (no `QUEST_*` reward constants, issues #55 and #244). `REQUIRED_CONSTANTS` in the exporter is the union; acceptance criterion 4 pins the C# `Constants` class to it.
 
 ## 5. Table schemas
 
@@ -184,12 +191,13 @@ FISH_BOARD_W int S            FISH_BOARD_H int S           FISH_MAX_LVL0 int S
 FISH_MERGE_COINS_PCT double S FISH_BOARD_DPS_FACTOR double S
 ATTACK_PROGRESS_UNIT int I    CRIT_DMG_BASE double S       MP_POOL0 double S
 MP_REGEN0 double S            BOSS_ROCK_CANDY_P double S   FIRST_CLEAR_DIAMONDS int I
-QUEST_DAILY_DIAMONDS int S    QUEST_DAILY_BONUS_5 int S    QUEST_DAILY_BONUS_8 int S
-QUEST_WEEKLY_DIAMONDS int S   INBOX_EXPIRY_DAYS int S      DAILY_GIFT_WEAPON_TICKETS int S
-LOGIN_DIAMONDS int I
+INBOX_EXPIRY_DAYS int S       DAILY_GIFT_WEAPON_TICKETS int S  LOGIN_DIAMONDS int I
+LIMIT_BREAK_RANKS int S       REF_DAILIES_DONE int S       REF_NEW_BOSSES int S
 ```
 
-Range rules: every `*_TICKS`, `TICK_HZ`, `KILLS_PER_STAGE`, `BOSS_EVERY`, `CHAPTER_WIDTH`, `STAGE_CAP`, `TAP_ZAP_MAX_PER_SEC`, `DAY_SECONDS`, `OFFLINE_MIN_S`, `*_SLOTS`, `FISH_BOARD_*`, `FISH_MAX_LVL0`, `ATTACK_PROGRESS_UNIT` are `> 0`; `SPAWN_DELAY_TICKS >= 0`; `BASE_ATK`, `BASE_HP`, `BOSS_HP_MULT`, `BOSS_GOLD_MULT`, `OFFLINE_CAP_H`, `DUPE_LVL_BONUS`, `MP_POOL0`, `MP_REGEN0` are `> 0`; `TAP_ZAP_DMG_PCT`, `OFFLINE_RATE`, `FISH_MERGE_COINS_PCT`, `FISH_BOARD_DPS_FACTOR`, `BOSS_ROCK_CANDY_P` are `in [0, 1]`; `CRIT_DMG_BASE >= 1`; `TRAIN_BULK_STEPS` strictly increasing with first element 1; `FISH_BOARD_W * FISH_BOARD_H <= 64` (02 stores the board as a fixed array).
+`REF_DAILIES_DONE` (8) and `REF_NEW_BOSSES` (4) are 06 section 2's reference-day assumptions (paying daily missions completed, new boss stages first-cleared); only `E039` and the bots read them (issue #55). There are no `QUEST_DAILY_DIAMONDS`, `QUEST_DAILY_BONUS_5`, `QUEST_DAILY_BONUS_8` or `QUEST_WEEKLY_DIAMONDS` constants: the quest rows are the single source (issues #55, #244).
+
+Range rules: every `*_TICKS`, `TICK_HZ`, `KILLS_PER_STAGE`, `BOSS_EVERY`, `CHAPTER_WIDTH`, `STAGE_CAP`, `TAP_ZAP_MAX_PER_SEC`, `DAY_SECONDS`, `OFFLINE_MIN_S`, `*_SLOTS`, `FISH_BOARD_*`, `FISH_MAX_LVL0`, `ATTACK_PROGRESS_UNIT`, `LIMIT_BREAK_RANKS` are `> 0`; `SPAWN_DELAY_TICKS`, `REF_DAILIES_DONE`, `REF_NEW_BOSSES` are `>= 0`; `BASE_ATK`, `BASE_HP`, `BOSS_HP_MULT`, `BOSS_GOLD_MULT`, `OFFLINE_CAP_H`, `DUPE_LVL_BONUS`, `MP_POOL0`, `MP_REGEN0` are `> 0`; `TAP_ZAP_DMG_PCT`, `OFFLINE_RATE`, `FISH_MERGE_COINS_PCT`, `FISH_BOARD_DPS_FACTOR`, `BOSS_ROCK_CANDY_P` are `in [0, 1]`; `CRIT_DMG_BASE >= 1`; `TRAIN_BULK_STEPS` strictly increasing with first element 1; `FISH_BOARD_W * FISH_BOARD_H <= 64` (02 stores the board as a fixed array).
 
 Example row: `{"key": "BOSS_TIME_TICKS", "type": "int", "value": 300, "kind": "S"}`. What the tuning tool checks for the `S` rows is stated by the owning spec (03 section 8.6, 05's `fish_model.py`, 06 section 2); this spec only guarantees the value reaches them unchanged.
 
@@ -287,10 +295,12 @@ Per-rarity facts shared by every collectible kind. 04 section 6.1, 7.1 and 8.1 d
 | `skill_dps_pct` | double | `SKILL_DPS_PCT[r]`; non-decreasing. |
 | `companion_dps_pct` | double | `COMPANION_DPS_PCT[r]`; non-decreasing. |
 | `rune_stat_pct` | double | P1 default; present, non-decreasing. |
+| `limit_break_cost` | long | `LIMIT_BREAK_COST[r]`: Rock Candy for limit-break rank `k` is `limit_break_cost * k` (04 section 5.2); `>= 1`, non-decreasing (`E048`) (issue #37). |
+| `dupe_overflow_rock_candy` | long | `DUPE_OVERFLOW_ROCK_CANDY[r]`: Rock Candy granted per copy past the last `dupe_levels` threshold (04 section 5.3); `>= 0`, non-decreasing (issue #37). |
 | `override_tolerance` | double | Fraction a collectible row may deviate from the default (`0.10`). |
 | `name_key` | key | |
 
-Example: `{"id": "EPIC", "code": "E", "color": "#9B59B6", "shape_icon": "icon_rarity_diamond", "weapon_atk_pct": 120.0, "weapon_passive_pct": 4.0, "skill_dps_pct": 40.0, "companion_dps_pct": 64.0, "rune_stat_pct": 8.0, "override_tolerance": 0.1, "name_key": "rarity.epic.name"}`.
+Example: `{"id": "EPIC", "code": "E", "color": "#9B59B6", "shape_icon": "icon_rarity_diamond", "weapon_atk_pct": 120.0, "weapon_passive_pct": 4.0, "skill_dps_pct": 40.0, "companion_dps_pct": 64.0, "rune_stat_pct": 8.0, "limit_break_cost": 40, "dupe_overflow_rock_candy": 5, "override_tolerance": 0.1, "name_key": "rarity.epic.name"}`.
 
 ### 5.9 `weapons` (30 rows)
 
@@ -397,6 +407,8 @@ The rate table per level, 04 section 4. Rows are generated in the sheet from the
 
 Cross-row rules: `rate_l` and `rate_m` identical across all levels of a banner within 1e-12 (`E037`: published odds never change with level, 04 principle 1); `rate_c` non-increasing and `rate_r`, `rate_e` non-decreasing in level (`E048`).
 
+`exp_required` (`BANNER_LVL_EXP`) is retuned from the per-banner pull cadence the tool computes from 06's income and 03's bot policy, so that weapon banner level 4 lands in days 20-35; the threshold values in this section are placeholders pending that tool run (04, issue #38).
+
 Example row: `{"banner": "WEAPON", "level": 4, "exp_required": 300, "rates": {"COMMON": 0.54, "RARE": 0.316, "EPIC": 0.114, "LEGENDARY": 0.025, "MYTHIC": 0.005}}`.
 
 ### 5.15 `dupe_levels` (10 rows)
@@ -406,7 +418,7 @@ Example row: `{"banner": "WEAPON", "level": 4, "exp_required": 300, "rates": {"C
 | `level` | int | Key. Exactly `1..N` (`E060`). |
 | `cum_copies` | int | `DUPE_LVL_CUM`. Level 1 must be `1` (`E061`); strictly increasing (`E031`). |
 
-`DUPE_LVL_BONUS` is in `constants`; `ContentDb.LevelMult(level) = 1 + DUPE_LVL_BONUS * (level - 1)`. Limit breaks past level 10 (04 section 5) use `constants.LIMIT_BREAK_*` rows once 04 settles their names; they are not in this spec's required list yet (Open question 3).
+`DUPE_LVL_BONUS` is in `constants`; `ContentDb.LevelMult(level) = 1 + DUPE_LVL_BONUS * (level - 1)`. Limit breaks (04 section 5.2) read `constants.LIMIT_BREAK_RANKS` and `rarities.limit_break_cost`; copies past the last row convert at `rarities.dupe_overflow_rock_candy` (04 section 5.3) (issue #37).
 
 ### 5.16 `awakening` (5 rows)
 
@@ -450,7 +462,7 @@ A one-row rule table rather than a per-level table: hero level is unbounded and 
 | `max_level` | int | `>= 1`. |
 | `cost0` | double | `RES_COST0`; `> 0`. |
 | `cost_g` | double | `RES_COST_G`; `> 1`. |
-| `unlock_awaken_rank` | int | `>= 0`; `1` for every MVP node (03: locked before rank 1). |
+| `unlock_awaken_rank` | int | `>= 0`; `1` for every MVP node (03: locked before rank 1). Must be `>= feature_unlocks[research].threshold` (`E063`): a node never opens before the Research screen. |
 | `layout_row`, `layout_col` | int | Unique pair (`E046`); drawn by `SCR_RESEARCH`. |
 | `tier` | enum(Tier) | |
 | `name_key`, `desc_key` | key | |
@@ -467,10 +479,13 @@ Example: `{"id": "res_fish_cap", "effect": "FISH_CAP", "effect_per_level": 1.0, 
 | `level` | int | Key. Exactly `1..N` (`E060`); `N >= FISH_MAX_LVL0 + max research cap` (`E038`). |
 | `discovery_coins` | long | `FISH_DISCOVERY_COINS[n]`; strictly increasing (`E031`). Sheet formula `10 * 2^(n-1)`. |
 | `missile_pct` | double | `FISH_MISSILE_PCT[n]`; strictly increasing. Sheet formula `5 * 1.5^(n-1)`. |
-| `sprite` | asset | |
+| `sprite` | asset | MVP art covers 12 distinct fish sprites plus a crown overlay (07); higher levels reuse a lower level's sprite with a `tint` (issue #48). |
+| `tint` | color? | Empty when the row has its own sprite; set when `sprite` repeats a lower row's value (`W013`). |
 | `name_key` | key | "Guppy", "Koi"... |
 
-Derived at build: `MergeCoins = discovery_coins * FISH_MERGE_COINS_PCT` as an unrounded `double` (no rounding, no minimum; the UI floors the display, issue #16), `BoardDpsPct = FISH_BOARD_DPS_FACTOR * missile_pct`. Example: `{"level": 5, "discovery_coins": 160, "missile_pct": 25.3125, "sprite": "spr_fish_05", "name_key": "fish.05.name"}`.
+Warning `W013`: a reachable fish level (`<= FISH_MAX_LVL0 + research[FISH_CAP].effect_per_level * max_level`) reuses a lower level's `sprite` with no `tint`, i.e. content can exceed the art set (issue #48).
+
+Derived at build: `MergeCoins = discovery_coins * FISH_MERGE_COINS_PCT` as an unrounded `double` (no rounding, no minimum; the UI floors the display, issue #16), `BoardDpsPct = FISH_BOARD_DPS_FACTOR * missile_pct`. Example: `{"level": 5, "discovery_coins": 160, "missile_pct": 25.3125, "sprite": "spr_fish_05", "tint": null, "name_key": "fish.05.name"}`.
 
 ### 5.20 `tank` (1 row)
 
@@ -494,15 +509,16 @@ Same schema, two tabs, because 06 resets them on different keys and `SCR_QUESTS`
 | `target` | long | `>= 1`. |
 | `reward_currency` | enum(Currency) | |
 | `reward_amount` | long | `>= 1`; `0` allowed only for goal `LOGIN` (`d_login` is a counting row that pays nothing, issue #20). |
-| `budgeted` | bool | `true` for rows 06 section 2 counts in the diamond budget (reference day); read only by `E039` (issue #20). |
 | `sort_order` | int | Unique (`E046`). |
 | `tier` | enum(Tier) | `d_watch_ad` is `P1`. |
 | `name_key` | key | |
 | `icon` | asset | |
 
-Sum rule (`E039`, on `quests_daily` and `quests_weekly`), reproducing 06 section 2's reference-day arithmetic (issue #20): `LOGIN_DIAMONDS`, plus `reward_amount` over `quests_daily` rows with `reward_currency = DIAMOND`, `budgeted = true` and `tier <= MVP` (the bonus rows included), plus the same sum over `quests_weekly` divided by 7, plus `FIRST_CLEAR_DIAMONDS` times the reference day's new boss stages (4, 06 section 2), must land within 10% of `DIAMONDS_PER_DAY_F2P`. Achievements and the tutorial grant are excluded. This rule only catches a sheet edit that silently breaks the budget.
+The quest rows are the only home of quest reward amounts, bonus payouts included (`d_bonus_5`, `d_bonus_8` are `DAILIES_COMPLETED` rows; issues #55, #244). Rule `E064`: `quests_daily` has at least one `DAILIES_COMPLETED` row with `tier <= MVP`, and every such row's `target` is at most the number of daily rows (`missing or unreachable daily bonus rows`).
 
-Example: `{"id": "d_merge", "goal": "MERGE_FISH", "filter": null, "target": 15, "reward_currency": "DIAMOND", "reward_amount": 20, "budgeted": true, "sort_order": 8, "tier": "MVP", "name_key": "quest.d_merge.name", "icon": "icon_quest_merge"}`.
+Sum rule (`E039`, on `quests_daily` and `quests_weekly`), recomputing 06 section 2's reference day from the rows (issues #20, #55): over rows with `reward_currency = DIAMOND` and `tier <= MVP`, the sum of `LOGIN_DIAMONDS`; `REF_DAILIES_DONE` times the mean `reward_amount` of the paying daily missions (`reward_amount > 0`, goal not `DAILIES_COMPLETED`); `reward_amount` of every `DAILIES_COMPLETED` row whose `target <= REF_DAILIES_DONE`; the `quests_weekly` sum divided by 7; and `FIRST_CLEAR_DIAMONDS * REF_NEW_BOSSES`, must land within 10% of `DIAMONDS_PER_DAY_F2P`. Achievements and the tutorial grant are excluded. This rule only catches a sheet edit that silently breaks the budget.
+
+Example: `{"id": "d_merge", "goal": "MERGE_FISH", "filter": null, "target": 15, "reward_currency": "DIAMOND", "reward_amount": 20, "sort_order": 8, "tier": "MVP", "name_key": "quest.d_merge.name", "icon": "icon_quest_merge"}`.
 
 ### 5.23 `achievements`
 
@@ -512,7 +528,7 @@ Example: `{"id": "d_merge", "goal": "MERGE_FISH", "filter": null, "target": 15, 
 | `ladder` | id | Groups rungs; 06 section 5.4 ladders. |
 | `rung` | int | Exactly `1..N` within a ladder (`E060`). |
 | `goal` | enum(QuestGoal) | Same for every rung of a ladder (`E056`). |
-| `target` | long | Strictly increasing within a ladder (`E031`). |
+| `target` | long | Strictly increasing within a ladder (`E031`). For goals `OWN_WEAPONS`, `OWN_SKILLS`, `OWN_COMPANIONS`, strictly less than the row count of `weapons`, `skills`, `companions` with `tier <= MVP` (`E065`): a count-owned reward never equals completing the pool (00 pillar 4, issue #44). |
 | `reward_currency` | enum(Currency) | |
 | `reward_amount` | long | `>= 1`. |
 | `tier` | enum(Tier) | |
@@ -605,15 +621,16 @@ Derived at build: `TotalAmount = base_amount + floor(base_amount * bonus_pct)`. 
 
 | Column | Type | Constraint |
 |---|---|---|
-| `id` | id | Key. Saves record completed ids (02), so ids are permanent. |
+| `id` | id | Key. Permanent. The save stores the step index `Tutorial.Step` (02, advanced by 01's `SetTutorialStep`), not ids, so rows are only ever appended (B5) and `TUTORIAL_DONE` is the row count (issue #46). |
 | `order` | int | Exactly `1..N` (`E060`). |
 | `trigger` | enum(TutorialTrigger) | |
 | `trigger_value` | string? | Stage for `STAGE_REACHED`, screen id for `SCREEN_OPENED`; empty otherwise (`E054`). |
 | `screen` | string | `SCR_*` id from 00 section 5.3 (`E021` against the screen list the exporter holds). |
 | `highlight` | string? | Element id in the screen prefab (07). |
 | `text_key` | key | |
-| `expect_command` | string? | Command name that completes the step (`ReleaseFish`); empty = tap to continue. |
-| `grants` | grantlist? | `tut_welcome` carries `DIAMOND:1500` (`TUTORIAL_DIAMONDS`) and `WEAPON:weapon_c_01:1` (`TUTORIAL_WEAPON_ID`). |
+| `expect_event` | string? | Sim event name (00/01 event vocabulary, e.g. `FishMerged`, `EnemyKilled`) the overlay waits for; empty = tap to continue (issue #46). |
+| `expect_count` | int? | How many `expect_event` occurrences complete the step; required with `expect_event`, empty otherwise (`E054`); `>= 1`. |
+| `grants` | grantlist? | `tut_welcome` carries `DIAMOND:1500` (`TUTORIAL_DIAMONDS`) and the starter weapon `WEAPON:weapon_c_01:1` (`TUTORIAL_WEAPON_ID`), so collection screens are never empty (issue #46). |
 | `skippable` | bool | |
 | `tier` | enum(Tier) | |
 
@@ -625,7 +642,7 @@ Rule `E062`: exactly one step has `trigger = PROFILE_CREATED` and it is `order =
 |---|---|---|
 | `key` | key | Key. |
 | `en` | string | Required, non-empty. |
-| `ja`, `ko`, `zh_hans` | string? | Empty = fall back to `en` at runtime and warning `W020`; `E073` for a locale listed in `meta.ship_locales`. |
+| `ja`, `ko`, `zh_hans` | string? | Empty = fall back to `en` at runtime and warning `W020`; `E073` for a locale listed in `meta.ship_locales`. Column `zh_hans` is locale `zh-Hans` (section 3.3). `ja` is kept fully translated even though MVP ships `en` only, so the pipeline always exercises a real second locale (issue #57). |
 | `max_chars` | int | Length budget at 1.3x font scale (07 section 11); every locale's rendered length `<= max_chars` (`E074`). `0` = unbudgeted (long body text). |
 | `plural` | bool | `true` when the text uses ICU `{n, plural, ...}`; the exporter parses the ICU message and requires `one` and `other` branches for `en` (`E075`). |
 | `#context` | note | Where it appears; for translators. Exported to the translator CSV, not to JSON. |
@@ -653,8 +670,41 @@ Every table with a `tier` column is filtered at build: `ContentDb.Build(dtos, Ti
 | `content_version` | string | `YYYY.MM.DD` or `YYYY.MM.DD.N` (section 6.3). Required. |
 | `min_client_version` | string | Semver of the oldest client that can load this content (`1.2.0`). Required. |
 | `source_revision` | string | Sheet revision or date plus initials; bumped by the author on every export so two different sheets never produce the same manifest. Required. |
-| `ship_locales` | string | Comma list of locales that must be complete (`en,ja`). |
+| `ship_locales` | string | Comma list of locales that must be complete. Shipped MVP meta: `en` (soft launch PH/CA/NZ is English-only); CI fixtures use `en,ja` (acceptance 14) (issue #57). |
 | `notes` | string | Free text, lands in the manifest for the release ticket. |
+
+### 5.34 `feature_unlocks`
+
+One gate per feature, read both by sim rejections (`ResearchLocked`, `DUNGEON_LOCKED`, ...) and by the client's Locked states, so they cannot disagree (issue #45). `ContentDb.IsUnlocked(feature, state)` is the single evaluator.
+
+| Column | Type | Constraint |
+|---|---|---|
+| `feature` | id | Key. MVP rows: `research`, `companions`, `quests`, `dungeons`, `shop`. |
+| `condition` | enum(FeatureCondition) | `STAGE_HIGHEST`: `Progress.HighestCleared >= threshold`; `AWAKEN_RANK`: `Hero.AwakenRank >= threshold`; `ALWAYS`: never locked. |
+| `threshold` | int? | Required for `STAGE_HIGHEST` and `AWAKEN_RANK` (`>= 1`), empty for `ALWAYS` (`E054`). |
+| `screen` | string | `SCR_*` id the gate locks (`E021` against `SCREEN_IDS`). |
+| `locked_text_key` | key? | "Unlocks at ..." text; empty for `ALWAYS`. |
+| `tier` | enum(Tier) | |
+
+MVP seed: `research` `AWAKEN_RANK` 1 (00 decision 11), `companions` `ALWAYS` (04: slot 1 open from the start), `quests` `STAGE_HIGHEST` 10, `dungeons` `STAGE_HIGHEST` = `DUNGEON_UNLOCK_STAGE` (30), `shop` `ALWAYS` (the Shop is never locked). Rule `E063`: `feature_unlocks[shop].condition = ALWAYS`; every `research.unlock_awaken_rank >= feature_unlocks[research].threshold`; every MVP `dungeons.unlock_stage >= feature_unlocks[dungeons].threshold`.
+
+### 5.35 `awakening_targets`
+
+The Awakening cadence target as data, read by `power_curve_model.py` (03) and the bot acceptance sweep (06 AC 18, 10) instead of per-spec day numbers (issue #43).
+
+| Column | Type | Constraint |
+|---|---|---|
+| `rank` | int | Key. Exactly the `awakening` ranks `1..N` (`E060`, `E034` against `awakening`). |
+| `max_days_after_gate` | int | `>= 0`. Rank `k` must be affordable (Rock Candy) within this many days of the day the bot first reaches `awakening[k].stage_gate`. MVP: `2` for every rank. |
+
+### 5.36 `plausibility_stage_bound` (generated)
+
+The whale stage curve 08's `STAGE_VS_TIME` check multiplies by `STAGE_BOUND_MULT` (issue #60). Not authored in the Sheet: `HeroCat.Bots compare --bots whale --seeds 1-20 --days 60` writes `content_src/plausibility_stage_bound.csv` (p95 `HighestCleared` over seeds per day; 10 owns the verb and the CI drift check), and `pull` never touches it. It is regenerated in the same PR as any sim-affecting content change (section 12 rule 3); no sim or bot code reads it, so one regeneration converges.
+
+| Column | Type | Constraint |
+|---|---|---|
+| `day` | int | Key. Exactly `1..60` (`E060`). Days past the last row use the last row. |
+| `stage` | int | `>= 1`; non-decreasing (`E048`). |
 
 ## 6. JSON layout, manifest and versioning
 
