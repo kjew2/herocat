@@ -29,10 +29,23 @@ step() { printf '\n== %s\n' "$1"; }
 
 step "Content: exporter tests, and content_src builds to content/ (and the Sim DTOs) with no drift"
 python3 tools/test_export_content.py
+python3 tools/test_content.py
+python3 tools/test_power_curve_model.py
 python3 tools/export_content.py check
 
 step "Tools: fish_model.py S-constant checks (05 section 9)"
 python3 tools/fish_model.py --quiet
+
+# Report-only: several of 03 section 8.6's S-constant bands miss under the current content (layer floors, walls,
+# Awakening cadence, ...). Retuning is the user's balance call; make this a hard gate once the checks pass.
+POWER_CURVE_FAILED=0
+if [ "$FAST" -eq 0 ]; then
+  step "Tools: power_curve_model.py --check, 20-seed sweep and S-constant checks (03 section 8.6; report-only)"
+  if ! python3 tools/power_curve_model.py --check --quiet; then
+    POWER_CURVE_FAILED=1
+    printf '\nWARNING: report-only step failed (power_curve_model.py S-constant bands, balance call pending). Not a full pass.\n'
+  fi
+fi
 
 step "Clock purity: no clock reads in HeroCat.Sim, only ServerClock.cs/SessionRunner.cs in HeroCat.Runtime (specs/02 AC 18)"
 python3 tools/check_clock_apis.py --self-test
@@ -46,6 +59,7 @@ python3 .github/scripts/test_android_release.py
 
 if [ "$DOTNET" -eq 0 ]; then
   printf '\nSkipped .NET checks (--no-dotnet). Not a full pass.\n'
+  [ "$POWER_CURVE_FAILED" -eq 1 ] && printf 'Report-only: power_curve_model.py --check FAILED (balance call pending).\n'
   exit 0
 fi
 
@@ -105,8 +119,13 @@ else
   soft $BOTS golden --check
 fi
 
+if [ "$POWER_CURVE_FAILED" -eq 1 ]; then
+  printf '\nHard checks passed; report-only power_curve_model.py --check FAILED (03 section 8.6 bands, balance call pending). Not a full pass.\n'
+fi
 if [ "$REPORT_ONLY_FAILED" -eq 1 ]; then
   printf '\nHard checks passed; report-only checks FAILED (acceptance/golden, M0 rewrite). Not a full pass.\n'
+elif [ "$POWER_CURVE_FAILED" -eq 1 ]; then
+  :
 elif [ "$REWRITE_REPORT_ONLY" -eq 1 ] && [ "$FAST" -eq 0 ]; then
   printf '\nAll checks passed (acceptance and golden are report-only during the M0 rewrite).\n'
 else
