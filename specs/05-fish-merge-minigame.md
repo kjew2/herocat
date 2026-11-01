@@ -1,6 +1,6 @@
 ## 05 - Fish Merge Minigame
 
-This spec owns the bottom half of `SCR_MAIN`: the `FishBoard` grid and its cells, the `Fish` data per level, the `MagicTank` that produces level-1 fish on a tick-driven timer, the `ReleaseFish` / `MergeFish` / `DiscardFish` commands and their events, Fish Coin income from discovery and merges, the fish missiles that feed damage into 03's tick loop, the passive `FISH_BOARD_DPS_PCT`, the whole touch interaction model, the throughput math, `tools/fish_model.py`, persistence and offline behaviour, edge cases and analytics. Research nodes that upgrade the tank and the level cap are priced in 03 section 6; this spec says what they do.
+This spec owns the bottom half of `SCR_MAIN`: the `FishBoard` grid and its cells, the `Fish` data per level, the `MagicTank` that produces level-1 fish on a tick-driven timer, the `ReleaseFish` / `MergeFish` / `DiscardFish` / `MoveFish` commands and their events, Fish Coin income from discovery and merges, the fish missiles that feed damage into 03's tick loop, the passive `FISH_BOARD_DPS_PCT`, the whole touch interaction model, the throughput math, `tools/fish_model.py`, persistence and offline behaviour, edge cases and analytics. Research nodes that upgrade the tank and the level cap are priced in 03 section 6; this spec says what they do.
 
 Tiers covered: M0 (board, tank, release, merge, discard, discovery, missiles, passive DPS, merge-all and release-max buttons), MVP (Research upgrades, analytics, haptics), P1 (Auto Merge, tank level upgrades).
 
@@ -371,7 +371,7 @@ All of these except `FishMissileHit` (03's) are in 00 section 5.1's fish group; 
 
 ## 12. Determinism rules
 
-1. `fish_spawn` is drawn only in a successful `ReleaseFish`, exactly once, and `fish_spawn.Counter == Stats.FishReleased` is a `Validate()` invariant (02).
+1. `fish_spawn` is drawn only in a successful `ReleaseFish`, exactly once (`MoveFish`, `MergeFish`, `DiscardFish` and every rejection draw nothing), and `fish_spawn.Counter == Stats.FishReleased` is a `Validate()` invariant (02).
 2. The k-th empty cell is found by a row-major scan; no hash sets, no platform-dependent iteration order.
 3. `MergeAll` order is fixed by section 6.1; `ReleaseMax` is a loop of `ReleaseFish`.
 4. Coins and missile values come from the `fish_levels` table rows, never recomputed with `Math.Pow`; `FISH_DISCOVERY_COINS` doubling is pre-evaluated by the exporter (09).
@@ -391,6 +391,8 @@ This section owns these events' fields (issue #245); every event also carries 02
 | `fish_discard` | `level`, `coins`, `boardOccupancyBefore` | per `DiscardFish` |
 | `fish_board_snapshot` | `cells[]`, `fishBoardDpsPct`, `fishMult`, `tankCap`, `tankRefillS`, `fishMaxLvl`, `autoMerge`, and session totals `releases`, `merges`, `discoveries`, `coinsEarned`, `activeSec` | Runtime, at session end (replaces the former `fish_session`; throughput for `tools/fish_model.py`; issue #11) |
 | `currency_changed` | 06 section 13, reasons `FISH_DISCOVERY`, `FISH_MERGE` | per wallet delta |
+
+`MoveFish` has no analytics event: it is a cosmetic reposition (section 4.5) and `fish_board_snapshot` already records where fish end up.
 
 Questions the dashboard should answer (10): share of sessions with at least one merge, merges per active minute distribution (attentive vs lazy in the wild), day index of first level-10 fish, `fishMult` percentile bands at day 7 versus the tool's x12-x25, discard rate, jam rate.
 

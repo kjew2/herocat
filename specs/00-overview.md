@@ -451,7 +451,7 @@ These were open or contradictory across the writer-produced specs and are now se
 19. **Packages are diamonds on a delivery schedule only** (starter 600; weekly 300 + 100/day; monthly 1000 + 100/day). No ticket or collectible bundles, so decision 7 stays strict. Reopen only with soft-launch revenue data.
 20. **Reason enum completed** (contract 6). `TUTORIAL` replaces 01's and 06's earlier use of `ADMIN` for the tutorial grant; both were patched.
 21. **Week key** is `floor((dayKey - 4) / 7)`, Monday 00:00 UTC. 06 was patched from an off-by-one form.
-22. **`MoveFish` is accepted** (MVP): cosmetic reposition of a fish to an empty cell, consumes no stream, emits `FishMoved`. 05 should add the command and its rejection reasons.
+22. **`MoveFish` is accepted** (MVP): cosmetic reposition of a fish to an empty cell, consumes no stream, emits `FishMoved`. 05 section 4.5 owns the command and its rejection reasons (`BAD_CELL`, `EMPTY_CELL`, `CELL_OCCUPIED`, `BOARD_LOCKED`; issue #166).
 23. **Content versioning** is `YYYY.MM.DD[.N]`; hot-apply allowlist as in contract 3; `hero_levels` and `tank` are one-row rule tables; `progress_targets` is a content table (09).
 24. **Enemy skins hash `(stage, killIndex)`** rather than consuming a sixth stream (09 section 5.6).
 25. **Bot harness epoch** is a Monday 09:00 UTC with two 60-minute sessions per day, so both weekly keys and the UTC rollover are exercised in a 30-day run; gap lengths alternate so that on alternate days the evening session runs across 00:00 UTC and the in-session rollover is exercised too (amended by decision 61, issue #29); diamond income defaults to the sim's own quests, with a flat `DIAMONDS_PER_DAY_F2P` mode kept only for parity with `power_curve_model.py` (10).
@@ -460,7 +460,7 @@ These were open or contradictory across the writer-produced specs and are now se
 28. **`IDEMPOTENCY_TTL_H = 24`**; a pending summon older than that executes fresh rather than replaying (02, 08).
 29. **Soft-launch markets**: Philippines and Canada, with a New Zealand technical launch (10). Belgium paid-summon handling is deferred to soft launch (08 open question 5).
 
-Known stale spots left for the next pass rather than patched blind: early-day stage numbers in 06 and 07 worked examples (written against day 1 = stage 90); 05 lacks `MoveFish` (decision 22); the Fish Coin Dungeon reward `50 * f` may overshoot the 25-50% income share band and `tools/fish_model.py` must decide between it and `50 * f^0.7` (06 open question).
+Known stale spots left for the next pass rather than patched blind: early-day stage numbers in 06 and 07 worked examples (written against day 1 = stage 90); the Fish Coin Dungeon reward `50 * f` may overshoot the 25-50% income share band and `tools/fish_model.py` must decide between it and `50 * f^0.7` (06 open question).
 
 ### 12.2 Decisions made after the spec rewrite
 
