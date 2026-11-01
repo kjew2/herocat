@@ -15,8 +15,8 @@ namespace HeroCat.Sim
     /// <see cref="DrainEvents"/> and <see cref="GetSnapshot"/>. Everything observable is a pure function of
     /// (ContentDb, genesis GameState, command log). Single-threaded; not thread-safe.
     ///
-    /// M0 skeleton: Advance ticks time forward (virtual server clock, day rollover). The stage loop, training, hero level,
-    /// summons, fish board and offline catch-up are added by their own issues (TODO(#81), #83, #84, #91, #99, #108).
+    /// Advance ticks time forward (virtual server clock, day rollover) and the stage combat loop (Simulation.Combat.cs).
+    /// Summons, fish board and offline catch-up are added by their own issues (TODO(#91), #99, #108).
     /// </summary>
     public sealed partial class Simulation : IEventEmitter
     {
@@ -71,6 +71,7 @@ namespace HeroCat.Sim
                 cmd = cmd with { IssuedAtTick = State.Time.Tick };
                 _log.Append(cmd);
                 var r = cmd.Execute(this);
+                if (r.Ok) MarkDpsDirty();   // 03 section 7.3: DPS recomputed at most once per command, whatever it changed
                 RefreshSnapshot();
                 return r;
             }
@@ -149,8 +150,8 @@ namespace HeroCat.Sim
                 EnsureDay(VirtualNowServerSeconds);
                 RecomputeNextDayTick();
             }
-            TickTank();   // 05 section 3: before combat, in every Combat.Mode
-            // TODO(#81): the stage combat loop (spawn, hit, crit, boss, wall).
+            TickTank();     // 05 section 3: before combat, in every Combat.Mode
+            TickCombat();   // 03 section 2.1 (Simulation.Combat.cs)
         }
 
         // ================================================================================================ events
@@ -165,12 +166,7 @@ namespace HeroCat.Sim
             {
                 if (e is EnemyKilled k)
                 {
-                    var b = OpenBatch(k.Stage);
-                    b.Count += 1;
-                    b.GoldTotal += k.Gold;
-                    b.ExpTotal += k.Exp;
-                    b.ToStage = k.Stage;
-                    b.Tick = e.Tick;
+                    FoldKill(k.Stage, k.Gold, k.Exp);
                     return;
                 }
                 if (e is CurrencyChanged cc && cc.Reason == CurrencyReason.KILL)
@@ -197,7 +193,7 @@ namespace HeroCat.Sim
             var s = State;
             var f = s.Combat.Fight;
             var k = Db.Constants;
-            _snapshot = new Snapshot(_damage, 0)
+            _snapshot = new Snapshot(_damage, _damageCount)
             {
                 Tick = s.Time.Tick,
                 Stage = s.Combat.Stage,
@@ -207,7 +203,7 @@ namespace HeroCat.Sim
                 BossTicksLeft = f != null ? f.BossTicksLeft : 0,
                 EnemyHp = f != null ? f.EnemyHp : 0,
                 EnemyHpMax = f != null ? f.EnemyMaxHp : 0,
-                HeroDps = 0,
+                HeroDps = Query.RatedDps,
                 Gold = s.Wallet.Gold,
                 Diamonds = s.Wallet.Diamond,
                 FishCoin = s.Wallet.FishCoin,

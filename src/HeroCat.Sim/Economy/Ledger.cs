@@ -27,12 +27,14 @@ namespace HeroCat.Sim.Economy
             double next = before + amount;
             if (next < 0 || double.IsInfinity(next)) return false;
             if (c == Currency.HERO_EXP)
-                s.Hero.Exp = next;   // TODO(#84): CheckHeroLevel() runs here (03 section 5.2)
+                s.Hero.Exp = next;   // CheckHeroLevel runs below, after the CurrencyChanged (03 section 5.2)
             else
                 s.Wallet.Set(c, next);
 
             Count(s.Stats, c, amount, reason);
-            events?.Emit(new CurrencyChanged(c, amount, next, reason));
+            if (reason == CurrencyReason.KILL && events is Simulation folding && folding.CoalescingKills) folding.FoldKillCurrency();   // never allocated (01 2.3)
+            else events?.Emit(new CurrencyChanged(c, amount, next, reason));
+            if (c == Currency.HERO_EXP && events is Simulation sim) sim.CheckHeroLevel();   // the one EXP path (03 section 5.2)
             return true;
         }
 

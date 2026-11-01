@@ -131,7 +131,8 @@ namespace HeroCat.Sim.Tests
             Assert.That(sim.VirtualNowServerSeconds, Is.EqualTo(T0 + 86400));
             sim.Advance(36000);
             Assert.That(sim.DrainEvents().OfType<DayRolledOver>().Count(), Is.EqualTo(1));
-            Assert.That(sim.State.Wallet.Diamond, Is.EqualTo(1500 + 2 * TestContent.Db.Constants.LoginDiamonds));
+            sim.State.Stats.ClientDiamondsEarned.TryGetValue(CurrencyReason.FIRST_CLEAR, out long firstClears);   // boss first clears (03 2.6)
+            Assert.That(sim.State.Wallet.Diamond, Is.EqualTo(1500 + 2 * TestContent.Db.Constants.LoginDiamonds + firstClears));
         }
 
         [Test]
