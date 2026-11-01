@@ -32,3 +32,6 @@ unity/HeroCatClient/Assets/Resources/content.meta
 
 # Claude Code agent worktrees
 .claude/worktrees/
+
+# tools/*_model.py outputs
+tools/out/
