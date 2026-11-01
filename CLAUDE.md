@@ -36,6 +36,6 @@ This file is how lessons reach the next agent. When the user corrects you on som
 
 ## Lessons
 
-- There is no Unity client: the web client in `web/` is the app, and store builds will wrap it (`specs/00` section 7, decision 10). Keep the sim Unity-safe (netstandard2.1, C# 9) but do not add Unity code.
+- The product is a Unity app for iOS and Android; `web/` is a dev and playtest build, not shipped (`specs/00` section 7, decision 11). Keep the sim Unity-safe (netstandard2.1, C# 9).
 - Cloud sessions install the .NET 8 SDK and the wasm-tools workload through `.claude/hooks/session-start.sh`. If `dotnet` is missing, run that script with `CLAUDE_CODE_REMOTE=true`, then the full `./check.sh`. The browser test needs Playwright: run it with `NODE_PATH=$(npm root -g)` if `require('playwright')` fails.
 - Generated test data is large and not for reading. Never open, grep through or hand-edit `golden/` files: regenerate them through the bot CLI, never edit by hand.

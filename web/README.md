@@ -1,6 +1,6 @@
 # Browser prototype
 
-A playable, phone-sized UI for feel and balance testing, running the **real C# game core** (`src/HeroCat.Sim`) compiled to WebAssembly. This web client is the app: the store builds will wrap it (`specs/00` section 7, decision 10).
+A playable, phone-sized UI for feel and balance testing, running the **real C# game core** (`src/HeroCat.Sim`) compiled to WebAssembly. This is the development and playtest build, not the shipped app: the iOS and Android apps are a Unity client (`specs/00` section 7, decision 11).
 
 To play: `./play.sh` from the repo root (details in the root README, "Running the web prototype").
 

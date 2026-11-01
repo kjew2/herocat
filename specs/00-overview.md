@@ -22,7 +22,7 @@ P0 feature list:
 6. Idle earnings in-app, offline catch-up with cap, server-clock seam (local fake clock in prototype).
 7. Versioned local save with migrations.
 8. Headless bot harness that plays N days in seconds and emits the tuning table.
-9. Ugly-UI web client (`web/`, the C# sim through WebAssembly) exposing all of the above. The app-store build wraps the same web client (decision 10 in section 7).
+9. Ugly-UI Unity client for iOS and Android (`specs/07`) exposing all of the above; the phone apps are the product. The web client (`web/`, the C# sim through WebAssembly) stays as the development and playtest build and is not shipped to players (decision 11 in section 7).
 
 P1: gear substats and reroll/lock, pet banner, daily dungeon tickets, shard shop, rate-up banners, accounts, cloud save, receipt validation and IAP, rewarded ads, certified progress (server-verified), stage leaderboard, asynchronous PvP. The trust model that keeps these fair is `specs/10`; P0 builds only its cheap shapes (command log, state hash, schema fields).
 P2: rebirth/prestige, guilds, real-time PvP.
@@ -178,7 +178,7 @@ herocat/
     04-economy-sinks.md
     05-content-data-schema.md
     06-save-and-offline.md
-    07-client-unity-prototype.md   client screens and layout (Unity parts are history)
+    07-client-unity-prototype.md   Unity client for iOS and Android: screens, layout, build settings
     08-backend-seams.md
     09-test-harness-and-bots.md
     10-online-competitive.md
@@ -214,4 +214,4 @@ These were open or contradictory across the subagent-written specs and are now s
 8. **Constant ownership.** Names introduced by `04`/`05`/`03` are now rows in section 2. Until `specs/05` section 12 is done (Python models reading the JSON), the Python tools remain the place to change a number first.
 9. **Hero gacha replaces skill gacha.** The gacha pulls heroes (characters) instead of skills. Every number is unchanged: rates, pity, pool sizes, base DPS% and dupe levels carry over one for one, so `tools/` output and the bot targets are identical. In P0 a hero is a passive party bonus plus a cosmetic sprite on the combat screen (`specs/01` section 7.1); hero roles and active abilities are P1 ideas, not commitments. Identifiers were renamed (`gacha_skill` -> `gacha_hero`, `SKILL_*` -> `HERO_*`, `SkillId` -> `HeroId`, and so on).
 10. **Online and competitive play is P1, built on server verification, not a server sim.** Leaderboards, async PvP and IAP move from P2/unscheduled to P1. The engine stays on the device; the server replays segments of the command log to certify progress, owns time, gacha, the gem ledger and receipts, and issues every ranked profile's stream seeds at genesis (`specs/10` sections 2 to 4). A profile created offline is permanently unranked.
-10. **No Unity client; the web client is the app.** The repo started from the HeroCat prototype, which had a Unity client (`specs/07`, never opened in Unity, needs a Mac to build). It was not carried over: the web client in `web/` runs the real C# sim through WebAssembly and plays on a phone, and the store apps will wrap that build (a web-view wrapper such as Capacitor for iOS/Android, Tauri or Electron for desktop; the wrapper is still to be chosen). The sim keeps its Unity-safe constraints (netstandard2.1, C# 9, no reflection, no platform crypto) so a native client stays possible; mentions of Unity in other specs describe those constraints or the old client, and this decision wins over them.
+11. **Mobile first: a native Unity client for iOS and Android; the web client is a dev tool.** Decided by kj on 2026-11-01, replacing the earlier plan to ship the web client inside a web-view wrapper. The phone apps are the product and are built in Unity (`specs/07`). The web client in `web/` stays for fast playtesting, balance checks and CI (its WebAssembly build and browser test keep running in `check.sh`) but is not shipped to players. The Unity project was not carried over from MonStack 28aaa59 and still has to be restored or rebuilt; iOS builds need a Mac with Xcode and an Apple Developer account. The sim keeps its Unity-safe constraints (netstandard2.1, C# 9, no reflection, no platform crypto).

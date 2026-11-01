@@ -1,6 +1,6 @@
 # HeroCat - prototype specs
 
-A cat hero idle game. It starts from the Idle RNG prototype (MonStack commit 28aaa59) without its Unity client; the game content is still the original hero gacha and is to be re-themed.
+A cat hero idle game. It is mobile first: the product is a Unity app for iOS and Android, and the web client in `web/` is the development and playtest build. It starts from the Idle RNG prototype (MonStack commit 28aaa59), whose Unity client is not restored yet; the game content is still the original hero gacha and is to be re-themed.
 
 Mobile idle game in the Sword x Staff / Maple Idle mould: auto-combat pushes stages, stages drop currency, currency feeds parallel RNG upgrade systems, the player's job is deciding where to spend.
 
@@ -15,7 +15,7 @@ Start with `specs/00-overview.md`. It holds the canonical constants and the cont
 | `specs/04-economy-sinks.md` | Currencies, stat levels, gear drops/enhancement, class advance, daily sources |
 | `specs/05-content-data-schema.md` | Table schemas, sheet-to-JSON pipeline, validation, `ContentDb` API |
 | `specs/06-save-and-offline.md` | Save schema v1, migrations, offline catch-up, clock seam, integrity |
-| `specs/07-client-unity-prototype.md` | Client screens, view-models, layout, palette and event wiring (followed by the web client; the Unity parts are history) |
+| `specs/07-client-unity-prototype.md` | Unity client for iOS and Android: screens, view-models, layout, palette, event wiring, build settings (the web client follows the same screens) |
 | `specs/08-backend-seams.md` | `IClock` / `IGachaService` / `ISaveStore` contracts, local impls, future remote |
 | `specs/09-test-harness-and-bots.md` | Headless bot runner, acceptance table, determinism tests, CI |
 | `specs/10-online-competitive.md` | Trust model for accounts, IAP, leaderboards and async PvP: server-verified progress, genesis seeds, command log, fairness levers |

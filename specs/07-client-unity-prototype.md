@@ -1,6 +1,6 @@
 # 07 - Unity Client Prototype (ugly UI)
 
-> **Unity is not used in HeroCat** (`specs/00` section 7, decision 10). The Unity project this spec describes was not carried over. The screens, view-models, layout, palette, event wiring and frame-loop rules still apply: the web client in `web/` follows them. Read Unity-specific parts (project layout, MonoBehaviours, asmdefs, iOS player settings) as history.
+> **This is the client for the iOS and Android apps** (`specs/00` section 7, decision 11). The Unity project it describes is not in this repo yet: it was left out when HeroCat was copied from MonStack 28aaa59 and has to be restored or rebuilt. The web client in `web/` follows the same screens, view-models, layout, palette, event wiring and frame-loop rules, but it is a development and playtest build, not a shipped app.
 
 Scope: the P0 Unity client that exposes everything in `specs/00` section 1 on a phone. It is a thin shell over the pure C# `HeroCat.Sim` assembly (`specs/03`): the client ticks the sim, sends it commands, reads its state and query API for numbers, and drains its event outbox for feedback. No game rule lives in the client. Constants are referred to by their `specs/00` section 2 names and are read from `ContentDb` (`specs/05`); the client never holds a balance literal. Where this document disagrees with `specs/00`, `specs/00` wins; where it disagrees with `specs/03` on the sim API, `specs/03` wins and section 17 lists the known gaps.
 
