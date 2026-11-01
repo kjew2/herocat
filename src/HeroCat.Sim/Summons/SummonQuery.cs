@@ -11,7 +11,7 @@ namespace HeroCat.Sim.Summons
         string Id, Rarity Rarity, string NameKey, string Icon,
         bool Owned, int Copies, int Level, int LimitBreaks, int EffectiveLevel,
         int CopiesToNextLevel,                    // 0 at level 10
-        int NextLimitBreakCost,                   // Rock Candy; 0 until limit breaks land (MVP), when maxed or unowned
+        int NextLimitBreakCost,                   // Rock Candy; 0 when maxed or unowned
         double ValueNow, double ValueNextLevel,   // weapons: equipped pct; skills: dps_pct; after LevelMult (0 / level-1 value when unowned)
         double PassiveNow,                        // weapons only: passive pct after LevelMult; 0 otherwise
         bool Equipped, int? Slot,
@@ -182,8 +182,8 @@ namespace HeroCat.Sim.Summons
             double next = !owned ? baseValue * db.LevelMult(1) : level >= maxLevel ? now : baseValue * db.LevelMult(eff + 1);
             double passiveNow = owned && b == Banner.WEAPON && db.Weapons.TryGetValue(id, out var pw)
                 ? pw.PassivePct * PowerFormula.ItemLevelMult(db, item) : 0.0;
-            // TODO(#36): NextLimitBreakCost = LIMIT_BREAK_COST[r] * (LimitBreaks + 1) when the MVP LimitBreak command lands.
-            return new CollectibleVm(id, rarity, nameKey, icon, owned, copies, level, lb, eff, toNext, 0, now, next, passiveNow,
+            int lbCost = (int)CollectionRules.NextLimitBreakCost(db, b, col, id);   // 04 section 5.2
+            return new CollectibleVm(id, rarity, nameKey, icon, owned, copies, level, lb, eff, toNext, lbCost, now, next, passiveNow,
                                      equipped, slot, isNew);
         }
     }

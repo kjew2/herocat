@@ -1,5 +1,6 @@
 using HeroCat.Sim.Content;
 using HeroCat.Sim.State;
+using HeroCat.Sim.Summons;
 
 namespace HeroCat.Sim.Power
 {
@@ -87,6 +88,28 @@ namespace HeroCat.Sim.Power
 
         /// <summary>Bought level of the Research node with <paramref name="effect"/> (0 in M0 content).</summary>
         public int ResearchLevel(ResearchEffect effect) => PowerFormula.ResearchLevel(_db, _s, effect);
+
+        // ------------------------------------------------------------------------------------------- limit breaks (04 5.2)
+
+        /// <summary>Rock Candy LimitBreak(<paramref name="itemId"/>) would charge now; 0 when unknown, unowned or maxed.</summary>
+        public long NextLimitBreakCost(string itemId) =>
+            CollectionRules.TryKindOf(_db, itemId, out var kind)
+                ? CollectionRules.NextLimitBreakCost(_db, kind, CollectionRules.For(_s, kind), itemId)
+                : 0;
+
+        /// <summary>
+        /// RatedDps after one more limit break on <paramref name="itemId"/>, everything else unchanged; RatedDps itself when
+        /// no break is possible (unknown, unowned or maxed). Affordability is not checked. The bots rank by
+        /// <c>ln(after / RatedDps) / NextLimitBreakCost</c> (03 section 8.3 step 3; the log is theirs, the sim takes none).
+        /// Evaluated on a probe copy of the state, so it allocates; nothing here mutates.
+        /// </summary>
+        public double RatedDpsAfterLimitBreak(string itemId)
+        {
+            if (NextLimitBreakCost(itemId) <= 0 || !CollectionRules.TryKindOf(_db, itemId, out var kind)) return RatedDps;
+            var probe = StateCopy.DeepClone(_s);
+            CollectionRules.For(probe, kind).Items[itemId].LimitBreaks += 1;
+            return PowerFormula.Compute(_db, probe).RatedDps;
+        }
 
         // ------------------------------------------------------------------------------------------- training (03 5.1)
 

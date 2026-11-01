@@ -15,6 +15,7 @@ import content_fixtures as fx  # noqa: E402
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(REPO, "content_src")
+# The shipped content_version (meta.csv), read rather than hard-coded so a version bump does not break these tests.
 
 # 09 section 4: where every 00 section 6 entry lives, as (table, column). A constants row is ("constants", KEY).
 SECTION_4 = [

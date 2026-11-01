@@ -503,6 +503,10 @@
       "text": "Fish must be the same level"
     },
     {
+      "key": "reject.limit_break_capped",
+      "text": "Already at max limit break"
+    },
+    {
       "key": "reject.locked",
       "text": "Locked"
     },

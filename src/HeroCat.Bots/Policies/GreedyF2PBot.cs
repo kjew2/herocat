@@ -80,6 +80,44 @@ namespace HeroCat.Bots.Policies
             if (ctx.Sim.State.Offline.Pending != null) ctx.Apply(new ClaimOfflineReward());
         }
 
+        // ============================================================================================ step 3: Rock Candy -> limit breaks
+
+        /// <summary>
+        /// 03 section 8.3 step 3's BestLimitBreak: the affordable limit break (04 section 5.2) with the most ln(DPS) per Rock
+        /// Candy, or null when none is affordable or none adds DPS. Candidates in a fixed order (weapons then skills, each in
+        /// pool order); strict comparison, so ties keep the earlier one. Not called yet: step 3 also needs Awakening and its
+        /// 50-stage gate rule, TODO(#214).
+        /// </summary>
+        public static string BestLimitBreak(BotContext ctx, out double value) => BestLimitBreak(ctx.Content, ctx.State, ctx.Query, out value);
+
+        public static string BestLimitBreak(ContentDb db, GameState s, SimQuery q, out double value)
+        {
+            string best = null;
+            value = 0;
+            long candy = s.Wallet.RockCandy;
+            foreach (var kind in CollectionRules.LimitBreakKinds)
+            {
+                if (!db.Banners.ContainsKey(kind)) continue;
+                foreach (var id in SummonQuery.PoolIds(db, kind))
+                {
+                    long cost = q.NextLimitBreakCost(id);
+                    if (cost <= 0 || cost > candy) continue;
+                    double v = LimitBreakLnDpsPerCandy(q, id);
+                    if (v > value) { best = id; value = v; }
+                }
+            }
+            return best;
+        }
+
+        /// <summary>ln(RatedDps after / RatedDps now) / cost of one more limit break on <paramref name="id"/>; 0 when none is possible.</summary>
+        public static double LimitBreakLnDpsPerCandy(SimQuery q, string id)
+        {
+            long cost = q.NextLimitBreakCost(id);
+            double now = q.RatedDps;
+            if (cost <= 0 || !(now > 0)) return 0;
+            return Math.Log(q.RatedDpsAfterLimitBreak(id) / now) / cost;
+        }
+
         // ============================================================================================ step 1: gold -> Training
 
         /// <summary>

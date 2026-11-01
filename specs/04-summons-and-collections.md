@@ -192,7 +192,8 @@ Past level 10 a copy cannot raise the level. The reference game's answer is a li
 
 ```
 LimitBreak(itemId):                                         # command, from SCR_ITEM_DETAIL
-  item = col.Items[itemId]                     # absent key == not owned
+  if itemId is no weapon/skill/companion row:    return Reject(InvalidTarget, "UNKNOWN_ITEM")   # as EquipWeapon (issue #162)
+  item = col.Items[itemId]                     # col: the kind's collection; absent key (or Copies 0) == not owned
   if item is null:                               return Reject(NotOwned, "ITEM_NOT_OWNED")
   if item.LimitBreaks >= LIMIT_BREAK_RANKS (5):  return Reject(Capped, "LIMIT_BREAK_CAPPED")
   cost = LIMIT_BREAK_COST[rarity(itemId)] * (item.LimitBreaks + 1)   # rarities.limit_break_cost (09)
@@ -211,6 +212,8 @@ LimitBreak(itemId):                                         # command, from SCR_
 | M | 150 | 2250 |
 
 A limit break does not require level 10 first; it is a flat +1 effective level, which is what makes it useful on a level-1 Mythic weapon (+20% of 700% = +140% ATK for 150 candy). The bot spends them almost all on the equipped Mythic or Legendary weapon and the top two skills; when they start and how many it holds by day 30 is `power_curve_model.py` output, not a hand figure. They are the main reason the summon layers keep growing after the pools saturate (03 section 8.2), so `LIMIT_BREAK_COST` is an `S` constant that `power_curve_model.py` validates: the bot must buy at least one limit break a day from day 10, and limit breaks must stay under 60% of its Rock Candy spend over 30 days (Awakening must still happen). Limit-break repricing is a candidate lever for the day-14-to-30 wall (03 section 9); the cost values above stay placeholders until the tool has run and the lever is chosen (issue #36).
+
+Bot hook (issue #162): `Query.NextLimitBreakCost(itemId)` is the charge above (0 when unknown, unowned or maxed) and `Query.RatedDpsAfterLimitBreak(itemId)` is `RatedDps` with one more rank on that item; the bot ranks by `ln(after / RatedDps) / cost` and takes the log itself, since the sim never calls `Math.Log` (01 AC 1).
 
 Content home (issue #37): `LIMIT_BREAK_RANKS` is a scalar in 09's `constants`; `LIMIT_BREAK_COST[r]` is the per-rarity column `rarities.limit_break_cost` and `DUPE_OVERFLOW_ROCK_CANDY[r]` (section 5.3) is `rarities.dupe_overflow_rock_candy`. All three are in 09's `REQUIRED_CONSTANTS`.
 
