@@ -132,7 +132,7 @@ public readonly record struct ApplyResult(bool Ok, RejectCode Code, string? Reas
 }
 ```
 
-A reject is two-level (issue #11): `Code` is the category from this enum, and `Reason` is a stable key from the owning spec's closed reason list (for example 06's `DUNGEON_FLOOR_NOT_UNLOCKED` under `Locked`, 03's `StatAtCap` under `Capped`), localized as `reject.<reason>`. 01 owns the type; each owning spec owns its reason list, and its tests assert both values.
+A reject is two-level (issue #11): `Code` is the category from this enum, and `Reason` is a stable key from the owning spec's closed reason list (for example 06's `DUNGEON_FLOOR_NOT_UNLOCKED` under `Locked`, 03's `STAT_AT_CAP` under `Capped`), localized as `reject.<reason>`. 01 owns the type; each owning spec owns its reason list, and its tests assert both values.
 
 Concrete commands (`VerbNoun`, 00 section 5.1) and the events they emit. Full field lists are in the owning spec; this table fixes the inventory and the owning assembly path.
 
@@ -259,7 +259,7 @@ public sealed record InboxGrantPayload(string InboxItemId, GrantLine[] Lines, Cu
 public sealed record GrantLine(string Kind, string Id, long Amount);   // Kind: "currency" | "item"
 ```
 
-This payload is the only summon contract (issue #13); 04 and 08 use it. `ApplySummonResult` is the only summon mutator in both modes (issue #6): it adds items and Rock Candy overflow, sets pity and banner level/EXP, and performs the debit. In Local mode it rejects `CannotAfford` if `Debits` are not covered, subtracts them, and sets `summon_<banner>.Counter = StreamCounterAfter` (so 00 contract 2's `Counter == 3 * TotalPulls` holds and a replay of the logged command is exact). In Remote mode it applies `Debits`, then replaces those balances with `BalancesAfter`, because the server ledger wins (00 section 4); if the local result disagreed it emits the `summon_reconcile` analytics event.
+This payload is the only summon contract (issue #13); 04 and 08 use it. `ApplySummonResult` is the only summon mutator in both modes (issue #6): it adds items and Rock Candy overflow, sets pity and banner level/EXP, and performs the debit. In Local mode it rejects `CannotAfford` if `Debits` are not covered, subtracts them, and sets `summon_<banner>.Counter = StreamCounterAfter` (so 00 contract 2's `Counter == 3 * TotalPulls` holds and a replay of the logged command is exact). In Remote mode it applies `Debits`, then replaces those balances with `BalancesAfter`, because the server ledger wins (00 section 4); if the local result disagreed it emits the `summon_reconciled` analytics event.
 
 ### 2.6 Command log
 

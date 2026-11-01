@@ -728,7 +728,7 @@ The board on `SCR_MAIN` is the one touch-heavy surface. Behaviour, commands, eve
 | Backgrounded mid-drag | on resume the drag is cancelled and the fish snaps back; nothing was sent | |
 | Boss fight | board stays active (merging is how you burst a boss); the merge VFX missile is the visible payoff | |
 
-Merge-all order: lowest level first, left-to-right, top-to-bottom pairs, so the result is deterministic and the player can predict it; this order is 05's `MergeAll` contract. `[Release max]` and `[Merge all]` each send one sim command (`ReleaseMax`, `MergeAll`; issue #11); the view animates from the resulting events in the sim's order, `UI_RELEASE_MAX_ANIM_MS` / `UI_MERGE_ALL_ANIM_MS` apart. Fish rejections use 05's reasons (`TankEmpty`, `BoardFull`, `EmptyCell`, `LevelMismatch`, `FishAtLevelCap`, `BadArgument` for same or out-of-range cells) as `reject.<reason>` toasts.
+Merge-all order: lowest level first, left-to-right, top-to-bottom pairs, so the result is deterministic and the player can predict it; this order is 05's `MergeAll` contract. `[Release max]` and `[Merge all]` each send one sim command (`ReleaseMax`, `MergeAll`; issue #11); the view animates from the resulting events in the sim's order, `UI_RELEASE_MAX_ANIM_MS` / `UI_MERGE_ALL_ANIM_MS` apart. Fish rejections use 05's reasons (`TANK_EMPTY`, `BOARD_FULL`, `EMPTY_CELL`, `CELL_OCCUPIED`, `LEVEL_MISMATCH`, `FISH_AT_LEVEL_CAP`, `BAD_CELL` for same or out-of-range cells) as `reject.<reason>` toasts.
 
 Haptics: light on pick-up, medium on merge, success pattern on discovery, failure pattern on invalid drop. Sound: pick, drop, merge pitch rising with level (12 steps), discovery fanfare.
 

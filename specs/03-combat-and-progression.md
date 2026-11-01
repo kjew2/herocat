@@ -56,7 +56,7 @@ Tick():
   TickBuffs()                                                              # 9. ATK/gold buffs from companions and skills -= 1
 ```
 
-State field names and shapes are 02's (section 3.1, issue #7): `Time.Tick`, `Combat.*`, `Progress.*`, `Loadout.*`, `Stats.*`. Everything this loop reads or writes lives in the in-memory `GameState`, so `DeepClone` and replay are exact. The save drops only the transient fight state 02 section 3.3 lists (enemy HP, `Phase`, `SpawnTimer`, `AttackProgress`, `ActiveDots`, buffs, `PendingTaps`, `TapWindowTick`); it keeps `Combat.Boss`, `Combat.BossFailsOnStage`, `Combat.SelectedStage`, `Combat.Mp`, the skill and companion cooldowns and `Combat.MissileQueue`. On load the player faces a fresh mob and a `Pending` boss respawns as the boss.
+State field names and shapes are 02's (section 3.1, issue #7): `Time.Tick`, `Combat.*`, `Progress.*`, `Loadout.*`, `Stats.*`. Everything this loop reads or writes lives in the in-memory `GameState`, so `DeepClone` and replay are exact. The save drops only the transient fight state 02 section 3.3 lists (enemy HP, `Phase`, `SpawnTimer`, `AttackProgress`, `ActiveDots`, buffs, `PendingTaps`, `TapWindowTick`); it keeps `Combat.Boss`, `Combat.BossFailsOnStage`, `Combat.Selected`, `Combat.Mp`, the skill and companion cooldowns and `Combat.MissileQueue`. On load the player faces a fresh mob and a `Pending` boss respawns as the boss.
 
 `ATTACK_PROGRESS_UNIT = 100` (integer fixed point). At `ATK_SPD` level 0 the hero gains 100 units per tick and hits every `ATTACK_INTERVAL_TICKS = 10` ticks, one hit per second. At `ATK_SPD` level `n` the gain is `100 * (1 + TRAIN_PER_LVL[ATK_SPD] * n)` rounded to an integer, so level 100 (cap, +100%) is 200 units per tick and one hit every 5 ticks. Integer arithmetic keeps the hit schedule identical on every platform; a `double` accumulator would not (00 section 3, determinism row).
 
@@ -170,8 +170,7 @@ Kill():
   gold = Gold(s) * GoldMult * (isBoss ? BOSS_GOLD_MULT : 1)
   exp  = Exp(s)  * ExpMult
   Wallet.Apply(+gold GOLD, isBoss ? BOSS : KILL)
-  Wallet.Apply(+exp HERO_EXP, isBoss ? BOSS : KILL)
-  GrantHeroExp(exp)                                         # section 5.1, may publish LevelUp
+  Wallet.Apply(+exp HERO_EXP, isBoss ? BOSS : KILL)        # the only EXP path: writes Hero.Exp, runs CheckHeroLevel (5.2), may publish LevelUp
   Stats.Kills += 1; if isBoss: Stats.BossKills += 1
   publish EnemyKilled(s, isBoss, gold, exp)
   Quests.OnKill(s, isBoss)                                  # 06
@@ -245,7 +244,7 @@ In words: **if a normal mob on this stage takes more than three seconds of hero 
 | `Combat.KillsInStage` | `int` | `0 .. KILLS_PER_STAGE-1`. |
 | `Combat.Boss` | `BossPhase` | `None`, `Pending` (next spawn is the boss), `Walled` (boss failed, farming mobs). Replaces 02's `BossActive` bool, which cannot represent `Walled` (issue #7). |
 | `Combat.BossFailsOnStage` | `int` | Reset on advance. |
-| `Combat.SelectedStage` | `int?` | MVP: stage chosen with `SelectStage` in `SCR_STAGE_SELECT`; null = frontier. |
+| `Combat.Selected` | `int?` | MVP: stage chosen with `SelectStage` in `SCR_STAGE_SELECT`; null = frontier. |
 | `Progress.HighestCleared` | `int` | Highest stage completed (all kills, or the boss); the Awakening gate reads it. |
 | `Progress.HighestFirstClearBoss` | `int` | Highest boss stage that paid first-clear diamonds (06). |
 
@@ -312,15 +311,16 @@ Why these shapes:
 - `ATK_SPD` is capped at exactly 2x so the integer attack schedule stays simple and the boss math in section 2.8 stays readable. It is deliberately the cheapest early doubling: level 100 costs `50 * (1.07^100 - 1) / 0.07 = 6.1e5` gold in total, affordable late on day 1.
 - `GOLD_GAIN` and `EXP_GAIN` are investment stats. A level of `GOLD_GAIN` is worth `ln(1 + 0.02/(1 + 0.02 n)) / ln(1.07)` future `ATK` levels; the bot (section 8.3) values it at half that to account for the delay.
 
-`TrainStat(stat, count)` is all-or-nothing for `count` in `TRAIN_BULK_STEPS` (1, 10, 100) and `TrainStatMax(stat)` buys while affordable. Both use 01's `RejectCode` with the specific reason in `Detail` (issue #11): `Locked`/`STAT_NOT_TRAINABLE` for `HP`/`DEF` in MVP, `Capped`/`STAT_AT_CAP` at the cap, `CannotAfford`/`GOLD` otherwise. On success they publish `StatTrained(stat, newLevel)` and mark DPS dirty. Bulk cost is the closed form `50 * 1.07^n * (1.07^m - 1) / 0.07`, quoted and charged identically; `MaxAffordable` is computed by walking the `GeometricTable` (no logarithm, 00 section 8 item 1).
+`TrainStat(stat, count)` is all-or-nothing for `count` in `TRAIN_BULK_STEPS` (1, 10, 100) and `TrainStatMax(stat)` buys while affordable. Both use 01's `RejectCode` with the specific reason in `ApplyResult.Reason` (issue #11): `Locked`/`STAT_NOT_TRAINABLE` for `HP`/`DEF` in MVP, `Capped`/`STAT_AT_CAP` at the cap, `CannotAfford`/`GOLD` otherwise. On success they publish `StatTrained(stat, newLevel)` and mark DPS dirty. Bulk cost is the closed form `50 * 1.07^n * (1.07^m - 1) / 0.07`, quoted and charged identically; `MaxAffordable` is computed by walking the `GeometricTable` (no logarithm, 00 section 8 item 1).
 
 ### 5.2 Hero Level
 
-Hero EXP is `HERO_EXP` in the Wallet (never spent manually, 00 section 5.2). Level thresholds follow 00: `HERO_LVL_EXP(l) = 100 * 1.08^l` EXP to go from level `l` to `l+1`.
+Hero EXP (`HERO_EXP`) is `Hero.Exp`, not a Wallet balance, though it flows through `Wallet.Apply` for the reason code (never spent manually, 00 section 5.2). Level thresholds follow 00: `HERO_LVL_EXP(l) = 100 * 1.08^l` EXP to go from level `l` to `l+1`.
+
+Every EXP source (kills, offline catch-up, the EXP Dungeon) goes through `Wallet.Apply(+exp HERO_EXP, reason)`, which writes `Hero.Exp` and then calls `CheckHeroLevel()` in the same `Apply` or tick (00 section 8 item 9); there is no second grant path.
 
 ```
-GrantHeroExp(exp):
-  Hero.Exp += exp
+CheckHeroLevel():                                # called by Wallet.Apply after any HERO_EXP delta
   while Hero.Exp >= HeroLvlExp(Hero.Level):
     Hero.Exp -= HeroLvlExp(Hero.Level); Hero.Level += 1; MarkDpsDirty()
     publish LevelUp(Hero.Level)
@@ -471,7 +471,7 @@ Reading the table:
 
 ### 8.3 The greedy F2P bot policy
 
-The bot is the reference player for every balance number. It plays `ACTIVE_MIN = 120` minutes a day in one session, is offline the rest, taps nothing, and spends everything as soon as it can on whatever gives the most log-DPS per unit of currency. In prose:
+The bot is the reference player for every balance number. It plays `ACTIVE_MIN = 120` minutes a day in two 60-minute sessions (00 decisions 25 and 61; 10 section 3.3), is offline the rest, taps nothing, and spends everything as soon as it can on whatever gives the most log-DPS per unit of currency. In prose:
 
 1. **Gold**: every active minute, buy Training levels while any stat is affordable, always the stat with the highest marginal `ln(DPS)` per gold. `GOLD_GAIN` and `EXP_GAIN` are valued at half the `ATK` levels (or hero levels) their income increase will eventually buy.
 2. **Diamonds and tickets**: at the start of each day, spend every ticket on its banner, then spend diamonds on the banner with the highest expected `ln(DPS)` gain per diamond, where the expectation is over the banner's current published rate table and the gain of each pool item is evaluated against the current collection. Use a 10-pull when the chosen banner's 10x price is affordable, else singles. Re-evaluate after every pull.
@@ -603,7 +603,7 @@ Summons are not a client stream (00 section 8 item 2). Draws are consumed even w
 8. Queued fish missiles apply on the first `Fighting` tick after queueing, in order, without crit; a missile queued during `Spawning` is not lost, including across a save round trip; surplus damage beyond the kill is discarded.
 9. `TrainStat(ATK, 10)` with insufficient gold changes nothing; with sufficient gold charges exactly the closed-form bulk cost and raises `atkMult` by `0.5`; `TrainStat(CRIT_RATE, 1)` at level 300 is rejected with `Capped`/`STAT_AT_CAP`; `TrainStat(HP, 1)` is rejected with `Locked`/`STAT_NOT_TRAINABLE` in MVP; a successful purchase publishes one `StatTrained`.
 10. `critFactor`, `speedFactor`, `heroMult`, `awakenMult` and `researchPct` from `Query` equal hand-computed values for a fixture with `CRIT_RATE` 120, `CRIT_DMG` 80, `ATK_SPD` 100, hero level 50, Awakening rank 2, `res_atk` 7, within relative 1e-12.
-11. `GrantHeroExp` crossing two thresholds in one grant raises the level by 2 and publishes two `LevelUp` events; `heroMult` equals `HERO_LVL_MULT^level` from the `GeometricTable` (bit-identical on x64, ARM64, IL2CPP per 10's golden-file test).
+11. A `Wallet.Apply(HERO_EXP)` crossing two thresholds in one grant raises the level by 2 and publishes two `LevelUp` events; `heroMult` equals `HERO_LVL_MULT^level` from the `GeometricTable` (bit-identical on x64, ARM64, IL2CPP per 10's golden-file test).
 12. `Awaken()` is rejected with `Locked`/`AWAKEN_STAGE_NOT_REACHED` at `Progress.HighestCleared == 49`, with `CannotAfford`/`ROCK_CANDY` at stage 50 with 99 candy, succeeds at 100 candy charging exactly 100 with reason `AWAKENING`, and opens companion slot 2.
 13. `Research(res_fish_cap)` at level 0 charges 2,500 Fish Coins, at level 9 charges 1,280,000, at level 10 is rejected with `Capped`/`RESEARCH_MAXED`; before Awakening rank 1 every `Research` call is rejected with `Locked`/`RESEARCH_LOCKED`.
 14. With four companions equipped, `MP_REGEN0 = 2`, costs 10 and cooldowns 100 ticks, the sim fires 12 +/- 1 companion abilities per minute (not 24); after `res_mp_regen` level 4 it fires 24 per minute.

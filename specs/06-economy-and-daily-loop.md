@@ -44,7 +44,7 @@ public sealed partial class Wallet
         if (!double.IsFinite(d.Amount) || (IsCounted(d.Currency) && d.Amount != Math.Floor(d.Amount))) return false;
         double next = Get(d.Currency) + d.Amount;
         if (next < 0) return false;
-        Set(d.Currency, next);                // HERO_EXP: Hero.Exp = next; 03 converts EXP to levels on the next tick
+        Set(d.Currency, next);                // HERO_EXP: Hero.Exp = next; then runs 03's CheckHeroLevel (03 section 5.2)
         sink.Emit(new CurrencyChanged(d.Currency, d.Amount, next, reason));
         return true;
     }
@@ -439,7 +439,7 @@ public static ApplyResult ClaimOfflineReward(GameState s, ContentDb db)
     var r = s.Offline.Pending;
     if (r is null) return Reject(NotAvailable, "NO_PENDING_OFFLINE_REWARD");
     s.Wallet.Apply(new(Currency.GOLD, r.Gold), CurrencyReason.OFFLINE, s.Sink);
-    s.Wallet.Apply(new(Currency.HERO_EXP, r.Exp), CurrencyReason.OFFLINE, s.Sink);   // writes Hero.Exp; 03 converts EXP to levels on the next tick
+    s.Wallet.Apply(new(Currency.HERO_EXP, r.Exp), CurrencyReason.OFFLINE, s.Sink);   // writes Hero.Exp; then runs 03's CheckHeroLevel (03 section 5.2)
     FishBoard.AddTankFish(s, db, r.TankFill);                            // 05: TankCount = min(TankCap, TankCount + TankFill), refill progress per 05
     s.Offline.Pending = null;
     s.Sink.Emit(new OfflineRewardClaimed(r));
