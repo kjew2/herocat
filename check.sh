@@ -13,8 +13,8 @@ FAST=0
 DOTNET=1
 # M0 rewrite (specs/00 decision 33): the user agreed to run the acceptance sweep report-only until the new bots meet
 # the day-stage targets. The golden files are regenerated from the new bots and are a hard gate again (#138).
-# TODO(#136): set to 0 (acceptance a hard gate again) once the greedy-f2p sweep passes honestly (it needs offline
-# catch-up, #108, and the MVP income systems).
+# TODO(#136): set to 0 (acceptance a hard gate again) once the greedy-f2p sweep passes honestly. Offline catch-up
+# (#108) has landed and the sweep still misses AC1/AC3/AC4; it waits on the balance decision #249.
 REWRITE_REPORT_ONLY=1
 REPORT_ONLY_FAILED=0
 for arg in "$@"; do
@@ -97,7 +97,7 @@ else
     if [ "$REWRITE_REPORT_ONLY" -eq 1 ]; then
       if ! "$@"; then
         REPORT_ONLY_FAILED=1
-        printf '\nWARNING: report-only step failed (M0 rewrite, TODO(#136)). Not a full pass.\n'
+        printf '\nWARNING: report-only step failed (until the balance decision #249, TODO(#136)). Not a full pass.\n'
       fi
     else
       "$@"
@@ -114,7 +114,7 @@ else
   step "Bots: tick benchmark"
   $BOTS bench --ticks 1000000 --stage 300 --max-ms 2000
 
-  step "Bots: acceptance sweep (greedy-f2p, 20 seeds x 30 days, tier M0; report-only during the M0 rewrite)"
+  step "Bots: acceptance sweep (greedy-f2p, 20 seeds x 30 days, tier M0; report-only until #249)"
   soft $BOTS acceptance --tier M0 --seeds 1-20 --days 30 --time-budget-s 240 --table
 
   step "Bots: M0 exit criterion, two weeks of simulated play (specs/00 section 11, specs/10 section 3.8; report-only)"
@@ -128,11 +128,11 @@ if [ "$POWER_CURVE_FAILED" -eq 1 ]; then
   printf '\nHard checks passed; report-only power_curve_model.py --check FAILED (03 section 8.6 bands, balance call pending). Not a full pass.\n'
 fi
 if [ "$REPORT_ONLY_FAILED" -eq 1 ]; then
-  printf '\nHard checks passed; the report-only acceptance sweep FAILED (M0 rewrite, TODO(#136)). Not a full pass.\n'
+  printf '\nHard checks passed; the report-only acceptance sweep FAILED (until the balance decision #249, TODO(#136)). Not a full pass.\n'
 elif [ "$POWER_CURVE_FAILED" -eq 1 ]; then
   :
 elif [ "$REWRITE_REPORT_ONLY" -eq 1 ] && [ "$FAST" -eq 0 ]; then
-  printf '\nAll checks passed (the acceptance sweep is report-only during the M0 rewrite).\n'
+  printf '\nAll checks passed (the acceptance sweep is report-only until the balance decision #249).\n'
 else
   printf '\nAll checks passed.\n'
 fi
