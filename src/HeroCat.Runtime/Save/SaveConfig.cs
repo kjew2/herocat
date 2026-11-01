@@ -18,6 +18,13 @@ namespace HeroCat.Runtime.Save
 
         /// <summary>Pending.Summon / Pending.Dungeon older than this is cleared on load (02 section 6.4 P17).</summary>
         public const int PENDING_STALE_DAYS = 7;
+
+        /// <summary>
+        /// Foreground ServerClock resync cadence when no API call has happened (02 section 2, 11.1; issue #149). Any
+        /// observation (every response's X-Server-Time) restarts it. CLOCK_JUMP_WARN_SEC is 01's too and lives in
+        /// <see cref="RuntimeConfig"/>.
+        /// </summary>
+        public const int CLOCK_RESYNC_SEC = 900;
     }
 
     /// <summary>

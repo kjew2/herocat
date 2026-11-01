@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using HeroCat.Remote.Transport;
 using HeroCat.Runtime.Save;
 using HeroCat.Runtime.Errors;
@@ -11,14 +13,15 @@ namespace HeroCat.Remote.Services
     /// <summary>Vendor-neutral call names. A vendor transport maps these onto its own routes or RPC ids.</summary>
     public static class RemoteRoutes
     {
-        public const string Time = "/time";   // GET  -> {"serverSeconds": 1700000000}
+        public const string Time = "/time";   // GET  -> {"serverTime": 1793670800} (08 section 2.2)
         public const string Save = "/save";   // PUT  {"bytes": "<base64>"}; 409 when the cloud copy is newer
     }
 
     /// <summary>
     /// The remote half of the composition root (01 section 1.2), supplied to GameServices.Build through
     /// ServicesOptions.Remote because HeroCat.Runtime cannot reference this assembly. A stub over the vendor-neutral
-    /// transport spike: server clock and local-first cloud save; the other seams keep their local implementations.
+    /// transport spike: Runtime's ServerClock over GET /time and local-first cloud save; the other seams keep their local
+    /// implementations.
     /// TODO(#143): rebuilt on the ApiClient (SummonClient #145, InboxClient, ReceiptClient #147, ConfigClient #144,
     /// DungeonSeedClient #146).
     /// </summary>
@@ -45,8 +48,8 @@ namespace HeroCat.Remote.Services
         public static GameServices Wire(ServicesOptions o, IRemoteTransport transport, RemoteOptions options = null, bool syncNow = false)
         {
             var client = new RemoteClient(transport, options);
-            var clock = new ServerClock(client, o.Clock ?? new SystemClock());
-            if (syncNow) clock.TrySync();
+            var clock = new ServerClock(new RemoteTimeApi(client), o.Clock);   // device clock until the first observation
+            if (syncNow) clock.SyncAsync().GetAwaiter().GetResult();          // false offline; SessionRunner syncs again at boot
             var slots = new CloudSaveStore(o.Slots ?? new FileSaveStore(Path.Combine(o.DataDir, "saves")), client);
             return GameServices.Build(BackendMode.Local, new ServicesOptions
             {
@@ -58,42 +61,28 @@ namespace HeroCat.Remote.Services
     }
 
     /// <summary>
-    /// specs/08 section 3.1 shape: device time plus an offset learned from the server. Never throws when read, so
-    /// the game runs offline; <see cref="IsAuthoritative"/> is true only after a successful <see cref="Sync"/>.
+    /// <c>GET /time</c> over the transport (08 section 2.2: <c>{"serverTime": unix seconds}</c>), the
+    /// <see cref="ITimeApi"/> of Runtime's <see cref="ServerClock"/> (02 section 11.1; issue #149). The transport is
+    /// synchronous, so the async call runs it on the thread pool and a sync never blocks a frame.
+    /// TODO(#143): the ApiClient forwards every response's X-Server-Time to ServerClock.Observe.
     /// </summary>
-    public sealed class ServerClock : IClock
+    public sealed class RemoteTimeApi : ITimeApi
     {
         readonly RemoteClient _client;
-        readonly IClock _device;
-        long _offsetSeconds;
 
-        public ServerClock(RemoteClient client, IClock device)
-        {
-            _client = client ?? throw new ArgumentNullException(nameof(client));
-            _device = device ?? throw new ArgumentNullException(nameof(device));
-        }
+        public RemoteTimeApi(RemoteClient client) { _client = client ?? throw new ArgumentNullException(nameof(client)); }
 
-        public long NowServerSeconds => _device.NowServerSeconds + _offsetSeconds;
-        public bool IsAuthoritative { get; private set; }
+        public Task<long> GetServerTimeAsync(CancellationToken ct) => Task.Run(GetServerTime, ct);
 
-        /// <summary>Fetches server time. Throws ServiceException; the previous offset is kept on failure.</summary>
-        public void Sync()
+        /// <summary>Fetches server time. Throws ServiceException (ServerError "BadResponse" for an unreadable body).</summary>
+        public long GetServerTime()
         {
             string body = _client.Send("GET", RemoteRoutes.Time);
-            long server;
-            try { server = JObject.Parse(body ?? "")["serverSeconds"].Value<long>(); }
+            try { return JObject.Parse(body ?? "")["serverTime"].Value<long>(); }
             catch (Exception e) when (!(e is ServiceException))
             {
                 throw new ServiceException(ErrorClass.ServerError, "BadResponse", "time: " + e.Message);
             }
-            _offsetSeconds = server - _device.NowServerSeconds;
-            IsAuthoritative = true;
-        }
-
-        public bool TrySync()
-        {
-            try { Sync(); return true; }
-            catch (ServiceException) { return false; }
         }
     }
 

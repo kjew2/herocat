@@ -37,7 +37,7 @@ Engineering constants in `HeroCat.Runtime.SaveConfig` (code, not `ContentDb`; mi
 | `CLOUD_UPLOAD_MIN_SEC` | 60 | I | Upload coalescing window (01 section 8.10). |
 | `CLOUD_FETCH_TIMEOUT_S` | 5 | I | Boot-time cloud meta fetch. |
 | `CONFLICT_PROGRESS_MARGIN` | 0.10 | S | Loser must have `progressScore` more than 10% above the winner to trigger the conflict modal. |
-| `CLOCK_RESYNC_SEC` | 900 | I | Foreground resync cadence when no API call has happened. |
+| `CLOCK_RESYNC_SEC` | 900 | I | Foreground resync cadence when no API call has happened; any observation or sync attempt restarts it (11.1). |
 | `CLOCK_JUMP_WARN_SEC` | 300 | I | Resync delta above which `clock_anomaly` is emitted. |
 | `CLOCK_MAX_SKEW_ACCEPT_S` | 120 | S | Server rejects a save whose `lastSavedServerTime` is more than this ahead of server now. |
 | `HMAC_KEY_BYTES` | 32 | S | Device key length. |
@@ -887,30 +887,41 @@ public interface IClock
     bool IsAuthoritative  { get; }     // true once anchored to a server observation in this process
 }
 
-public sealed class ServerClock : IClock
+public interface ITimeApi { Task<long> GetServerTimeAsync(CancellationToken ct); }   // GET /time (08 section 2.2)
+
+public sealed class ServerClock : IClock, IClockFloor, IClockResync    // thread-safe
 {
-    readonly ITimeApi? api;            // null in Local mode
-    long?  offsetSec;                  // serverNow - monotonicNow at last observation
+    readonly ITimeApi? api;            // null in Local mode: never syncs
+    readonly IClock device;            // SystemClock (device time, itself floored) until the first observation
+    readonly IMonoClock mono;          // Stopwatch by default; injectable, so tests never sleep
+    long?  offsetSec;                  // serverNow - monoNow at last observation
     long   floorSec;                   // Time.LastSavedServerTime at load; time never reads below this
-    long   lastSyncMono;
-    static long Mono() => Stopwatch.GetTimestamp() / Stopwatch.Frequency;
+    long   lastSyncMono;               // last observation or sync attempt: the CLOCK_RESYNC_SEC cadence
+    long Mono() => mono.Ticks / mono.Frequency;
+
+    public ServerClock(ITimeApi? api = null, IClock? device = null, IMonoClock? mono = null);
 
     public bool IsAuthoritative => offsetSec.HasValue;
-    public long NowServerSeconds => Math.Max(floorSec, offsetSec is long o ? Mono() + o : DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+    public long NowServerSeconds => Math.Max(floorSec, offsetSec is long o ? Mono() + o : device.NowServerSeconds);
 
-    public void SetFloor(long lastSavedServerTime) => floorSec = lastSavedServerTime;
+    public void SetFloor(long lastSavedServerTime) { if (lastSavedServerTime > floorSec) floorSec = lastSavedServerTime; }
 
     // Called by ApiClient on every response with X-Server-Time (01 section 5.1), and by SyncAsync.
     public void Observe(long serverTimeSec, long rttMs)
     {
-        long estimate = serverTimeSec + rttMs / 2000;
-        long newOffset = estimate - Mono();
-        if (offsetSec is long old && Math.Abs(newOffset - old) > CLOCK_JUMP_WARN_SEC) analytics.Track(new ClockAnomaly("resync", newOffset - old));
-        offsetSec = newOffset; lastSyncMono = Mono();
+        long extrapolated = NowServerSeconds;
+        offsetSec = serverTimeSec + Math.Max(0, rttMs) / 2000 - Mono(); lastSyncMono = mono.Ticks;
+        Resynced?.Invoke(extrapolated, NowServerSeconds);  // SessionRunner: clock_anomaly{resync} past CLOCK_JUMP_WARN_SEC (01 8.2)
     }
+    public event Action<long, long> Resynced;
 
-    public async Task SyncAsync(CancellationToken ct)      // GET /time; used at resume and every CLOCK_RESYNC_SEC if no other call happened
-    { if (api == null) return; long t0 = Mono(); var t = await api.GetServerTimeAsync(ct); Observe(t, (Mono() - t0) * 1000); }
+    public bool ResyncDue => api != null && no sync in flight && mono.Ticks - lastSyncMono >= CLOCK_RESYNC_SEC * mono.Frequency;
+
+    // GET /time; SessionRunner fires it (not awaited) at boot, resume and gap recovery, and on the frame ResyncDue turns true.
+    // True when an observation landed; false in Local mode, on any failure or cancellation (the offset is kept). Never throws.
+    // A call while one is in flight joins it; an attempt restarts the cadence, so an offline device retries every 900 s.
+    public Task<bool> SyncAsync(CancellationToken ct = default)
+    { if (api == null) return false; lastSyncMono = mono.Ticks; long t0 = mono.Ticks; var t = await api.GetServerTimeAsync(ct); Observe(t, ms since t0); return true; }
 }
 
 public sealed class FakeClock : IClock
@@ -922,7 +933,7 @@ public sealed class FakeClock : IClock
 }
 ```
 
-M0 (issue #78): Local mode is `SystemClock` in `ServerClock.cs`: device time floored at the loaded save's `LastSavedServerTime` through `IClockFloor.SetFloor` (which `LocalSaveStore` calls after each load; the floor only rises), `IsAuthoritative = false`. The monotonic, observing `ServerClock` above replaces it in MVP (issue #149), with `api == null` as Local mode.
+As built (issues #78, #149): `ServerClock.cs` holds both clocks. `SystemClock` is the device time floored at the loaded save's `LastSavedServerTime`, never authoritative; `ServerClock` reads it before the first observation. `IClockFloor.SetFloor` is called by `LocalSaveStore` after each load and the floor only rises. Local mode is `ServerClock(api: null)` (the composition root's default); Remote mode passes `HeroCat.Remote`'s `RemoteTimeApi` over `GET /time` until `ApiClient` (issue #143) also forwards every `X-Server-Time` to `Observe`. `IMonoClock` is the monotonic seam `SessionRunner` also uses. `IClockResync` (`Resynced`, `ResyncDue`, `SyncAsync`) is what `SessionRunner` sees, so a wrapper such as the client's debug `OffsetClock` forwards all three. `clock_anomaly{kind: resync, seconds, negative}` is tracked by `SessionRunner.OnClockSynced` from `Resynced`, not by the clock, so it is emitted once per sync whose result differs from the extrapolation by more than `CLOCK_JUMP_WARN_SEC`. This includes the first observation of an offline launch, whose extrapolation was the floored device clock.
 
 ### 11.2 Rules
 

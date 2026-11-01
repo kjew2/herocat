@@ -233,7 +233,7 @@ namespace HeroCat.Runtime.Tests
         public void AServerClockObservation_LandsOnTheNextFrame()
         {
             var device = new FakeClock(TestContent.T0);
-            var clock = new ServerClock(device);
+            var clock = new ServerClock(device: device);
             var t = TestSession.Open(clock: device, clockOverride: clock);
             clock.Observe(device.NowServerSeconds + 4 * 3600, 0);   // the device clock was 4 h behind the server
             Assert.That(t.Sim.State.Offline.Pending, Is.Null, "nothing happens off the frame loop");
