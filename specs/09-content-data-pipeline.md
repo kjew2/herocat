@@ -161,7 +161,7 @@ The exporter checks `constants` against this list (`E040` missing, `E042` unknow
 | 08's `STAGE_VS_TIME` whale curve | `plausibility_stage_bound` (generated, issue #60) | int, int |
 | 06 section 2 reference-day parameters | `constants.REF_DAILIES_DONE`, `.REF_NEW_BOSSES` *(named here, issue #55)* | int |
 
-Constants other specs declare and this spec hosts (their owners' Constants introduced sections are the source): 03's `ATTACK_PROGRESS_UNIT`, `CRIT_DMG_BASE`, `MP_POOL0`, `MP_REGEN0`, `BOSS_ROCK_CANDY_P`, `TRAIN_CAP[*]` (in `stats.cap`), `RES_*` (in `research`); 04's `WEAPON_ATK_PCT[r]`, `SKILL_DPS_PCT[r]`, `COMPANION_DPS_PCT[r]` (in `rarities`), `BANNER_LVL_EXP` (in `banner_levels.exp_required`), `TUTORIAL_WEAPON_ID` (in `tutorial_steps`); 06's `FIRST_CLEAR_DIAMONDS`, `DUNGEON_*`, `INBOX_EXPIRY_DAYS`, shop rows. Quest diamond amounts live only in the quest rows' `reward_amount` (no `QUEST_*` reward constants, issues #55 and #244). `REQUIRED_CONSTANTS` in the exporter is the union; acceptance criterion 4 pins the C# `Constants` class to it.
+Constants other specs declare and this spec hosts (their owners' Constants introduced sections are the source): 03's `ATTACK_PROGRESS_UNIT`, `CRIT_DMG_BASE`, `MP_POOL0`, `MP_REGEN0`, `BOSS_ROCK_CANDY_P`, `TRAIN_CAP[*]` (in `stats.cap`), `RES_*` (in `research`); 04's `WEAPON_ATK_PCT[r]`, `SKILL_DPS_PCT[r]`, `COMPANION_DPS_PCT[r]`, `LIMIT_BREAK_COST[r]`, `DUPE_OVERFLOW_ROCK_CANDY[r]` (in `rarities`), `BANNER_LVL_EXP` (in `banner_levels.exp_required`), `TUTORIAL_WEAPON_ID` (in `tutorial_steps`); 06's `FIRST_CLEAR_DIAMONDS`, `DUNGEON_*`, `INBOX_EXPIRY_DAYS`, shop rows. Quest diamond amounts live only in the quest rows' `reward_amount` (no `QUEST_*` reward constants, issues #55 and #244). `REQUIRED_CONSTANTS` in the exporter is the union; acceptance criterion 4 pins the C# `Constants` class to it.
 
 ## 5. Table schemas
 
@@ -1333,8 +1333,8 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 17. **Build time.** `ContentDb.Build` of the shipped MVP set completes in under 30 ms warm on the CI runner and under 100 ms on the slowest reference device (10).
 18. **Culture invariance.** `Build` under `CultureInfo.CurrentCulture = de-DE` yields `EnemyHp.Growth == 1.07`.
 19. **Reconcile.** Covered by 02's load-validator tests (P10-P14, issue #56): a save that references `weapon_e_99` (not in content) loses that entry and keeps everything else; a level-12 fish under content with a lower reachable cap stays level 12 (issue #41).
-21. **New-table rules.** Fixtures prove `E063` (Research node below the Research gate; `shop` not `ALWAYS`), `E064` (no `DAILIES_COMPLETED` row), `E065` (`OWN_WEAPONS` target equal to the weapon row count), and that the shipped `E039` sum equals 06 section 2's 400 within 10%.
 20. **Exporter parity on messages.** For every fixture in criterion 6, the Python and C# messages are string-equal, including the `repr` of doubles.
+21. **New-table rules.** Fixtures prove `E063` (Research node below the Research gate; `shop` not `ALWAYS`), `E064` (no `DAILIES_COMPLETED` row), `E065` (`OWN_WEAPONS` target equal to the weapon row count), and that the shipped `E039` sum equals 06 section 2's 400 within 10%.
 
 ## Constants introduced
 
