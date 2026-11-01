@@ -66,7 +66,7 @@ namespace HeroCat.Bots.Acceptance
             if (determinism != null)
             {
                 string diff = determinism();
-                results.Add(new CheckResult("AC6", diff == null, diff == null ? "deterministic: seed 7 twice identical; golden matches" : "not deterministic: " + diff,
+                results.Add(new CheckResult("AC6", diff == null, diff == null ? "deterministic: seed 7 twice identical; golden matches" : "determinism or golden check failed: " + diff,
                     Array.Empty<string>()));
             }
             return results;
