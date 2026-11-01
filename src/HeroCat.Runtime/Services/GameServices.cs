@@ -17,6 +17,8 @@ namespace HeroCat.Runtime.Services
 
         /// <summary>This install's id (02 section 8.4). Guid.Empty: the session uses a fresh one.</summary>
         public Guid InstallId { get; set; }
+        /// <summary>The summon seam (04 section 12). Null: GameSession uses a LocalSummonService over its own state (M0).</summary>
+        public HeroCat.Runtime.Summons.ISummonService Summon { get; set; }
 
         /// <summary>Device build: device clock, saves under {dataDir}/saves.</summary>
         public static GameServices Local(string dataDir, IAnalytics analytics = null) => new GameServices

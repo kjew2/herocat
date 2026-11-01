@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using HeroCat.Runtime.Profile;
 using HeroCat.Runtime.Save;
 using HeroCat.Runtime.Services;
+using HeroCat.Runtime.Summons;
 using HeroCat.Sim;
 using HeroCat.Sim.Commands;
 using HeroCat.Sim.Content;
@@ -44,6 +47,7 @@ namespace HeroCat.Runtime.Session
         readonly Guid _installId;
         readonly List<Event> _pending = new List<Event>();
         double _accTicks, _sinceSave, _sinceSync;
+        ISummonService _summon;
         bool _dirty;
         bool _clockAnomalyReported;
 
@@ -172,6 +176,25 @@ namespace HeroCat.Runtime.Session
             if (r.Ok) _dirty = true;
             Drain();
             return r;
+        }
+
+        /// <summary>The summon service in use: services.Summon, or a LocalSummonService over this session's state (M0).</summary>
+        public ISummonService SummonService => _summon ??= _services.Summon ?? new LocalSummonService(() => State, Content, () => Clock.NowServerSeconds);
+
+        /// <summary>
+        /// The Runtime summon flow of 01 section 8.5.1, minimal: ask the service, then apply the payload through the logged
+        /// ApplySummonResult (the only summon mutator), drain events, save. TODO(#65): the SessionRunner's SummonFlow with
+        /// the persisted Pending.Summon intent, the summon analytics event (04 section 13) and the Remote pre-roll.
+        /// </summary>
+        public async Task<Result<SummonResultPayload, SummonError>> SummonAsync(Banner banner, int count, SummonPayment payment,
+                                                                               CancellationToken ct = default)
+        {
+            var result = await SummonService.PullAsync(SummonRequest.New(banner, count, payment), ct).ConfigureAwait(false);
+            if (!result.IsOk) return result;
+            var applied = Apply(new ApplySummonResult(result.Value));
+            if (!applied.Ok) throw new InvalidOperationException("ApplySummonResult rejected a service payload: " + applied);
+            SaveNow();
+            return result;
         }
 
         /// <summary>App to background: save immediately, stop ticking.</summary>

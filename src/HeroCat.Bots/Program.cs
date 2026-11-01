@@ -47,12 +47,13 @@ namespace HeroCat.Bots
     public static class Program
     {
         const string Usage =
-            "usage: HeroCat.Bots <run|sweep|acceptance|golden|save-fixture|bench> [options]\n" +
+            "usage: HeroCat.Bots <run|sweep|acceptance|golden|save-fixture|summon-stream|bench> [options]\n" +
             "  run          --bot idle --seed N --days N --all-days --format table|csv|json --out path --content dir --tier M0|MVP\n" +
             "  sweep        --bot idle --seeds 1-20 --days N --format table|csv|json --out path --parallel N --content dir\n" +
             "  acceptance   --seeds 1-20 --days N --time-budget-s 180 --targets path --verbose --content dir\n" +
             "  golden       --check|--update --golden-dir path --content dir\n" +
             "  save-fixture --check|--update --out path --content dir\n" +
+            "  summon-stream --check|--update --out path --content dir\n" +
             "  bench        --ticks N --max-ms N\n";
 
         public static int Main(string[] argv)
@@ -68,6 +69,7 @@ namespace HeroCat.Bots
                     case "acceptance": return AcceptanceCmd(a);
                     case "golden": return GoldenCmd(a);
                     case "save-fixture": return SaveFixtureCmd(a);
+                    case "summon-stream": return SummonStreamCmd(a);
                     case "bench": return Bench(a);
                     case "help": case "--help": Console.Out.Write(Usage); return 0;
                     default: Console.Error.Write($"unknown verb '{a.Verb}'\n" + Usage); return 2;
@@ -180,6 +182,23 @@ namespace HeroCat.Bots
         }
 
         /// <summary>The v1 save fixture: --update rewrites it (refused once V1 is frozen), otherwise checks it byte for byte.</summary>
+        /// <summary>Fixtures/Summon/stream.json, the C# stream-sequence golden that gacha_model.py reproduces (issue #14).</summary>
+        static int SummonStreamCmd(CliArgs a)
+        {
+            var db = LoadContent(a);
+            string path = a.Str("out", SummonStream.DefaultPath(ContentDir(a)));
+            string text = SummonStream.Generate(db);
+            if (a.Has("update"))
+            {
+                SummonStream.Write(path, text);
+                Console.Out.Write($"wrote {path}\n");
+                return 0;
+            }
+            bool same = File.Exists(path) && File.ReadAllText(path).Replace("\r\n", "\n") == text;
+            Console.Out.Write(same ? $"OK   {path}\n" : $"FAIL {path} differs (regenerate: {SummonStream.Regenerate})\n");
+            return same ? 0 : 1;
+        }
+
         static int SaveFixtureCmd(CliArgs a)
         {
             var db = LoadContent(a);

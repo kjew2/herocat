@@ -49,6 +49,21 @@ namespace HeroCat.Sim.Events
         public int ToStage { get; internal set; }
     }
 
+    // ---------------------------------------------------------------------------------------- collections (04)
+
+    /// <summary>One per summoned item (04 section 10). OverflowRockCandy &gt; 0 when the copy past the cap converted.</summary>
+    public sealed record ItemAcquired(Banner Banner, string ItemId, Rarity Rarity, bool IsNew, int LevelBefore, int LevelAfter,
+                                      long OverflowRockCandy) : Event;
+
+    /// <summary>
+    /// A loadout slot changed (04 sections 6.3, 7.2; analytics item_equipped). Weapons use slot 0. ItemId null: the slot
+    /// was emptied (UnequipSkill). Auto: chosen by the sim after a summon, not by a player command (the client's toast).
+    /// </summary>
+    public sealed record ItemEquipped(Banner Banner, int Slot, string ItemId, string PreviousItemId, bool Auto) : Event;
+
+    /// <summary>A summon raised the banner level (04 section 10).</summary>
+    public sealed record BannerLeveledUp(Banner Banner, int Level) : Event;
+
     // ---------------------------------------------------------------------------------------- fish board (05 section 10)
 
     /// <summary>A tank fish landed in <see cref="Cell"/>; StockAfter is TankCount after the release.</summary>
