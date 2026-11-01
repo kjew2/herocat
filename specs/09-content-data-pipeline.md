@@ -909,7 +909,25 @@ CONTENT <code> <location>: <message>
 
 `W010` more than two `BUFF` skills in one rarity; `W011` a rarity `<= RARE` with no `MP_REGEN` companion; `W012` banners with different `banner_levels` counts; `W013` a reachable fish level reuses a lower sprite with no `tint` (issue #48); `W031` `FISH_MAX_LVL0` or the `res_fish_cap` max decreased against `--previous` (05, issue #41); `W020` missing non-ship-locale text; `W021` unused localization key; `W030` an `S` constant changed without a note in `meta.notes`.
 
-Loader scope: `ContentDb.Build` implements every `E0xx`, `E03x`-`E06x` rule that touches sim-read data, and `E9xx`. It does not implement `E07x` localization rules (strings are client-only) or `E09x` (no previous build). `check` in CI plus the hash check at load are what make a hand edit of `content/` visible.
+Loader scope: `ContentDb.Build` implements every `E0xx`, `E03x`-`E06x` rule that touches sim-read data, and `E9xx`. It does not implement `E07x` localization rules (strings are client-only) or `E09x` (no previous build). `check` in CI plus the hash check at load are what make a hand edit of `content/` visible. In code: the rules live in `ContentDb.Rules.cs`, mirror the exporter's `RULES` in order, and sort by table like it. Also left to the exporter: the warnings, `E039` (a budget check for the designer, not a sim guard) and the rules over tables the sim never reads (`enemies`/`bosses` `E057`, the shop tables, `inbox_templates`). The quest, achievement and dungeon rules join `Build` when those tables are built into `ContentDb` (issues #170, #171, #173).
+
+### 8.7 How the rules read where the tables above leave it open
+
+Decided while implementing issues #122, #123 and #128; each is a default the design owner may veto.
+
+- **Order.** `validate` sorts its errors by table in `SCHEMA` order (acceptance 7). Within one table the rule order holds. `E020` comes first because the reader finds it before any rule runs.
+- **Tables not authored yet.** A rule whose table is optional and absent is skipped. That covers `E034` for a banner whose pool table is missing (`companions`, issue #161), `E039`/`E064` without `quests_daily`, `E065` without `achievements`, `E057` without `enemies`/`bosses`, and the research halves of `E038`, `E056` and `E063`.
+- **Bounds that name no code** report as `E043` with the rule text. That includes `awakening.companion_slots_after <= COMPANION_SLOTS` and banner level 1's `exp_required = 0`. `E048` is kept for the ordering rules.
+- **`E055` and `E022`.** When a `training_curves` row names a stat that does not exist, `E022` reports it and `E055` stays silent.
+- **`E059` on banners**: `ticket_currency` must be exactly `TICKET_SUMMON_<id>`.
+- **`E064`**: "the number of daily rows" counts every `quests_daily` row with `tier <= MVP`, the bonus rows included.
+- **`E074` length**: the longest rendering, where a plural or select counts its longest branch and `#` or an argument counts as one character.
+- **`W020`**: a non-ship locale with no text at all warns once (`ja has no text; all N keys fall back to en`), not once per key.
+- **`W021`**: rows whose keys start `err.`, `reject.` or `notice.` are exempt, because section 13.1 checks them elsewhere. `ui.*` rows are judged only when `--ui-keys` is given.
+- **`W030`**: a "note" means the constant's key appears somewhere in `meta.notes`.
+- **Version rules.** B3 (`E090`) applies to every table keyed by an `id`, enum or `ref`, plus the B5 tables. B4 compares each banner that was enabled in the previous build, using pool lists over all of its rows. B6 (`E092`) is detected two ways: a non-nullable column the previous rows lack, or an enum value the previous rows use that no longer exists. `E091` compares data files only. A `source_revision` or `notes` change on its own rewrites only the manifest.
+- **`hot_apply` without a diff.** A build identical to `--previous` keeps the previous `hot_apply`. `check` without `--previous` keeps the committed manifest's value rather than recomputing it. `./check.sh` runs `build --previous` against the merge base's `content/`.
+- **Fixtures** (acceptance 6). Each `tests/content_fixtures/<name>/` describes its defect in a `fixture.json` as edits on `good_minimal/`, not as a full copy. `good_minimal` is a small valid set with `ship_locales = en,ja`. `warn_*` fixtures pin warnings under `--strict-warnings`. Fixtures marked `"csharp": true` are built with the exporter's fixture-only `--emit-invalid`, so their defect reaches `ContentDb.Build` (`ContentDbFixtureTests`). `tools/content_fixtures.py` documents the format.
 
 ## 9. `ContentDb` in `HeroCat.Sim`
 
@@ -1317,7 +1335,7 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 3. **Deterministic export.** `export_content.py build` twice from the same `content_src/` produces byte-identical `content/`; `check` exits 0 on the committed tree.
 4. **Constants pinned.** The set of `REQUIRED_CONSTANTS` keys in the exporter equals the set of `constants.json` keys equals the set of `Constants` properties (snake-cased), and every property is non-default after build.
 5. **Every 00 section 6 row is reachable.** For each row of the section 4 table, a unit test reads the named location from `ContentDb` and compares to the 00 value (`[Category("Golden")]`; updated in the same PR as 00).
-6. **Every rule has a fixture.** For every `E0xx`-`E09x` code in section 8 there is a `tests/content_fixtures/bad_<code>_<name>/` directory with one defect and an `expected.txt`; the Python test and the C# `ContentDbTests` both produce exactly that first line for the codes in their scope.
+6. **Every rule has a fixture.** For every `E0xx`-`E09x` code in section 8 there is a `tests/content_fixtures/bad_<code>_<name>/` directory with one defect (described as edits on `good_minimal/`, section 8.7) and an `expected.txt`; the Python test (`tools/test_export_content.py`) and the C# `ContentDbFixtureTests` both produce exactly that first line for the codes in their scope. `E076` waits for `import-translations`.
 7. **All errors reported.** A fixture with three independent defects yields three errors in table order from both validators.
 8. **Hash tamper.** Flipping one byte in `skills.json` makes the loader fail with `E900` naming the file; adding an unlisted `pets.json` fails with `E902`.
 9. **Curve eval is bit-exact.** `CurveDef("enemy_hp", 20, 1.07).Eval(s)` for `s` in `{0, 1, 10, 100, 550, 9000}` produces identical `BitConverter.DoubleToInt64Bits` on x64 Linux, Apple ARM64 and an IL2CPP Android build (10's golden-file test carries this).
