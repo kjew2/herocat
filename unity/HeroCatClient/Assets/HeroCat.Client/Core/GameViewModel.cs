@@ -1,5 +1,8 @@
 using System;
 using System.Collections.Generic;
+using HeroCat.Runtime.Errors;
+using HeroCat.Runtime.Save;
+using HeroCat.Runtime.Session;
 using HeroCat.Sim;
 using HeroCat.Sim.Commands;
 using HeroCat.Sim.Content;
@@ -11,26 +14,40 @@ namespace HeroCat.Client.Core
 {
     /// <summary>
     /// The one object screens talk to (07 section 3). Pull for numbers: Refresh() copies the sim's per-tick Snapshot into
-    /// the sub-view-models. Push for feedback: DrainEvents() turns events into feed lines and toasts. Commands go through
-    /// Simulation.Apply and toast the reject reason. No game rule lives here, and no screen sees GameState.
+    /// the sub-view-models. Push for feedback: it subscribes to the SessionRunner's EventBus and turns events into feed
+    /// lines and toasts. Commands go through SessionRunner.Issue; a reject arrives as CommandRejected and toasts its
+    /// reject.&lt;reason&gt; key (01 section 7). No game rule lives here, and no screen sees GameState.
     /// M0 skeleton: the old prototype's gear, hero party and class screens are gone (00 decision 33); the M0 screens
     /// (SCR_MAIN, SCR_HERO, SCR_WEAPONS, SCR_SKILLS, SCR_SUMMON, ...) are their own issues (TODO(#109), #111-#118).
     /// </summary>
     public sealed class GameViewModel
     {
+        readonly SessionRunner _runner;
         readonly Simulation _sim;
         readonly OffsetClock _clock;
         readonly Constants _k;
         readonly List<string> _popups = new List<string>();
+        readonly List<IDisposable> _subs = new List<IDisposable>();
         bool _dirty, _saveRequested;
 
-        public GameViewModel(Simulation sim, OffsetClock clock, string saveDescription = "")
+        public GameViewModel(SessionRunner runner, OffsetClock clock, string saveDescription = "")
         {
-            _sim = sim ?? throw new ArgumentNullException(nameof(sim));
+            _runner = runner ?? throw new ArgumentNullException(nameof(runner));
+            _sim = runner.Sim;
             _clock = clock;
-            _k = sim.Db.Constants;
+            _k = _sim.Db.Constants;
             SaveDescription = saveDescription;
+            _subs.Add(runner.Bus.Subscribe<Event>(OnSimEvent));
+            _subs.Add(runner.Bus.SubscribeNotice<CommandRejected>(OnRejected));
+            _subs.Add(runner.Bus.SubscribeNotice<SaveWriteFailed>(_ => Toasts.Push("Save failed", 3.0)));   // TODO(#118): SCR_ERROR / toast key
             Refresh();
+        }
+
+        /// <summary>Unsubscribes from the bus (the session is being torn down).</summary>
+        public void Dispose()
+        {
+            foreach (var s in _subs) s.Dispose();
+            _subs.Clear();
         }
 
         public readonly HudVm Hud = new HudVm();
@@ -41,7 +58,7 @@ namespace HeroCat.Client.Core
         public string SaveDescription { get; }
         public string ContentVersion => _sim.Db.Version;
         public string ProfileId => _sim.State.RngRoot.ToString();
-        public double TimeScale { get; private set; } = 1;
+        public double TimeScale => _runner.DebugTimeScale;
         public long ClockOffsetSeconds => _clock?.OffsetSeconds ?? 0;
         public bool ResetRequested { get; private set; }
 
@@ -87,17 +104,9 @@ namespace HeroCat.Client.Core
             Combat.EnemyMaxHp = s.EnemyHpMax;
         }
 
-        /// <summary>Drains the sim's events into feed lines and toasts. Returns how many were handled.</summary>
-        public int DrainEvents()
-        {
-            var events = _sim.DrainEvents();
-            foreach (var e in events) OnSimEvent(e);
-            if (events.Count > 0) _dirty = true;
-            return events.Count;
-        }
-
         void OnSimEvent(Event e)
         {
+            _dirty = true;
             switch (e)
             {
                 case DayRolledOver _:
@@ -109,11 +118,16 @@ namespace HeroCat.Client.Core
             }
         }
 
-        /// <summary>Apply a command; a reject toasts its reason key.</summary>
+        void OnRejected(CommandRejected r)
+        {
+            _dirty = true;
+            Toasts.Push(ErrorClassifier.RejectKey(r.Result), 1.5);   // TODO(#187): localize the key
+        }
+
+        /// <summary>Apply a player command now (a button press, never an EventBus handler); a reject toasts its reason key.</summary>
         public ApplyResult Apply(Command c)
         {
-            var r = _sim.Apply(c);
-            if (!r.Ok) Toasts.Push("reject." + (r.Reason ?? r.Code.ToString()), 1.5);
+            var r = _runner.Issue(c);
             _dirty = true;
             return r;
         }
@@ -124,9 +138,8 @@ namespace HeroCat.Client.Core
         public void DebugRunHours(double hours)
         {
             long ticks = (long)(hours * 3600 * _k.TickHz);
-            _sim.AdvanceTicks(ticks);
             if (_clock != null) _clock.OffsetSeconds += (long)(hours * 3600);
-            DrainEvents();
+            _runner.DebugAdvance(ticks);
             Refresh();
         }
 
@@ -136,7 +149,7 @@ namespace HeroCat.Client.Core
             if (_clock != null) _clock.OffsetSeconds += (long)(hours * 3600);
         }
 
-        public void DebugSetTimeScale(double scale) => TimeScale = scale;
+        public void DebugSetTimeScale(double scale) => _runner.DebugTimeScale = scale;
         public void DebugRequestSave() => _saveRequested = true;
         public void DebugResetProfile() => ResetRequested = true;
     }

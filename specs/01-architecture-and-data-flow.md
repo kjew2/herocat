@@ -70,15 +70,15 @@ flowchart TB
 | `HeroCat.Bots` references `HeroCat.Sim` and `HeroCat.Runtime` (for `SessionRunner`, `FakeClock`, `LocalSummonService`). | csproj. |
 | Server-sensitive operations go through the seven interfaces of 00 section 8.11 (`IClock`, `ISummonService`, `ISaveStore`, `IInboxService`, `IReceiptValidator`, `IConfigService`, `IDungeonSeedService`; issue #25). Interfaces live in `HeroCat.Runtime.Services`. Local and remote implementations live beside them. The sim never sees any of them. | Code review; `HeroCat.Sim` cannot reference `Runtime`, so the sim cannot see them by construction. |
 
-The composition root (`Bootstrapper`, Unity `MonoBehaviour` on `SCR_BOOT`) picks implementations from a build-time `BackendMode`:
+The composition root (`GameServices.Build`, called by the engine-free `BootFlow` of 8.1 once content is loaded; Unity's `GameRoot` only forwards to it) picks implementations from a build-time `BackendMode`. The record is named `GameServices` because a type `Services` inside the `HeroCat.Runtime.Services` namespace is shadowed by the namespace. Services that read state (`LocalSummonService`, `LocalDungeonSeedService`) get a `Func<GameState>` because they are built before the save loads. The remote clients live in the separate `HeroCat.Remote` assembly (keeps `System.Net.Http` out of bots), which supplies the Remote branch through `ServicesOptions.Remote`:
 
 ```csharp
 public enum BackendMode { Local, Remote }   // Local = M0 and any build with no server configured
 
-public static Services Build(BackendMode mode, string dataDir, ContentDb db, Simulation sim)
+public static GameServices Build(BackendMode mode, ServicesOptions o)   // o: dataDir, content, state accessor, overrides
 {
     if (mode == BackendMode.Local)
-        return new Services
+        return new GameServices
         {
             Clock    = new ServerClock(timeApi: null),               // serves device clock floored at last save; IsAuthoritative = false
             Summon   = new LocalSummonService(sim, db),              // same algorithm as the server (04, 08); reads state, never writes it
@@ -90,7 +90,7 @@ public static Services Build(BackendMode mode, string dataDir, ContentDb db, Sim
             Analytics = new NullAnalyticsSink(),                     // no backend: events are dropped, Flush is a no-op
         };
     var api = new ApiClient(opts.BaseUrl, tokenStore);
-    return new Services
+    return new GameServices
     {
         Clock    = new ServerClock(api),
         Summon   = new SummonClient(api, sim, db),
@@ -295,12 +295,12 @@ Server time reaches the sim only through logged `ApplyServerTime` commands at sy
 ```csharp
 public sealed class SessionRunner
 {
-    readonly Simulation sim; readonly Services svc; readonly EventBus bus; readonly CommandLog log;
+    readonly Simulation sim; readonly GameServices svc; readonly EventBus bus; readonly CommandLog log;
     readonly double tickDt;                   // 1.0 / TICK_HZ
     double acc; long lastMono; long lastSaveMono; long lastClockSyncMono; bool dirty; int saveFailures;
     readonly Queue<Command> pending = new();
 
-    public SessionRunner(Simulation sim, Services svc, EventBus bus, CommandLog log);
+    public SessionRunner(Simulation sim, GameServices svc, EventBus bus, CommandLog log);
 
     public void Enqueue(Command c) => pending.Enqueue(c);
 

@@ -21,7 +21,7 @@ namespace HeroCat.Runtime.Services
     /// calls with every X-Server-Time; after one observation time runs on the monotonic clock from that offset.
     /// TODO(#149): SyncAsync over a time API, CLOCK_JUMP_WARN_SEC and the clock_anomaly event.
     /// </summary>
-    public sealed class ServerClock : IClock
+    public sealed class ServerClock : IClock, IClockFloor
     {
         readonly IClock _device;
         long? _offsetSec;   // serverNow - monotonicNow at the last observation

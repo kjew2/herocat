@@ -1,11 +1,12 @@
+using System;
 using HeroCat.Remote.Services;
 using HeroCat.Remote.Transport;
 using HeroCat.Runtime.Services;
+using HeroCat.Sim.Content;
+using HeroCat.Sim.State;
 
 namespace HeroCat.Client.Boot
 {
-    public enum BackendMode { Local, Remote }
-
     /// <summary>
     /// Build-time backend selection (specs/08 section 1). Local by default; add the scripting define symbol
     /// HEROCAT_BACKEND_REMOTE (Player Settings > Other Settings > Scripting Define Symbols) for a Remote build.
@@ -19,17 +20,20 @@ namespace HeroCat.Client.Boot
         public const BackendMode Mode = BackendMode.Local;
 #endif
 
+        /// <summary>The composition root call (01 section 1.2): GameServices.Build for this build's mode.</summary>
         /// <param name="dataDir">Application.persistentDataPath.</param>
-        public static GameServices Create(string dataDir)
+        public static GameServices Create(string dataDir, ContentDb content, Func<GameState> state)
         {
+            var options = new ServicesOptions { DataDir = dataDir, Content = content, State = state };
 #if HEROCAT_BACKEND_REMOTE
-            // No vendor yet (UGS vs Nakama spike, specs/08 section 10): the offline transport makes every remote call
-            // fail as Offline, so the game runs on the device clock with local saves and a queued upload.
-            var services = RemoteGameServices.Create(dataDir, OfflineTransport.Instance);
-            ((ServerClock)services.Clock).TrySync();
+            // No server yet (TODO(#143)): the offline transport makes every remote call fail as Offline, so the game runs
+            // on the device clock with local saves and a queued upload.
+            options.Remote = o => RemoteGameServices.Wire(o, OfflineTransport.Instance);
+            var services = GameServices.Build(Mode, options);
+            ((HeroCat.Remote.Services.ServerClock)services.Clock).TrySync();
             return services;
 #else
-            return GameServices.Local(dataDir);
+            return GameServices.Build(Mode, options);
 #endif
         }
     }

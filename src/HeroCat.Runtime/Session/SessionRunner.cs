@@ -115,6 +115,12 @@ namespace HeroCat.Runtime.Session
         /// </summary>
         public bool TicksEnabled { get; set; } = true;
 
+        /// <summary>
+        /// Debug builds only (the client's x5/x20 cheat): multiplies frame time for the tick accumulator. The gap rule,
+        /// the clock sync and autosave still use real time, and MAX_TICKS_PER_FRAME still caps a frame. Default 1.
+        /// </summary>
+        public double DebugTimeScale { get; set; } = 1;
+
         /// <summary>Between OnPause and OnResume. OnFrame does nothing while paused.</summary>
         public bool IsPaused { get; private set; }
 
@@ -183,7 +189,8 @@ namespace HeroCat.Runtime.Session
             int n = 0;
             if (TicksEnabled)
             {
-                _accTicks = Math.Min(_accTicks + dt * _tickHz, _opt.InAppGapSec * _tickHz);
+                double scale = DebugTimeScale > 0 ? DebugTimeScale : 1;
+                _accTicks = Math.Min(_accTicks + dt * scale * _tickHz, _opt.InAppGapSec * scale * _tickHz);
                 long budget = _opt.TickBudgetMs > 0 ? (long)(_opt.TickBudgetMs / 1000.0 * _mono.Frequency) : long.MaxValue;
                 long start = _opt.TickBudgetMs > 0 ? _mono.Ticks : 0;
                 while (_accTicks >= 1.0 - 1e-9 && n < _opt.MaxTicksPerFrame)
@@ -212,6 +219,20 @@ namespace HeroCat.Runtime.Session
 
             if (_dirty && (mono - _lastSaveMono) / (double)_mono.Frequency >= _opt.AutosaveIntervalSec) SaveNow(SaveTrigger.Periodic);
             return n;
+        }
+
+        /// <summary>
+        /// Debug builds ("Run 1 h") and headless drivers: runs <paramref name="ticks"/> ticks now, as if the app had been
+        /// open that long, and publishes the events. Not from an EventBus handler.
+        /// </summary>
+        public void DebugAdvance(long ticks)
+        {
+            if (_bus.IsPublishing) throw new InvalidOperationException("DebugAdvance called from an EventBus handler");
+            if (ticks <= 0) return;
+            _sim.AdvanceTicks(ticks);
+            TotalTicks += ticks;
+            _dirty = true;
+            _bus.Publish(_sim.DrainEvents());
         }
 
         /// <summary>App to background (01 section 3.3): a synchronous save inside the callback, then the analytics flush.</summary>

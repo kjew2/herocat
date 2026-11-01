@@ -13,6 +13,15 @@ namespace HeroCat.Runtime.Services
         bool IsAuthoritative { get; }
     }
 
+    /// <summary>
+    /// A clock that must never read below the last save (02 section 11.2 rule 4). Boot calls SetFloor with the loaded
+    /// save's LastSavedServerTime. ServerClock implements it; wrappers (the client's debug OffsetClock) forward it.
+    /// </summary>
+    public interface IClockFloor
+    {
+        void SetFloor(long lastSavedServerTime);
+    }
+
     /// <summary>Tests and the bot harness. Starts wherever you put it and only moves when told.</summary>
     public sealed class FakeClock : IClock
     {

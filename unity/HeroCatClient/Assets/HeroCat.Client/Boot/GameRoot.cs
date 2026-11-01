@@ -1,6 +1,8 @@
 using System;
 using HeroCat.Client.Core;
 using HeroCat.Client.Screens;
+using HeroCat.Runtime.Boot;
+using HeroCat.Runtime.Replay;
 using HeroCat.Sim.Content;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -10,7 +12,8 @@ namespace HeroCat.Client.Boot
     /// <summary>
     /// Composition root and the only MonoBehaviour (specs/07 section 4). Self-bootstraps after the first scene
     /// loads, so pressing Play in any scene (even an empty one) starts the game: no scene, prefab or UXML assets.
-    /// Unity callbacks are forwarded to the plain-C# SimRunnerCore (10 Hz fixed step on unscaled time).
+    /// Unity callbacks are forwarded to the plain-C# ClientSession, which runs Runtime's BootFlow and SessionRunner
+    /// (01 sections 3 and 8.1; issues #65, #70).
     /// </summary>
     public sealed class GameRoot : MonoBehaviour
     {
@@ -31,9 +34,8 @@ namespace HeroCat.Client.Boot
         Vector2Int _lastScreen;
         Vector2 _lastPanel;
         ContentDb _content;
-        ISaveBridge _save;
-        OffsetClock _clock;
-        SimRunnerCore _runner;
+        ClientSession _session;
+        JsonlCommandLog _cmdlog;
         Shell _shell;
         Label _fatal;
         bool _useBuiltinFont;
@@ -106,23 +108,7 @@ namespace HeroCat.Client.Boot
                 catch (Exception e) { Debug.LogWarning("HeroCat: no built-in font: " + e.Message); }
             }
 
-            try
-            {
-                _content = ContentLocator.Load();
-                Debug.Log("HeroCat: content " + _content.Version + " from " + ContentLocator.Describe);
-            }
-            catch (Exception e)
-            {
-                ShowFatal("Content failed to load from " + ContentLocator.Describe + ":\n\n" + e.Message);
-                Debug.LogException(e);
-                return;
-            }
-            RunSaveSelfCheck();
-            // The build-time BackendMode picks the service implementations (01 section 1.2). TODO(#66).
-            var services = Backend.Create(Application.persistentDataPath);
             Debug.Log("HeroCat: backend " + Backend.Mode);
-            _save = new RuntimeSaveBridge(services.SaveStore);
-            _clock = new OffsetClock(services.Clock);
             StartSession();
         }
 
@@ -145,16 +131,48 @@ namespace HeroCat.Client.Boot
             }
         }
 
+        /// <summary>The bundled content (01 section 8.1 step 1). TODO(#212): a verified cached newer bundle goes first.</summary>
+        ContentDb LoadBundledContent()
+        {
+            if (_content != null) return _content;
+            try
+            {
+                _content = ContentLocator.Load();
+                Debug.Log("HeroCat: content " + _content.Version + " from " + ContentLocator.Describe);
+                RunSaveSelfCheck();
+                return _content;
+            }
+            catch (Exception e)
+            {
+                Debug.LogError("HeroCat: content failed to load from " + ContentLocator.Describe + ": " + e.Message);
+                throw;
+            }
+        }
+
         void StartSession()
         {
             try
             {
-                _runner = SimRunnerCore.Start(_content, _save, _clock);
-                _shell = new Shell(_safe, _runner.Vm);
+                string dataDir = Application.persistentDataPath;
+                _cmdlog?.Dispose();
+                _cmdlog = new JsonlCommandLog(System.IO.Path.Combine(dataDir, "saves", JsonlCommandLog.FileName));
+                // The build-time BackendMode picks the service implementations (01 section 1.2); nothing else branches on it.
+                _session = ClientSession.Start(new Func<ContentDb>[] { LoadBundledContent },
+                                               (db, state) => Backend.Create(dataDir, db, state), _cmdlog,
+                                               clientVersion: Application.version);
+                if (!_session.IsReady)
+                {
+                    // TODO(#118): SCR_BOOT / SCR_ERROR render the error class; M0 shows the key and the support id.
+                    var err = _session.Boot.Error;
+                    ShowFatal(err.LocalizationKey + "\n\nSupport id: " + err.SupportId);
+                    _session = null;
+                    return;
+                }
+                _shell = new Shell(_safe, _session.Vm);
             }
             catch (Exception e)
             {
-                _runner = null;
+                _session = null;
                 ShowFatal("Failed to start the session:\n\n" + e);
                 Debug.LogException(e);
             }
@@ -198,30 +216,36 @@ namespace HeroCat.Client.Boot
             if (_fpsAcc >= 0.5f) { DebugScreen.Fps = _fpsFrames / _fpsAcc; _fpsAcc = 0; _fpsFrames = 0; }
 #endif
 
-            if (_runner == null) return;
-            _runner.Frame(dt);
+            if (_session == null) return;
+            _session.Frame();
             _shell.Refresh(Time.unscaledTime);
 
-            if (_runner.Vm.ResetRequested)
+            if (_session.Vm.ResetRequested)
             {
-                _save.DeleteProfile();
+                _session.DeleteProfile();
                 _shell.Dispose();
-                _clock.OffsetSeconds = 0;
                 StartSession();
             }
         }
 
         void OnApplicationPause(bool paused)
         {
-            if (_runner == null) return;
-            if (paused) _runner.OnPause();
-            else _runner.OnResume();
+            if (_session == null) return;
+            if (paused) _session.OnPause();
+            else _session.OnResume();
         }
 
-        void OnApplicationQuit() => _runner?.OnQuit();
+        void OnApplicationQuit() => _session?.OnQuit();
+
+        void OnLowMemory() => _session?.OnLowMemory();
+
+        void OnEnable() => Application.lowMemory += OnLowMemory;
+
+        void OnDisable() => Application.lowMemory -= OnLowMemory;
 
         void OnDestroy()
         {
+            _cmdlog?.Dispose();
             if (Instance == this) Instance = null;
         }
     }

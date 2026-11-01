@@ -164,7 +164,7 @@ namespace HeroCat.Runtime.Boot
             if (load.HasState)
             {
                 state = load.State;
-                (svc.Clock as ServerClock)?.SetFloor(state.Time.LastSavedServerTime);   // 02 section 11.2 rule 4
+                (svc.Clock as IClockFloor)?.SetFloor(state.Time.LastSavedServerTime);   // 02 section 11.2 rule 4
             }
             else
             {

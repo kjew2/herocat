@@ -74,8 +74,9 @@ Assets/HeroCat.Client/
   Art/       AppIcon.png (placeholder 1024x1024 icon)
   Screens/   Ui.cs (style kit), Shell.cs, HudAndStrip.cs, *Screen(s).cs, DebugScreen.cs
   Core/      HeroCat.Client.Core.asmdef (noEngineReferences: plain C#)
-             GameViewModel.cs, ViewModels.cs, Feedback.cs, TextFmt.cs, SimRunnerCore.cs (10 Hz tick driver)
-             SaveBridge.cs   <- the ONLY save/load/session code
+             GameViewModel.cs, ViewModels.cs, Feedback.cs, TextFmt.cs
+             ClientSession.cs  <- runs Runtime's BootFlow and drives its SessionRunner (the one tick driver)
+             SaveBridge.cs   (the save self-check; load/create/save is Runtime's)
 Assets/Resources/HeroCatTheme.tss   imports Unity's default runtime theme (optional; styles are inline)
 ```
 
