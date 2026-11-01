@@ -145,7 +145,15 @@ namespace HeroCat.Client.Boot
                 return;
             }
             _session.Vm.Error.Log = code => Debug.LogWarning("HeroCat: SCR_ERROR replaced " + code);
-            _ui = UiRoot.Create(transform, _session.Vm);
+            try { _ui = UiRoot.Create(transform, _session.Vm); }
+            catch (Exception e)
+            {
+                // Report the real cause once; Update skips frames while there is no UI instead of throwing every frame.
+                Debug.LogError("HeroCat: building the screens failed; the game is paused until the next Play.");
+                Debug.LogException(e);
+                _ui = null;
+                return;
+            }
             // TODO(#118): the acknowledge-only notice modal; M0 toasts the notice body with the support id (00 decision 103).
             var notice = _session.Boot.SaveResetNotice;
             if (notice != null)
@@ -184,7 +192,7 @@ namespace HeroCat.Client.Boot
 
         void Update()
         {
-            if (_session == null || !_session.IsReady) return;
+            if (_session == null || !_session.IsReady || _ui == null) return;
             _session.Frame();
             _ui.Tick();
             ApplySleepTimeout(_session.Vm.Router.KeepScreenAwake);
