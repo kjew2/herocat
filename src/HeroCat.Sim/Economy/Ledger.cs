@@ -32,7 +32,8 @@ namespace HeroCat.Sim.Economy
                 s.Wallet.Set(c, next);
 
             Count(s.Stats, c, amount, reason);
-            events?.Emit(new CurrencyChanged(c, amount, next, reason));
+            if (reason == CurrencyReason.KILL && events is Simulation folding && folding.CoalescingKills) folding.FoldKillCurrency();   // never allocated (01 2.3)
+            else events?.Emit(new CurrencyChanged(c, amount, next, reason));
             if (c == Currency.HERO_EXP && events is Simulation sim) sim.CheckHeroLevel();   // the one EXP path (03 section 5.2)
             return true;
         }

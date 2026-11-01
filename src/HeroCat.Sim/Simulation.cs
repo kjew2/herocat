@@ -166,12 +166,7 @@ namespace HeroCat.Sim
             {
                 if (e is EnemyKilled k)
                 {
-                    var b = OpenBatch(k.Stage);
-                    b.Count += 1;
-                    b.GoldTotal += k.Gold;
-                    b.ExpTotal += k.Exp;
-                    b.ToStage = k.Stage;
-                    b.Tick = e.Tick;
+                    FoldKill(k.Stage, k.Gold, k.Exp);
                     return;
                 }
                 if (e is CurrencyChanged cc && cc.Reason == CurrencyReason.KILL)

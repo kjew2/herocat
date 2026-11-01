@@ -37,6 +37,26 @@ namespace HeroCat.Sim
         /// <summary>The fish track's hook (Simulation.Fish.cs): a board change invalidates the DPS cache (05 section 12 rule 5).</summary>
         partial void OnFishBoardDpsChanged() => MarkDpsDirty();
 
+        /// <summary>
+        /// True when Emit would fold a kill's EnemyKilled and CurrencyChanged(KILL) into the open EnemyKilledBatch (01 section
+        /// 2.3). The kill path checks it first so a folded event is never allocated (03 criterion 19: under 128 B per kill).
+        /// </summary>
+        internal bool CoalescingKills => ForceCoalesce || _events.Count >= SimConfig.EVENT_COALESCE_AT;
+
+        /// <summary>Adds one kill to the open batch: what Emit does with a coalesced EnemyKilled.</summary>
+        void FoldKill(int stage, double gold, double exp)
+        {
+            var b = OpenBatch(stage);
+            b.Count += 1;
+            b.GoldTotal += gold;
+            b.ExpTotal += exp;
+            b.ToStage = stage;
+            b.Tick = State.Time.Tick;
+        }
+
+        /// <summary>What Emit does with a coalesced CurrencyChanged(KILL): its amount is summed through the kill's EnemyKilled.</summary>
+        internal void FoldKillCurrency() => OpenBatch(State.Combat.Stage);
+
         /// <summary>The fought stage: the selected side stage, else the frontier (03 section 2.6; selection is MVP, #159).</summary>
         int FoughtStage => State.Combat.Selected ?? State.Combat.Stage;
 
@@ -277,7 +297,8 @@ namespace HeroCat.Sim
             Ledger.Apply(State, new CurrencyDelta(Currency.HERO_EXP, exp), reason, this);   // the only EXP path: runs CheckHeroLevel
             st.Kills += 1;
             if (isBoss) st.BossKills += 1;
-            Emit(new EnemyKilled(s, isBoss, gold, exp));
+            if (CoalescingKills) FoldKill(s, gold, exp);
+            else Emit(new EnemyKilled(s, isBoss, gold, exp));
             // TODO(#170): Quests.OnKill(s, isBoss) (06).
 
             if (isBoss)
