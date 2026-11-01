@@ -176,7 +176,7 @@
     {
       "key": "FISH_BOARD_DPS_FACTOR",
       "type": "double",
-      "value": 0.5,
+      "value": 0.77,
       "kind": "S"
     },
     {

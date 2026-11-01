@@ -206,7 +206,7 @@ namespace HeroCat.Runtime.Tests
             store.FailWrites = true;
             for (int i = 0; i < RuntimeConfig.SAVE_FAIL_WARN_COUNT + 1; i++) Assert.That(s.Runner.SaveNow(SaveTrigger.Periodic), Is.False);
             Assert.That(notices.Select(n => n.ConsecutiveFailures), Is.EqualTo(new[] { RuntimeConfig.SAVE_FAIL_WARN_COUNT }));
-            Assert.That(s.Analytics.Count("save_write_failed"), Is.EqualTo(1));
+            Assert.That(s.Analytics.Count("save_write_failed"), Is.EqualTo(RuntimeConfig.SAVE_FAIL_WARN_COUNT + 1), "the store tracks each failure (02 section 14.3)");
             store.FailWrites = false;
             Assert.That(s.Runner.SaveNow(SaveTrigger.Periodic), Is.True);
             Assert.That(s.Runner.ConsecutiveSaveFailures, Is.EqualTo(0));

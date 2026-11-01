@@ -22,16 +22,15 @@ namespace HeroCat.Client.Boot
 
         /// <summary>The composition root call (01 section 1.2): GameServices.Build for this build's mode.</summary>
         /// <param name="dataDir">Application.persistentDataPath.</param>
-        public static GameServices Create(string dataDir, ContentDb content, Func<GameState> state)
+        /// <param name="wrapClock">Debug builds: the client's OffsetClock wrapper (ServicesOptions.WrapClock).</param>
+        public static GameServices Create(string dataDir, ContentDb content, Func<GameState> state, Func<IClock, IClock> wrapClock = null)
         {
-            var options = new ServicesOptions { DataDir = dataDir, Content = content, State = state };
+            var options = new ServicesOptions { DataDir = dataDir, Content = content, State = state, WrapClock = wrapClock };
 #if HEROCAT_BACKEND_REMOTE
             // No server yet (TODO(#143)): the offline transport makes every remote call fail as Offline, so the game runs
             // on the device clock with local saves and a queued upload.
-            options.Remote = o => RemoteGameServices.Wire(o, OfflineTransport.Instance);
-            var services = GameServices.Build(Mode, options);
-            ((HeroCat.Remote.Services.ServerClock)services.Clock).TrySync();
-            return services;
+            options.Remote = o => RemoteGameServices.Wire(o, OfflineTransport.Instance, syncNow: true);
+            return GameServices.Build(Mode, options);
 #else
             return GameServices.Build(Mode, options);
 #endif

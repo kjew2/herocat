@@ -92,14 +92,15 @@ namespace HeroCat.Remote.Tests
             {
                 var s = RemoteGameServices.Create(dir, OfflineTransport.Instance);
                 Assert.That(s.Clock, Is.TypeOf<ServerClock>());
-                Assert.That(s.Saves, Is.TypeOf<CloudSaveStore>());
+                Assert.That(s.Saves, Is.TypeOf<LocalSaveStore>());
+                Assert.That(s.Slots, Is.TypeOf<CloudSaveStore>());
                 Assert.That(s.Analytics, Is.SameAs(NullAnalytics.Instance));
                 Assert.That(s.Mode, Is.EqualTo(BackendMode.Remote));
                 Assert.That(s.Inbox, Is.Not.Null);
                 Assert.That(s.Dungeons, Is.Not.Null);
 
                 Assert.That(s.Clock.IsAuthoritative, Is.False);
-                s.Saves.Write(new byte[] { 7 });
+                s.Slots.Write(new byte[] { 7 });
                 Assert.That(File.Exists(Path.Combine(dir, "saves", "slot0.sav")), Is.True);
             }
             finally

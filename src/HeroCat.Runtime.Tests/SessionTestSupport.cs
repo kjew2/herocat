@@ -13,7 +13,7 @@ namespace HeroCat.Runtime.Tests
     {
         public FakeClock Clock;
         public FakeMonoClock Mono;
-        public ISaveStore Store;
+        public ISaveSlotStore Store;
         public MemoryAnalytics Analytics;
         public BootResult Boot;
         public ListCommandLog Log;
@@ -23,9 +23,9 @@ namespace HeroCat.Runtime.Tests
         public EventBus Bus => Boot.Bus;
 
         /// <summary>Boots (load or create, sync, catch-up, save). Asserts the boot is Ready unless <paramref name="expectReady"/> is false.</summary>
-        public static TestSession Open(FakeClock clock = null, ISaveStore store = null, MemoryAnalytics analytics = null,
+        public static TestSession Open(FakeClock clock = null, ISaveSlotStore store = null, MemoryAnalytics analytics = null,
                                        Action<SessionRunnerOptions> configure = null, bool expectReady = true,
-                                       INetTransport network = null)
+                                       INetTransport network = null, IClock clockOverride = null, Guid? installId = null)
         {
             var t = new TestSession
             {
@@ -42,9 +42,9 @@ namespace HeroCat.Runtime.Tests
                 Content = new Func<HeroCat.Sim.Content.ContentDb>[] { () => TestContent.Db },
                 Services = (db, state) => GameServices.Build(BackendMode.Local, new ServicesOptions
                 {
-                    Clock = t.Clock, Saves = t.Store, Analytics = t.Analytics, State = state, Content = db, Network = network,
+                    Clock = clockOverride ?? t.Clock, Slots = t.Store, Analytics = t.Analytics, State = state, Content = db,
+                    Network = network, InstallId = installId ?? TestContent.Device,
                 }),
-                InstallId = TestContent.Device,
                 NewProfileRngRoot = TestContent.Root,
                 Runner = ro,
                 CommandLog = t.Log,

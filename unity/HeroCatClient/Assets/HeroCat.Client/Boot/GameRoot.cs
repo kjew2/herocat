@@ -158,7 +158,7 @@ namespace HeroCat.Client.Boot
                 _cmdlog = new JsonlCommandLog(System.IO.Path.Combine(dataDir, "saves", JsonlCommandLog.FileName));
                 // The build-time BackendMode picks the service implementations (01 section 1.2); nothing else branches on it.
                 _session = ClientSession.Start(new Func<ContentDb>[] { LoadBundledContent },
-                                               (db, state) => Backend.Create(dataDir, db, state), _cmdlog,
+                                               (db, state, wrapClock) => Backend.Create(dataDir, db, state, wrapClock), _cmdlog,
                                                clientVersion: Application.version);
                 if (!_session.IsReady)
                 {

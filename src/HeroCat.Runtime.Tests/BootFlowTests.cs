@@ -20,7 +20,7 @@ namespace HeroCat.Runtime.Tests
     /// <summary>BootFlow (01 section 8.1, section 6 degrade rules; issue #70).</summary>
     public class BootFlowTests
     {
-        static BootOptions Options(FakeClock clock, ISaveStore store, Func<ContentDb>[] content = null,
+        static BootOptions Options(FakeClock clock, ISaveSlotStore store, Func<ContentDb>[] content = null,
                                    Func<GameServices, GameServices> tweak = null, MemoryAnalytics analytics = null)
         {
             return new BootOptions
@@ -30,11 +30,11 @@ namespace HeroCat.Runtime.Tests
                 {
                     var svc = GameServices.Build(BackendMode.Local, new ServicesOptions
                     {
-                        Clock = clock, Saves = store, State = state, Content = db, Analytics = analytics ?? new MemoryAnalytics(),
+                        Clock = clock, Slots = store, State = state, Content = db, Analytics = analytics ?? new MemoryAnalytics(),
+                        InstallId = TestContent.Device,
                     });
                     return tweak != null ? tweak(svc) : svc;
                 },
-                InstallId = TestContent.Device,
                 NewProfileRngRoot = TestContent.Root,
                 Runner = new SessionRunnerOptions { Mono = new FakeMonoClock(), TickBudgetMs = 0 },
                 CommandLog = new ListCommandLog(),
@@ -84,7 +84,7 @@ namespace HeroCat.Runtime.Tests
             var expected = TestContent.Db.ProfileCreatedGrants.Where(g => g.Currency == Currency.DIAMOND).Sum(g => g.Amount);
             Assert.That(r.Outcome, Is.EqualTo(BootOutcome.Ready));
             Assert.That(r.IsNewProfile, Is.True);
-            Assert.That(r.LoadStatus, Is.EqualTo(LoadStatus.NoSave));
+            Assert.That(r.LoadStatus, Is.EqualTo(LoadStatus.NewProfile));
             Assert.That(s.Stats.ClientDiamondsEarned[CurrencyReason.TUTORIAL], Is.EqualTo(expected));
             Assert.That(s.Tutorial.Step, Is.EqualTo(0));
             Assert.That(r.ShowTutorial, Is.True);
@@ -110,7 +110,7 @@ namespace HeroCat.Runtime.Tests
             Assert.That(log.Select(c => c.GetType().Name), Is.EqualTo(new[] { "ApplyServerTime", "ComputeOfflineCatchup" }));
             Assert.That(((ComputeOfflineCatchup)log[1]).NowServerSeconds, Is.EqualTo(clock.NowServerSeconds));
             Assert.That(r.Sim.Tick, Is.EqualTo(tick), "no tick between boot and the first SCR_MAIN frame");
-            Assert.That(SaveSystem.Load(store, TestContent.Db, clock.NowServerSeconds).State.Time.LastTickServerTime,
+            Assert.That(TestContent.Store(store, clock).Load(clock.NowServerSeconds, TestContent.Db).State.Time.LastTickServerTime,
                         Is.EqualTo(clock.NowServerSeconds), "the stamp is saved before handoff");
             // TODO(#108): with the catch-up compute in place, also assert Offline.Pending covers 3 h (credited >= OFFLINE_MIN_S).
         }
@@ -188,7 +188,13 @@ namespace HeroCat.Runtime.Tests
 
             clock.Set(TestContent.T0);   // the device clock went back
             var serverClock = new ServerClock(clock);
-            var r = BootFlow.Run(Options(clock, store, tweak: s => s with { Clock = serverClock }));
+            var o = Options(clock, store);
+            var build = o.Services;
+            o.Services = (db, st) => GameServices.Build(BackendMode.Local, new ServicesOptions
+            {
+                Clock = serverClock, Slots = store, State = st, Content = db, InstallId = TestContent.Device,
+            });
+            var r = BootFlow.Run(o);
             Assert.That(serverClock.NowServerSeconds, Is.EqualTo(TestContent.T0 + 1000));
             Assert.That(r.Sim.State.Time.LastTickServerTime, Is.EqualTo(TestContent.T0 + 1000));
         }

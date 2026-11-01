@@ -13,7 +13,8 @@ namespace HeroCat.Client.Core
     /// <summary>
     /// The client's engine-free session host (07 section 17.3; issue #65): runs Runtime's BootFlow, then forwards the
     /// Unity callbacks to the SessionRunner, the one tick driver shared with bots and tests. GameRoot is a thin forwarder
-    /// over this. It wraps the composition root's clock in an <see cref="OffsetClock"/> for the debug clock cheats.
+    /// over this. The composition root wraps its clock in an <see cref="OffsetClock"/> (ServicesOptions.WrapClock) for the
+    /// debug clock cheats, so saves, summons and the runner all read the same time.
     /// </summary>
     public sealed class ClientSession
     {
@@ -41,26 +42,23 @@ namespace HeroCat.Client.Core
 
         /// <summary>
         /// Boots a session. <paramref name="services"/> is the composition root (GameServices.Build for the build's
-        /// BackendMode); <paramref name="content"/> lists the content sources in priority order.
+        /// BackendMode) given the content, the state accessor and the clock wrapper to pass as ServicesOptions.WrapClock;
+        /// <paramref name="content"/> lists the content sources in priority order.
         /// </summary>
-        public static ClientSession Start(IReadOnlyList<Func<ContentDb>> content, Func<ContentDb, Func<GameState>, GameServices> services,
+        public static ClientSession Start(IReadOnlyList<Func<ContentDb>> content,
+                                          Func<ContentDb, Func<GameState>, Func<IClock, IClock>, GameServices> services,
                                           ICommandLog commandLog = null, SessionRunnerOptions runner = null, string clientVersion = null)
         {
             if (services == null) throw new ArgumentNullException(nameof(services));
             OffsetClock clock = null;
+            Func<IClock, IClock> wrap = inner => clock = new OffsetClock(inner);
             var boot = BootFlow.Run(new BootOptions
             {
                 Content = content,
-                Services = (db, state) =>
-                {
-                    var svc = services(db, state);
-                    clock = new OffsetClock(svc.Clock);
-                    return svc with { Clock = clock };
-                },
+                Services = (db, state) => services(db, state, wrap),
                 CommandLog = commandLog,
                 Runner = runner,
                 ClientVersion = clientVersion,
-                InstallId = Guid.NewGuid(),   // TODO(#73): the persisted install_id file (02 section 8.4)
             });
             return new ClientSession(boot, clock);
         }
@@ -84,7 +82,7 @@ namespace HeroCat.Client.Core
         public void DeleteProfile()
         {
             Vm?.Dispose();
-            Services?.Saves?.DeleteAll();
+            Services?.Slots?.DeleteAll();
         }
     }
 }

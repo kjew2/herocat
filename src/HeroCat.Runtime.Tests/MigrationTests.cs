@@ -42,8 +42,10 @@ namespace HeroCat.Runtime.Tests
             {
                 var body = SaveMigrations.Migrate(v, Fixture(v));
                 var state = SaveSerializer.Materialize(body);
-                Assert.DoesNotThrow(() => SaveSystem.Validate(state, TestContent.Db), $"v{v}");
-                // TODO(#75): and zero repairs once the repair rules exist.
+                IReadOnlyList<string> repairs = null;
+                Assert.DoesNotThrow(() => repairs = SaveValidator.Run(state, state.Time.LastSavedServerTime, TestContent.Db,
+                                                                       new SaveValidatorOptions { InstallId = TestContent.Device }), $"v{v}");
+                Assert.That(repairs, Is.Empty, $"v{v}: every fixture validates with zero repairs (02 acceptance 10)");
             }
         }
 
@@ -88,10 +90,18 @@ namespace HeroCat.Runtime.Tests
                 Primary = SaveSerializer.EncodeBody(body.ToString()),
                 Backup = SaveSerializer.Encode(TestContent.NewState()),
             };
-            var e = Assert.Throws<SaveTooNewException>(() => SaveSystem.Load(store, TestContent.Db, TestContent.T0));
-            Assert.That(e.Found, Is.EqualTo(SaveSchema.Current + 1));
+            var local = TestContent.Store(store);
+            var r = local.Load(TestContent.T0, TestContent.Db);
+            Assert.That(r.Status, Is.EqualTo(LoadStatus.TooNew));
+            Assert.That(r.State, Is.Null, "prev not consulted");
+            Assert.That(r.TooNewVersion, Is.EqualTo(SaveSchema.Current + 1));
             Assert.That(store.Quarantined, Is.Empty);
             Assert.That(store.Primary, Is.Not.Null, "nothing renamed");
+            Assert.Throws<SaveWriteException>(() => local.Save(TestContent.NewState(), SaveTrigger.Periodic), "must not write anything");
+            Assert.That(store.WriteCount, Is.EqualTo(0));
+            // The driver itself throws (02 section 7.1).
+            var e = Assert.Throws<SaveTooNewException>(() => SaveSystem.DecodeFull(store.Primary, TestContent.Db));
+            Assert.That(e.Found, Is.EqualTo(SaveSchema.Current + 1));
         }
 
         [Test]
@@ -103,10 +113,10 @@ namespace HeroCat.Runtime.Tests
             File.WriteAllBytes(store.PrimaryPath, old);
             var analytics = new HeroCat.Runtime.Services.MemoryAnalytics();
             var session = TestSession.Open(new HeroCat.Runtime.Services.FakeClock(TestContent.T0 + 100), store, analytics);
-            Assert.That(session.Boot.LoadStatus, Is.EqualTo(LoadStatus.Corrupt));
+            Assert.That(session.Boot.LoadStatus, Is.EqualTo(LoadStatus.NewProfile));
             Assert.That(session.Boot.IsNewProfile, Is.True);
             Assert.That(store.QuarantinedFiles(), Has.Length.EqualTo(1));
-            Assert.That(SaveSystem.Load(store, TestContent.Db, TestContent.T0 + 100).Status, Is.EqualTo(LoadStatus.Loaded));
+            Assert.That(TestContent.Store(store).Load(TestContent.T0 + 100, TestContent.Db).Status, Is.EqualTo(LoadStatus.Loaded));
         }
     }
 }

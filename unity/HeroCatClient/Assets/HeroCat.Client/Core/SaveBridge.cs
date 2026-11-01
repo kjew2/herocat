@@ -3,8 +3,8 @@ using HeroCat.Sim.Content;
 
 // ============================================================================================================
 // SaveBridge: the client's build-health check for saves. Loading, creating and writing the profile is Runtime's
-// (BootFlow and SessionRunner, issues #65 and #70); the client never touches the save files itself.
-// TODO(#77): 02 section 8's LocalSaveStore and its recovery order replace SaveSystem inside Runtime.
+// (BootFlow and SessionRunner over 02 section 8's LocalSaveStore, issues #65, #70, #77); the client never touches the
+// save files itself.
 // ============================================================================================================
 
 namespace HeroCat.Client.Core

@@ -37,19 +37,23 @@ namespace HeroCat.Remote.Services
             });
         }
 
-        /// <summary>A ServicesOptions.Remote factory over <paramref name="transport"/>.</summary>
-        public static GameServices Wire(ServicesOptions o, IRemoteTransport transport, RemoteOptions options = null)
+        /// <summary>
+        /// A ServicesOptions.Remote factory over <paramref name="transport"/>: the Local set with the remote clock and the
+        /// local-first cloud slots, so the LocalSaveStore and the summon service capture the same clock.
+        /// <paramref name="syncNow"/> tries one clock sync before anything reads the time.
+        /// </summary>
+        public static GameServices Wire(ServicesOptions o, IRemoteTransport transport, RemoteOptions options = null, bool syncNow = false)
         {
             var client = new RemoteClient(transport, options);
-            var local = GameServices.Build(BackendMode.Local, new ServicesOptions
+            var clock = new ServerClock(client, o.Clock ?? new SystemClock());
+            if (syncNow) clock.TrySync();
+            var slots = new CloudSaveStore(o.Slots ?? new FileSaveStore(Path.Combine(o.DataDir, "saves")), client);
+            return GameServices.Build(BackendMode.Local, new ServicesOptions
             {
                 DataDir = o.DataDir, Content = o.Content, State = o.State, Analytics = o.Analytics, Network = o.Network,
+                Clock = clock, Slots = slots, InstallId = o.InstallId, DeviceKey = o.DeviceKey, WrapClock = o.WrapClock,
+                DebugReceiptCatalog = o.DebugReceiptCatalog,
             });
-            return local with
-            {
-                Clock = new ServerClock(client, o.Clock ?? new SystemClock()),
-                Saves = new CloudSaveStore(o.Saves ?? new FileSaveStore(Path.Combine(o.DataDir, "saves")), client),
-            };
         }
     }
 
@@ -98,18 +102,18 @@ namespace HeroCat.Remote.Services
     /// goes to the local store; <see cref="Write"/> also queues the bytes, and <see cref="Upload"/> sends the
     /// latest queued copy. Cloud download and the conflict rule (section 5.2) are P1.
     /// </summary>
-    public sealed class CloudSaveStore : ISaveStore
+    public sealed class CloudSaveStore : ISaveSlotStore
     {
-        readonly ISaveStore _local;
+        readonly ISaveSlotStore _local;
         readonly RemoteClient _client;
 
-        public CloudSaveStore(ISaveStore local, RemoteClient client)
+        public CloudSaveStore(ISaveSlotStore local, RemoteClient client)
         {
             _local = local ?? throw new ArgumentNullException(nameof(local));
             _client = client ?? throw new ArgumentNullException(nameof(client));
         }
 
-        public ISaveStore Local => _local;
+        public ISaveSlotStore Local => _local;
 
         /// <summary>Newest bytes written locally and not yet accepted by the server; null when in sync.</summary>
         public byte[] PendingUpload { get; private set; }
@@ -123,6 +127,13 @@ namespace HeroCat.Remote.Services
         }
 
         public void Quarantine(SaveSlot slot, long nowServerSec) => _local.Quarantine(slot, nowServerSec);
+
+        public void ArchiveConflict(byte[] bytes, long nowServerSec) => _local.ArchiveConflict(bytes, nowServerSec);
+
+        public void DeleteStrayTemp() => _local.DeleteStrayTemp();
+
+        public void Purge(long nowServerSec, long corruptMaxAgeSec, long conflictMaxAgeSec) =>
+            _local.Purge(nowServerSec, corruptMaxAgeSec, conflictMaxAgeSec);
 
         public void DeleteAll()
         {

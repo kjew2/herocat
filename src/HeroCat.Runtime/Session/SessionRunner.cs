@@ -1,10 +1,15 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
+using System.Threading.Tasks;
 using HeroCat.Runtime.Save;
 using HeroCat.Runtime.Services;
+using HeroCat.Runtime.Summons;
 using HeroCat.Sim;
 using HeroCat.Sim.Commands;
+using HeroCat.Sim.Content;
+using HeroCat.Sim.Events;
 using HeroCat.Sim.Replay;
 
 namespace HeroCat.Runtime.Session
@@ -52,12 +57,6 @@ namespace HeroCat.Runtime.Session
     {
         public IMonoClock Mono { get; set; } = StopwatchMonoClock.Instance;
 
-        /// <summary>This install's id, stamped into DeviceId on every save. TODO(#73): the persisted install_id file.</summary>
-        public Guid InstallId { get; set; }
-
-        /// <summary>HMAC device key for the save envelope (02 section 10), if any.</summary>
-        public byte[] DeviceKey { get; set; }
-
         public int MaxTicksPerFrame { get; set; } = RuntimeConfig.MAX_TICKS_PER_FRAME;
         public double InAppGapSec { get; set; } = RuntimeConfig.IN_APP_GAP_SEC;
         public double AutosaveIntervalSec { get; set; } = RuntimeConfig.AUTOSAVE_INTERVAL_SEC;
@@ -89,13 +88,15 @@ namespace HeroCat.Runtime.Session
         Queue<Command> _running = new Queue<Command>();
         double _accTicks;
         long _lastMono, _lastSaveMono, _lastClockSyncMono;
-        bool _dirty, _started;
+        bool _dirty, _started, _clockAnomalyReported;
 
         public SessionRunner(Simulation sim, GameServices services, EventBus bus, ICommandLog log = null, SessionRunnerOptions options = null)
         {
             _sim = sim ?? throw new ArgumentNullException(nameof(sim));
             _svc = services ?? throw new ArgumentNullException(nameof(services));
             if (services.Clock == null || services.Saves == null) throw new ArgumentException("services needs Clock and Saves", nameof(services));
+            // Main-thread only (01 section 4): every runner-owned publish reports clock_anomaly{backwards} (02 section 11.3).
+            bus.Subscribe<ClockWentBackwards>(e => ReportClockBackwards(e.DeltaSeconds));
             _bus = bus ?? throw new ArgumentNullException(nameof(bus));
             _opt = options ?? new SessionRunnerOptions();
             _mono = _opt.Mono ?? StopwatchMonoClock.Instance;
@@ -272,7 +273,7 @@ namespace HeroCat.Runtime.Session
             _lastSaveMono = _mono.Ticks;
             try
             {
-                WriteSave(trigger);
+                _svc.Saves.Save(_sim.State, trigger);   // 02 section 8.2: the store stamps, encodes and rotates
                 _dirty = false;
                 ConsecutiveSaveFailures = 0;
                 LastSaveError = null;
@@ -281,23 +282,38 @@ namespace HeroCat.Runtime.Session
             }
             catch (SaveWriteException e)
             {
-                ConsecutiveSaveFailures++;
+                ConsecutiveSaveFailures++;   // the store tracks save_write_failed{consecutive} (02 section 14.3)
                 LastSaveError = e.Message;
-                if (ConsecutiveSaveFailures == RuntimeConfig.SAVE_FAIL_WARN_COUNT)
-                {
-                    _svc.Analytics?.Track("save_write_failed", new Dictionary<string, object> { ["consecutive"] = ConsecutiveSaveFailures, ["trigger"] = trigger.ToString() });
-                    _bus.PublishSystem(new SaveWriteFailed(ConsecutiveSaveFailures));
-                }
+                if (ConsecutiveSaveFailures == RuntimeConfig.SAVE_FAIL_WARN_COUNT) _bus.PublishSystem(new SaveWriteFailed(ConsecutiveSaveFailures));
                 return false;
             }
         }
 
-        void WriteSave(SaveTrigger trigger)
+        /// <summary>
+        /// The Runtime summon flow of 01 section 8.5, minimal (carried over from GameSession): ask the summon service, apply
+        /// the payload through the logged ApplySummonResult (the only summon mutator), publish, save. Main thread; the
+        /// local service completes synchronously. TODO(#93): the persisted Pending.Summon intent, the summon analytics
+        /// event (04 section 13) and the Remote pre-roll and timeout path.
+        /// </summary>
+        public async Task<Result<SummonResultPayload, SummonError>> SummonAsync(Banner banner, int count, SummonPayment payment,
+                                                                               CancellationToken ct = default)
         {
-            // Ticking saves stamp LastTickServerTime = now: that window was ticked, not idle (02 section 8.2).
-            bool ticking = TicksEnabled && (trigger == SaveTrigger.Periodic || trigger == SaveTrigger.Pause || trigger == SaveTrigger.Quit);
-            // TODO(#77): 02 section 8.1's ISaveStore.Save(state, trigger) replaces this call into SaveSystem.
-            SaveSystem.Write(_svc.Saves, _sim.State, _svc.Clock.NowServerSeconds, _sim.Db, _opt.InstallId, ticking, _opt.DeviceKey);
+            if (_svc.Summon == null) throw new InvalidOperationException("no summon service in this GameServices");
+            var result = await _svc.Summon.PullAsync(SummonRequest.New(banner, count, payment), ct).ConfigureAwait(false);
+            if (!result.IsOk) return result;
+            var applied = Issue(new ApplySummonResult(result.Value));
+            if (!applied.Ok) throw new InvalidOperationException("ApplySummonResult rejected a service payload: " + applied);
+            _bus.Publish(_sim.DrainEvents());
+            SaveNow(SaveTrigger.Summon);
+            return result;
+        }
+
+        /// <summary>clock_anomaly{backwards}, at most once per session (02 section 11.3).</summary>
+        void ReportClockBackwards(long seconds)
+        {
+            if (_clockAnomalyReported) return;
+            _clockAnomalyReported = true;
+            _svc.Analytics?.Track("clock_anomaly", new Dictionary<string, object> { ["kind"] = "backwards", ["seconds"] = seconds });
         }
 
         void SyncAndCatchUp()
@@ -305,6 +321,9 @@ namespace HeroCat.Runtime.Session
             // TODO(#149): fire ServerClock.SyncAsync here (not awaited; the result lands on a later frame), and on a jump
             // over CLOCK_JUMP_WARN_SEC credit the second catch-up window (01 section 8.2 step 2).
             long now = _svc.Clock.NowServerSeconds;
+            // 02 section 11.3: a resume behind the catch-up anchor credits nothing (the sim never moves the anchor back).
+            long behind = _sim.State.Time.LastTickServerTime - now;
+            if (behind > 0) ReportClockBackwards(behind);
             Issue(new ApplyServerTime(now));          // re-anchor; day/week rollover first
             Issue(new ComputeOfflineCatchup(now));    // stores or sums into Offline.Pending and stamps LastTickServerTime (8.7)
             _bus.Publish(_sim.DrainEvents());

@@ -17,7 +17,10 @@ namespace HeroCat.Runtime.Tests
     {
         static ClientSession Start(FakeClock clock, MemorySaveStore store, FakeMonoClock mono, Func<ContentDb> content = null) =>
             ClientSession.Start(new[] { content ?? (() => TestContent.Db) },
-                                (db, state) => GameServices.Build(BackendMode.Local, new ServicesOptions { Clock = clock, Saves = store, State = state, Content = db }),
+                                (db, state, wrap) => GameServices.Build(BackendMode.Local, new ServicesOptions
+                                {
+                                    Clock = clock, Slots = store, State = state, Content = db, WrapClock = wrap, InstallId = TestContent.Device,
+                                }),
                                 runner: new SessionRunnerOptions { Mono = mono, TickBudgetMs = 0 });
 
         [Test]
@@ -42,6 +45,7 @@ namespace HeroCat.Runtime.Tests
             cs.Vm.DebugRunHours(1);
             Assert.That(cs.Runner.Sim.Tick - before, Is.EqualTo(3600L * hz));
             Assert.That(cs.Clock.OffsetSeconds, Is.EqualTo(3600));
+            Assert.That(cs.Services.Clock, Is.SameAs(cs.Clock), "the wrapped clock is the one every service reads");
 
             int writes = store.WriteCount;
             cs.Vm.DebugRequestSave();

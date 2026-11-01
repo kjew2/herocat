@@ -25,16 +25,18 @@ namespace HeroCat.Runtime.Tests
             Assert.That(svc.Mode, Is.EqualTo(BackendMode.Local));
             Assert.That(svc.Clock, Is.InstanceOf<ServerClock>());
             Assert.That(svc.Clock.IsAuthoritative, Is.False);
-            Assert.That(svc.Saves, Is.InstanceOf<FileSaveStore>());
+            Assert.That(svc.Saves, Is.InstanceOf<LocalSaveStore>());
+            Assert.That(svc.Slots, Is.InstanceOf<FileSaveStore>());
+            Assert.That(svc.Summon, Is.InstanceOf<HeroCat.Runtime.Summons.LocalSummonService>());
+            Assert.That(svc.InstallId, Is.EqualTo(HeroCat.Runtime.Profile.InstallId.LoadOrCreate(Dir)));
             Assert.That(svc.Inbox, Is.InstanceOf<LocalInboxService>());
             Assert.That(svc.Receipts, Is.InstanceOf<DisabledReceiptValidator>());
             Assert.That(svc.Config, Is.InstanceOf<LocalConfigService>());
             Assert.That(svc.Dungeons, Is.InstanceOf<LocalDungeonSeedService>());
             Assert.That(svc.Analytics, Is.SameAs(NullAnalytics.Instance));
-            // TODO(#92): svc.Summon is a LocalSummonService.
 
             var mem = GameServices.InMemory(new FakeClock(TestContent.T0));
-            Assert.That(mem.Saves, Is.InstanceOf<MemorySaveStore>());
+            Assert.That(mem.Slots, Is.InstanceOf<MemorySaveStore>());
             Assert.That(mem.Clock, Is.InstanceOf<FakeClock>());
         }
 

@@ -31,6 +31,16 @@ step "Content: exporter tests, and content_src builds to content/ (and the Sim D
 python3 tools/test_export_content.py
 python3 tools/export_content.py check
 
+step "Tools: fish_model.py S-constant checks (05 section 9)"
+python3 tools/fish_model.py --quiet
+
+step "Clock purity: no clock reads in HeroCat.Sim, only ServerClock.cs/SessionRunner.cs in HeroCat.Runtime (specs/02 AC 18)"
+python3 tools/check_clock_apis.py --self-test
+python3 tools/check_clock_apis.py
+
+step "Summons: tools/gacha_model.py matches content/, Fixtures/Summon/stream.json and vectors.json (04, decision 46)"
+python3 tools/gacha_model.py --check
+
 step "Release: build-android.yml helpers (version.json, size gate)"
 python3 .github/scripts/test_android_release.py
 
@@ -51,6 +61,9 @@ BOTS="dotnet run -c Release --no-build --project src/HeroCat.Bots --"
 
 step "Saves: the v1 fixture matches what the bot CLI generates (until SaveSchema.V1Frozen)"
 $BOTS save-fixture --check
+
+step "Summons: Fixtures/Summon/stream.json matches what the bot CLI generates (the C# side of issue #14)"
+$BOTS summon-stream --check
 
 if [ "$FAST" -eq 1 ]; then
   step ".NET: unit tests (no golden)"
@@ -86,11 +99,6 @@ else
 
   step "Bots: golden files match"
   soft $BOTS golden --check
-
-  # Report-only: 05 section 9's "full cap-10 board between day 6 and day 12" band cannot pass, because a 20-cell
-  # board holds at most 11 cap fish (making one needs FISH_MAX_LVL0 free cells). Pending a design decision.
-  step "Tools: fish_model.py S-constant checks (report-only)"
-  soft python3 tools/fish_model.py --quiet
 fi
 
 if [ "$REPORT_ONLY_FAILED" -eq 1 ]; then

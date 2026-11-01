@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using HeroCat.Runtime.Content;
 using HeroCat.Runtime.Errors;
 using HeroCat.Runtime.Profile;
@@ -29,9 +30,6 @@ namespace HeroCat.Runtime.Boot
 
         /// <summary>This build's version for config's minClientVersion gate (null skips the gate).</summary>
         public string ClientVersion { get; set; }
-
-        /// <summary>This install's DeviceId. TODO(#73): the persisted install_id file (02 section 8.4).</summary>
-        public Guid InstallId { get; set; }
 
         /// <summary>Server playerId when known (MVP auth), else Guid.Empty for a local guest.</summary>
         public Guid PlayerId { get; set; }
@@ -151,34 +149,25 @@ namespace HeroCat.Runtime.Boot
             // 4. Save load, or a new profile with the profile-created grant (TUTORIAL_DIAMONDS + TUTORIAL_WEAPON_ID, tutorial step 0).
             progress?.Invoke(BootStep.Save);
             long now = svc.Clock.NowServerSeconds;
-            LoadResult load;
-            try
-            {
-                load = SaveSystem.Load(svc.Saves, r.Content, now, analytics);   // TODO(#77): 02 section 8's ISaveStore.LoadAsync
-            }
-            catch (SaveTooNewException)
-            {
-                return Fail(r, BootOutcome.Fatal, ErrorClassifier.SAVE_TOO_NEW, o, now);   // nothing is written over a newer save
-            }
+            if (svc.Saves is LocalSaveStore local)   // a new profile is this boot's guest (or MVP account), seeded as asked
+                local.NewProfileFactory = (db, t) => ProfileFactory.Create(db, o.PlayerId, t, svc.InstallId, o.NewProfileRngRoot);
+            // 02 section 8.3's recovery order; the store floors the clock at the loaded LastSavedServerTime (11.2 rule 4).
+            var load = svc.Saves.LoadAsync(now, r.Content, CancellationToken.None).GetAwaiter().GetResult();
             r.LoadStatus = load.Status;
-            if (load.HasState)
+            if (load.Status == LoadStatus.TooNew)
+                return Fail(r, BootOutcome.Fatal, ErrorClassifier.SAVE_TOO_NEW, o, now);   // nothing is written over a newer save
+            // TODO(#152): LoadStatus.Conflict (cloud, MVP) opens the 02 section 9.4 conflict modal before SCR_MAIN.
+            state = load.State;
+            if (load.IsNewProfile)
             {
-                state = load.State;
-                (svc.Clock as IClockFloor)?.SetFloor(state.Time.LastSavedServerTime);   // 02 section 11.2 rule 4
-            }
-            else
-            {
-                // NoSave, or Corrupt (both files quarantined): a new profile (02 section 8.3 step 4). See the gap note in
-                // the PR on 01's SAVE_CORRUPT_ALL vs 02's quarantine-and-recreate.
-                state = ProfileFactory.Create(r.Content, o.PlayerId, now, o.InstallId, o.NewProfileRngRoot);
+                // No save, or every local copy bad (quarantined): a new profile (02 section 8.3 step 4). See the gap note
+                // in the runtime track report on 01's SAVE_CORRUPT_ALL vs 02's quarantine-and-recreate.
                 r.IsNewProfile = true;
-                analytics.Track("profile_created", new Dictionary<string, object> { ["loadStatus"] = load.Status.ToString() });
+                analytics.Track("profile_created", new Dictionary<string, object> { ["rngRoot"] = state.RngRoot.ToString() });
             }
             r.Sim = new Simulation(state, r.Content);
             r.Bus = new EventBus();
-            var runnerOptions = o.Runner ?? new SessionRunnerOptions();
-            if (runnerOptions.InstallId == Guid.Empty) runnerOptions.InstallId = o.InstallId;
-            r.Runner = new SessionRunner(r.Sim, svc, r.Bus, o.CommandLog, runnerOptions);
+            r.Runner = new SessionRunner(r.Sim, svc, r.Bus, o.CommandLog, o.Runner ?? new SessionRunnerOptions());
             Done(BootStep.Save);
 
             // 5. Rollover first, then the catch-up compute (stores Offline.Pending, stamps LastTickServerTime), save now.

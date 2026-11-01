@@ -80,10 +80,10 @@ namespace HeroCat.Sim.Commands
         internal override ApplyResult Execute(Simulation sim) => sim.HandleComputeOfflineCatchup(this);
     }
 
-    /// <summary>The only summon mutator (01 section 2.5, 04 section 10). TODO(#91): the body.</summary>
+    /// <summary>The only summon mutator (01 section 2.5, 04 section 10); the body is Simulation.Summons.cs.</summary>
     public sealed record ApplySummonResult(SummonResultPayload Payload) : Command
     {
-        internal override ApplyResult Execute(Simulation sim) => ApplyResult.Reject(RejectCode.NotAvailable, SimRejectReasons.NOT_IMPLEMENTED);
+        internal override ApplyResult Execute(Simulation sim) => sim.HandleApplySummonResult(this);
     }
 
     /// <summary>Server-granted items (01 section 2.5, 06 section 9). TODO(#176): the body.</summary>
