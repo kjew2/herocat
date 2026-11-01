@@ -29,6 +29,7 @@ step() { printf '\n== %s\n' "$1"; }
 
 step "Content: exporter tests, and content_src builds to content/ (and the Sim DTOs) with no drift"
 python3 tools/test_export_content.py
+python3 tools/test_content.py
 python3 tools/export_content.py check
 
 step "Tools: fish_model.py S-constant checks (05 section 9)"
