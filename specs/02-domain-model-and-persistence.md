@@ -1317,7 +1317,7 @@ As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
 3. An upload outcome is accepted (the events leave the queue), retry (offline, timeout, 5xx, 429, or the uploader threw: the flush stops and the next flush retries the same batch) or rejected (a non-retryable 4xx: the batch is dropped so it cannot block the queue). The remote uploader (Firebase for every event, the backend events route of issue #209 for the economy ones) waits on `ApiClient` (issue #143); a sink with no uploader keeps the events on disk.
 4. A Local build without a backend uses `NullAnalytics` and writes no queue file (01 section 1.2); bots and tests use `MemoryAnalytics` (no envelope, no files).
 
-### 14.3 Events owned here (session, save health, cloud, clock)
+### 14.3 Events owned here (session, save health, cloud, clock, client performance)
 
 | Event | Properties | Emitted by | Notes |
 |---|---|---|---|
@@ -1328,6 +1328,10 @@ As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
 | `save_fallback`, `save_corrupt{problems}`, `save_corrupt_all{supportId}`, `save_repaired{rule}`, `save_reject{file, reason}`, `save_write_failed{consecutive}`, `migration_applied{from, to}` | | Runtime | Save health. `save_corrupt_all` is a new profile replacing an unreadable save (8.3; issue #248). |
 | `clock_anomaly` | `kind` (backwards/gap/resync), `seconds` | Runtime | Section 11 and 01; also emitted with `kind = backwards` when 06's offline compute sees `ClockWentBackwards`. |
 | `player_deleted` | `playerIdHash` | Server | 13.2 step 5. |
+| `profile_created` | | Runtime (boot step 4, new profile) | The funnel step only; the `RngRoot` seed (3.4) is never sent (issue #261). |
+| `boot_ms` | `totalMs`, `contentMs`, `configMs`, `authMs`, `saveMs`, `catchUpMs`, `handoffMs` | Runtime, once per cold boot | 10 section 5's cold-boot metric with the 01 section 8.1 step breakdown (issue #261). |
+| `resume_ms` | `ms` | Runtime, once per warm resume | 10 section 5; emitted with issue #218. |
+| `perf_tick` | `p50Ms`, `p95Ms`, `maxMs`, `ticks` | Runtime, sampled once per session (not per tick) | 10 section 5's tick cost; emitted with issue #218. |
 
 ### 14.4 Event index
 
@@ -1338,7 +1342,7 @@ As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
 | `fish_release`, `fish_merge`, `fish_discovered`, `fish_discard`, `fish_board_snapshot` | 05 section 13 |
 | `currency_changed`, `quest_completed`, `quest_claimed`, `achievement_unlocked`, `dungeon_run`, `offline_catchup`, `offline_claimed`, `day_rollover`, `daily_gift_claimed`, `exchange`, `shop_view`, `iap_initiated`, `iap_completed`, `iap_failed`, `iap_status`, `inbox_claimed` | 06 section 13 |
 | `plausibility_flag` | 08 section 7.4 |
-| `session_start`, `session_end`, `cloud_save_uploaded`, `cloud_conflict`, `cloud_autoresolved`, `save_*`, `migration_applied`, `clock_anomaly`, `player_deleted` | 14.3 |
+| `session_start`, `session_end`, `cloud_save_uploaded`, `cloud_conflict`, `cloud_autoresolved`, `save_*`, `migration_applied`, `clock_anomaly`, `player_deleted`, `profile_created`, `boot_ms`, `resume_ms`, `perf_tick` | 14.3 |
 
 07 defines no events of its own; screen-driven events (`shop_view`) are owned by the feature spec of the screen. A new event is added to its owner's section and to this index in the same change.
 
