@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "2026.11.02.2",
+  "content_version": "2026.11.02.3",
   "min_client_version": "0.1.0",
   "source_revision": "2026-11-01 m0 skeleton, spec 00 seed values (agent)",
   "hot_apply": false,
@@ -49,6 +49,16 @@
       "file": "curves.json",
       "rows": 3,
       "sha256": "a1490fbffc02c3e973d6c62d7adea5712d100a31934a7851fc355da3be0c6600"
+    },
+    "dungeon_floors": {
+      "file": "dungeon_floors.json",
+      "rows": 120,
+      "sha256": "e86754d6fd47f6e7dc7d111bbebcc7fe5079029e5e7918849b8e2d70a03958b6"
+    },
+    "dungeons": {
+      "file": "dungeons.json",
+      "rows": 3,
+      "sha256": "8d275990ede514c890613022f34d5d33ff19b0d258676ae401f6fe630e9ee96f"
     },
     "dupe_levels": {
       "file": "dupe_levels.json",
@@ -139,11 +149,11 @@
   "localization": {
     "en": {
       "file": "localization.en.json",
-      "rows": 669,
-      "sha256": "33e673b647415464e401c81110f4f0e7ca0474bd9c5a889558f7e2f33636359d"
+      "rows": 680,
+      "sha256": "d40322acfaacb9c23eb0e847ab0f861420a2d5ed28c0df719ec1f30af9f941a9"
     }
   },
-  "content_hash": "83d6b7575bef587199c304e2379c54c3406c5303184e2aa29e52e6fb070d2d86",
+  "content_hash": "a0c2056dab085388314f357ceac7e4d9e6bab7a0eb81686ae5ed766d345bbdeb",
   "s_constants": [
     "BASE_HP",
     "BOSS_ROCK_CANDY_P",

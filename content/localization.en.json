@@ -2677,6 +2677,50 @@
     {
       "key": "companion.m_02.name",
       "text": "Mythic Companion 2"
+    },
+    {
+      "key": "dungeon.dungeon_fish.name",
+      "text": "Fish Coin Dungeon"
+    },
+    {
+      "key": "dungeon.dungeon_fish.desc",
+      "text": "Earn Fish Coins for Research"
+    },
+    {
+      "key": "dungeon.dungeon_candy.name",
+      "text": "Rock Candy Dungeon"
+    },
+    {
+      "key": "dungeon.dungeon_candy.desc",
+      "text": "Earn Rock Candy for Awakening"
+    },
+    {
+      "key": "dungeon.dungeon_exp.name",
+      "text": "EXP Dungeon"
+    },
+    {
+      "key": "dungeon.dungeon_exp.desc",
+      "text": "Earn hero EXP"
+    },
+    {
+      "key": "reject.dungeon_locked",
+      "text": "Dungeons unlock at stage 30"
+    },
+    {
+      "key": "reject.dungeon_floor_not_unlocked",
+      "text": "Clear the previous floor first"
+    },
+    {
+      "key": "reject.boss_attempt_in_progress",
+      "text": "Finish the boss fight first"
+    },
+    {
+      "key": "reject.nothing_to_sweep",
+      "text": "Clear a floor first to sweep"
+    },
+    {
+      "key": "reject.invalid_dungeon",
+      "text": "Unknown dungeon"
     }
   ]
 }

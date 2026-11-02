@@ -30,8 +30,14 @@ namespace HeroCat.Runtime.Save
         /// <summary>Informational lines, e.g. an unknown Rng stream dropped (02 section 6.3).</summary>
         public List<string> Log { get; } = new List<string>();
 
-        /// <summary>P16 found a dungeon run in the save and abandoned it. TODO(#172): the caller emits DungeonAbandoned.</summary>
+        /// <summary>P16 found a dungeon run in the save and abandoned it.</summary>
         public bool DungeonAbandoned { get; internal set; }
+
+        /// <summary>
+        /// The run P16 abandoned, as the sim's DungeonAbandoned event (06 section 13 `dungeon_run` outcome abandoned); null when
+        /// P16 did not fire, or fired on a Dungeon mode with no run. TODO(#146): the boot flow forwards it to analytics.
+        /// </summary>
+        public HeroCat.Sim.Events.DungeonAbandoned AbandonedRun { get; internal set; }
     }
 
     /// <summary>
@@ -448,9 +454,11 @@ namespace HeroCat.Runtime.Save
             {
                 var c = s.Combat;
                 if (c.DungeonRun == null && c.Mode == CombatMode.Stage) return;
+                if (c.DungeonRun != null)
+                    Report.AbandonedRun = new HeroCat.Sim.Events.DungeonAbandoned(c.DungeonRun.Kind, c.DungeonRun.Floor, c.DungeonRun.GrantId ?? "");
                 c.Mode = CombatMode.Stage;
                 c.DungeonRun = null;
-                Report.DungeonAbandoned = true;   // TODO(#172): emit DungeonAbandoned once the dungeon events exist
+                Report.DungeonAbandoned = true;
                 Hit("P16");
             }
 

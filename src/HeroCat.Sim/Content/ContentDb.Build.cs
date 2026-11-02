@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using HeroCat.Sim.Content.Dto;
 
 namespace HeroCat.Sim.Content
@@ -85,6 +86,7 @@ namespace HeroCat.Sim.Content
                 Required("quests_daily", d.QuestsDaily); Required("quests_weekly", d.QuestsWeekly);
                 Required("achievements", d.Achievements);
                 Required("shop_exchange", d.ShopExchange);
+                Required("dungeons", d.Dungeons); Required("dungeon_floors", d.DungeonFloors);
                 if (Errors.Count > 0) return null;
 
                 // Loader-scope validation (ContentDb.Rules.cs, issue #126): keys first, then constants, refs and the
@@ -301,6 +303,8 @@ namespace HeroCat.Sim.Content
                 foreach (var o in offers) offerMap[o.Id] = o;
                 db.ExchangeOffers = offers.AsReadOnly();
                 db._exchangeById = new ReadOnlyDictionary<string, ExchangeOfferDef>(offerMap);
+
+                BuildDungeons(db, d, weapons, skills, companions);
                 return db;
             }
 
@@ -533,6 +537,48 @@ namespace HeroCat.Sim.Content
             {
                 foreach (var b in banners) if (string.Equals(b.Id, id, StringComparison.Ordinal)) return true;
                 return false;
+            }
+
+            /// <summary>
+            /// dungeons and dungeon_floors (09 sections 5.24-5.25, issue #173): MVP rows, so an M0 build has none. Floors of a
+            /// dungeon filtered out by tier are dropped with it; a HERO_EXP floor's reward is resolved here from
+            /// curves[exp_per_kill] at the floor's stage-equivalent (06 section 6.3).
+            /// </summary>
+            void BuildDungeons(ContentDb db, ContentDtos d, Dictionary<string, WeaponDef> weapons, Dictionary<string, SkillDef> skills,
+                               Dictionary<string, CompanionDef> companions)
+            {
+                var floorsOf = new Dictionary<string, List<DungeonFloorRowDto>>(StringComparer.Ordinal);
+                foreach (var f in Rows(d.DungeonFloors))
+                {
+                    if (f.Dungeon == null) continue;
+                    if (!floorsOf.TryGetValue(f.Dungeon, out var l)) floorsOf[f.Dungeon] = l = new List<DungeonFloorRowDto>();
+                    l.Add(f);
+                }
+                var byId = new Dictionary<string, DungeonDef>(StringComparer.Ordinal);
+                var byKind = new DungeonDef[System.Enum.GetValues(typeof(Dungeon)).Length];
+                foreach (var r in Rows(d.Dungeons))
+                {
+                    if (!Keep("dungeons", r.Id, r.Tier)) continue;
+                    string loc = "dungeons[" + r.Id + "]";
+                    Dungeon? kind = r.Kind == null ? (Dungeon?)null : Enum<Dungeon>(r.Kind, loc + ".kind");
+                    Currency? ticket = r.TicketCurrency == null ? (Currency?)null : Enum<Currency>(r.TicketCurrency, loc + ".ticket_currency");
+                    var floors = new List<DungeonFloorDef>();
+                    if (floorsOf.TryGetValue(r.Id, out var rows))
+                        foreach (var f in rows)
+                        {
+                            string floc = "dungeon_floors[" + r.Id + "," + f.Floor.ToString(CultureInfo.InvariantCulture) + "]";
+                            int stage = f.Floor * r.FloorStageStep;
+                            double amount = f.RewardKillsEquiv is int kills ? kills * db.ExpPerKill.Eval(stage) : f.RewardAmount.GetValueOrDefault();
+                            floors.Add(new DungeonFloorDef(f.Floor, stage, Enum<Currency>(f.RewardCurrency, floc + ".reward_currency"), amount,
+                                                           f.RewardKillsEquiv, f.Boss, Grants(f.FirstClearBonus, floc + ".first_clear_bonus", weapons, skills, companions)));
+                        }
+                    var def = new DungeonDef(r.Id, kind, ticket, r.TicketsPerDay, r.FloorStageStep, r.Floors, r.SweepAllowed,
+                                             Enum<Tier>(r.Tier, loc + ".tier"), r.NameKey, r.DescKey, r.Icon, r.Background, floors.AsReadOnly());
+                    byId[r.Id] = def;
+                    if (kind is Dungeon k) byKind[(int)k] = def;
+                }
+                db.Dungeons = new ReadOnlyDictionary<string, DungeonDef>(byId);
+                db._dungeonByKind = byKind;
             }
 
             IReadOnlyList<Grant> Grants(GrantDto[] grants, string loc, Dictionary<string, WeaponDef> weapons, Dictionary<string, SkillDef> skills,

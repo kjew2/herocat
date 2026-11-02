@@ -58,6 +58,13 @@ namespace HeroCat.Runtime.Session
             }));
             _subs.Add(bus.Subscribe<DailyGiftClaimed>(_ => Track(new AnalyticsEvents.DailyGiftClaimed())));
             _subs.Add(bus.Subscribe<ItemExchanged>(e => Track(new AnalyticsEvents.Exchange(e.OfferId, e.Qty, e.Diamonds))));
+            // dungeon_run (issues #172, #173); the abandoned row comes from the save validator's report: TODO(#146).
+            _subs.Add(bus.Subscribe<DungeonCleared>(e =>
+                Track(new AnalyticsEvents.DungeonRun(e.Dungeon, e.Floor, "cleared", e.TicksUsed, e.RewardCurrency, e.RewardAmount, e.GrantId))));
+            _subs.Add(bus.Subscribe<DungeonFailed>(e =>
+                Track(new AnalyticsEvents.DungeonRun(e.Dungeon, e.Floor, "failed", e.TicksUsed, null, 0, e.GrantId))));
+            _subs.Add(bus.Subscribe<DungeonSwept>(e =>
+                Track(new AnalyticsEvents.DungeonRun(e.Dungeon, e.Floor, "swept", 0, e.RewardCurrency, e.RewardAmount, ""))));
 
             // 03 section 11: Awaken debits first, so its CurrencyChanged(AWAKENING) arrives just before Awakened.
             _subs.Add(bus.Subscribe<CurrencyChanged>(e =>

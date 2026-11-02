@@ -74,6 +74,14 @@ namespace HeroCat.Sim.Content
         /// <summary>The exchange offer with this id, or null if shop_exchange (after the tier filter) has none.</summary>
         public ExchangeOfferDef ExchangeOffer(string id) => id != null && _exchangeById.TryGetValue(id, out var o) ? o : null;
 
+        /// <summary>Dungeons by id (09 section 5.24). Empty in an M0 build (tier MVP rows).</summary>
+        public IReadOnlyDictionary<string, DungeonDef> Dungeons { get; private set; }
+
+        DungeonDef[] _dungeonByKind;
+
+        /// <summary>The dungeon of <paramref name="kind"/>, or null if this build has none (M0, or an ordinal outside the enum).</summary>
+        public DungeonDef DungeonOf(Dungeon kind) => (int)kind >= 0 && (int)kind < _dungeonByKind.Length ? _dungeonByKind[(int)kind] : null;
+
         /// <summary>Research nodes by id (09 section 5.18). Empty when the table is absent or filtered out by tier (M0).</summary>
         public IReadOnlyDictionary<string, ResearchDef> Research { get; private set; }
 

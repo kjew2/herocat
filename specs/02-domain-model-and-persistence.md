@@ -230,6 +230,7 @@ public sealed class DungeonRunState                        // a ticked run in th
     public string  GrantId     { get; init; } = "";        // server grant id (MVP) for plausibility correlation; "" in M0
     public int     EnemyIndex  { get; set; }               // position in the floor's enemy sequence; always 0 in MVP (one boss per floor)
     public int     TicksLeft   { get; set; }
+    public FightState Fight    { get; set; }               // transient (3.3): the floor's boss fight; never saved, a reload abandons the run (P16). Combat.Fight stays the frozen frontier fight (issue #172)
 }
 
 public sealed class ProgressState
@@ -257,8 +258,8 @@ public sealed class QuestProgress
 public sealed class DungeonState                             // daily counters reset off Time.DayKey (06)
 {
     public int[] BestFloor     { get; set; } = new int[3];   // per Dungeon ordinal; 0 = never cleared
-    public int[] EntriesToday  { get; set; } = new int[3];   // informational for the HUD; tickets are the real limiter
-    public int[] SweepsToday   { get; set; } = new int[3];
+    public int[] EntriesToday  { get; set; } = new int[3];   // cleared runs today, informational for the HUD; tickets are the real limiter; reset at rollover
+    public int[] SweepsToday   { get; set; } = new int[3];   // sweeps today; reset at rollover
     public List<DungeonRunRecord> RecentRuns { get; init; } = new();   // newest last, at most DUNGEON_RECENT_RUNS_MAX; never reset by rollover (issue #52)
 }
 
@@ -350,6 +351,7 @@ public sealed class LifetimeStats
 ### 3.3 Deliberately not saved
 
 - `Combat.Fight`: current enemy HP, spawn timer, boss timer, attack progress, DOTs, buffs and pending tap zaps. On load the player faces a fresh mob at `Combat.Stage`; a boss attempt in progress restarts (`Boss == Pending` respawns the boss with a full timer), and a `Walled` stage stays walled. Queued fish missiles are saved (`Combat.MissileQueue`).
+- `Combat.DungeonRun.Fight`: the dungeon boss's fight state. A run in a loaded save is abandoned anyway (P16), so nothing needs it.
 - The `Event` buffer and the `Snapshot`.
 - Derived values: DPS, kill time, board passive DPS%, weapon passive total, next training cost, `FISH_BOARD_DPS_PCT`, item and banner levels, and any live missile-DPS rolling average (view-model only, issue #15). All recomputed from `ContentDb`, so a retune reflows every save without a migration.
 - Client-only flags: collection NEW badges, coach marks, sort/filter/step prefs and settings toggles live in Runtime's `ClientPrefs` (8.4), not in `GameState` or `Profile` (issue #47).
@@ -537,7 +539,7 @@ Newtonsoft.Json 13.x (`com.unity.nuget.newtonsoft-json` in Unity; the NuGet pack
 | Encoding | UTF-8 without BOM | |
 | `TypeNameHandling` | `None` | Never emit `$type`. |
 | `ReferenceLoopHandling` | `Error` | The tree has no cycles; a cycle is a bug. |
-| `Combat.Fight` | Skipped (`ShouldSerializeFight() => false`, Json.NET's convention; no attribute) | Transient fight state (3.3); absent on read, so it loads as `null`. |
+| `Combat.Fight`, `Combat.DungeonRun.Fight` | Skipped (`ShouldSerializeFight() => false`, Json.NET's convention; no attribute) | Transient fight state (3.3); absent on read, so it loads as `null`. |
 
 IL2CPP: every record in section 3 is referenced from a `[Preserve]`d `SaveTypes.Touch()` method and `link.xml` preserves `HeroCat.Sim.State` so stripping cannot remove a setter.
 

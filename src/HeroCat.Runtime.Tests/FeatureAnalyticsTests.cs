@@ -113,6 +113,22 @@ namespace HeroCat.Runtime.Tests
         }
 
         [Test]
+        public void DungeonCleared_Failed_Swept_AreDungeonRunRows()   // 06 section 13 (issues #172, #173)
+        {
+            var h = new Harness();
+            h.Publish(new DungeonCleared(Dungeon.FISH_COIN, 3, Currency.FISH_COIN, 150, 7, 120, "g1"),
+                      new DungeonFailed(Dungeon.EXP, 2, 0.25, 8, 300, "g2"),
+                      new DungeonSwept(Dungeon.ROCK_CANDY, 4, Currency.ROCK_CANDY, 40));
+            var rows = h.Analytics.Events.Where(e => e.Name == "dungeon_run").ToList();
+            Assert.That(rows.Select(r => ((string)r.Props["kind"], (int)r.Props["floor"], (string)r.Props["outcome"], (int)r.Props["ticksUsed"], (string)r.Props["grantId"])),
+                        Is.EqualTo(new[] { ("FISH_COIN", 3, "cleared", 120, "g1"), ("EXP", 2, "failed", 300, "g2"), ("ROCK_CANDY", 4, "swept", 0, "") }));
+            var reward = ((List<Dictionary<string, object>>)rows[0].Props["rewards"]).Single();
+            Assert.That((reward["currency"], reward["amount"]), Is.EqualTo(((object)"FISH_COIN", (object)150.0)));
+            Assert.That((List<Dictionary<string, object>>)rows[1].Props["rewards"], Is.Empty);
+            AssertCatalogue(new AnalyticsEvent[] { new AnalyticsEvents.DungeonRun(Dungeon.EXP, 1, "abandoned", 0, null, 0, "g") });
+        }
+
+        [Test]
         public void Awakened_CarriesTheRanksCost_AndTheRockCandyBalanceAfterTheDebit()   // 03 section 11
         {
             var h = new Harness();

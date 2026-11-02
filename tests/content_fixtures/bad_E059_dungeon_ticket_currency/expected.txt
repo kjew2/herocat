@@ -1,0 +1,1 @@
+CONTENT E059 dungeons[dungeon_fish].ticket_currency: ticket_currency 'TICKET_EXP' is not an allowed currency here (TICKET_FISH_COIN for kind FISH_COIN)

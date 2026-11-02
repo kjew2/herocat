@@ -62,6 +62,9 @@ namespace HeroCat.Runtime.Replay
             // Shop: daily gift and exchange (06 sections 8.3-8.4; issue #174).
             (typeof(ClaimDailyGift), "ClaimDailyGift"),
             (typeof(ExchangeItem), "ExchangeItem"),
+            // Dungeons (06 section 6.2; issues #172, #173).
+            (typeof(StartDungeon), "StartDungeon"),
+            (typeof(SweepDungeon), "SweepDungeon"),
         };
 
         static readonly object Lock = new object();

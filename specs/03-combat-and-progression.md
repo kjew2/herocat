@@ -58,7 +58,7 @@ Tick():
 
 State field names and shapes are 02's (section 3.1, issue #7): `Time.Tick`, `Combat.*`, `Progress.*`, `Loadout.*`, `Stats.*`. Everything this loop reads or writes lives in the in-memory `GameState`, so `DeepClone` and replay are exact. The save drops only the transient fight state 02 section 3.3 lists, which lives in `Combat.Fight` (02's `FightState`; the pseudocode below writes `Combat.EnemyHp`, `Combat.Phase`, `Combat.BossTicksLeft` and the like as shorthand for `Combat.Fight.EnemyHp` and so on): enemy HP, `Phase`, `SpawnTimer`, `AttackProgress`, `ActiveDots`, buffs, `PendingTaps`, `TapWindowTick`. It keeps `Combat.Boss`, `Combat.BossFailsOnStage`, `Combat.Selected`, `Combat.Mp`, the skill and companion cooldowns and `Combat.MissileQueue`. On load the player faces a fresh mob and a `Pending` boss respawns as the boss.
 
-Dungeon runs (MVP, 06) are ticked in this same loop, not resolved instantly (issue #42): `StartDungeon` switches `Combat.Mode = Dungeon` and the floor's single boss is fought with steps 1-9 above under the dungeon's time limit, except step 3: the missile queue is not drained in that mode (section 2.5). In that mode the kill and timeout branches hand off to 06 (`DungeonCleared`, which debits the ticket and grants the reward, or `DungeonFailed`, which costs nothing; 00 decision 16) instead of `Kill()`/`BossFail()`, so no stage, loot, first-clear or wall state changes; the hero's crit draw comes from the temporary `dungeon_run` stream (section 10), and the frontier fight resumes unchanged when the run ends.
+Dungeon runs (MVP, 06) are ticked in this same loop, not resolved instantly (issue #42): `StartDungeon` switches `Combat.Mode = Dungeon` and the floor's single boss is fought with steps 1-9 above under the dungeon's time limit, except steps 3 and 7: the missile queue is not drained in that mode (section 2.5), and there is no Tap Zap (`TapZap` is rejected `(NotAvailable, DUNGEON_RUN_IN_PROGRESS)`, as are `AttemptBoss` and `SelectStage`, so no input changes the run's outcome; issue #172). The boss is a separate transient fight (`Combat.DungeonRun.Fight`); `Combat.Fight` is not ticked during the run. In that mode the kill and timeout branches hand off to 06 (`DungeonCleared`, which debits the ticket and grants the reward, or `DungeonFailed`, which costs nothing; 00 decision 16) instead of `Kill()`/`BossFail()`, so no stage, loot, first-clear or wall state changes; the hero's crit draw comes from the temporary `dungeon_run` stream (section 10), and the frontier fight resumes unchanged when the run ends.
 
 `ATTACK_PROGRESS_UNIT = 100` (integer fixed point). At `ATK_SPD` level 0 the hero gains 100 units per tick and hits every `ATTACK_INTERVAL_TICKS = 10` ticks, one hit per second. At `ATK_SPD` level `n` the gain is `100 * (1 + TRAIN_PER_LVL[ATK_SPD] * n)` rounded to an integer, so level 100 (cap, +100%) is 200 units per tick and one hit every 5 ticks. Integer arithmetic keeps the hit schedule identical on every platform; a `double` accumulator would not (00 section 3, determinism row).
 
@@ -143,6 +143,7 @@ Tap Zap (M0): the client sends `TapZap(count)` once per frame with the number of
 
 ```
 TapZap(count):                                              # command, validated like any other
+  if Combat.Mode == Dungeon: return Reject(NotAvailable, "DUNGEON_RUN_IN_PROGRESS")   # no taps in a run (06 section 6.1)
   if Time.Tick - Combat.TapWindowTick >= TICK_HZ: Combat.TapWindowTick = Time.Tick; Combat.TapsThisSecond = 0
   allowed = max(0, TAP_ZAP_MAX_PER_SEC - Combat.TapsThisSecond)
   used = min(count, allowed); Combat.TapsThisSecond += used
@@ -224,6 +225,7 @@ BossFail():
   Combat.Phase = Spawning; Combat.SpawnTimer = SPAWN_DELAY_TICKS; Combat.ActiveDots.Clear()
 
 AttemptBoss():                                              # command; always the frontier boss (issue #35)
+  if Combat.Mode == Dungeon:                                  return Reject(NotAvailable, "DUNGEON_RUN_IN_PROGRESS")   # stage fields frozen (02 section 3.3)
   if Combat.Boss == Pending and Combat.Selected == null:      return Reject(NotAvailable, "BOSS_ALREADY_PENDING")
   if Combat.Stage % BOSS_EVERY != 0 or Combat.Boss == None:   return Reject(NotAvailable, "NO_BOSS_TO_ATTEMPT")
   if Combat.Selected != null:

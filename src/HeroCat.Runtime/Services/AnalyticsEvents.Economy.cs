@@ -92,6 +92,28 @@ namespace HeroCat.Runtime.Services
             };
         }
 
+        /// <summary>
+        /// 06 section 13: one dungeon outcome (issues #172, #173). Outcome is cleared, failed, swept or abandoned; Rewards is the
+        /// floor reward ({currency, amount}), empty for failed and abandoned; TicksUsed is 0 for a sweep or an abandoned run.
+        /// </summary>
+        public sealed record DungeonRun(Dungeon Kind, int Floor, string Outcome, int TicksUsed, Currency? RewardCurrency, double RewardAmount,
+                                        string GrantId) : AnalyticsEvent
+        {
+            public override string Name => AnalyticsNames.DUNGEON_RUN;
+
+            public override Dictionary<string, object> Props()
+            {
+                var rewards = new List<Dictionary<string, object>>(1);
+                if (RewardCurrency is Currency c)
+                    rewards.Add(new Dictionary<string, object> { ["currency"] = c.ToString(), ["amount"] = RewardAmount });
+                return new Dictionary<string, object>
+                {
+                    ["kind"] = Kind.ToString(), ["floor"] = Floor, ["outcome"] = Outcome, ["ticksUsed"] = TicksUsed, ["rewards"] = rewards,
+                    ["grantId"] = GrantId ?? "",
+                };
+            }
+        }
+
         /// <summary>06 section 13: SCR_SHOP opened on a tab (07 section 4.16). The client's shop screen tracks it; no sim event.</summary>
         public sealed record ShopView(string Tab) : AnalyticsEvent
         {

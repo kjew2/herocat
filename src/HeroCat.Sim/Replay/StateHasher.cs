@@ -22,6 +22,7 @@ namespace HeroCat.Sim.Replay
     public static class StateHasher
     {
         public const int Version = 3;   // literal-ok: encoding version; 3 adds FightState.GoldBuffPct / GoldBuffTicksLeft (issue #156)
+                                        // and a dungeon run's transient boss fight, DungeonRun.Fight (issue #172)
         static readonly byte[] Magic = Encoding.ASCII.GetBytes("HEROCAT-STATEHASH-v3");
 
         /// <summary>Lowercase hex SHA-256 of the play-state encoding.</summary>
@@ -88,19 +89,9 @@ namespace HeroCat.Sim.Replay
             {
                 w.I32((int)dr.Kind); w.I32(dr.Floor); w.U64(dr.Seed); w.I64(dr.StreamCounter); w.Str(dr.GrantId);
                 w.I32(dr.EnemyIndex); w.I32(dr.TicksLeft);
+                Fight(w, dr.Fight);   // the run's transient boss fight; inside the run block, so a state without a run encodes as before
             }
-            var fi = c.Fight;
-            w.Bool(fi != null);
-            if (fi != null)
-            {
-                w.I32((int)fi.Phase); w.I32(fi.SpawnTimer); w.F64(fi.EnemyHp); w.F64(fi.EnemyMaxHp); w.Bool(fi.EnemyIsBoss);
-                w.I32(fi.BossTicksLeft); w.I32(fi.AttackProgress);
-                w.I32(fi.ActiveDots.Count);
-                foreach (var d in fi.ActiveDots) { w.I32(d.TicksLeft); w.F64(d.DamagePerTick); }
-                w.F64(fi.AtkBuffPct); w.I32(fi.AtkBuffTicksLeft); w.F64(fi.GoldBuffPct); w.I32(fi.GoldBuffTicksLeft);
-                w.I32(fi.PendingTaps); w.I32(fi.TapsThisSecond);
-                w.I64(fi.TapWindowTick);
-            }
+            Fight(w, c.Fight);
 
             var p = s.Progress;
             w.I32(p.HighestCleared); w.I32(p.HighestFirstClearBoss); w.I32(p.StageCapReached);
@@ -184,6 +175,20 @@ namespace HeroCat.Sim.Replay
                 if (it == null) continue;
                 w.I32(it.Copies); w.I32(it.LimitBreaks); w.I64(it.FirstAcquiredServerTime);
             }
+        }
+
+        /// <summary>A transient FightState: a presence byte, then its fields (the frontier fight and a dungeon run's boss fight).</summary>
+        static void Fight(CanonicalWriter w, FightState fi)
+        {
+            w.Bool(fi != null);
+            if (fi == null) return;
+            w.I32((int)fi.Phase); w.I32(fi.SpawnTimer); w.F64(fi.EnemyHp); w.F64(fi.EnemyMaxHp); w.Bool(fi.EnemyIsBoss);
+            w.I32(fi.BossTicksLeft); w.I32(fi.AttackProgress);
+            w.I32(fi.ActiveDots.Count);
+            foreach (var d in fi.ActiveDots) { w.I32(d.TicksLeft); w.F64(d.DamagePerTick); }
+            w.F64(fi.AtkBuffPct); w.I32(fi.AtkBuffTicksLeft); w.F64(fi.GoldBuffPct); w.I32(fi.GoldBuffTicksLeft);
+            w.I32(fi.PendingTaps); w.I32(fi.TapsThisSecond);
+            w.I64(fi.TapWindowTick);
         }
 
         static void Quests(CanonicalWriter w, Dictionary<string, QuestProgress> q)

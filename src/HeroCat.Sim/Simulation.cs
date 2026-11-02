@@ -199,7 +199,7 @@ namespace HeroCat.Sim
         void RefreshSnapshot()
         {
             var s = State;
-            var f = s.Combat.Fight;
+            var f = s.Combat.Mode == CombatMode.Dungeon && s.Combat.DungeonRun != null ? s.Combat.DungeonRun.Fight : s.Combat.Fight;
             var k = Db.Constants;
             _snapshot = new Snapshot(_damage, _damageCount)
             {
@@ -207,6 +207,7 @@ namespace HeroCat.Sim
                 Stage = s.Combat.Stage,
                 SelectedStage = s.Combat.Selected,
                 KillsInStage = s.Combat.KillsInStage,
+                Mode = s.Combat.Mode,
                 Chapter = k.ChapterOf(s.Combat.Stage < 1 ? 1 : s.Combat.Stage),
                 BossPhase = s.Combat.Boss,
                 BossTicksLeft = f != null ? f.BossTicksLeft : 0,

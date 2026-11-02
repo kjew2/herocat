@@ -221,7 +221,7 @@ namespace HeroCat.Sim.State
         public int[]  SkillCooldowns    { get; set; } = new int[6];   // ticks left per skill slot   // literal-ok: 02 default size
         public int[]  CompanionCooldowns { get; set; } = new int[4];  // ticks left per companion slot (03 section 2.4)   // literal-ok: 02 default size
         public List<double> MissileQueue { get; init; } = new List<double>();   // queued fish-missile hit fractions, FIFO (issue #7)
-        public DungeonRunState DungeonRun { get; set; }        // non-null only while Mode == Dungeon
+        public DungeonRunState DungeonRun { get; set; }        // non-null only while Mode == Dungeon; Fight stays the frozen frontier fight
         public FightState Fight         { get; set; }          // transient fight state; never saved (3.3)
 
         public bool ShouldSerializeFight() => false;           // Json.NET naming convention, no attribute: the serializer skips Fight
@@ -259,6 +259,9 @@ namespace HeroCat.Sim.State
         public string  GrantId       { get; init; } = "";     // server grant id (MVP); "" in M0
         public int     EnemyIndex    { get; set; }            // always 0 in MVP (one boss per floor)
         public int     TicksLeft     { get; set; }
+        public FightState Fight      { get; set; }            // transient: the floor's boss fight; never saved (a reload abandons the run, P16)
+
+        public bool ShouldSerializeFight() => false;          // Json.NET naming convention, no attribute: the serializer skips Fight
     }
 
     public sealed class ProgressState
