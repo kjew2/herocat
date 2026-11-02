@@ -1,3 +1,5 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
+
 namespace HeroCat.Server.Features.Save;
 
 /// <summary>
@@ -6,6 +8,12 @@ namespace HeroCat.Server.Features.Save;
 /// </summary>
 public static class SaveFeature
 {
-    // TODO(#198, #206, #207): the Save endpoints and their services.
-    public static IServiceCollection AddSaveFeature(this IServiceCollection services) => services;
+    // TODO(#206, #207): the plausibility checks and the command-log replay behind ISavePlausibility.
+    public static IServiceCollection AddSaveFeature(this IServiceCollection services)
+    {
+        services.AddSingleton<SaveStore>();
+        services.TryAddSingleton<ISavePlausibility, NoSavePlausibility>();
+        services.TryAddSingleton<IResimSampler, ResimSampler>();
+        return services;
+    }
 }

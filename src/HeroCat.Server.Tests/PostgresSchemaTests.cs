@@ -79,7 +79,7 @@ public sealed class PostgresSchemaTests
         return rows;
     }
 
-    static readonly SqlSchemaModel Spec = SqlSchemaModel.Parse(SqlSchemaModel.SpecBlock());
+    static readonly SqlSchemaModel Spec = SqlSchemaModel.Parse(SqlSchemaModel.SpecTexts());
 
     [Test]
     public async Task Tables_columns_types_and_nullability_are_section_12()
