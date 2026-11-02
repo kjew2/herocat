@@ -121,6 +121,20 @@ namespace HeroCat.Runtime.Tests
         }
 
         [Test]
+        public void ItemEquipped_OnePerSlotChange_AnEmptiedSlotHasANullItem()   // 04 section 13
+        {
+            var h = new Harness();
+            h.Publish(new ItemEquipped(Banner.SKILL, 2, "sk_a", null, false), new ItemEquipped(Banner.SKILL, 2, null, "sk_a", false));
+            var rows = h.Analytics.Events.Where(e => e.Name == "item_equipped").ToList();
+            Assert.That(rows, Has.Count.EqualTo(2));
+            AssertProps(rows[0], new Dictionary<string, object>
+            {
+                ["banner"] = "SKILL", ["slot"] = 2, ["itemId"] = "sk_a", ["previousItemId"] = null, ["auto"] = false,
+            });
+            Assert.That((rows[1].Props["itemId"], rows[1].Props["previousItemId"]), Is.EqualTo(((object)null, "sk_a")));
+        }
+
+        [Test]
         public void TypedFeatureEvents_UseKnownNames_AndCamelCaseProps_WithoutEnvelopeFields()
         {
             var all = new AnalyticsEvent[]
@@ -130,6 +144,10 @@ namespace HeroCat.Runtime.Tests
                 new AnalyticsEvents.OfflineClaimed(1, 1, true, 1, 1, 1, false), new AnalyticsEvents.DayRollover(1, 0, 0),
                 new AnalyticsEvents.DailyGiftClaimed(), new AnalyticsEvents.Exchange("o", 1, 50), new AnalyticsEvents.ShopView("DIAMONDS"),
                 new AnalyticsEvents.Awakened(1, 100, 0),
+                new AnalyticsEvents.Summon("r", Banner.WEAPON, 1, "DIAMOND", 100, 0, 0, 1, 1, 1,
+                                           new[] { new AnalyticsEvents.SummonResultRow("w", Rarity.COMMON, true, 0, 1, 0, false) }, 0, false, "LOCAL", 1),
+                new AnalyticsEvents.ItemAcquired(Banner.WEAPON, "w", Rarity.COMMON, true, 1, 0, 1, "SUMMON", "r"),
+                new AnalyticsEvents.ItemEquipped(Banner.SKILL, 1, null, "s", false),
             };
             AssertCatalogue(all);
         }

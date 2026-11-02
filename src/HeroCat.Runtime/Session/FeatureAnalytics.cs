@@ -12,9 +12,9 @@ namespace HeroCat.Runtime.Session
     /// <summary>
     /// The feature specs' analytics rows from the sim's events on the session's <see cref="EventBus"/> (02 section 14; the
     /// owner sections define the fields): 06 section 13's quest, offline, rollover and shop events and 03 section 11's
-    /// <c>awakened</c> (issue #177). <c>currency_changed</c> is <see cref="CurrencyAnalytics"/>'. Rows that group one
-    /// command's events (the <c>quest_claimed</c> bulk flag) read <see cref="CommandApplied"/>; the rest map one sim event to
-    /// one row. Attached by the boot flow whenever analytics is not <see cref="NullAnalytics"/>. Main thread, like the bus.
+    /// <c>awakened</c> (issue #177), 04 section 13's <c>item_equipped</c> (issue #163). <c>currency_changed</c> is
+    /// <see cref="CurrencyAnalytics"/>'. Rows that group one command's events (the <c>quest_claimed</c> bulk flag) read
+    /// <see cref="CommandApplied"/>; the rest map one sim event to one row. Attached by the boot flow whenever analytics is not <see cref="NullAnalytics"/>. Main thread, like the bus.
     /// </summary>
     public sealed class FeatureAnalytics : IDisposable
     {
@@ -55,6 +55,9 @@ namespace HeroCat.Runtime.Session
                 if (e.Reason == CurrencyReason.AWAKENING && e.Currency == Currency.ROCK_CANDY) _rockCandyAfterAwaken = e.BalanceAfter;
             }));
             _subs.Add(bus.Subscribe<Awakened>(OnAwakened));
+
+            // 04 section 13 (issue #163). summon and item_acquired come from SummonFlow, which knows the request.
+            _subs.Add(bus.Subscribe<ItemEquipped>(e => Track(new AnalyticsEvents.ItemEquipped(e.Banner, e.Slot, e.ItemId, e.PreviousItemId, e.Auto))));
         }
 
         /// <summary>Rows emitted so far (diagnostics).</summary>

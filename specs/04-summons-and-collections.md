@@ -451,6 +451,8 @@ This section owns these events' fields (issue #245); every event also carries 02
 | `limit_break` | `banner`, `itemId`, `rarity`, `rankAfter`, `rockCandySpent` | on `ItemLimitBroken` |
 | `currency_changed` | 06 section 13, reasons `SUMMON`, `LIMIT_BREAK` | per wallet delta |
 
+As built (issue #163): `summon` and its `item_acquired` rows (`acquireReason = SUMMON`, the summon's `requestId`) are tracked by Runtime's `SummonFlow` after the logged `ApplySummonResult` succeeds, so a replayed `requestId` tracks neither; the profile-created starter weapon is one `item_acquired` with `acquireReason = TUTORIAL` and `requestId = null` from `ProfileFactory`; `item_equipped` maps each `ItemEquipped` (`itemId` null when a slot was emptied) in `FeatureAnalytics`. Not emitted yet: `limit_break` (waits for the `LimitBreak` command), `item_acquired` with `MAIL` (waits for inbox item grants), and `summon_reconciled`, `summon_pending`, `summon_resolved` (the Remote summon path, 01 section 8.5.2).
+
 Dashboards 10 wants from these: L+ frequency per banner vs the published 3.657% (the odds-drift alarm is 10 section 10's: a sample-size-scaled Wilson interval per banner level, runbook `RB-SUMMON-RATES`; issue #59), guarantee fire rate per banner level, pulls per DAU per banner, first-L+ day distribution, limit-break adoption.
 
 ## 14. `tools/gacha_model.py`
