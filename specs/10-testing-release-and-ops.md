@@ -40,7 +40,7 @@ Grouped by what they protect. Each group names the fixtures it uses; fixtures ar
 | Quests, dungeons, day keys | 48 | 06: `EnsureDay` resets and preserves the right fields; weekly key via `WEEK_EPOCH_OFFSET`; every `QuestGoal` increments from its event; `SetMax` goals; achievement rungs; dungeon ticket grant, a ticked run (`Combat.Mode = Dungeon`) with a fixed seed is deterministic and the reward matches `dungeon_floors`; the ticket is debited only on `DungeonCleared`, a failed or abandoned run costs nothing (issue #42); sweep rule; app open across rollover. |
 | Content | 30 | 09 acceptance 2, 5, 6 (loader scope), 7, 8, 9, 11, 12, 13, 17, 18 as listed there. |
 | Snapshot and events | 20 | Per-tick snapshot fields match state; event buffer coalescing at `EVENT_COALESCE_AT` (01); every `Event` type serialises to the analytics envelope. |
-| Perf (`[Category("Perf")]`) | 6 | 03 criterion 19: `Advance(1_000_000)` from stage 300 under 2 s Release; under 128 B allocated per kill with the default sink; `Build` under 30 ms. |
+| Perf (`[Category("Perf")]`) | 6 | 03 criterion 19 on `PerfFixture` (stage 300, six skills, four companions): `Advance(1_000_000)` with the null sink under 2 s Release; 0 B per fighting tick with no event masked in; under 128 B allocated per kill with the default mask; `Build` under 30 ms. |
 
 ### 1.2 `HeroCat.Runtime.Tests`
 
@@ -309,7 +309,7 @@ report      --longest-walls | --layer-shares | --diamonds  --seeds  --days
 golden      --check | --update | --replay
 stage-bound --check | --update  [--seeds 1-20] [--days 60]
 save-fixture --check | --update                              # 02 section 7.3's v1.json from a played bot profile; check.sh drift-checks it until V1Frozen
-bench       --ticks 1000000 --stage 300 --max-ms 2000
+bench       --ticks 1000000 --stage 300 --max-ms 2000          # PerfFixture: six skills, four companions; MVP content unless --tier (03 criterion 19)
 ```
 
 `--tier M0` builds the content at tier M0 (09 section 5.32) so the M0 milestone's "two weeks of simulated play within tolerance" (00 section 11) is `acceptance --tier M0 --days 14` with `stageCheckDays` clipped to the days that exist.

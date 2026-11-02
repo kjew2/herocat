@@ -20,6 +20,7 @@ namespace HeroCat.Sim.Tests
         public static Simulation NewSim(bool hits = true)
         {
             var sim = TestContent.NewSim();
+            sim.CombatEvents = CombatEventMask.All;   // the tests observe casts; the perf group measures the default mask
             sim.EmitHitLanded = hits;
             sim.DrainEvents();
             return sim;

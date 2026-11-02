@@ -8,7 +8,7 @@ namespace HeroCat.Sim.State
     /// <summary>
     /// Deep copy of a GameState (02 section 3.1: bots, tests, the conflict flow, LocalSummonService's roll-on-a-clone).
     /// Every field is copied, the transient Combat.Fight included, so a clone mid-fight continues identically (03 AC15).
-    /// Records (DotInstance, CatchupResult, Pending*, DungeonRunRecord) are immutable and shared.
+    /// Records (CatchupResult, Pending*, DungeonRunRecord) are immutable and shared.
     /// </summary>
     public static class StateCopy
     {

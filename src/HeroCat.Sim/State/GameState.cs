@@ -247,7 +247,27 @@ namespace HeroCat.Sim.State
         public long   TapWindowTick    { get; set; }          // Time.Tick at which the current tap window opened
     }
 
-    public sealed record DotInstance(int TicksLeft, double DamagePerTick);
+    /// <summary>
+    /// One active DOT (03 section 2.3). A value, not a record class, so ticking it down replaces a list element without
+    /// allocating (03 criterion 19); C# 9 has no record struct, so equality is written out.
+    /// </summary>
+    public readonly struct DotInstance : IEquatable<DotInstance>
+    {
+        public DotInstance(int ticksLeft, double damagePerTick)
+        {
+            TicksLeft = ticksLeft;
+            DamagePerTick = damagePerTick;
+        }
+
+        public int TicksLeft { get; }
+        public double DamagePerTick { get; }
+
+        public bool Equals(DotInstance o) => TicksLeft == o.TicksLeft && DamagePerTick.Equals(o.DamagePerTick);
+        public override bool Equals(object obj) => obj is DotInstance o && Equals(o);
+        public override int GetHashCode() => (TicksLeft * 397) ^ DamagePerTick.GetHashCode();   // literal-ok: hash mixing, not balance
+        public static bool operator ==(DotInstance a, DotInstance b) => a.Equals(b);
+        public static bool operator !=(DotInstance a, DotInstance b) => !a.Equals(b);
+    }
 
     /// <summary>A ticked dungeon run in the main loop (06 section 6.2; issue #42).</summary>
     public sealed class DungeonRunState
