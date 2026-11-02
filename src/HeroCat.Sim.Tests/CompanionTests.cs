@@ -346,8 +346,8 @@ namespace HeroCat.Sim.Tests
             Assert.That(others, Is.EqualTo(15.6).Within(1.0), "04 criterion 11 as corrected by issue #39");
             Assert.That(others, Is.GreaterThan(12.5), "above the 12 of four damage companions");
             // The rated mpSufficiency (156 / 180) assumes the MP_REGEN fires every 10 s; in the loop it waits for 10 MP too,
-            // so it fires every 12 s and the three realise 15.0, 4% under. 04 AC11's "within 1%" clause is an open question
-            // for the user (recorded under 04 criterion 11); this test asserts the 15.6 +/- 1 band only.
+            // so it fires every 12 s and the three realise 15.0, 4% under. 04 criterion 11 allows 5% (agreed with the user).
+            Assert.That(others, Is.EqualTo(15.6).Within(5).Percent, "04 criterion 11: matches mpSufficiency within 5%");
         }
 
         [Test]
