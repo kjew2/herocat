@@ -12,6 +12,9 @@ tables regenerated from content, the S-constant checks (PASS/FAIL) and a FISHLIN
 and writes tools/out/fish_<policy>.json. Exits 1 when any band in 05 section 9 fails.
 
   python3 tools/fish_model.py [--policy attentive] [--days 30] [--research "RES_TANK_REFILL=5"] [--override NAME=VALUE]
+  python3 tools/fish_model.py --research-schedule tools/out/power_curve_7.json --dungeon-curves ["50*f,50*f^0.7"]
+      report only (issue #165): Fish Coin Dungeon share of the day's Fish Coin income at days 1, 7, 30 per curve,
+      using the bot's research levels and best Fish Coin floor per day; writes tools/out/fish_dungeon_curves.json
 """
 import argparse
 import json
@@ -287,6 +290,87 @@ def act(b, level, fcap, discard):
             return
 
 
+# ------------------------------------------------------------------------------------------------ dungeon curves (#165)
+# 06 section 6.3 (a): `2 * FISH_COIN_FLOOR(f)` at the day's best Fish Coin floor must be 25-50% of the day's Fish Coin
+# income at days 1, 7 and 30 (band and days under review in #249 item 6). This report compares candidate curves
+# against the attentive board run with 03's research schedule; it decides nothing and never fails the run.
+
+DUNGEON_DAYS = (1, 7, 30)
+DUNGEON_BAND = (0.25, 0.50)
+DUNGEON_TICKETS_PER_DAY = 2          # 06 section 6.2 DUNGEON_TICKETS_PER_DAY (no dungeons table yet, TODO(#173))
+DUNGEON_CURVES_DEFAULT = "50*f,50*f^0.7"
+
+
+def parse_curve(text):
+    """'K*f' or 'K*f^P' -> (label, K, P). No eval."""
+    t = text.replace(" ", "").replace("**", "^")
+    k, sep, rest = t.partition("*")
+    if not sep or not rest.startswith("f"):
+        sys.exit(f"--dungeon-curves: expected K*f or K*f^P, got {text!r}")
+    power = 1.0
+    if rest != "f":
+        if not rest.startswith("f^"):
+            sys.exit(f"--dungeon-curves: expected K*f or K*f^P, got {text!r}")
+        power = float(rest[2:])
+    return t, float(k), power
+
+
+def floor_schedule(path):
+    """Best FISH_COIN floor at the end of each day from power_curve_model.py's JSON (days[].best_floor)."""
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    days = data.get("days", data) if isinstance(data, dict) else data
+    out = {int(r["day"]): int((r.get("best_floor") or {}).get("FISH_COIN", 0)) for r in days}
+    if not any(out.values()):
+        sys.exit(f"--dungeon-curves: {path} has no days[].best_floor.FISH_COIN (run power_curve_model.py without --m0)")
+    return out
+
+
+def dungeon_report(rows, floors, curves, days=DUNGEON_DAYS, tickets=DUNGEON_TICKETS_PER_DAY):
+    """Per report day: board coins, best floor, and per curve the dungeon coins (tickets x reward(f)) and share; also
+    the linear coefficient K (reward = K * f) that would put the share at the band's low end, middle and high end."""
+    out = []
+    for d in days:
+        if d > len(rows):
+            continue
+        board = rows[d - 1]["coins_board"]
+        week = rows[max(0, d - 7):d]
+        board7 = sum(r["coins_board"] for r in week) / len(week)
+        f = floors.get(d, 0)
+        row = {"day": d, "best_floor": f, "coins_board": board, "coins_board_7d_mean": board7, "curves": {}}
+        for label, k, p in curves:
+            dun = tickets * k * f ** p if f > 0 else 0.0
+            row["curves"][label] = {"coins_dungeon": dun, "share": dun / (board + dun) if board + dun else 0.0,
+                                    "share_7d": dun / (board7 + dun) if board7 + dun else 0.0}
+        need = {}
+        for name, s in (("low", DUNGEON_BAND[0]), ("mid", sum(DUNGEON_BAND) / 2), ("high", DUNGEON_BAND[1])):
+            dun = board * s / (1 - s)
+            need[name] = dun / (tickets * f) if f > 0 else None
+        row["linear_k_for_band"] = need
+        out.append(row)
+    return out
+
+
+def print_dungeon_report(report, curves, schedule_path):
+    lo, hi = DUNGEON_BAND
+    print(f"\nFish Coin Dungeon curves (06 section 6.3 (a), issue #165): {DUNGEON_TICKETS_PER_DAY} x reward(best floor) "
+          f"against the attentive board with the research schedule from {schedule_path}; band {lo:.0%}..{hi:.0%}")
+    print("day  floor   board coins (7-day mean)  " + "  ".join(f"{lab:>24}" for lab, _, _ in curves)
+          + "   linear K for 25% / 37.5% / 50%")
+    for r in report:
+        cells = []
+        for lab, _, _ in curves:
+            c = r["curves"][lab]
+            tag = "in" if lo <= c["share"] <= hi else ("under" if c["share"] < lo else "over")
+            cells.append(f"{c['coins_dungeon']:>7,.0f} {c['share']:>6.1%} {tag:<5} ({c['share_7d']:.0%})")
+        k = r["linear_k_for_band"]
+        ks = " / ".join("-" if k[n] is None else f"{k[n]:,.0f}" for n in ("low", "mid", "high"))
+        print(f"{r['day']:>3}  {r['best_floor']:>5}   {r['coins_board']:>11,.0f} ({r['coins_board_7d_mean']:>9,.0f})  "
+              + "  ".join(f"{x:>24}" for x in cells) + f"   {ks}")
+    print("  share = dungeon / (board + dungeon) on that day; (n%) uses the board's 7-day mean, since single-day board "
+          "income jumps with discoveries after each fish-cap raise. Report only: the curve is a balance call (#165, #249 item 6).")
+
+
 # ------------------------------------------------------------------------------------------------ CLI
 
 def parse_kv(text, what):
@@ -371,6 +455,9 @@ def main(argv=None):
     p.add_argument("--research", default="")
     p.add_argument("--research-schedule", default=None)
     p.add_argument("--dungeon-coins", type=float, default=1000.0)
+    p.add_argument("--dungeon-curves", nargs="?", const=DUNGEON_CURVES_DEFAULT, default=None, metavar="K*f[^P],...",
+                   help="report only: Fish Coin Dungeon share at days 1/7/30 for each curve (default "
+                        f"{DUNGEON_CURVES_DEFAULT}); needs --research-schedule from power_curve_model.py (issue #165)")
     p.add_argument("--seed", type=int, default=7)
     p.add_argument("--override", action="append", default=[])
     p.add_argument("--out", default=os.path.join(HERE, "out"))
@@ -463,6 +550,18 @@ def main(argv=None):
     print(f"FISHLINE day7 attentive x{att7:.2f} lazy x{lazy7:.2f} ratio {ratio:.1f}")
 
     os.makedirs(a.out, exist_ok=True)
+    if a.dungeon_curves is not None:
+        if not a.research_schedule:
+            sys.exit("--dungeon-curves needs --research-schedule (power_curve_model.py's tools/out/power_curve_<seed>.json)")
+        curves = [parse_curve(x) for x in a.dungeon_curves.split(",") if x.strip()]
+        att_sched, _ = runs["attentive"]
+        report = dungeon_report(att_sched, floor_schedule(a.research_schedule), curves)
+        print_dungeon_report(report, curves, os.path.relpath(a.research_schedule))
+        dpath = os.path.join(a.out, "fish_dungeon_curves.json")
+        with open(dpath, "w", encoding="utf-8") as f:
+            json.dump({"schedule": os.path.relpath(a.research_schedule, REPO), "tickets_per_day": DUNGEON_TICKETS_PER_DAY,
+                       "band": DUNGEON_BAND, "curves": [lab for lab, _, _ in curves], "days": report}, f, indent=1)
+        print(f"wrote {os.path.relpath(dpath, REPO)}")
     path = os.path.join(a.out, f"fish_{a.policy}.json")
     with open(path, "w", encoding="utf-8") as f:
         json.dump({"policy": a.policy, "days": rows, "ceiling_day": ceiling_day, "finished_board_day": finished_day,

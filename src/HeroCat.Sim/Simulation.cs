@@ -103,6 +103,12 @@ namespace HeroCat.Sim
             }
         }
 
+        /// <summary>
+        /// The events buffered since the last drain, as a live read-only view. Runtime notes its count before an Apply and
+        /// reads the tail after it, so analytics can group one command's events (05 section 13's per-command rows).
+        /// </summary>
+        public IReadOnlyList<Event> BufferedEvents => _events;
+
         /// <summary>Moves the buffered events out; the caller owns the returned list.</summary>
         public IReadOnlyList<Event> DrainEvents()
         {

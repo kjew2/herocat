@@ -2,7 +2,7 @@
   "name": "com.herocat.remote",
   "version": "0.1.0",
   "displayName": "HeroCat Remote",
-  "description": "Vendor-neutral remote backend seams for the HeroCat prototype (specs/08 sections 1 and 9): transport abstraction, ServiceException mapping and remote service stubs. Plain C#, no UnityEngine references.",
+  "description": "The HeroCat client network layer (specs/01 section 5, specs/08): async ApiClient over HttpClient with retries and idempotent replay, NetworkMonitor, and the Remote composition root. Plain C#, no UnityEngine references.",
   "unity": "6000.6",
   "dependencies": {
     "com.herocat.sim": "0.1.0",

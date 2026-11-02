@@ -24,7 +24,12 @@ namespace HeroCat.Sim.Events
     /// <summary>Every Ledger.Apply emits exactly one (06 AC 22). Delta is signed; BalanceAfter is the new balance (Hero.Exp for HERO_EXP).</summary>
     public sealed record CurrencyChanged(Currency Currency, double Delta, double BalanceAfter, CurrencyReason Reason) : Event;
 
-    public sealed record DayRolledOver(int DayKey) : Event;
+    /// <summary>
+    /// EnsureDay moved to <see cref="DayKey"/> (06 section 4.2). SkippedDays: day keys passed over without a rollover (0 for
+    /// consecutive days and for a new profile); SecondsSinceLastTick: the rollover's now minus Time.LastTickServerTime
+    /// before it, at least 0 (analytics day_rollover, 06 section 13).
+    /// </summary>
+    public sealed record DayRolledOver(int DayKey, int SkippedDays = 0, long SecondsSinceLastTick = 0) : Event;
 
     public sealed record WeekRolledOver(int WeekKey) : Event;
 

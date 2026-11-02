@@ -225,6 +225,8 @@ namespace HeroCat.Client.Core
             {
                 case ItemAcquired _:
                 case ItemEquipped _:
+                case ItemLimitBroken _:
+                case CurrencyChanged cc when cc.Currency == Currency.ROCK_CANDY:   // the Limit break button's affordability
                     _detailDirty = true;
                     break;
                 case DayRolledOver _:

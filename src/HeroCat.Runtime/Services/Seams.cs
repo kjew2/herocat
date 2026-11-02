@@ -104,7 +104,7 @@ namespace HeroCat.Runtime.Services
 
     // ------------------------------------------------------------------------------------- network
 
-    /// <summary>One HTTP exchange at the transport level. TODO(#143): ApiClient (headers, retry, idempotent replay) sits on this.</summary>
+    /// <summary>One HTTP exchange at the transport level: the seam Local-mode tests use to prove no network call is made.</summary>
     public sealed record NetRequest(string Method, string Path, string Body, string RequestId);
 
     public sealed record NetResponse(int Status, string Body, long ServerTimeSec);

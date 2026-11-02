@@ -34,6 +34,9 @@ namespace HeroCat.Sim.Content
         public IReadOnlyDictionary<Rarity, RarityDef> Rarities { get; private set; }
         public IReadOnlyDictionary<string, WeaponDef> Weapons { get; private set; }
         public IReadOnlyDictionary<string, SkillDef> Skills { get; private set; }
+
+        /// <summary>Companions by id (04 section 8.1, 09 section 5.11). Empty when filtered out by tier (M0).</summary>
+        public IReadOnlyDictionary<string, CompanionDef> Companions { get; private set; }
         public IReadOnlyDictionary<Banner, BannerDef> Banners { get; private set; }
 
         /// <summary>[0] is level 1's cumulative copies (DUPE_LVL_CUM).</summary>

@@ -53,7 +53,7 @@ namespace HeroCat.Runtime.Services
     /// also fires <see cref="SyncAsync"/> at boot and resume and whenever <see cref="ResyncDue"/> (CLOCK_RESYNC_SEC without
     /// an observation). With no <see cref="ITimeApi"/> (Local mode) it never syncs. Thread-safe.
     /// </summary>
-    public sealed class ServerClock : IClock, IClockFloor, IClockResync
+    public sealed class ServerClock : IClock, IClockFloor, IClockResync, IServerTimeObserver
     {
         static readonly Task<bool> NoSync = Task.FromResult(false);
 
@@ -174,6 +174,17 @@ namespace HeroCat.Runtime.Services
         }
 
         long MonoSeconds() => _mono.Ticks / _mono.Frequency;
+    }
+
+    /// <summary>
+    /// Where the ApiClient reports the <c>X-Server-Time</c> of every response, success or error, with the measured round
+    /// trip (01 section 5.1). <see cref="ServerClock"/> implements it; HeroCat.Remote's ApiClient holds it, so Remote code
+    /// needs no reference to the concrete clock (a debug wrapper such as the client's OffsetClock stays outside). Any thread.
+    /// </summary>
+    public interface IServerTimeObserver
+    {
+        /// <summary>A server time observation: unix seconds as stamped by the server, and the request's round trip in ms.</summary>
+        void Observe(long serverTimeSec, long rttMs);
     }
 
     /// <summary>

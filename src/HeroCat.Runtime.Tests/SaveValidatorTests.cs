@@ -322,6 +322,23 @@ namespace HeroCat.Runtime.Tests
         }
 
         [Test]
+        public void P8_P10_CompanionIds_CheckedAgainstContent()   // 02 rules P8 and P10 (issue #161)
+        {
+            var mvp = ContentLoader.LoadFromDirectory(TestContent.Dir, Tier.MVP);
+            var s = ProfileFactory.Create(mvp, Guid.Empty, TestContent.T0, TestContent.Device, TestContent.Root);
+            s.Companions.Items["comp_e_01"] = Own();
+            s.Companions.Items["comp_removed_from_content"] = Own(3);
+            s.Skills.Items[AnySkill()] = Own();
+            s.Loadout.Companions[0] = "comp_e_01";
+            s.Loadout.Companions[1] = AnySkill();            // a skill id in a companion slot (wrong kind)
+            s.Loadout.Companions[2] = "comp_removed_from_content";
+            Assert.That(SaveValidator.Run(s, Now, mvp, Opt()), Is.EquivalentTo(new[] { "P8", "P10" }));
+            Assert.That(s.Loadout.Companions, Is.EqualTo(new[] { "comp_e_01", null, null, null }));
+            Assert.That(s.Companions.Items.Keys, Is.EqualTo(new[] { "comp_e_01" }));
+            Assert.That(SaveValidator.Run(s, Now, mvp, Opt()), Is.Empty);
+        }
+
+        [Test]
         public void FreshProfile_HasZeroRepairs()   // #73 acceptance, 02 acceptance 10
         {
             Assert.That(SaveValidator.Run(Fresh(), Now, Db, Opt()), Is.Empty);

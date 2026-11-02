@@ -224,7 +224,11 @@ namespace HeroCat.Runtime.Tests
             var all = new[] { BootStep.Content, BootStep.Config, BootStep.Auth, BootStep.Save, BootStep.CatchUp, BootStep.Handoff };
             Assert.That(steps, Is.EqualTo(all));
             Assert.That(r.Timings.Select(t => t.Step), Is.EqualTo(all));
-            Assert.That(analytics.Events.Count(e => e.Name == "boot_step"), Is.EqualTo(all.Length));
+            var boot = analytics.Events.Single(e => e.Name == "boot_ms").Props;   // 02 section 14.3, 10 section 5 (issue #261)
+            Assert.That(boot.Keys, Is.EquivalentTo(new[] { "totalMs", "contentMs", "configMs", "authMs", "saveMs", "catchUpMs", "handoffMs" }));
+            Assert.That((double)boot["totalMs"], Is.EqualTo(r.Timings.Sum(t => t.Ms)).Within(1e-9));
+            Assert.That(boot["saveMs"], Is.EqualTo(r.Timings.Single(t => t.Step == BootStep.Save).Ms));
+            Assert.That(analytics.Events.Single(e => e.Name == "profile_created").Props, Is.Empty, "the RngRoot seed is never sent");
         }
 
         [Test]

@@ -183,7 +183,20 @@ namespace HeroCat.Sim.Content
                 }
                 db.Skills = new ReadOnlyDictionary<string, SkillDef>(skills);
 
-                db.Banners = BuildBanners(d, weapons, skills);
+                Unique("companions", Rows(d.Companions), r => r.Id);
+                var companions = new Dictionary<string, CompanionDef>(StringComparer.Ordinal);
+                foreach (var r in Rows(d.Companions))
+                {
+                    if (!Keep("companions", r.Id, r.Tier)) continue;
+                    var type = Enum<AbilityType>(r.AbilityType, $"companions[{r.Id}].ability_type");
+                    companions[r.Id] = new CompanionDef(r.Id, Enum<Rarity>(r.Rarity, $"companions[{r.Id}].rarity"), type, r.DpsPct, r.MpCost,
+                                                        r.CooldownTicks, r.DurationTicks,
+                                                        CompanionMagnitude(type, r.DpsPct, r.CooldownTicks, r.DurationTicks, k.AttackIntervalTicks),
+                                                        Enum<Tier>(r.Tier, $"companions[{r.Id}].tier"), r.NameKey, r.DescKey, r.Icon, r.Sprite, r.Vfx);
+                }
+                db.Companions = new ReadOnlyDictionary<string, CompanionDef>(companions);
+
+                db.Banners = BuildBanners(d, weapons, skills, companions);
 
                 // dupes, awakening, hero levels
                 var dupes = new List<int>();
@@ -231,7 +244,7 @@ namespace HeroCat.Sim.Content
                 {
                     if (!Keep("tutorial_steps", r.Id, r.Tier)) continue;
                     var trig = Enum<TutorialTrigger>(r.Trigger, $"tutorial_steps[{r.Id}].trigger");
-                    var grants = Grants(r.Grants, $"tutorial_steps[{r.Id}].grants", weapons, skills);
+                    var grants = Grants(r.Grants, $"tutorial_steps[{r.Id}].grants", weapons, skills, companions);
                     steps.Add(new TutorialStepDef(r.Id, r.Order, trig, r.TriggerValue, r.Screen, r.Highlight, r.TextKey, r.ExpectEvent,
                                                   r.ExpectCount, grants, r.Skippable, Enum<Tier>(r.Tier, $"tutorial_steps[{r.Id}].tier")));
                     if (trig == TutorialTrigger.PROFILE_CREATED)
@@ -291,7 +304,7 @@ namespace HeroCat.Sim.Content
                 db.ExchangeOffers = offers.AsReadOnly();
                 db._exchangeById = new ReadOnlyDictionary<string, ExchangeOfferDef>(offerMap);
 
-                BuildDungeons(db, d, weapons, skills);
+                BuildDungeons(db, d, weapons, skills, companions);
                 return db;
             }
 
@@ -452,8 +465,22 @@ namespace HeroCat.Sim.Content
                 }
             }
 
+            /// <summary>04 section 8.1's derived magnitude at level 1 (see <see cref="CompanionDef.Magnitude"/>).</summary>
+            static double CompanionMagnitude(AbilityType type, double dpsPct, int cooldownTicks, int? durationTicks, int attackIntervalTicks)
+            {
+                int dur = durationTicks.GetValueOrDefault();
+                switch (type)
+                {
+                    case AbilityType.DAMAGE: return dpsPct * cooldownTicks / attackIntervalTicks;
+                    case AbilityType.BUFF_ATK: return dur > 0 ? dpsPct * cooldownTicks / dur : 0.0;
+                    case AbilityType.BUFF_GOLD: return dur > 0 ? 2.0 * dpsPct * cooldownTicks / dur : 0.0;
+                    default: return dpsPct / 4.0;                                                              // literal-ok: 04 section 8.1 formula (mp_restored)
+                }
+            }
+
             IReadOnlyDictionary<Banner, BannerDef> BuildBanners(ContentDtos d, Dictionary<string, WeaponDef> weapons,
-                                                                Dictionary<string, SkillDef> skills)
+                                                                Dictionary<string, SkillDef> skills,
+                                                                Dictionary<string, CompanionDef> companions)
             {
                 Unique("banners", d.Banners, r => r.Id);
                 var levelsByBanner = new Dictionary<string, List<BannerLevelDef>>(StringComparer.Ordinal);
@@ -480,7 +507,8 @@ namespace HeroCat.Sim.Content
                     foreach (Rarity rr in System.Enum.GetValues(typeof(Rarity))) pool[rr] = new List<string>();
                     if (id == Banner.WEAPON) foreach (var w in weapons.Values) pool[w.Rarity].Add(w.Id);
                     if (id == Banner.SKILL) foreach (var s in skills.Values) pool[s.Rarity].Add(s.Id);
-                    // TODO(#161): the companion pool; TODO(#227): the rune pool.
+                    if (id == Banner.COMPANION) foreach (var cp in companions.Values) pool[cp.Rarity].Add(cp.Id);
+                    // TODO(#227): the rune pool.
                     var poolRo = new Dictionary<Rarity, IReadOnlyList<string>>();
                     foreach (var kv in pool)
                     {
@@ -516,7 +544,8 @@ namespace HeroCat.Sim.Content
             /// dungeon filtered out by tier are dropped with it; a HERO_EXP floor's reward is resolved here from
             /// curves[exp_per_kill] at the floor's stage-equivalent (06 section 6.3).
             /// </summary>
-            void BuildDungeons(ContentDb db, ContentDtos d, Dictionary<string, WeaponDef> weapons, Dictionary<string, SkillDef> skills)
+            void BuildDungeons(ContentDb db, ContentDtos d, Dictionary<string, WeaponDef> weapons, Dictionary<string, SkillDef> skills,
+                               Dictionary<string, CompanionDef> companions)
             {
                 var floorsOf = new Dictionary<string, List<DungeonFloorRowDto>>(StringComparer.Ordinal);
                 foreach (var f in Rows(d.DungeonFloors))
@@ -541,7 +570,7 @@ namespace HeroCat.Sim.Content
                             int stage = f.Floor * r.FloorStageStep;
                             double amount = f.RewardKillsEquiv is int kills ? kills * db.ExpPerKill.Eval(stage) : f.RewardAmount.GetValueOrDefault();
                             floors.Add(new DungeonFloorDef(f.Floor, stage, Enum<Currency>(f.RewardCurrency, floc + ".reward_currency"), amount,
-                                                           f.RewardKillsEquiv, f.Boss, Grants(f.FirstClearBonus, floc + ".first_clear_bonus", weapons, skills)));
+                                                           f.RewardKillsEquiv, f.Boss, Grants(f.FirstClearBonus, floc + ".first_clear_bonus", weapons, skills, companions)));
                         }
                     var def = new DungeonDef(r.Id, kind, ticket, r.TicketsPerDay, r.FloorStageStep, r.Floors, r.SweepAllowed,
                                              Enum<Tier>(r.Tier, loc + ".tier"), r.NameKey, r.DescKey, r.Icon, r.Background, floors.AsReadOnly());
@@ -552,7 +581,8 @@ namespace HeroCat.Sim.Content
                 db._dungeonByKind = byKind;
             }
 
-            IReadOnlyList<Grant> Grants(GrantDto[] grants, string loc, Dictionary<string, WeaponDef> weapons, Dictionary<string, SkillDef> skills)
+            IReadOnlyList<Grant> Grants(GrantDto[] grants, string loc, Dictionary<string, WeaponDef> weapons, Dictionary<string, SkillDef> skills,
+                                        Dictionary<string, CompanionDef> companions)
             {
                 if (grants == null || grants.Length == 0) return Array.Empty<Grant>();
                 var list = new List<Grant>();
@@ -563,7 +593,8 @@ namespace HeroCat.Sim.Content
                         list.Add(new Grant(Enum<Content.Currency>(g.Currency, loc), null, null, g.Amount));
                         continue;
                     }
-                    bool known = (g.Kind == "WEAPON" && weapons.ContainsKey(g.Id ?? "")) || (g.Kind == "SKILL" && skills.ContainsKey(g.Id ?? ""));
+                    bool known = (g.Kind == "WEAPON" && weapons.ContainsKey(g.Id ?? "")) || (g.Kind == "SKILL" && skills.ContainsKey(g.Id ?? "")) ||
+                                 (g.Kind == "COMPANION" && companions.ContainsKey(g.Id ?? ""));
                     if (!known)
                     {
                         Err("E022", loc, $"'{g.Id}' does not exist in {(g.Kind ?? "item").ToLowerInvariant()}s");

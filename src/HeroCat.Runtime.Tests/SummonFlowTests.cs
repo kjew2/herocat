@@ -180,6 +180,85 @@ namespace HeroCat.Runtime.Tests
             Assert.That(e.Props["diamondsSpent"], Is.EqualTo(Cost(10)));
             Assert.That(e.Props["source"], Is.EqualTo("LOCAL"));
             Assert.That(t.Log.Records.OfType<ApplySummonResult>().Count(), Is.EqualTo(1));
+            Assert.That(e.Props.Keys, Is.EquivalentTo(new[]
+            {
+                "requestId", "banner", "count", "payment", "diamondsSpent", "ticketsSpent", "pityBefore", "pityAfter", "bannerLevelBefore",
+                "bannerLevelAfter", "results", "lplusCount", "guaranteeApplied", "source", "latencyMs",
+            }), "04 section 13");
+            Assert.That(e.Props["payment"], Is.EqualTo("DIAMOND"));
+            Assert.That(e.Props["ticketsSpent"], Is.EqualTo(0L));
+            var rows = (System.Collections.Generic.List<System.Collections.Generic.Dictionary<string, object>>)e.Props["results"];
+            Assert.That(rows, Has.Count.EqualTo(10));
+            Assert.That(rows[0].Keys, Is.EquivalentTo(new[]
+            {
+                "itemId", "rarity", "isNew", "levelBefore", "levelAfter", "overflowRockCandy", "guaranteeApplied",
+            }));
+            var pulls = r.Value.Pulls;
+            Assert.That(rows.Select(x => (string)x["itemId"]), Is.EqualTo(pulls.Select(p => p.ItemId)));
+            Assert.That(e.Props["guaranteeApplied"], Is.EqualTo(pulls.Any(p => p.GuaranteeApplied)), "true exactly when a slot was forced");
+            Assert.That(e.Props["lplusCount"], Is.EqualTo(pulls.Count(p => p.Rarity >= Rarity.LEGENDARY)));
+        }
+
+        [Test]
+        public void AnAppliedSummon_TracksOneItemAcquiredPerResult_WithTheRequestId()   // 04 section 13
+        {
+            var t = TestSession.Open();
+            int before = t.Analytics.Events.Count;
+            var r = t.Runner.SummonAsync(Banner.WEAPON, 10, SummonPayment.Diamonds).GetAwaiter().GetResult();
+            var rows = t.Analytics.Events.Skip(before).Where(x => x.Name == "item_acquired").ToList();
+            Assert.That(rows, Has.Count.EqualTo(10));
+            for (int i = 0; i < rows.Count; i++)
+            {
+                var p = r.Value.Pulls[i];
+                var e = rows[i].Props;
+                Assert.That(e.Keys, Is.EquivalentTo(new[]
+                {
+                    "banner", "itemId", "rarity", "isNew", "copiesAfter", "levelBefore", "levelAfter", "acquireReason", "requestId",
+                }));
+                Assert.That((e["banner"], e["itemId"], e["rarity"], e["isNew"], e["copiesAfter"], e["levelBefore"], e["levelAfter"]),
+                            Is.EqualTo(("WEAPON", p.ItemId, p.Rarity.ToString(), p.IsNew, p.CopiesAfter, p.LevelBefore, p.LevelAfter)));
+                Assert.That((e["acquireReason"], e["requestId"]), Is.EqualTo(("SUMMON", r.Value.RequestId)));
+            }
+        }
+
+        [Test]
+        public void AReplayedRequestId_TracksNoSummonAndNoItems()   // 04 AC 12
+        {
+            var t = TestSession.Open();
+            var s = t.Sim.State;
+            var intent = new PendingSummon("0123456789abcdef0123456789abcdef", Banner.WEAPON, 1, SummonPayment.Diamonds.ToString(), TestContent.T0);
+            s.Pending.Summon = intent;
+            Assert.That(t.Runner.Summons.ResolveAsync().GetAwaiter().GetResult().IsOk, Is.True);
+            int before = t.Analytics.Events.Count;
+            s.Pending.Summon = intent;
+            Assert.That(t.Runner.Summons.ResolveAsync().GetAwaiter().GetResult().Error, Is.EqualTo(SummonError.Replayed));
+            Assert.That(t.Analytics.Events.Skip(before).Count(x => x.Name == "summon" || x.Name == "item_acquired"), Is.Zero);
+        }
+
+        [Test]
+        public void ANewProfile_TracksTheStarterWeapon_AsATutorialItemAcquired()   // 04 section 13
+        {
+            var t = TestSession.Open();
+            var e = t.Analytics.Events.Single(x => x.Name == "item_acquired");
+            var id = TestContent.Db.TutorialWeaponId;
+            Assert.That((e.Props["banner"], e.Props["itemId"], e.Props["isNew"], e.Props["levelBefore"], e.Props["acquireReason"], e.Props["requestId"]),
+                        Is.EqualTo(("WEAPON", id, true, 0, "TUTORIAL", (object)null)));
+            Assert.That(e.Props["copiesAfter"], Is.EqualTo(t.Sim.State.Weapons.Items[id].Copies));
+            Assert.That(e.Props["rarity"], Is.EqualTo(TestContent.Db.Weapons[id].Rarity.ToString()));
+        }
+
+        [Test]
+        public void AWeaponSummon_AutoEquip_TracksItemEquipped()   // 04 section 13
+        {
+            var t = TestSession.Open();
+            var s = t.Sim.State;
+            string before = s.Loadout.Weapon;
+            for (int i = 0; i < 5 && s.Loadout.Weapon == before; i++)
+                t.Runner.SummonAsync(Banner.WEAPON, 10, SummonPayment.Diamonds).GetAwaiter().GetResult();
+            Assume.That(s.Loadout.Weapon, Is.Not.EqualTo(before), "a better weapon was pulled");
+            var e = t.Analytics.Events.First(x => x.Name == "item_equipped");
+            Assert.That(e.Props.Keys, Is.EquivalentTo(new[] { "banner", "slot", "itemId", "previousItemId", "auto" }));
+            Assert.That((e.Props["banner"], e.Props["slot"], e.Props["previousItemId"], e.Props["auto"]), Is.EqualTo(("WEAPON", 0, before, true)));
         }
     }
 

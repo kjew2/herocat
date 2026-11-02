@@ -252,8 +252,7 @@ namespace HeroCat.Runtime.Save
                     Hit("P8");
                 }
                 if (CleanSlots(l.Skills, s.Skills, db.Skills)) Hit("P8");
-                // TODO(#161): companion content (unknown or wrong-kind ids); ownership and duplicates are checked now.
-                if (CleanSlots<object>(l.Companions, s.Companions, null)) Hit("P8");
+                if (CleanSlots(l.Companions, s.Companions, db.Companions)) Hit("P8");
                 // TODO(#227): rune content (P1).
                 if (CleanSlots<object>(l.Runes, s.Runes, null)) Hit("P8");
             }
@@ -334,7 +333,7 @@ namespace HeroCat.Runtime.Save
             {
                 if (PruneItems(s.Weapons, db.Weapons)) Hit("P10");
                 if (PruneItems(s.Skills, db.Skills)) Hit("P10");
-                if (PruneItems<object>(s.Companions, null)) Hit("P10");   // TODO(#161): companion ids against content
+                if (PruneItems(s.Companions, db.Companions)) Hit("P10");
                 if (PruneItems<object>(s.Runes, null)) Hit("P10");        // TODO(#227): rune ids against content
             }
 

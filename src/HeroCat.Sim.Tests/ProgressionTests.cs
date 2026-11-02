@@ -337,7 +337,7 @@ namespace HeroCat.Sim.Tests
         /// The damage the loop deals over <paramref name="ticks"/> against an unkillable enemy, per second, with the hero
         /// attack counted at its expected crit value (03 AC20).
         /// </summary>
-        static double MeasuredDps(Simulation sim, int ticks)
+        internal static double MeasuredDps(Simulation sim, int ticks)
         {
             Combat.AdvanceUntil<EnemySpawned>(sim);
             var f = Combat.Fight(sim);
@@ -357,7 +357,7 @@ namespace HeroCat.Sim.Tests
         }
 
         [Test]
-        public void AC20_RatedDps_MatchesMeasuredDps_Within1Pct()   // issue #10; companions are MVP (#156)
+        public void AC20_RatedDps_MatchesMeasuredDps_Within1Pct()   // issue #10; the companion half is CompanionTests (MVP tier)
         {
             var sim = Combat.NewSim();
             var s = sim.State;

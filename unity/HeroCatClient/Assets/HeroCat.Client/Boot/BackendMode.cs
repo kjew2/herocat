@@ -1,4 +1,5 @@
 using System;
+using HeroCat.Remote.Api;
 using HeroCat.Remote.Services;
 using HeroCat.Remote.Transport;
 using HeroCat.Runtime.Services;
@@ -27,9 +28,16 @@ namespace HeroCat.Client.Boot
         {
             var options = new ServicesOptions { DataDir = dataDir, Content = content, State = state, WrapClock = wrapClock };
 #if HEROCAT_BACKEND_REMOTE
-            // No server yet (TODO(#143)): the offline transport makes every remote call fail as Offline, so the game runs
-            // on the device clock with local saves and a queued upload.
-            options.Remote = o => RemoteGameServices.Wire(o, OfflineTransport.Instance, syncNow: true);
+            // No deployed server yet: the offline handler makes every ApiClient call fail as NET_OFFLINE, so the game runs
+            // on the device clock with local saves and a queued upload. A real build drops Handler (platform HttpClientHandler)
+            // and sets BaseUrl per environment, ContentVersion and Credentials (AuthClient, #148).
+            var api = new ApiClientOptions
+            {
+                Handler = new OfflineHandler(),
+                ClientVersion = string.IsNullOrEmpty(UnityEngine.Application.version) ? "0.0.0" : UnityEngine.Application.version,
+                Locale = () => System.Globalization.CultureInfo.CurrentUICulture.Name,
+            };
+            options.Remote = o => RemoteGameServices.Wire(o, api, syncNow: true);
             return GameServices.Build(Mode, options);
 #else
             return GameServices.Build(Mode, options);

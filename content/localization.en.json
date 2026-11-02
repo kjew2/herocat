@@ -931,6 +931,14 @@
       "text": "Equipped in another slot"
     },
     {
+      "key": "reject.companion_in_other_slot",
+      "text": "Equipped in another slot"
+    },
+    {
+      "key": "reject.companion_slot_locked",
+      "text": "Unlocks with Awakening"
+    },
+    {
       "key": "reject.slot_empty",
       "text": "That slot is empty"
     },
@@ -1201,6 +1209,14 @@
     {
       "key": "scr.item_detail.level",
       "text": "Level {0}   {1} / {2} copies"
+    },
+    {
+      "key": "scr.item_detail.limit_break",
+      "text": "Limit break ({0} Rock Candy)"
+    },
+    {
+      "key": "scr.item_detail.limit_breaks",
+      "text": "Limit breaks {0} / {1}"
     },
     {
       "key": "scr.item_detail.new",
@@ -2249,6 +2265,406 @@
     {
       "key": "reject.unknown_research",
       "text": "Unknown research"
+    },
+    {
+      "key": "companion.c_01.desc",
+      "text": "A common damage companion."
+    },
+    {
+      "key": "companion.c_01.name",
+      "text": "Common Companion 1"
+    },
+    {
+      "key": "companion.c_02.desc",
+      "text": "A common damage companion."
+    },
+    {
+      "key": "companion.c_02.name",
+      "text": "Common Companion 2"
+    },
+    {
+      "key": "companion.c_03.desc",
+      "text": "A common damage companion."
+    },
+    {
+      "key": "companion.c_03.name",
+      "text": "Common Companion 3"
+    },
+    {
+      "key": "companion.c_04.desc",
+      "text": "A common damage companion."
+    },
+    {
+      "key": "companion.c_04.name",
+      "text": "Common Companion 4"
+    },
+    {
+      "key": "companion.c_05.desc",
+      "text": "A common damage companion."
+    },
+    {
+      "key": "companion.c_05.name",
+      "text": "Common Companion 5"
+    },
+    {
+      "key": "companion.c_06.desc",
+      "text": "A common damage companion."
+    },
+    {
+      "key": "companion.c_06.name",
+      "text": "Common Companion 6"
+    },
+    {
+      "key": "companion.c_07.desc",
+      "text": "A common damage companion."
+    },
+    {
+      "key": "companion.c_07.name",
+      "text": "Common Companion 7"
+    },
+    {
+      "key": "companion.c_08.desc",
+      "text": "A common damage companion."
+    },
+    {
+      "key": "companion.c_08.name",
+      "text": "Common Companion 8"
+    },
+    {
+      "key": "companion.c_09.desc",
+      "text": "A common damage companion."
+    },
+    {
+      "key": "companion.c_09.name",
+      "text": "Common Companion 9"
+    },
+    {
+      "key": "companion.c_10.desc",
+      "text": "A common attack-buff companion."
+    },
+    {
+      "key": "companion.c_10.name",
+      "text": "Common Companion 10"
+    },
+    {
+      "key": "companion.c_11.desc",
+      "text": "A common attack-buff companion."
+    },
+    {
+      "key": "companion.c_11.name",
+      "text": "Common Companion 11"
+    },
+    {
+      "key": "companion.c_12.desc",
+      "text": "A common attack-buff companion."
+    },
+    {
+      "key": "companion.c_12.name",
+      "text": "Common Companion 12"
+    },
+    {
+      "key": "companion.c_13.desc",
+      "text": "A common attack-buff companion."
+    },
+    {
+      "key": "companion.c_13.name",
+      "text": "Common Companion 13"
+    },
+    {
+      "key": "companion.c_14.desc",
+      "text": "A common gold-buff companion."
+    },
+    {
+      "key": "companion.c_14.name",
+      "text": "Common Companion 14"
+    },
+    {
+      "key": "companion.c_15.desc",
+      "text": "A common gold-buff companion."
+    },
+    {
+      "key": "companion.c_15.name",
+      "text": "Common Companion 15"
+    },
+    {
+      "key": "companion.c_16.desc",
+      "text": "A common gold-buff companion."
+    },
+    {
+      "key": "companion.c_16.name",
+      "text": "Common Companion 16"
+    },
+    {
+      "key": "companion.c_17.desc",
+      "text": "A common mana companion."
+    },
+    {
+      "key": "companion.c_17.name",
+      "text": "Common Companion 17"
+    },
+    {
+      "key": "companion.c_18.desc",
+      "text": "A common mana companion."
+    },
+    {
+      "key": "companion.c_18.name",
+      "text": "Common Companion 18"
+    },
+    {
+      "key": "companion.r_01.desc",
+      "text": "A rare damage companion."
+    },
+    {
+      "key": "companion.r_01.name",
+      "text": "Rare Companion 1"
+    },
+    {
+      "key": "companion.r_02.desc",
+      "text": "A rare damage companion."
+    },
+    {
+      "key": "companion.r_02.name",
+      "text": "Rare Companion 2"
+    },
+    {
+      "key": "companion.r_03.desc",
+      "text": "A rare damage companion."
+    },
+    {
+      "key": "companion.r_03.name",
+      "text": "Rare Companion 3"
+    },
+    {
+      "key": "companion.r_04.desc",
+      "text": "A rare damage companion."
+    },
+    {
+      "key": "companion.r_04.name",
+      "text": "Rare Companion 4"
+    },
+    {
+      "key": "companion.r_05.desc",
+      "text": "A rare mana companion."
+    },
+    {
+      "key": "companion.r_05.name",
+      "text": "Rare Companion 5"
+    },
+    {
+      "key": "companion.r_06.desc",
+      "text": "A rare damage companion."
+    },
+    {
+      "key": "companion.r_06.name",
+      "text": "Rare Companion 6"
+    },
+    {
+      "key": "companion.r_07.desc",
+      "text": "A rare damage companion."
+    },
+    {
+      "key": "companion.r_07.name",
+      "text": "Rare Companion 7"
+    },
+    {
+      "key": "companion.r_08.desc",
+      "text": "A rare damage companion."
+    },
+    {
+      "key": "companion.r_08.name",
+      "text": "Rare Companion 8"
+    },
+    {
+      "key": "companion.r_09.desc",
+      "text": "A rare attack-buff companion."
+    },
+    {
+      "key": "companion.r_09.name",
+      "text": "Rare Companion 9"
+    },
+    {
+      "key": "companion.r_10.desc",
+      "text": "A rare attack-buff companion."
+    },
+    {
+      "key": "companion.r_10.name",
+      "text": "Rare Companion 10"
+    },
+    {
+      "key": "companion.r_11.desc",
+      "text": "A rare attack-buff companion."
+    },
+    {
+      "key": "companion.r_11.name",
+      "text": "Rare Companion 11"
+    },
+    {
+      "key": "companion.r_12.desc",
+      "text": "A rare gold-buff companion."
+    },
+    {
+      "key": "companion.r_12.name",
+      "text": "Rare Companion 12"
+    },
+    {
+      "key": "companion.r_13.desc",
+      "text": "A rare gold-buff companion."
+    },
+    {
+      "key": "companion.r_13.name",
+      "text": "Rare Companion 13"
+    },
+    {
+      "key": "companion.r_14.desc",
+      "text": "A rare mana companion."
+    },
+    {
+      "key": "companion.r_14.name",
+      "text": "Rare Companion 14"
+    },
+    {
+      "key": "companion.e_01.desc",
+      "text": "An epic damage companion."
+    },
+    {
+      "key": "companion.e_01.name",
+      "text": "Epic Companion 1"
+    },
+    {
+      "key": "companion.e_02.desc",
+      "text": "An epic damage companion."
+    },
+    {
+      "key": "companion.e_02.name",
+      "text": "Epic Companion 2"
+    },
+    {
+      "key": "companion.e_03.desc",
+      "text": "An epic damage companion."
+    },
+    {
+      "key": "companion.e_03.name",
+      "text": "Epic Companion 3"
+    },
+    {
+      "key": "companion.e_04.desc",
+      "text": "An epic damage companion."
+    },
+    {
+      "key": "companion.e_04.name",
+      "text": "Epic Companion 4"
+    },
+    {
+      "key": "companion.e_05.desc",
+      "text": "An epic damage companion."
+    },
+    {
+      "key": "companion.e_05.name",
+      "text": "Epic Companion 5"
+    },
+    {
+      "key": "companion.e_06.desc",
+      "text": "An epic attack-buff companion."
+    },
+    {
+      "key": "companion.e_06.name",
+      "text": "Epic Companion 6"
+    },
+    {
+      "key": "companion.e_07.desc",
+      "text": "An epic attack-buff companion."
+    },
+    {
+      "key": "companion.e_07.name",
+      "text": "Epic Companion 7"
+    },
+    {
+      "key": "companion.e_08.desc",
+      "text": "An epic gold-buff companion."
+    },
+    {
+      "key": "companion.e_08.name",
+      "text": "Epic Companion 8"
+    },
+    {
+      "key": "companion.e_09.desc",
+      "text": "An epic mana companion."
+    },
+    {
+      "key": "companion.e_09.name",
+      "text": "Epic Companion 9"
+    },
+    {
+      "key": "companion.e_10.desc",
+      "text": "An epic mana companion."
+    },
+    {
+      "key": "companion.e_10.name",
+      "text": "Epic Companion 10"
+    },
+    {
+      "key": "companion.l_01.desc",
+      "text": "A legendary damage companion."
+    },
+    {
+      "key": "companion.l_01.name",
+      "text": "Legendary Companion 1"
+    },
+    {
+      "key": "companion.l_02.desc",
+      "text": "A legendary damage companion."
+    },
+    {
+      "key": "companion.l_02.name",
+      "text": "Legendary Companion 2"
+    },
+    {
+      "key": "companion.l_03.desc",
+      "text": "A legendary damage companion."
+    },
+    {
+      "key": "companion.l_03.name",
+      "text": "Legendary Companion 3"
+    },
+    {
+      "key": "companion.l_04.desc",
+      "text": "A legendary attack-buff companion."
+    },
+    {
+      "key": "companion.l_04.name",
+      "text": "Legendary Companion 4"
+    },
+    {
+      "key": "companion.l_05.desc",
+      "text": "A legendary gold-buff companion."
+    },
+    {
+      "key": "companion.l_05.name",
+      "text": "Legendary Companion 5"
+    },
+    {
+      "key": "companion.l_06.desc",
+      "text": "A legendary mana companion."
+    },
+    {
+      "key": "companion.l_06.name",
+      "text": "Legendary Companion 6"
+    },
+    {
+      "key": "companion.m_01.desc",
+      "text": "A mythic damage companion."
+    },
+    {
+      "key": "companion.m_01.name",
+      "text": "Mythic Companion 1"
+    },
+    {
+      "key": "companion.m_02.desc",
+      "text": "A mythic attack-buff companion."
+    },
+    {
+      "key": "companion.m_02.name",
+      "text": "Mythic Companion 2"
     },
     {
       "key": "dungeon.dungeon_fish.name",
