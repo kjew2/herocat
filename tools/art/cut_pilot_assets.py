@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cut stand-in art for the companion art pilot (issue #291) from the artist's reference sheets in art/reference/.
+"""Cut stand-in art for the companion art pilot (issue #291) and the companions added after it from the artist's reference sheets in art/reference/.
 
 These are placeholders until the artist delivers. They are cut from the artist's own prototypes so the pilot can run
 end to end in Unity. Outputs are named by content address (specs/07 section 15.2) and written to
@@ -32,6 +32,8 @@ OUT = os.path.join(ROOT, "unity", "HeroCatClient", "Assets", "Resources", "Art")
 #   bust:   (x0, y0, size) square for the portrait
 #   chibi:  (x0, y0, x1, feetY, pedestalTopY) in the crop whose origin is (60, 0.45 * height)
 #   grid:   source pixels per art pixel of the chibi (measured; the AI-drawn grid is not exact)
+#   wide_gold: also drop the pedestal's darker shading (only where the character has no gold near the feet)
+#   clear:  optional boxes (x0, y0, x1, y1) in the same crop coordinates to drop (background the fill cannot reach)
 PILOT = {
     "comp_l_01": dict(src="lucy.jpeg",      splash=(600, 0, 1340, 960),  face=(1010, 345, 120), bust=(820, 150, 420),
                       chibi=(20, 10, 360, 332, 285), grid=6.3),
@@ -39,6 +41,8 @@ PILOT = {
                       chibi=(40, 30, 345, 352, 300), grid=5.6),
     "comp_m_01": dict(src="seraphine.jpeg", splash=(580, 0, 1362, 1014), face=(1000, 345, 120), bust=(790, 90, 420),
                       chibi=(20, 20, 375, 358, 300), grid=5.35),
+    "comp_l_02": dict(src="yuki.jpg",       splash=(600, 0, 1390, 1024), face=(1005, 315, 120), bust=(790, 90, 430),
+                      chibi=(-20, 20, 355, 378, 335), grid=5.1, wide_gold=True, clear=[(295, 255, 380, 420)]),
 }
 
 
@@ -90,7 +94,7 @@ def largest_component(mask):
     return out
 
 
-def cut_chibi(src, box, grid):
+def cut_chibi(src, box, grid, clear=(), wide_gold=False):
     x0, y0, x1, feet, ped = box
     oy = int(src.height * 0.45)
     im = np.asarray(src.crop((60 + x0, oy + y0, 60 + x1, oy + feet + 40))).astype(int)
@@ -99,9 +103,13 @@ def cut_chibi(src, box, grid):
     keep[fy:, :] = False
     r, g, b = im[..., 0], im[..., 1], im[..., 2]
     gold = (r > 150) & (g > 100) & (b < 120) & (r > b + 60)   # the pedestal's top surface around the feet
+    if wide_gold:
+        gold |= (r > 120) & (g > 80) & (r > b + 50) & (g > b + 20)   # and its darker shading
     band = np.zeros_like(keep)
     band[py:fy, :] = True
     keep &= ~(band & gold)
+    for cx0, cy0, cx1, cy1 in clear:
+        keep[max(0, cy0 - y0):max(0, cy1 - y0), max(0, cx0 - x0):max(0, cx1 - x0)] = False
     keep = largest_component(keep)
     # Sample the centre of each art pixel (box-averaging smears the outlines), then a small palette.
     ys, xs = np.where(keep)
@@ -140,7 +148,7 @@ def main():
         print(save(src.crop((bx, by, bx + bs, by + bs)).resize((256, 256), Image.LANCZOS), "Portraits", "portrait_" + cid))
         cx, cy, r = c["face"]
         print(save(square(src, cx, cy, r, 128), "Icons", "icon_" + cid))
-        chibi = cut_chibi(src, c["chibi"], c["grid"])
+        chibi = cut_chibi(src, c["chibi"], c["grid"], c.get("clear", ()), c.get("wide_gold", False))
         print(save(chibi, "Pixel", "spr_" + cid), chibi.size)
         if args.preview:
             os.makedirs(args.preview, exist_ok=True)

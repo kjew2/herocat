@@ -7,6 +7,7 @@ Presentation only: names, roles and look briefs for the rows in `content_src/com
 | `comp_l_01` | Legendary | `DAMAGE` | Lucy | Arcane / Caster | LIGHT (arcane) | `art/reference/lucy.jpeg`, alt `lucy_special.jpeg` |
 | `comp_l_04` | Legendary | `BUFF_ATK` | Valeria | Tank / Paladin | LIGHT | `art/reference/valeria.jpeg` |
 | `comp_m_01` | Mythic | `DAMAGE` | Seraphine | Warrior / Death Knight | DARK | `art/reference/seraphine.jpeg` |
+| `comp_l_02` | Legendary | `DAMAGE` | Yuki | Mage / Shadow | DARK | `art/reference/yuki.jpg` |
 
 ## Lucy
 - **Hook:** a stargazing witch who reads the sky like a map and redraws it when it disagrees with her.
@@ -26,6 +27,13 @@ Presentation only: names, roles and look briefs for the rows in `content_src/com
 - **Silhouette:** curling black horns with a red rose, long silver hair, a skull pauldron, a tattered crimson cape and a huge skull scythe.
 - **Palette:** black, crimson and magenta, with gold trim.
 - **Ability VFX (`vfx_comp_m_01`):** a crimson crescent slash crosses the screen and leaves fading magenta wisps.
+
+## Yuki
+- **Hook:** a gothic shadow mage who never lowers her parasol; when she twirls it, the shade breaks into butterflies.
+- **Silhouette:** long black hair with a white streak, a heart-and-cross bow, a halo of thorns, a frilled black-and-white gothic dress and a frilled black parasol.
+- **Palette:** black, white and violet; silver chains and cross accents.
+- **Ability VFX (`vfx_comp_l_02`):** violet shadow butterflies swarm out of the parasol and burst on the enemy.
+- **Added after the pilot**, the same way: stand-ins cut by `tools/art/cut_pilot_assets.py`.
 
 ## Pilot asset status (issue #291)
 The images in Unity are **stand-ins cut from the reference sheets** by `tools/art/cut_pilot_assets.py`. They don't replace the artist's deliverables:

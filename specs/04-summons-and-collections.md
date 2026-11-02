@@ -342,7 +342,7 @@ Rule (issue #243): companion damage scales with the skill layer, because `Compan
 
 Mix: 50% `DAMAGE`, 20% `BUFF_ATK`, 15% `BUFF_GOLD`, 15% `MP_REGEN`. `MP_REGEN` companions are what lets a player raise the uptime of the other companions before Research catches up; the bot values them through `mpSufficiency`.
 
-Role tags (issue #289) are presentation only: a class name shown on the card, derived from `ability_type` and never read by the sim. Warrior, Death Knight and Caster tags go on `DAMAGE`; Paladin and Tank on `BUFF_ATK`; Merchant and Bard on `BUFF_GOLD`; Cleric and Sage on `MP_REGEN`. If a role ever needs a game effect, that is a new decision, not a tag. The art pilot placed the artist's three prototypes (issue #291; concepts in `art/concepts/companions.md`): Lucy, Arcane Caster, `comp_l_01` (L, `DAMAGE`); Valeria, Paladin, `comp_l_04` (L, `BUFF_ATK`); Seraphine, Death Knight, `comp_m_01` (M, `DAMAGE`).
+Role tags (issue #289) are presentation only: a class name shown on the card, derived from `ability_type` and never read by the sim. Warrior, Death Knight, Caster and Mage tags go on `DAMAGE`; Paladin and Tank on `BUFF_ATK`; Merchant and Bard on `BUFF_GOLD`; Cleric and Sage on `MP_REGEN`. If a role ever needs a game effect, that is a new decision, not a tag. The art pilot placed the artist's three prototypes (issue #291; concepts in `art/concepts/companions.md`): Lucy, Arcane Caster, `comp_l_01` (L, `DAMAGE`); Valeria, Paladin, `comp_l_04` (L, `BUFF_ATK`); Seraphine, Death Knight, `comp_m_01` (M, `DAMAGE`); and, after the pilot, Yuki, Shadow Mage, `comp_l_02` (L, `DAMAGE`).
 
 ### 8.2 Slots and MP
 

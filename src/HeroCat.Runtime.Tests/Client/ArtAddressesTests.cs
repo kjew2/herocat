@@ -36,10 +36,10 @@ namespace HeroCat.Runtime.Tests
         }
 
         [Test]
-        public void EveryPilotAssetIsCommitted()   // issue #291: the three pilot companions resolve to files
+        public void EveryPilotAssetIsCommitted()   // issue #291: the pilot companions (and Yuki, added after) resolve to files
         {
             string res = System.IO.Path.Combine(TestContent.RepoRoot, "unity", "HeroCatClient", "Assets", "Resources");
-            foreach (var id in new[] { "comp_l_01", "comp_l_04", "comp_m_01" })
+            foreach (var id in new[] { "comp_l_01", "comp_l_04", "comp_m_01", "comp_l_02" })
                 foreach (var a in new[] { "icon_" + id, "spr_" + id, ArtAddresses.PortraitFor(id), "art_splash_" + id })
                     Assert.That(System.IO.File.Exists(System.IO.Path.Combine(res, ArtAddresses.ResourcePath(a) + ".png")), a);
         }
