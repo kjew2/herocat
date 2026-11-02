@@ -36,7 +36,7 @@ namespace HeroCat.Sim.State
                     AnchorServerTime = s.Time.AnchorServerTime, AnchorTick = s.Time.AnchorTick, CreatedServerTime = s.Time.CreatedServerTime,
                     DayKey = s.Time.DayKey, WeekKey = s.Time.WeekKey, LoginDayKey = s.Time.LoginDayKey,
                 },
-                Hero = new HeroState { Level = s.Hero.Level, Exp = s.Hero.Exp, AwakenRank = s.Hero.AwakenRank },
+                Party = new PartyState { Level = s.Party.Level, Exp = s.Party.Exp, Slots = Copy(s.Party.Slots) },
                 Training = new TrainingState { Level = Copy(s.Training.Level) },
                 Wallet = new Wallet
                 {
@@ -49,7 +49,6 @@ namespace HeroCat.Sim.State
                 Runes = Copy(s.Runes),
                 Loadout = new LoadoutState
                 {
-                    Weapon = s.Loadout.Weapon, Skills = Copy(s.Loadout.Skills), Companions = Copy(s.Loadout.Companions),
                     Runes = Copy(s.Loadout.Runes),
                 },
                 Fish = new FishBoardState
@@ -127,7 +126,7 @@ namespace HeroCat.Sim.State
             var c = new CombatState
             {
                 Mode = s.Mode, Stage = s.Stage, KillsInStage = s.KillsInStage, Boss = s.Boss, BossFailsOnStage = s.BossFailsOnStage,
-                Selected = s.Selected, Mp = s.Mp, SkillCooldowns = Copy(s.SkillCooldowns), CompanionCooldowns = Copy(s.CompanionCooldowns),
+                Selected = s.Selected, Mp = Copy(s.Mp), SkillCooldowns = Copy(s.SkillCooldowns), CompanionCooldowns = Copy(s.CompanionCooldowns),
                 MissileQueue = new List<double>(s.MissileQueue),
             };
             if (s.DungeonRun != null)
@@ -149,8 +148,9 @@ namespace HeroCat.Sim.State
             return new FightState
             {
                 Phase = f.Phase, SpawnTimer = f.SpawnTimer, EnemyHp = f.EnemyHp, EnemyMaxHp = f.EnemyMaxHp, EnemyIsBoss = f.EnemyIsBoss,
-                BossTicksLeft = f.BossTicksLeft, AttackProgress = f.AttackProgress, ActiveDots = new List<DotInstance>(f.ActiveDots),
-                AtkBuffPct = f.AtkBuffPct, AtkBuffTicksLeft = f.AtkBuffTicksLeft, GoldBuffPct = f.GoldBuffPct,
+                BossTicksLeft = f.BossTicksLeft, AttackProgress = Copy(f.AttackProgress), ActiveDots = new List<DotInstance>(f.ActiveDots),
+                AtkBuffPct = f.AtkBuffPct, AtkBuffTicksLeft = f.AtkBuffTicksLeft,
+                SlotAtkBuffPct = Copy(f.SlotAtkBuffPct), SlotAtkBuffTicksLeft = Copy(f.SlotAtkBuffTicksLeft), GoldBuffPct = f.GoldBuffPct,
                 GoldBuffTicksLeft = f.GoldBuffTicksLeft, PendingTaps = f.PendingTaps,
                 TapsThisSecond = f.TapsThisSecond, TapWindowTick = f.TapWindowTick,
             };
@@ -160,7 +160,7 @@ namespace HeroCat.Sim.State
         {
             var c = new LifetimeStats
             {
-                Kills = s.Kills, BossKills = s.BossKills, BossFails = s.BossFails, HeroHits = s.HeroHits, Taps = s.Taps, Pulls = s.Pulls,
+                Kills = s.Kills, BossKills = s.BossKills, BossFails = s.BossFails, PartyHits = s.PartyHits, Taps = s.Taps, Pulls = s.Pulls,
                 Merges = s.Merges, FishReleased = s.FishReleased, FishDiscards = s.FishDiscards, DungeonClears = s.DungeonClears,
                 TrainingLevelsBought = s.TrainingLevelsBought, FirstWallStage = s.FirstWallStage, ActiveSeconds = s.ActiveSeconds,
                 GoldEarned = s.GoldEarned, GoldSpent = s.GoldSpent, FishCoinEarned = s.FishCoinEarned,
@@ -170,6 +170,15 @@ namespace HeroCat.Sim.State
             };
             foreach (var kv in s.ClientTicketsEarned) c.ClientTicketsEarned[kv.Key] = new Dictionary<CurrencyReason, long>(kv.Value);
             return c;
+        }
+
+        static PartySlot[] Copy(PartySlot[] a)
+        {
+            if (a == null) return null;
+            var r = new PartySlot[a.Length];
+            for (int i = 0; i < a.Length; i++)
+                if (a[i] != null) r[i] = new PartySlot { Companion = a[i].Companion, Weapon = a[i].Weapon, Skill = a[i].Skill, AwakenRank = a[i].AwakenRank };
+            return r;
         }
     }
 }

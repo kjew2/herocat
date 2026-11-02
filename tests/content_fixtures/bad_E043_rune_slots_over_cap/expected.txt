@@ -1,0 +1,1 @@
+CONTENT E043 awakening[5].rune_slots_after: value 7 out of range (<= RUNE_SLOTS)

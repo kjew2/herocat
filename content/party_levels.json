@@ -1,5 +1,5 @@
 {
-  "table": "hero_levels",
+  "table": "party_levels",
   "rows": [
     {
       "id": "default",

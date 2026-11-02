@@ -84,7 +84,7 @@ namespace HeroCat.Sim.Tests
             Combat.SetLevel(sim, Stat.GOLD_GAIN, 5);
             Combat.SetLevel(sim, Stat.EXP_GAIN, 3);
             Combat.AdvanceUntil<EnemySpawned>(sim);
-            double gold = sim.State.Wallet.Gold, exp = sim.State.Hero.Exp;
+            double gold = sim.State.Wallet.Gold, exp = sim.State.Party.Exp;
             long kills = sim.State.Stats.Kills;
 
             var r = sim.Apply(new SelectStage(56));
@@ -93,7 +93,7 @@ namespace HeroCat.Sim.Tests
             var c = sim.State.Combat;
             Assert.That(c.Selected, Is.EqualTo(56));
             Assert.That(Combat.Fight(sim).Phase, Is.EqualTo(FightPhase.Spawning), "the frontier mob despawns");
-            Assert.That((sim.State.Wallet.Gold, sim.State.Hero.Exp, sim.State.Stats.Kills), Is.EqualTo((gold, exp, kills)), "despawn pays nothing");
+            Assert.That((sim.State.Wallet.Gold, sim.State.Party.Exp, sim.State.Stats.Kills), Is.EqualTo((gold, exp, kills)), "despawn pays nothing");
 
             var spawn = Combat.AdvanceUntil<EnemySpawned>(sim);
             Assert.That((spawn.Stage, spawn.IsBoss, spawn.MaxHp), Is.EqualTo((56, false, sim.Query.EnemyHp(56))));

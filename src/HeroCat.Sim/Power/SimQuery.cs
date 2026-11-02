@@ -5,7 +5,7 @@ using HeroCat.Sim.Summons;
 namespace HeroCat.Sim.Power
 {
     /// <summary>
-    /// <c>Simulation.Query</c> (03 section 7): read-only derived numbers for SCR_HERO's breakdown, the wall check, the bots
+    /// <c>Simulation.Query</c> (03 section 7): read-only derived numbers for SCR_PARTY's breakdown, the wall check, the bots
     /// and the tools. The power breakdown is cached and recomputed lazily after <see cref="MarkDirty"/> (03 section 7.3);
     /// the tick loop only reads it. Simulation marks it dirty after every accepted command and every LevelUp, which covers
     /// 03 section 7.3's whole trigger list (Training, LevelUp, Awakened, ResearchLeveled, equips, copy gains, limit breaks
@@ -43,15 +43,16 @@ namespace HeroCat.Sim.Power
         }
 
         public double RatedDps => Power.RatedDps;
-        public double HeroHit => Power.HeroHit;
-        public double SkillUnit => Power.SkillUnit;
-        public double CompanionUnit => Power.CompanionUnit;
+        public double PartyHit => Power.PartyHit;
+        public double SlotHit(int slot) => Power.SlotHit(slot);
+        public double SlotUnit(int slot) => Power.SlotUnit(slot);
+        public double CompanionUnit(int slot) => Power.CompanionUnit(slot);
+        public double MpSufficiency(int slot) => Power.MpSufficiency(slot);
         public double CritRate => Power.CritRate;
         public double CritDmg => Power.CritDmg;
         public double CritFactor => Power.Crit;
         public double SpeedFactor => Power.Speed;
-        public double HeroMult => Power.Hero;
-        public double AwakenMult => Power.Awakening;
+        public double PartyMult => Power.Party;
         public double ResearchPct => Power.ResearchPct;
         public double GoldMult => Power.GoldMult;
         public double ExpMult => Power.ExpMult;
@@ -59,7 +60,7 @@ namespace HeroCat.Sim.Power
 
         /// <summary>The rated DPS with a modelled <paramref name="missileDpsPct"/> (05 section 5.1; issue #15).</summary>
         public double RatedDpsWithMissiles(double missileDpsPct) =>
-            RatedDps / Power.Fish * (1.0 + (Power.FishBoardDpsPct + missileDpsPct) / Units.Percent);
+            Power.AutoDps + Power.PartyHit * Power.Speed * missileDpsPct / Units.Percent;
 
         // ------------------------------------------------------------------------------------------- stages (03 3)
 
@@ -91,22 +92,25 @@ namespace HeroCat.Sim.Power
 
         // ------------------------------------------------------------------------------------------- awakening (03 5.3)
 
-        /// <summary>Hero.AwakenRank, clamped to the content's ranks.</summary>
-        public int AwakenRank => AwakeningRules.Rank(_db, _s);
+        /// <summary>The slot's AwakenRank, clamped to the content's ranks (per slot, 00 decision 109).</summary>
+        public int AwakenRank(int slot) => AwakeningRules.Rank(_db, _s, slot);
 
-        /// <summary>The next rank's AWAKEN_STAGES gate (Progress.HighestCleared must reach it); null at the last rank.</summary>
-        public int? NextAwakenStageGate => AwakeningRules.Next(_db, _s)?.StageGate;
+        /// <summary>The highest rank of any slot: what feature_unlocks' AWAKEN_RANK and the rune slots read.</summary>
+        public int HighestAwakenRank => AwakeningRules.HighestRank(_db, _s);
 
-        /// <summary>Rock Candy the next Awaken charges (AWAKEN_COST_ROCK_CANDY); 0 at the last rank.</summary>
-        public long NextAwakenCost => AwakeningRules.Next(_db, _s)?.RockCandyCost ?? 0;
+        /// <summary>The slot's AWAKEN_MULT ^ rank (exactly 2.25 at rank 2).</summary>
+        public double AwakenMult(int slot) => AwakeningRules.Mult(_db, _s, slot);
 
-        /// <summary>Awaken would be accepted now (next rank exists, gate reached, Rock Candy held).</summary>
-        public bool CanAwaken => AwakeningRules.CanAwaken(_db, _s);
+        /// <summary>The slot's next rank's AWAKEN_STAGES gate (Progress.HighestCleared must reach it); null at the last rank.</summary>
+        public int? NextAwakenStageGate(int slot) => AwakeningRules.Next(_db, _s, slot)?.StageGate;
 
-        /// <summary>Companion slots open now: 1 at rank 0, then awakening.companion_slots_after (00 decision 11).</summary>
-        public int CompanionSlotsUnlocked => AwakeningRules.CompanionSlots(_db, _s);
+        /// <summary>Rock Candy the slot's next Awaken charges (AWAKEN_COST_ROCK_CANDY); 0 at the last rank.</summary>
+        public long NextAwakenCost(int slot) => AwakeningRules.Next(_db, _s, slot)?.RockCandyCost ?? 0;
 
-        /// <summary>Rune slots open now (P1): awakening.rune_slots_after, 0 at rank 0.</summary>
+        /// <summary>Awaken(slot) would be accepted now (valid slot, next rank exists, gate reached, Rock Candy held).</summary>
+        public bool CanAwaken(int slot) => AwakeningRules.CanAwaken(_db, _s, slot);
+
+        /// <summary>Rune slots open now (P1): rune_slots_after of the highest slot rank, 0 at rank 0.</summary>
         public int RuneSlotsUnlocked => AwakeningRules.RuneSlots(_db, _s);
 
         /// <summary>

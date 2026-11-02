@@ -46,7 +46,7 @@ namespace HeroCat.Runtime.Tests
         public void AC13_DamageNumberPool_NeverExceeds32_RecyclesTheOldest_MergesSameSourceInATick()
         {
             var pool = new DamageNumberPool();
-            for (int i = 0; i < 100; i++) pool.Add(10, false, DamageSource.Hero, i, i * 0.001);
+            for (int i = 0; i < 100; i++) pool.Add(10, false, DamageSource.Attack, i, i * 0.001);
             Assert.That(pool.LiveCount, Is.EqualTo(UiConstants.DamageLabelPool));
             Assert.That(pool.Recycled, Is.EqualTo(100 - UiConstants.DamageLabelPool));
             double oldest = double.MaxValue;
@@ -54,8 +54,8 @@ namespace HeroCat.Runtime.Tests
             Assert.That(oldest, Is.EqualTo((100 - UiConstants.DamageLabelPool) * 0.001).Within(1e-9), "the oldest were recycled");
 
             var p2 = new DamageNumberPool();
-            p2.Add(5, false, DamageSource.Hero, 7, 0);
-            int slot = p2.Add(6, true, DamageSource.Hero, 7, 0);
+            p2.Add(5, false, DamageSource.Attack, 7, 0);
+            int slot = p2.Add(6, true, DamageSource.Attack, 7, 0);
             p2.Add(1, false, DamageSource.Fish, 7, 0);
             Assert.That(p2.LiveCount, Is.EqualTo(2));
             Assert.That(p2[slot].Amount, Is.EqualTo(11));
@@ -112,7 +112,7 @@ namespace HeroCat.Runtime.Tests
         {
             var f = ClientFixture.Open();
             f.Vm.Hud.OnGoldChip();
-            Assert.That(f.Vm.Router.TopFull.Id, Is.EqualTo(ScreenIds.Hero));
+            Assert.That(f.Vm.Router.TopFull.Id, Is.EqualTo(ScreenIds.Party));
             f.Vm.Main.OnTab(MainTab.Summon);
             Assert.That(f.Vm.Router.TopFull.Id, Is.EqualTo(ScreenIds.Summon));
             Assert.That(f.Vm.Router.Depth, Is.EqualTo(2));

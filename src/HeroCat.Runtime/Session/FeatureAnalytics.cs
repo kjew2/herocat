@@ -202,7 +202,7 @@ namespace HeroCat.Runtime.Session
         {
             int i = e.Rank - 1;
             long cost = i >= 0 && i < _db.Awakening.Count ? _db.Awakening[i].RockCandyCost : 0;
-            Track(new AnalyticsEvents.Awakened(e.Rank, cost, _rockCandyAfterAwaken));
+            Track(new AnalyticsEvents.Awakened(e.Slot, e.Rank, cost, _rockCandyAfterAwaken));   // the slot's rank (03 section 11)
         }
 
         void Track(AnalyticsEvent e)

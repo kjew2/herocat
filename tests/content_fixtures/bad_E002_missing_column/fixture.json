@@ -1,12 +1,12 @@
 {
   "edits": [
     [
-      "hero_levels",
+      "party_levels",
       ",mult_per_level,level_cap",
       ",mult_per_level"
     ],
     [
-      "hero_levels",
+      "party_levels",
       ",1.02,9999",
       ",1.02"
     ]

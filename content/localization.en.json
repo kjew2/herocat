@@ -48,31 +48,31 @@
     },
     {
       "key": "achievement.hero_level_01.name",
-      "text": "Reach hero level 10"
+      "text": "Reach party level 10"
     },
     {
       "key": "achievement.hero_level_02.name",
-      "text": "Reach hero level 25"
+      "text": "Reach party level 25"
     },
     {
       "key": "achievement.hero_level_03.name",
-      "text": "Reach hero level 50"
+      "text": "Reach party level 50"
     },
     {
       "key": "achievement.hero_level_04.name",
-      "text": "Reach hero level 75"
+      "text": "Reach party level 75"
     },
     {
       "key": "achievement.hero_level_05.name",
-      "text": "Reach hero level 100"
+      "text": "Reach party level 100"
     },
     {
       "key": "achievement.hero_level_06.name",
-      "text": "Reach hero level 150"
+      "text": "Reach party level 150"
     },
     {
       "key": "achievement.hero_level_07.name",
-      "text": "Reach hero level 200"
+      "text": "Reach party level 200"
     },
     {
       "key": "achievement.weapons_01.name",
@@ -871,7 +871,7 @@
       "text": "Not enough Guild Coins"
     },
     {
-      "key": "reject.not_enough_hero_exp",
+      "key": "reject.not_enough_party_exp",
       "text": "Not enough EXP"
     },
     {
@@ -947,12 +947,8 @@
       "text": "Equipped in another slot"
     },
     {
-      "key": "reject.companion_slot_locked",
-      "text": "Unlocks with Awakening"
-    },
-    {
-      "key": "reject.slot_empty",
-      "text": "That slot is empty"
+      "key": "reject.weapon_in_other_slot",
+      "text": "Equipped in another slot"
     },
     {
       "key": "reject.slot_occupied",
@@ -1123,16 +1119,8 @@
       "text": "MP {0} / {1} · regen {2}/s"
     },
     {
-      "key": "scr.companions.slot_awaken",
-      "text": "Awakening {0}"
-    },
-    {
-      "key": "scr.companions.slot_locked",
-      "text": "Locked"
-    },
-    {
       "key": "scr.companions.slots",
-      "text": "Slots (cast in order)"
+      "text": "Party slots"
     },
     {
       "key": "scr.companions.stats",
@@ -1199,39 +1187,43 @@
       "text": "Update"
     },
     {
-      "key": "scr.hero.buy_levels",
+      "key": "scr.party.buy_levels",
       "text": "Buy {0} levels for {1}"
     },
     {
-      "key": "scr.hero.level",
+      "key": "scr.party.awaken_gate",
+      "text": "Reach stage {0}"
+    },
+    {
+      "key": "scr.party.level",
       "text": "Lv {0}"
     },
     {
-      "key": "scr.hero.loadout",
-      "text": "Loadout"
+      "key": "scr.party.loadout",
+      "text": "Party"
     },
     {
-      "key": "scr.hero.max",
+      "key": "scr.party.max",
       "text": "MAX"
     },
     {
-      "key": "scr.hero.plus",
+      "key": "scr.party.plus",
       "text": "+"
     },
     {
-      "key": "scr.hero.step_max",
+      "key": "scr.party.step_max",
       "text": "Max"
     },
     {
-      "key": "scr.hero.step_n",
+      "key": "scr.party.step_n",
       "text": "x{0}"
     },
     {
-      "key": "scr.hero.title",
-      "text": "Hero"
+      "key": "scr.party.title",
+      "text": "Party"
     },
     {
-      "key": "scr.hero.training",
+      "key": "scr.party.training",
       "text": "Training"
     },
     {
@@ -1379,8 +1371,8 @@
       "text": "Dungeons"
     },
     {
-      "key": "scr.main.tab_hero",
-      "text": "Hero"
+      "key": "scr.main.tab_party",
+      "text": "Party"
     },
     {
       "key": "scr.main.tab_quests",
@@ -1971,8 +1963,8 @@
       "text": "Monsters drop gold."
     },
     {
-      "key": "tut.3.hero",
-      "text": "Make your squire stronger"
+      "key": "tut.3.party",
+      "text": "Make your party stronger"
     },
     {
       "key": "tut.4.train",
@@ -2744,7 +2736,7 @@
     },
     {
       "key": "dungeon.dungeon_exp.desc",
-      "text": "Earn hero EXP"
+      "text": "Earn party EXP"
     },
     {
       "key": "reject.dungeon_locked",

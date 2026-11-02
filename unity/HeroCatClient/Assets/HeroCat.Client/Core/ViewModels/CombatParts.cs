@@ -59,7 +59,7 @@ namespace HeroCat.Client.Core
     }
 
     /// <summary>Who dealt a damage number; same-source hits within one tick merge (07 section 13).</summary>
-    public enum DamageSource { Hero, Skill, Companion, Fish, Tap }
+    public enum DamageSource { Attack, Skill, Companion, Fish, Tap }
 
     /// <summary>One live damage label.</summary>
     public struct DamageLabel

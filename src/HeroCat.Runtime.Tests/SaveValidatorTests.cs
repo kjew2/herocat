@@ -67,22 +67,25 @@ namespace HeroCat.Runtime.Tests
             yield return new Case("P1", "bad missile entries dropped",
                                   s => { s.Combat.MissileQueue.Add(0.5); s.Combat.MissileQueue.Add(double.NaN); s.Combat.MissileQueue.Add(-1); s.Combat.MissileQueue.Add(double.PositiveInfinity); s.Combat.MissileQueue.Add(0); },
                                   s => Assert.That(s.Combat.MissileQueue, Is.EqualTo(new[] { 0.5 })));
-            yield return new Case("P1", "Mp not finite", s => s.Combat.Mp = double.NaN, s => Assert.That(s.Combat.Mp, Is.EqualTo(0)));
+            yield return new Case("P1", "one pool not finite", s => { s.Combat.Mp[3] = double.NaN; s.Combat.Mp[1] = 7; },
+                                  s => Assert.That(s.Combat.Mp, Is.EqualTo(new[] { 0.0, 7.0, 0.0, 0.0, 0.0 }), "only that pool is reset"));
+            yield return new Case("P1", "one pool negative", s => s.Combat.Mp[4] = -2, s => Assert.That(s.Combat.Mp[4], Is.EqualTo(0)));
 
-            // P2: wallet and Hero.Exp
+            // P2: wallet and Party.Exp
             yield return new Case("P2", "gold NaN", s => s.Wallet.Gold = double.NaN, s => Assert.That(s.Wallet.Gold, Is.EqualTo(0)));
             yield return new Case("P2", "fish coin infinite", s => s.Wallet.FishCoin = double.PositiveInfinity, s => Assert.That(s.Wallet.FishCoin, Is.EqualTo(0)));
             yield return new Case("P2", "diamond and rock candy negative", s => { s.Wallet.Diamond = -3; s.Wallet.RockCandy = -1; s.Wallet.GuildCoin = -1; },
                                   s => { Assert.That(s.Wallet.Diamond, Is.EqualTo(0)); Assert.That(s.Wallet.RockCandy, Is.EqualTo(0)); Assert.That(s.Wallet.GuildCoin, Is.EqualTo(0)); });
             yield return new Case("P2", "tickets negative", s => { s.Wallet.DungeonTicket[1] = -2; s.Wallet.SummonTicket[3] = -1; },
                                   s => { Assert.That(s.Wallet.DungeonTicket[1], Is.EqualTo(0)); Assert.That(s.Wallet.SummonTicket[3], Is.EqualTo(0)); });
-            yield return new Case("P2", "hero exp negative", s => s.Hero.Exp = -0.5, s => Assert.That(s.Hero.Exp, Is.EqualTo(0)));
+            yield return new Case("P2", "party exp negative", s => s.Party.Exp = -0.5, s => Assert.That(s.Party.Exp, Is.EqualTo(0)));
 
-            // P3: hero level, awakening rank
-            yield return new Case("P3", "level 0", s => s.Hero.Level = 0, s => Assert.That(s.Hero.Level, Is.EqualTo(1)));
-            yield return new Case("P3", "rank past AWAKEN_STAGES", s => s.Hero.AwakenRank = Db.Awakening.Count + 2,
-                                  s => Assert.That(s.Hero.AwakenRank, Is.EqualTo(Db.Awakening.Count)));
-            yield return new Case("P3", "rank negative", s => s.Hero.AwakenRank = -1, s => Assert.That(s.Hero.AwakenRank, Is.EqualTo(0)));
+            // P3: party level, every slot's awakening rank
+            yield return new Case("P3", "level 0", s => s.Party.Level = 0, s => Assert.That(s.Party.Level, Is.EqualTo(1)));
+            yield return new Case("P3", "rank past AWAKEN_STAGES", s => s.Party.Slots[0].AwakenRank = Db.Awakening.Count + 2,
+                                  s => Assert.That(s.Party.Slots[0].AwakenRank, Is.EqualTo(Db.Awakening.Count)));
+            yield return new Case("P3", "rank negative", s => s.Party.Slots[0].AwakenRank = -1, s => Assert.That(s.Party.Slots[0].AwakenRank, Is.EqualTo(0)));
+            yield return new Case("P3", "a later slot's rank", s => s.Party.Slots[4].AwakenRank = -3, s => Assert.That(s.Party.Slots[4].AwakenRank, Is.EqualTo(0)));
 
             // P4: training within [0, TRAIN_CAP]
             yield return new Case("P4", "training negative", s => s.Training.Level[0] = -1, s => Assert.That(s.Training.Level[0], Is.EqualTo(0)));
@@ -107,41 +110,46 @@ namespace HeroCat.Runtime.Tests
             yield return new Case("P6", "negative", s => s.Progress.HighestFirstClearBoss = -K.BossEvery,
                                   s => Assert.That(s.Progress.HighestFirstClearBoss, Is.EqualTo(0)));
 
-            // P7: slot array lengths
-            yield return new Case("P7", "skills padded, runes truncated",
-                                  s => { s.Skills.Items[AnySkill()] = Own(); s.Loadout.Skills = new[] { AnySkill(), null }; s.Loadout.Runes = new string[K.RuneSlots + 3]; },
+            // P7: party slots and per-slot arrays sized PARTY_SLOTS (00 decision 109)
+            yield return new Case("P7", "party slots padded, runes truncated",
+                                  s => { s.Party.Slots = new[] { s.Party.Slots[0], s.Party.Slots[1] }; s.Loadout.Runes = new string[K.RuneSlots + 3]; },
                                   s =>
                                   {
-                                      Assert.That(s.Loadout.Skills, Has.Length.EqualTo(K.SkillSlots));
-                                      Assert.That(s.Loadout.Skills[0], Is.EqualTo(AnySkill()), "kept in place");
+                                      Assert.That(s.Party.Slots, Has.Length.EqualTo(K.PartySlots));
+                                      Assert.That(s.Party.Slots[0].Companion, Is.EqualTo("comp_c_01"), "kept in place");
+                                      Assert.That(s.Party.Slots[4].Companion, Is.Null, "a padded slot is empty");
                                       Assert.That(s.Loadout.Runes, Has.Length.EqualTo(K.RuneSlots));
                                   });
-            yield return new Case("P7", "companions and cooldowns resized",
-                                  s => { s.Loadout.Companions = new string[1]; s.Combat.SkillCooldowns = new int[2]; s.Combat.CompanionCooldowns = null; },
+            yield return new Case("P7", "a null slot element becomes an empty slot",
+                                  s => s.Party.Slots[2] = null,
+                                  s => Assert.That((s.Party.Slots[2].Companion, s.Party.Slots[2].AwakenRank), Is.EqualTo(((string)null, 0))));
+            yield return new Case("P7", "pools and cooldowns resized",
+                                  s => { s.Combat.Mp = new double[2]; s.Combat.SkillCooldowns = new int[7]; s.Combat.CompanionCooldowns = null; },
                                   s =>
                                   {
-                                      Assert.That(s.Loadout.Companions, Has.Length.EqualTo(K.CompanionSlots));
-                                      Assert.That(s.Combat.SkillCooldowns, Has.Length.EqualTo(K.SkillSlots));
-                                      Assert.That(s.Combat.CompanionCooldowns, Has.Length.EqualTo(K.CompanionSlots));
+                                      Assert.That(s.Combat.Mp, Has.Length.EqualTo(K.PartySlots));
+                                      Assert.That(s.Combat.SkillCooldowns, Has.Length.EqualTo(K.PartySlots));
+                                      Assert.That(s.Combat.CompanionCooldowns, Has.Length.EqualTo(K.PartySlots));
                                   });
 
-            // P8: equipped ids
-            yield return new Case("P8", "unknown weapon re-equips the best owned",
-                                  s => { s.Weapons.Items[BestContentWeapon()] = Own(); s.Loadout.Weapon = "weapon_not_in_content"; },
-                                  s => Assert.That(s.Loadout.Weapon, Is.EqualTo(BestContentWeapon())));
-            yield return new Case("P8", "unowned weapon", s => s.Loadout.Weapon = BestContentWeapon(),
-                                  s => Assert.That(s.Loadout.Weapon, Is.EqualTo(Db.TutorialWeaponId)));
-            yield return new Case("P8", "null weapon auto-equips (04 AutoEquipBestWeapon)",
-                                  s => { s.Weapons.Items[BestContentWeapon()] = Own(); s.Loadout.Weapon = null; },
-                                  s => Assert.That(s.Loadout.Weapon, Is.EqualTo(BestContentWeapon())));
-            yield return new Case("P8", "unowned skill slot cleared", s => s.Loadout.Skills[1] = AnySkill(), s => Assert.That(s.Loadout.Skills[1], Is.Null));
-            yield return new Case("P8", "weapon id in a skill slot (wrong kind)",
-                                  s => s.Loadout.Skills[0] = Db.TutorialWeaponId,
-                                  s => Assert.That(s.Loadout.Skills[0], Is.Null));
+            // P8: every slot's ids owned, known, of the right kind and unique across slots; nothing auto-equips
+            yield return new Case("P8", "unknown weapon cleared", s => s.Party.Slots[0].Weapon = "weapon_not_in_content",
+                                  s => Assert.That(s.Party.Slots[0].Weapon, Is.Null, "an unarmed slot is valid (02 section 3.2)"));
+            yield return new Case("P8", "unowned weapon cleared", s => s.Party.Slots[2].Weapon = BestContentWeapon(),
+                                  s => Assert.That(s.Party.Slots[2].Weapon, Is.Null));
+            yield return new Case("P8", "duplicate weapon keeps the lowest slot", s => s.Party.Slots[3].Weapon = Db.TutorialWeaponId,
+                                  s => { Assert.That(s.Party.Slots[0].Weapon, Is.EqualTo(Db.TutorialWeaponId)); Assert.That(s.Party.Slots[3].Weapon, Is.Null); });
+            yield return new Case("P8", "unowned skill cleared", s => s.Party.Slots[1].Skill = AnySkill(), s => Assert.That(s.Party.Slots[1].Skill, Is.Null));
+            yield return new Case("P8", "weapon id in a skill field (wrong kind)",
+                                  s => s.Party.Slots[0].Skill = Db.TutorialWeaponId,
+                                  s => Assert.That(s.Party.Slots[0].Skill, Is.Null));
             yield return new Case("P8", "duplicate skill keeps the first",
-                                  s => { s.Skills.Items[AnySkill()] = Own(); s.Loadout.Skills[0] = AnySkill(); s.Loadout.Skills[3] = AnySkill(); },
-                                  s => { Assert.That(s.Loadout.Skills[0], Is.EqualTo(AnySkill())); Assert.That(s.Loadout.Skills[3], Is.Null); });
-            yield return new Case("P8", "unowned companion", s => s.Loadout.Companions[0] = "comp_c_01", s => Assert.That(s.Loadout.Companions[0], Is.Null));
+                                  s => { s.Skills.Items[AnySkill()] = Own(); s.Party.Slots[0].Skill = AnySkill(); s.Party.Slots[3].Skill = AnySkill(); },
+                                  s => { Assert.That(s.Party.Slots[0].Skill, Is.EqualTo(AnySkill())); Assert.That(s.Party.Slots[3].Skill, Is.Null); });
+            yield return new Case("P8", "unowned companion", s => s.Party.Slots[0].Companion = "comp_c_06",
+                                  s => { Assert.That(s.Party.Slots[0].Companion, Is.Null); Assert.That(s.Party.Slots[0].Weapon, Is.EqualTo(Db.TutorialWeaponId), "the slot keeps its weapon"); });
+            yield return new Case("P8", "duplicate companion keeps the lowest slot", s => s.Party.Slots[4].Companion = "comp_c_01",
+                                  s => { Assert.That(s.Party.Slots[0].Companion, Is.EqualTo("comp_c_01")); Assert.That(s.Party.Slots[4].Companion, Is.Null); });
 
             // P9: the board
             int hard = Db.FishLevels.Count;
@@ -182,8 +190,8 @@ namespace HeroCat.Runtime.Tests
                                   s => { Assert.That(s.Weapons.Items.ContainsKey("weapon_removed_from_content"), Is.False); Assert.That(s.Wallet.RockCandy, Is.EqualTo(0)); });
             yield return new Case("P10", "zero copies removed", s => s.Skills.Items[AnySkill()] = Own(0),
                                   s => Assert.That(s.Skills.Items.ContainsKey(AnySkill()), Is.False));
-            yield return new Case("P10", "companion with no copies removed", s => s.Companions.Items["comp_c_01"] = Own(-1),
-                                  s => Assert.That(s.Companions.Items, Is.Empty));
+            yield return new Case("P10", "companion with no copies removed", s => s.Companions.Items["comp_c_06"] = Own(-1),
+                                  s => Assert.That(s.Companions.Items.ContainsKey("comp_c_06"), Is.False));
 
             // P11: banners
             yield return new Case("P11", "pity at PITY_HARD", s => s.Banners[Banner.WEAPON].Pity = Db.Banners[Banner.WEAPON].PityHard,
@@ -210,7 +218,7 @@ namespace HeroCat.Runtime.Tests
                                   s => Assert.That(s.Weapons.Items[Db.TutorialWeaponId].LimitBreaks, Is.EqualTo(K.LimitBreakRanks)));
 
             // P15: stream counters follow the stats
-            yield return new Case("P15", "crit and combat counters", s => { s.Rng["crit"].Counter = 5; s.Stats.HeroHits = 2; s.Rng["combat"].Counter = 1; },
+            yield return new Case("P15", "crit and combat counters", s => { s.Rng["crit"].Counter = 5; s.Stats.PartyHits = 2; s.Rng["combat"].Counter = 1; },
                                   s => { Assert.That(s.Rng["crit"].Counter, Is.EqualTo(2)); Assert.That(s.Rng["combat"].Counter, Is.EqualTo(0)); });
             yield return new Case("P15", "loot and fish_spawn counters", s => { s.Stats.BossKills = 3; s.Stats.FishReleased = 4; },
                                   s => { Assert.That(s.Rng["loot"].Counter, Is.EqualTo(3)); Assert.That(s.Rng["fish_spawn"].Counter, Is.EqualTo(4)); });
@@ -329,12 +337,12 @@ namespace HeroCat.Runtime.Tests
             s.Companions.Items["comp_e_01"] = Own();
             s.Companions.Items["comp_removed_from_content"] = Own(3);
             s.Skills.Items[AnySkill()] = Own();
-            s.Loadout.Companions[0] = "comp_e_01";
-            s.Loadout.Companions[1] = AnySkill();            // a skill id in a companion slot (wrong kind)
-            s.Loadout.Companions[2] = "comp_removed_from_content";
+            s.Party.Slots[0].Companion = "comp_e_01";
+            s.Party.Slots[1].Companion = AnySkill();            // a skill id in a companion field (wrong kind)
+            s.Party.Slots[2].Companion = "comp_removed_from_content";
             Assert.That(SaveValidator.Run(s, Now, mvp, Opt()), Is.EquivalentTo(new[] { "P8", "P10" }));
-            Assert.That(s.Loadout.Companions, Is.EqualTo(new[] { "comp_e_01", null, null, null }));
-            Assert.That(s.Companions.Items.Keys, Is.EqualTo(new[] { "comp_e_01" }));
+            Assert.That(s.Party.Slots.Select(x => x.Companion), Is.EqualTo(new[] { "comp_e_01", null, null, "comp_c_04", "comp_c_05" }));
+            Assert.That(s.Companions.Items.Keys, Is.EquivalentTo(new[] { "comp_e_01", "comp_c_01", "comp_c_02", "comp_c_03", "comp_c_04", "comp_c_05" }));
             Assert.That(SaveValidator.Run(s, Now, mvp, Opt()), Is.Empty);
         }
 
@@ -450,7 +458,8 @@ namespace HeroCat.Runtime.Tests
 
         public static IEnumerable<TestCaseData> Rejects()
         {
-            yield return new TestCaseData("R3", (Action<Newtonsoft.Json.Linq.JObject>)(j => j["Hero"] = null));
+            yield return new TestCaseData("R3", (Action<Newtonsoft.Json.Linq.JObject>)(j => j["Party"] = null));
+            yield return new TestCaseData("R3", (Action<Newtonsoft.Json.Linq.JObject>)(j => { j["Hero"] = j["Party"]; j.Remove("Party"); }));   // a pre-party dev save (00 decision 109)
             yield return new TestCaseData("R3", (Action<Newtonsoft.Json.Linq.JObject>)(j => j["Stats"] = null));
             yield return new TestCaseData("R4", (Action<Newtonsoft.Json.Linq.JObject>)(j => ((Newtonsoft.Json.Linq.JObject)j["Rng"]).Remove("loot")));
             yield return new TestCaseData("R4", (Action<Newtonsoft.Json.Linq.JObject>)(j => j["Rng"]["crit"]["Seed"] = "12345"));
@@ -466,8 +475,8 @@ namespace HeroCat.Runtime.Tests
         [TestCaseSource(nameof(Rejects))]
         public void RejectRule(string rule, Action<Newtonsoft.Json.Linq.JObject> edit)
         {
-            var s = SaveSerializer.Materialize(Json(Fresh(), edit));
-            var e = Assert.Throws<SaveInvalidException>(() => SaveValidator.Run(s, Now, Db, Opt()));
+            // R3 is checked on the body (an absent section is not defaulted), the rest on the materialised state (02 section 6.4).
+            var e = Assert.Throws<SaveInvalidException>(() => SaveValidator.Run(SaveSerializer.Materialize(Json(Fresh(), edit)), Now, Db, Opt()));
             Assert.That(e.Message, Does.StartWith(rule));
         }
 

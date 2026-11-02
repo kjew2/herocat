@@ -146,12 +146,13 @@ Concrete commands (`VerbNoun`, 00 section 5.1) and the events they emit. Full fi
 |---|---|---|---|
 | `TrainStat` | `Stat stat, int count` (1/10/100) | 03 | `StatTrained`, `CurrencyChanged(GOLD, TRAINING)` |
 | `TrainStatMax` | `Stat stat` | 03 | `StatTrained`, `CurrencyChanged(GOLD, TRAINING)` |
-| `EquipWeapon` | `string weaponId` | 04 | `ItemEquipped` |
-| `EquipSkill` | `int slot, string skillId` | 04 | `ItemEquipped` |
+| `EquipWeapon` | `int slot, string weaponId` | 04 | `ItemEquipped(kind, slot, id)` |
+| `UnequipWeapon` | `int slot` | 04 | `ItemEquipped` (slot cleared) |
+| `EquipSkill` | `int slot, string skillId` | 04 | `ItemEquipped(kind, slot, id)` |
 | `UnequipSkill` | `int slot` | 04 | `ItemEquipped` (slot cleared) |
-| `EquipCompanion` | `int slot, string companionId` | 04 | `ItemEquipped` |
+| `EquipCompanion` | `int slot, string companionId` | 04 | `ItemEquipped(kind, slot, id)` |
 | `UnequipCompanion` | `int slot` | 04 | `ItemEquipped` (slot cleared) |
-| `AutoEquipBestWeapon`, `AutoEquipBestSkills`, `AutoEquipBestCompanions` | none | 04 | `ItemEquipped` per changed slot |
+| `AutoEquipBestWeapons`, `AutoEquipBestSkills`, `AutoEquipBestCompanions` | none | 04 | `ItemEquipped` per changed slot (each fills or rearranges the `PARTY_SLOTS` party slots) |
 | `LimitBreak` | `string itemId` | 04 | `ItemLimitBroken`, `CurrencyChanged(ROCK_CANDY, LIMIT_BREAK)` |
 | `ApplySummonResult` | `SummonResultPayload payload` (the service output, 2.5) | 04 | `ItemAcquired` x N, `CurrencyChanged(..., SUMMON)`, `BannerLeveledUp?` |
 | `ReleaseFish` | none | 05 | `FishReleased`, `FishDiscovered?` |
@@ -163,20 +164,22 @@ Concrete commands (`VerbNoun`, 00 section 5.1) and the events they emit. Full fi
 | `TapZap` | `int count` | 03 | `TapZapped`; taps above `TAP_ZAP_MAX_PER_SEC` are dropped |
 | `AttemptBoss` | none | 03 | `EnemySpawned` (the boss) |
 | `SelectStage` | `int? stage` (farm target `<= HighestCleared`, any completed stage per 02; null returns to the frontier; `Combat.Stage` stays the frontier and keeps its kills and boss phase, issue #35) | 03 | `StageChanged` |
-| `ClaimOfflineReward` | none | 06 | `OfflineRewardClaimed`, `CurrencyChanged(GOLD, OFFLINE)`, `CurrencyChanged(HERO_EXP, OFFLINE)` |
+| `ClaimOfflineReward` | none | 06 | `OfflineRewardClaimed`, `CurrencyChanged(GOLD, OFFLINE)`, `CurrencyChanged(PARTY_EXP, OFFLINE)` |
 | `StartDungeon` | `Dungeon kind, int floor, ulong seed, string grantId, bool localSeed` | 06 | `DungeonStarted` |
 | `SweepDungeon` | `Dungeon kind` | 06 | `DungeonSwept`, `CurrencyChanged(..., DUNGEON)` |
 | `ClaimQuest` | `string questId` | 06 | `QuestClaimed`, `CurrencyChanged(..., QUEST)` |
 | `ClaimAllQuests` | `QuestKind kind` | 06 | one `QuestClaimed` per quest |
 | `ClaimDailyGift` | none | 06 | `DailyGiftClaimed`, `CurrencyChanged(TICKET_SUMMON_WEAPON, DAILY_GIFT)` |
 | `ExchangeItem` | `string offerId, int qty` | 06 | `ItemExchanged`, `CurrencyChanged(DIAMOND, SHOP_EXCHANGE)`, `CurrencyChanged(TICKET_*, SHOP_EXCHANGE)` |
-| `Awaken` | none | 03 | `Awakened`, `CurrencyChanged(ROCK_CANDY, AWAKENING)` |
+| `Awaken` | `int slot` | 03 | `Awakened(slot, rank)`, `CurrencyChanged(ROCK_CANDY, AWAKENING)` |
 | `Research` | `string nodeId` | 03 | `ResearchLeveled`, `CurrencyChanged(FISH_COIN, RESEARCH)` |
 | `ApplyInboxGrant` | `InboxGrantPayload grant` | 06/08 | `CurrencyChanged(..., IAP or MAIL)`, `ItemAcquired?` |
 | `ApplyServerTime` | `long serverSeconds` | 02/06 | `DayRolledOver?`, `WeekRolledOver?` (re-anchors the sim's virtual server clock, 3.1) |
 | `ComputeOfflineCatchup` | `long nowServerSeconds` | 06 | `OfflineRewardComputed?` (stores or sums into `Offline.Pending`, stamps `LastTickServerTime`; 8.7) |
 | `SetTutorialStep` | `int step` | 07 | `TutorialStepChanged` |
 | `SetAutoMerge` (P1) | `bool on` | 05 | per 05 section 6 |
+
+Slot arguments (00 decision 109; implementation tracked in issue #309): every `slot` is a party slot index `0..PARTY_SLOTS-1` (5 slots, all open from the start). A slot outside that range is `BadArgument` with reason `BAD_SLOT`; the owning spec lists the other reasons (04: `UNKNOWN_ITEM`, `ITEM_NOT_OWNED`, `ALREADY_EQUIPPED`, `WEAPON_IN_OTHER_SLOT`, `SKILL_IN_OTHER_SLOT`, `COMPANION_IN_OTHER_SLOT`; 03 for `Awaken`). Combat events that a slot causes carry it: `HitLanded(slot, dmg, isCrit, enemyHp)`, `SkillCast(slot, id)`, `CompanionAbilityUsed(slot, id, mpAfter)` (`mpAfter` is that slot's pool), `ItemEquipped(kind, slot, id)`, `Awakened(slot, rank)`.
 
 P1 commands not listed here (`CastSkill(slot)`, 04 section 7.2) follow the same rules; their rows live in the owning spec. `RetreatFromBoss` is not in MVP (issue #11): a boss attempt ends by kill or timer.
 
@@ -209,7 +212,7 @@ Rules:
 
 ### 2.3 Event buffering
 
-`Simulation` appends to a `List<Event>` with capacity `EVENT_BUFFER_MAX = 4096`. If a single `Advance` exceeds it (a 10 s catch-up at `MAX_TICKS_PER_FRAME` on a high-DPS hero can kill a few hundred mobs), the sim coalesces per tick: repeated `EnemyKilled` and `CurrencyChanged(KILL)` in the same `Advance` call are summed into `EnemyKilledBatch(count, goldTotal, expTotal, fromStage, toStage, killGold, killExp)` once the buffer passes `EVENT_COALESCE_AT = 1024`. `goldTotal`/`expTotal` sum the folded kills (boss kills included, whose `CurrencyChanged(BOSS)` is not folded); `killGold`/`killExp` sum only the folded `CurrencyChanged(KILL)` amounts, so 06 section 13's `currency_changed` stays exact (issue #155). Coalescing is deterministic (it depends only on counts) and the bot harness turns it on permanently to keep memory flat.
+`Simulation` appends to a `List<Event>` with capacity `EVENT_BUFFER_MAX = 4096`. If a single `Advance` exceeds it (a 10 s catch-up at `MAX_TICKS_PER_FRAME` on a high-DPS party can kill a few hundred mobs), the sim coalesces per tick: repeated `EnemyKilled` and `CurrencyChanged(KILL)` in the same `Advance` call are summed into `EnemyKilledBatch(count, goldTotal, expTotal, fromStage, toStage, killGold, killExp)` once the buffer passes `EVENT_COALESCE_AT = 1024`. `goldTotal`/`expTotal` sum the folded kills (boss kills included, whose `CurrencyChanged(BOSS)` is not folded); `killGold`/`killExp` sum only the folded `CurrencyChanged(KILL)` amounts, so 06 section 13's `currency_changed` stays exact (issue #155). Coalescing is deterministic (it depends only on counts) and the bot harness turns it on permanently to keep memory flat.
 
 `SessionRunner` drains the buffer once per frame after ticking and dispatches to the `EventBus`:
 
@@ -236,14 +239,23 @@ public readonly struct Snapshot
     public int?   SelectedStage;                     // 02 `Combat.Selected`: the side stage being farmed, null = frontier (issue #254)
     public BossPhase BossPhase; public int BossTicksLeft;   // 02 `Combat.BossPhase` (None/Pending/Walled), issue #7
     public double EnemyHp, EnemyHpMax;
-    public double HeroDps;                      // the 00 section 7 formula evaluated this tick
-    public double Gold, FishCoin, HeroExp, HeroExpToNext;
+    public double PartyDps;                     // the 00 section 7 formula evaluated this tick
+    public double Gold, FishCoin, PartyExp, PartyExpToNext;
     public long   Diamonds, RockCandy;               // counted currencies are long (00 contract 9)
-    public int    HeroLevel, AwakenRank;
-    public double Mp, MpMax;
+    public int    PartyLevel;
+    public SlotSnapshot Slot0, Slot1, Slot2, Slot3, Slot4;   // PARTY_SLOTS = 5 fixed fields keep the struct allocation-free; indexer Slot(int i)
+    public double MpMax;                         // MpPoolMax, the same for every pool (00 decision 109)
     public int    TankFish, TankCap; public int TankRefillTicksLeft;
     public int    PendingInboxCount;             // set by Runtime, not sim; see 2.7
-    public ReadOnlySpan<DamageNumber> DamageNumbersThisTick => ...;   // up to DMG_NUMBERS_PER_TICK_MAX = 16
+    public ReadOnlySpan<DamageNumber> DamageNumbersThisTick => ...;   // up to DMG_NUMBERS_PER_TICK_MAX = 16; each carries its source slot (-1 for missile/tap zap)
+}
+
+public readonly struct SlotSnapshot             // one party slot (02 `Party.Slots[i]`, `Combat.Mp[i]`)
+{
+    public bool   Occupied;                      // a companion is equipped; an empty slot does nothing
+    public int    AwakenRank;
+    public double Mp;                            // this slot's own pool
+    public double SlotDps;                       // the slot's term of 00 section 7's PartyDps
 }
 ```
 
@@ -492,7 +504,7 @@ As built (issue #143): `HeroCat.Remote.Api.NetworkMonitor` over an `IReachabilit
 
 | Area | Local mode (M0) | Remote mode, offline (MVP) | Rule |
 |---|---|---|---|
-| Combat, stages, training, hero level, awakening, research, fish board, tap zap | Works | Works | Client-authoritative (00 section 4). |
+| Combat, stages, training, party level, awakening, research, fish board, tap zap | Works | Works | Client-authoritative (00 section 4). |
 | Offline catch-up, day rollover | Works on device clock floored at last save | Works on `ServerClock` extrapolated from last sync; `IsAuthoritative = false` | Bounded loss, reconciled by cloud save. |
 | Save | Local | Local; upload queued | A save never fails because the network did. |
 | Load | Local | Local after `CLOUD_FETCH_TIMEOUT_S = 5`; conflict check deferred | Bounded boot time. |
@@ -558,7 +570,7 @@ Steps:
 1. **Content load** (Runtime `ContentLoader`): read `StreamingAssets/content/manifest.json`, verify each table's hash, parse into DTOs, hand DTOs to `ContentDb.Build(dtos)` (sim). If a cached newer bundle exists in `persistentDataPath/content/<version>/` and its manifest hash verifies, use it instead. Failure of both -> `Fatal CONTENT_CORRUPT`. Target under 300 ms.
 2. **Config fetch** (`ConfigClient`): `GET /config` with `CONFIG_FETCH_TIMEOUT_S = 3`, sending the cached access JWT if one exists (it may be expired). The server applies the content rollout bucket only for a valid JWT; without one it returns the non-rollout default (08; issue #31). After step 3 succeeds, `ConfigClient` re-fetches config once in the background with the fresh JWT; this fetch is off the boot critical path, and any newer bundle it names applies at the next cold boot (8.12). On success: if `minClientVersion > clientVersion` -> `CLIENT_TOO_OLD` block with store link; if `maintenance.active` -> `Maintenance` block; store kill switches; if `contentVersion` newer than loaded -> start background download (8.12). On timeout/offline: use cached config if under `CONFIG_CACHE_MAX_AGE_S = 86400`, else defaults (everything enabled, no gate). Local mode skips this step.
 3. **Auth** (`AuthClient`): if a refresh token exists, `POST /auth/refresh`; else if no account at all, `POST /auth/guest` with the device id. Store tokens in secure storage. On offline: continue with cached `playerId` if any; else create a local guest profile with `playerId = null` and link it on first successful connection (08 section 3). First `X-Server-Time` observation makes `ServerClock.IsAuthoritative = true`. As built (issue #148): `GameServices.Account` (`IAccountService`; `LocalAccountService` in Local builds, `HeroCat.Remote.Services.AuthClient` in Remote ones, which is also the `ApiClient`'s `IApiCredentials`) returns a `SignInResult` (`Local`, `SignedIn`, `Offline`, `SignInRequired`) and never stops the boot: a refused session still loads the local save and the client offers `SCR_TITLE`'s sign-in. Tokens live in an `ITokenStore` (`tokens.json` in an `ISecureStore`, 02 section 8.4) and are written before they are used; the save HMAC key is `device_key` in the same store. The guest call's `X-Request-Id` is stored before the call, so a 201 lost to a timeout or a kill is replayed by 08's idempotency store on the next launch instead of answering `DEVICE_ALREADY_BOUND`; a final 4xx drops it. A refresh is single-flight; offline, timeout, 5xx and 429 keep the presented token and retry it only while the retry starts within `REFRESH_REUSE_GRACE_S - HTTP_TIMEOUT_S` of the first send, so it lands inside 08's same-device grace (issue #273); a 401 or `403 DEVICE_MISMATCH` clears the tokens and raises `SessionLost`. A loaded save with `PlayerId = Guid.Empty` is adopted by the signed-in (or cached) account at boot (`BootResult.AdoptedLocalSave`, open question 7), keeping its `RngRoot`.
-4. **Save load** (`CloudSaveClient.LoadAsync`): local load per 02 section 8.3 in parallel with `GET /save/meta` (5 s). Resolve per 02 section 9.3; a `Conflict` result shows the conflict modal before `SCR_MAIN`. No save anywhere -> `GameState.NewProfile(playerId, now)` with `TUTORIAL_DIAMONDS` granted via `Wallet.Apply(+1500 DIAMOND, TUTORIAL)` and the starter weapon `TUTORIAL_WEAPON_ID` (both from 09's `tut_welcome` step grant, the only grant path, applied once and guarded by `Tutorial.TutorialDiamondsGranted`, 02; issue #46), tutorial step 0, a full Magic Tank and MP 0 (02 section 3.1). No `Simulation` exists yet, so `ProfileFactory` reports the grant as a `currency_changed` analytics row with `reason = TUTORIAL` itself (06 section 13; issue #246). Copies that exist but none is readable: the same new profile plus 02 section 8.3's `save_corrupt_all` and one-time notice, never a fatal error (section 7; issue #248).
+4. **Save load** (`CloudSaveClient.LoadAsync`): local load per 02 section 8.3 in parallel with `GET /save/meta` (5 s). Resolve per 02 section 9.3; a `Conflict` result shows the conflict modal before `SCR_MAIN`. No save anywhere -> `GameState.NewProfile(playerId, now)` with `TUTORIAL_DIAMONDS` granted via `Wallet.Apply(+1500 DIAMOND, TUTORIAL)` the five starter companions `TUTORIAL_COMPANION_IDS` (equipped in party slots 0-4) and the starter weapon `TUTORIAL_WEAPON_ID` (in slot 0) (all from 09's `tut_welcome` step grant, 00 decision 109; the only grant path, applied once and guarded by `Tutorial.TutorialDiamondsGranted`, 02; issue #46), tutorial step 0, a full Magic Tank and every slot's MP pool at 0 (02 section 3.1). No `Simulation` exists yet, so `ProfileFactory` reports the grant as a `currency_changed` analytics row with `reason = TUTORIAL` itself (06 section 13; issue #246). Copies that exist but none is readable: the same new profile plus 02 section 8.3's `save_corrupt_all` and one-time notice, never a fatal error (section 7; issue #248).
 5. **Offline catch-up**: issue the logged system commands `ApplyServerTime(now)` (day/week rollover first, so a new day's quests exist before anything is credited), then `ComputeOfflineCatchup(now)`, which runs `Catchup.Compute` inside `Apply`, stores or sums the result into `state.Offline.Pending` and stamps `LastTickServerTime = now` (8.7; issue #6). Save immediately.
 6. **Main screen**: `SCR_BOOT` hands over to `SCR_MAIN`; `SCR_MAIN` opens `SCR_OFFLINE_REWARD` if `Offline.Pending != null`, then the tutorial overlay if `Tutorial.Step < TUTORIAL_DONE` (`TUTORIAL_DONE` = row count of `tutorial_steps`, 09; issue #46). Ticks start on the first `OnFrame` after `SCR_MAIN` is shown (not during the modal, so the modal's numbers are exactly what gets credited).
 
@@ -598,8 +610,8 @@ sequenceDiagram
     participant VM as ViewModels
     participant HUD
     R->>Sim: Advance(1) x n (n <= MAX_TICKS_PER_FRAME)
-    Note over Sim: hero attack, skills, companions, fish missiles, tap zap -> enemy HP
-    Note over Sim: enemy HP <= 0: Loot.Roll(loot stream, boss only) -> Wallet.Apply(GOLD, KILL), Wallet.Apply(HERO_EXP, KILL)
+    Note over Sim: per slot 0..4: attack, skill, ability; then fish missiles, tap zap -> enemy HP
+    Note over Sim: enemy HP <= 0: Loot.Roll(loot stream, boss only) -> Wallet.Apply(GOLD, KILL), Wallet.Apply(PARTY_EXP, KILL)
     Note over Sim: KillsInStage++ ; == KILLS_PER_STAGE -> StageCleared, Stage++
     Note over Sim: emit EnemyKilled, CurrencyChanged, StageCleared, LevelUp
     R->>Sim: DrainEvents()
@@ -612,8 +624,8 @@ Per tick, in this order (03 owns the bodies):
 
 1. `Time.Tick++`; the virtual server clock advances with it and `EnsureDay` runs on the tick that crosses a day key (8.11). Boss timer decrement while a boss fight is on.
 2. Spawn: if no enemy and `SpawnDelayLeft == 0`, spawn for `Selected ?? Stage` (a selected farm stage pays its own gold/EXP and never advances anything, issue #35) (`HP0 * HP_G^Stage` by table lookup, x `BOSS_HP_MULT` for a boss).
-3. Damage sources, fixed order: hero auto-attack (every `ATTACK_INTERVAL_TICKS` scaled by `ATK_SPD`), skill auto-casts, companion abilities (MP check), queued fish missiles, queued tap zaps (capped). Draws follow 03's fixed order so stream counters advance deterministically regardless of frame rate: one `crit` draw per hero hit (`crit.Counter == Stats.HeroHits`); `combat` is reserved and takes no draws in MVP (issue #8).
-4. Death: on a boss kill only, one `loot` draw (boss Rock Candy chance; `loot.Counter == Stats.BossKills`, issue #8); then `Wallet.Apply(GOLD, KILL)`, `Wallet.Apply(HERO_EXP, KILL)`, quest counters (`defeat monsters`), `KillsInStage++`.
+3. Damage sources, fixed order: for each occupied party slot in slot order 0..4, its auto-attack (own `Combat.AttackProgress[slot]`, every `ATTACK_INTERVAL_TICKS` scaled by the party-wide `ATK_SPD`), then its skill auto-cast, then its companion ability (MP check against its own pool `Combat.Mp[slot]`); then queued fish missiles and queued tap zaps (capped), both multiples of `PartyHit` (00 decision 109). When an attack kills the enemy, the remaining slots' attacks that tick do not happen. Draws follow 03's fixed order so stream counters advance deterministically regardless of frame rate: one `crit` draw per slot attack that lands (`crit.Counter == Stats.PartyHits`); `combat` is reserved and takes no draws in MVP (issue #8).
+4. Death: on a boss kill only, one `loot` draw (boss Rock Candy chance; `loot.Counter == Stats.BossKills`, issue #8); then `Wallet.Apply(GOLD, KILL)`, `Wallet.Apply(PARTY_EXP, KILL)`, quest counters (`defeat monsters`), `KillsInStage++`.
 5. Stage advance / boss resolution (frontier only); `StageCleared` carries `firstClear` and the diamond grant (reason `FIRST_CLEAR`) when `Stage % BOSS_EVERY == 0` and `Stage > HighestFirstClearBoss` (02; issue #35).
 6. Magic Tank refill tick (05); passive `FISH_BOARD_DPS_PCT` is recomputed only when the board changes, not per tick.
 7. Snapshot refresh.
@@ -625,8 +637,8 @@ Events coalesce above `EVENT_COALESCE_AT` (2.3). View-models update bound fields
 ```mermaid
 sequenceDiagram
     participant U
-    participant S as SCR_HERO
-    participant VM as HeroViewModel
+    participant S as SCR_PARTY
+    participant VM as PartyViewModel
     participant R as SessionRunner
     participant Sim
     U->>S: tap "ATK +10"
@@ -765,7 +777,7 @@ sequenceDiagram
     R->>M: open (gold, EXP, duration, "capped at 24 h")
     U->>M: tap Claim
     M->>R: Enqueue(ClaimOfflineReward)
-    R->>Sim: Apply: Wallet.Apply(GOLD, OFFLINE), Wallet.Apply(HERO_EXP, OFFLINE), TankCount = min(TankCap, TankCount + TankFill); Pending = null
+    R->>Sim: Apply: Wallet.Apply(GOLD, OFFLINE), Wallet.Apply(PARTY_EXP, OFFLINE), TankCount = min(TankCap, TankCount + TankFill); Pending = null
     Sim->>R: OfflineRewardClaimed, CurrencyChanged x2, LevelUp?
     R->>R: Save
     M->>M: close; ticks begin
@@ -1028,4 +1040,4 @@ Engineering constants, code-resident in `HeroCat.Runtime.RuntimeConfig` (not bal
 | `REFRESH_REUSE_GRACE_S` | 30 | S (08's, mirrored) | 8.1 (the refresh retry window) |
 | `WEEK_EPOCH_OFFSET` | `4 * DAY_SECONDS` | S | 8.11 (06 owns the week-start decision) |
 
-Used from 00 by name: `TICK_HZ`, `ATTACK_INTERVAL_TICKS`, `KILLS_PER_STAGE`, `BOSS_EVERY`, `BOSS_HP_MULT`, `HP0`, `HP_G`, `STAGE_CAP`, `TAP_ZAP_MAX_PER_SEC`, `TRAIN_COST0`, `TRAIN_COST_G`, `PULL_COST[*]`, `PITY_HARD`, `DUPE_LVL_CUM`, `DAY_SECONDS`, `OFFLINE_RATE`, `OFFLINE_CAP_H`, `RES_OFFLINE_CAP`, `OFFLINE_MIN_S`, `TUTORIAL_DIAMONDS`, `LOGIN_DIAMONDS`, `DIAMONDS_PER_DAY_F2P`, `FISH_MAX_LVL0`, `FISH_DISCOVERY_COINS`, `FISH_MERGE_COINS_PCT`, `FISH_MISSILE_PCT`, `FISH_BOARD_DPS_PCT`.
+Used from 00 by name: `TICK_HZ`, `ATTACK_INTERVAL_TICKS`, `KILLS_PER_STAGE`, `BOSS_EVERY`, `BOSS_HP_MULT`, `HP0`, `HP_G`, `STAGE_CAP`, `TAP_ZAP_MAX_PER_SEC`, `TRAIN_COST0`, `TRAIN_COST_G`, `PULL_COST[*]`, `PITY_HARD`, `DUPE_LVL_CUM`, `DAY_SECONDS`, `OFFLINE_RATE`, `OFFLINE_CAP_H`, `RES_OFFLINE_CAP`, `OFFLINE_MIN_S`, `TUTORIAL_DIAMONDS`, `TUTORIAL_WEAPON_ID`, `TUTORIAL_COMPANION_IDS`, `PARTY_SLOTS`, `LOGIN_DIAMONDS`, `DIAMONDS_PER_DAY_F2P`, `FISH_MAX_LVL0`, `FISH_DISCOVERY_COINS`, `FISH_MERGE_COINS_PCT`, `FISH_MISSILE_PCT`, `FISH_BOARD_DPS_PCT`.

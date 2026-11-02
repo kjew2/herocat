@@ -60,8 +60,8 @@ namespace HeroCat.Runtime.Tests
             Assert.That(Codes(Assert.Throws<ContentBuildException>(() => ContentLoader.LoadDtos(src))), Is.EqualTo(new[] { "E901" }));
 
             var e = Assert.Throws<ContentBuildException>(() => ContentLoader.LoadDtos(Copy(), clientVersion: "0.0.9"));
-            Assert.That(e.Errors.Single().Message, Does.StartWith("content requires client >= 0.1.0, this client is 0.0.9"));
-            Assert.DoesNotThrow(() => ContentLoader.LoadDtos(Copy(), clientVersion: "0.1.0"));
+            Assert.That(e.Errors.Single().Message, Does.StartWith("content requires client >= 0.2.0, this client is 0.0.9"));
+            Assert.DoesNotThrow(() => ContentLoader.LoadDtos(Copy(), clientVersion: "0.2.0"));
         }
 
         [Test]

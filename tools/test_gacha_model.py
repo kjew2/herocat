@@ -20,7 +20,7 @@ EPLUS = "BANNER_LVL_*_SHIFT"
 COMMON = "weapon pool size: a specific Common"
 LEGEND = "weapon pool size: a specific Legendary"
 PASSIVE = "WEAPON_PASSIVE_PCT"
-COMPANION = "COMPANION_SLOTS"
+COMPANION = "PARTY_SLOTS / companion dps_pct"
 
 
 def cadence(overrides):
@@ -119,8 +119,10 @@ class CadenceCheckTests(unittest.TestCase):
         for c in find(gm.cadence_checks(p, cad, dict(gm.SHIFTS)), PASSIVE):
             self.assertEqual(c[0], "FAIL", f"{c[1]}: {c[2]}")
 
-    def test_companion_check_trips_without_companion_slots(self):
-        p, cad = cadence({"COMPANION_SLOTS": "0"})
+    def test_companion_check_trips_without_companion_damage(self):
+        over = {f"COMPANION_DPS_PCT[{r}]": "0" for r in gm.RARITIES}
+        over.update({f"COMPANION_ATK_MULT[{r}]": "1" for r in gm.RARITIES})   # the rarity attack multiplier is in the layer too (00 decision 111)
+        p, cad = cadence(over)
         (c,) = find(gm.cadence_checks(p, cad, dict(gm.SHIFTS)), COMPANION)
         self.assertEqual(c[0], "FAIL")
         self.assertTrue(math.isclose(cad.companion_share, 0.0, abs_tol=1e-12))

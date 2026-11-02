@@ -93,14 +93,14 @@ namespace HeroCat.Sim.Commands
     }
 
     /// <summary>
-    /// Buys the next Awakening rank (03 section 5.3, 00 decision 11; issue #157). Rejects, in this order:
-    /// Capped/AWAKEN_MAX_RANK (no next row), Locked/AWAKEN_STAGE_NOT_REACHED (Progress.HighestCleared below the next
-    /// rank's stage_gate), CannotAfford/NOT_ENOUGH_ROCK_CANDY. Charges rock_candy_cost with reason AWAKENING, raises
-    /// Hero.AwakenRank by one and publishes Awakened(rank).
+    /// Buys party slot <paramref name="Slot"/>'s next Awakening rank (03 section 5.3, 00 decisions 11 and 109; issue #157).
+    /// Rejects, in this order: BadArgument/BAD_SLOT, Capped/AWAKEN_MAX_RANK (no next row), Locked/AWAKEN_STAGE_NOT_REACHED
+    /// (Progress.HighestCleared below the next rank's stage_gate), CannotAfford/NOT_ENOUGH_ROCK_CANDY. Charges
+    /// rock_candy_cost with reason AWAKENING, raises the slot's AwakenRank by one and publishes Awakened(slot, rank).
     /// </summary>
-    public sealed record Awaken : Command
+    public sealed record Awaken(int Slot) : Command
     {
-        internal override ApplyResult Execute(Simulation sim) => sim.HandleAwaken();
+        internal override ApplyResult Execute(Simulation sim) => sim.HandleAwaken(this);
     }
 
     /// <summary>

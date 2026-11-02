@@ -72,11 +72,12 @@ namespace HeroCat.Sim.Content
     public sealed class RarityDef
     {
         internal RarityDef(Rarity id, string code, string color, string shapeIcon, double weaponAtkPct,
-                           double weaponPassivePct, double skillDpsPct, double companionDpsPct, double runeStatPct,
+                           double weaponPassivePct, double skillDpsPct, double companionDpsPct, double companionAtkMult, double runeStatPct,
                            long limitBreakCost, long dupeOverflowRockCandy, double overrideTolerance, string nameKey)
         {
             Id = id; Code = code; Color = color; ShapeIcon = shapeIcon; WeaponAtkPct = weaponAtkPct;
             WeaponPassivePct = weaponPassivePct; SkillDpsPct = skillDpsPct; CompanionDpsPct = companionDpsPct;
+            CompanionAtkMult = companionAtkMult;
             RuneStatPct = runeStatPct; LimitBreakCost = limitBreakCost; DupeOverflowRockCandy = dupeOverflowRockCandy;
             OverrideTolerance = overrideTolerance; NameKey = nameKey;
         }
@@ -89,6 +90,9 @@ namespace HeroCat.Sim.Content
         public double WeaponPassivePct { get; }
         public double SkillDpsPct { get; }
         public double CompanionDpsPct { get; }
+
+        /// <summary>COMPANION_ATK_MULT[r]: a companion's auto-attack multiplier by rarity, not level (00 decision 111).</summary>
+        public double CompanionAtkMult { get; }
         public double RuneStatPct { get; }
         public long LimitBreakCost { get; }
         public long DupeOverflowRockCandy { get; }
@@ -284,11 +288,11 @@ namespace HeroCat.Sim.Content
 
     public sealed class AwakeningDef
     {
-        internal AwakeningDef(int rank, int stageGate, long rockCandyCost, double mult, int companionSlotsAfter,
+        internal AwakeningDef(int rank, int stageGate, long rockCandyCost, double mult,
                               int runeSlotsAfter, Tier tier, string nameKey, string icon)
         {
             Rank = rank; StageGate = stageGate; RockCandyCost = rockCandyCost; Mult = mult;
-            CompanionSlotsAfter = companionSlotsAfter; RuneSlotsAfter = runeSlotsAfter; Tier = tier; NameKey = nameKey;
+            RuneSlotsAfter = runeSlotsAfter; Tier = tier; NameKey = nameKey;
             Icon = icon;
         }
 
@@ -296,28 +300,27 @@ namespace HeroCat.Sim.Content
         public int StageGate { get; }
         public long RockCandyCost { get; }
         public double Mult { get; }
-        public int CompanionSlotsAfter { get; }
         public int RuneSlotsAfter { get; }
         public Tier Tier { get; }
         public string NameKey { get; }
         public string Icon { get; }
     }
 
-    public sealed class HeroLevelsDef
+    public sealed class PartyLevelsDef
     {
-        internal HeroLevelsDef(CurveDef exp, double? atkPctPerLevel, double? multPerLevel, int levelCap, CurveDef mult)
+        internal PartyLevelsDef(CurveDef exp, double? atkPctPerLevel, double? multPerLevel, int levelCap, CurveDef mult)
         {
             Exp = exp; AtkPctPerLevel = atkPctPerLevel; MultPerLevel = multPerLevel; LevelCap = levelCap; Mult = mult;
         }
 
-        /// <summary>HERO_LVL_EXP(l) = exp0 * exp_g^l, EXP to go from level l to l + 1.</summary>
+        /// <summary>PARTY_LVL_EXP(l) = exp0 * exp_g^l, EXP to go from level l to l + 1.</summary>
         public CurveDef Exp { get; }
 
         public double? AtkPctPerLevel { get; }
         public double? MultPerLevel { get; }
         public int LevelCap { get; }
 
-        /// <summary>HERO_LVL_MULT^level as a cached table (base 1); null when the linear column is the populated one.</summary>
+        /// <summary>PARTY_LVL_MULT^level as a cached table (base 1); null when the linear column is the populated one.</summary>
         public CurveDef Mult { get; }
     }
 
@@ -574,7 +577,7 @@ namespace HeroCat.Sim.Content
 
     /// <summary>
     /// One dungeon floor (09 section 5.25): its stage-equivalent and its reward. <see cref="RewardAmount"/> is resolved at build:
-    /// the fixed reward_amount, or for HERO_EXP rows reward_kills_equiv x ExpPerKill(StageEquiv) from curves[exp_per_kill]
+    /// the fixed reward_amount, or for PARTY_EXP rows reward_kills_equiv x ExpPerKill(StageEquiv) from curves[exp_per_kill]
     /// (06 section 6.3, EXP_FLOOR before EXP_GAIN training).
     /// </summary>
     public sealed class DungeonFloorDef

@@ -64,7 +64,7 @@ namespace HeroCat.Client.Core
                 Flags = () => _runner.Services.Config?.Flags,
             };
             Main = new MainVm(Context);
-            Hero = new HeroVm(Context);
+            Party = new PartyVm(Context);
             Weapons = new WeaponsVm(Context);
             Skills = new SkillsVm(Context);
             Companions = new CompanionsVm(Context);
@@ -110,7 +110,7 @@ namespace HeroCat.Client.Core
         public HudVm Hud => Main.Hud;
         public CombatVm Combat => Main.Combat;
         public FishBoardVm Board => Main.Board;
-        public HeroVm Hero { get; }
+        public PartyVm Party { get; }
         public WeaponsVm Weapons { get; }
         public SkillsVm Skills { get; }
         public CompanionsVm Companions { get; }
@@ -160,7 +160,7 @@ namespace HeroCat.Client.Core
             int newCount = Prefs.NewCount(Banner.WEAPON) + Prefs.NewCount(Banner.SKILL);
             Main.Refresh(_sim, s, now, newCount);
             string top = Router.TopFull.Id;
-            if (top == ScreenIds.Hero) Hero.Refresh(_sim, s);
+            if (top == ScreenIds.Party) Party.Refresh(_sim, s);
             else if (top == ScreenIds.Weapons) Weapons.Refresh(_sim);
             else if (top == ScreenIds.Skills) Skills.Refresh(_sim);
             else if (top == ScreenIds.Companions) Companions.Refresh(_sim);
@@ -225,7 +225,7 @@ namespace HeroCat.Client.Core
             _dirty = true;
             double now = _now();
             Main.OnEvent(e, now);
-            Hero.OnEvent(e);
+            Party.OnEvent(e);
             Weapons.OnEvent(e);
             Skills.OnEvent(e);
             Companions.OnEvent(e);

@@ -20,7 +20,7 @@ namespace HeroCat.Runtime.Tests
             var src = Bundle();
             string m = Encoding.UTF8.GetString(src.Files["manifest.json"]);
             m = m.Replace($"\"content_version\": \"{Version(src)}\"", $"\"content_version\": \"{version}\"");
-            if (minClient != null) m = m.Replace("\"min_client_version\": \"0.1.0\"", $"\"min_client_version\": \"{minClient}\"");
+            if (minClient != null) m = m.Replace("\"min_client_version\": \"0.2.0\"", $"\"min_client_version\": \"{minClient}\"");
             src.Files["manifest.json"] = Encoding.UTF8.GetBytes(m);
             return src;
         }
@@ -32,7 +32,7 @@ namespace HeroCat.Runtime.Tests
             var older = Cached("2020.01.01");
             var newer = Cached("2099.01.01");
             var newest = Cached("2099.02.01");
-            var choice = ContentSelection.LoadPreferred(bundled, new IContentSource[] { older, newest, newer }, Tier.M0, "0.1.0");
+            var choice = ContentSelection.LoadPreferred(bundled, new IContentSource[] { older, newest, newer }, Tier.M0, "0.2.0");
             Assert.That(choice.IsBundled, Is.False);
             Assert.That(choice.Db.Version, Is.EqualTo("2099.02.01"));
             Assert.That(choice.Rejected, Is.Empty);
@@ -42,11 +42,11 @@ namespace HeroCat.Runtime.Tests
         public void ACachedSetForANewerClient_IsE903_AndTheBundleIsKept()   // acceptance 16
         {
             var logged = new List<ContentError>();
-            var choice = ContentSelection.LoadPreferred(Bundle(), new IContentSource[] { Cached("2099.01.01", "9.0.0") }, Tier.M0, "0.1.0", logged.Add);
+            var choice = ContentSelection.LoadPreferred(Bundle(), new IContentSource[] { Cached("2099.01.01", "9.0.0") }, Tier.M0, "0.2.0", logged.Add);
             Assert.That(choice.IsBundled, Is.True);
             Assert.That(choice.Db.Version, Is.EqualTo(Version(Bundle())));
             Assert.That(logged.Select(e => e.Code), Is.EqualTo(new[] { "E903" }));
-            Assert.That(choice.Rejected.Single().Message, Is.EqualTo("content requires client >= 9.0.0, this client is 0.1.0"));
+            Assert.That(choice.Rejected.Single().Message, Is.EqualTo("content requires client >= 9.0.0, this client is 0.2.0"));
         }
 
         [Test]
@@ -54,7 +54,7 @@ namespace HeroCat.Runtime.Tests
         {
             var bad = Cached("2099.02.01");
             bad.Files["skills.json"][40] ^= 1;
-            var choice = ContentSelection.LoadPreferred(Bundle(), new IContentSource[] { bad, Cached("2099.01.01") }, Tier.M0, "0.1.0");
+            var choice = ContentSelection.LoadPreferred(Bundle(), new IContentSource[] { bad, Cached("2099.01.01") }, Tier.M0, "0.2.0");
             Assert.That(choice.Db.Version, Is.EqualTo("2099.01.01"));
             Assert.That(choice.Rejected.Select(e => e.Code), Is.EqualTo(new[] { "E900" }));
         }
@@ -62,12 +62,12 @@ namespace HeroCat.Runtime.Tests
         [Test]
         public void TryNewer_KeepsTheSameInstance_UnlessTheCandidateIsNewerAndValid()   // acceptance 16, 01 acceptance 11
         {
-            var current = ContentLoader.Load(Bundle(), Tier.M0, "0.1.0");
+            var current = ContentLoader.Load(Bundle(), Tier.M0, "0.2.0");
             var logged = new List<ContentError>();
-            Assert.That(ContentSelection.TryNewer(Cached("2099.01.01", "9.0.0"), current, Tier.M0, "0.1.0", logged.Add), Is.SameAs(current));
+            Assert.That(ContentSelection.TryNewer(Cached("2099.01.01", "9.0.0"), current, Tier.M0, "0.2.0", logged.Add), Is.SameAs(current));
             Assert.That(logged.Single().Code, Is.EqualTo("E903"));
-            Assert.That(ContentSelection.TryNewer(Cached("2020.01.01"), current, Tier.M0, "0.1.0"), Is.SameAs(current), "not newer");
-            var next = ContentSelection.TryNewer(Cached("2099.01.01"), current, Tier.M0, "0.1.0");
+            Assert.That(ContentSelection.TryNewer(Cached("2020.01.01"), current, Tier.M0, "0.2.0"), Is.SameAs(current), "not newer");
+            var next = ContentSelection.TryNewer(Cached("2099.01.01"), current, Tier.M0, "0.2.0");
             Assert.That(next, Is.Not.SameAs(current));
             Assert.That(next.Version, Is.EqualTo("2099.01.01"));
         }

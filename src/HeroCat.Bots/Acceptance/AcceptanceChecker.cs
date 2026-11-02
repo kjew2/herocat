@@ -246,7 +246,7 @@ namespace HeroCat.Bots.Acceptance
 
         /// <summary>
         /// AC11 (issue #43): every Awakening rank whose gate (highest cleared stage &gt;= its stage gate) is reached by the last
-        /// day is bought (AwakenRank) within awakening_targets.max_days_after_gate days. SKIP when the tier has no awakening.
+        /// day is bought (the first slot to reach the rank, AwakenRankMax; 03 section 5.3 until #249) within awakening_targets.max_days_after_gate days. SKIP when the tier has no awakening.
         /// </summary>
         static void Ac11(SweepResult sw, ContentDb db, List<CheckResult> results)
         {
@@ -265,7 +265,7 @@ namespace HeroCat.Bots.Acceptance
                     var gate = r.Rows.FirstOrDefault(row => row.HighestCleared >= a.StageGate);
                     if (gate == null) continue;
                     checkedRanks++;
-                    var bought = r.Rows.FirstOrDefault(row => row.AwakenRank >= a.Rank);
+                    var bought = r.Rows.FirstOrDefault(row => row.AwakenRankMax >= a.Rank);
                     int late = (bought?.Day ?? int.MaxValue) - gate.Day;
                     if (late > target.MaxDaysAfterGate)
                         bad.Add(F("seed {0}: rank {1} gate day {2}, bought {3}", r.Seed, a.Rank, gate.Day, bought == null ? "never" : "day " + bought.Day));

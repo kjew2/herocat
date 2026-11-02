@@ -38,7 +38,9 @@ namespace HeroCat.Sim.Tests
         {
             var k = Db.Constants;
             Assert.That(k.TickHz, Is.EqualTo(10));
-            Assert.That(k.BaseAtk, Is.EqualTo(10.0));
+            Assert.That(k.BaseAtk, Is.EqualTo(2.0), "per companion (00 decision 109)");
+            Assert.That(k.PartySlots, Is.EqualTo(5));
+            Assert.That(k.MpRegen0, Is.EqualTo(0.5), "per slot pool (00 decision 110)");
             Assert.That(k.BaseHp, Is.EqualTo(100.0));
             Assert.That(k.BossTimeTicks, Is.EqualTo(300));
             Assert.That(k.BossHpMult, Is.EqualTo(10.0));
@@ -50,8 +52,8 @@ namespace HeroCat.Sim.Tests
             Assert.That(Db.GoldPerKill.Base, Is.EqualTo(2.0)); Assert.That(Db.GoldPerKill.Growth, Is.EqualTo(1.03));
             Assert.That(Db.ExpPerKill.Base, Is.EqualTo(5.0)); Assert.That(Db.ExpPerKill.Growth, Is.EqualTo(1.025));
             Assert.That(Db.DupeLevels, Is.EqualTo(new[] { 1, 3, 6, 10, 16, 25, 40, 64, 100, 160 }));
-            Assert.That(Db.HeroLevels.MultPerLevel, Is.EqualTo(1.02));
-            Assert.That(Db.HeroLevels.AtkPctPerLevel, Is.Null);
+            Assert.That(Db.PartyLevels.MultPerLevel, Is.EqualTo(1.02));
+            Assert.That(Db.PartyLevels.AtkPctPerLevel, Is.Null);
             Assert.That(Db.Stat(Stat.CRIT_RATE).Cap, Is.EqualTo(300));
             Assert.That(Db.Stat(Stat.HP).Trainable, Is.False);
             Assert.That(Db.TrainingCurves.Keys, Is.EquivalentTo(Db.Stats.Where(s => s.Trainable).Select(s => s.Id)));
@@ -66,8 +68,8 @@ namespace HeroCat.Sim.Tests
             Assert.That(Db.ExpPerKill.Eval(10), Is.EqualTo(5 * pow), "Base * Growth^x, the power by repeated multiplication");
             double m = 1.0;
             for (int i = 0; i < 50; i++) m *= 1.02;
-            Assert.That(BitConverter.DoubleToInt64Bits(Db.HeroMult(50)), Is.EqualTo(BitConverter.DoubleToInt64Bits(m)));
-            Assert.That(Db.HeroLvlExp(1), Is.EqualTo(100 * 1.08));
+            Assert.That(BitConverter.DoubleToInt64Bits(Db.PartyMult(50)), Is.EqualTo(BitConverter.DoubleToInt64Bits(m)));
+            Assert.That(Db.PartyLvlExp(1), Is.EqualTo(100 * 1.08));
             // 03 section 3 spot checks: mob HP 20.8 at stage 1, 1.01e3 at 100, 4.67e10 at 550, within 1%
             Assert.That(Db.EnemyHp.Eval(100), Is.EqualTo(1.01e3).Within(1).Percent);
             Assert.That(Db.EnemyHp.Eval(550), Is.EqualTo(4.67e10).Within(1).Percent);
@@ -140,8 +142,8 @@ namespace HeroCat.Sim.Tests
             Assert.That(w.PityRate(80), Is.EqualTo(1.0));
             Assert.That(w.PityRate(51), Is.EqualTo(0.03 + 0.0325).Within(1e-12));
             Assert.That(w.LevelFor(0), Is.EqualTo(1));
-            Assert.That(w.LevelFor(54), Is.EqualTo(3));   // BANNER_LVL_EXP[4] = 55 (04 section 4, issue #38)
-            Assert.That(w.LevelFor(55), Is.EqualTo(4));
+            Assert.That(w.LevelFor(79), Is.EqualTo(3));   // BANNER_LVL_EXP[4] = 80 (04 section 4, issue #38; 00 decision 112)
+            Assert.That(w.LevelFor(80), Is.EqualTo(4));
             Assert.That(w.LevelFor(1_000_000), Is.EqualTo(10));
             Assert.That(Rarities().Select(r => w.Pool[r].Count), Is.EqualTo(new[] { 10, 8, 6, 4, 2 }));
             Assert.That(Rarities().Select(r => Db.Banners[Banner.SKILL].Pool[r].Count), Is.EqualTo(new[] { 14, 11, 8, 5, 2 }));
@@ -198,7 +200,7 @@ namespace HeroCat.Sim.Tests
             s.Progress.HighestCleared = 10;
             Assert.That(mvp.IsUnlocked("QUESTS", s), Is.True);
             Assert.That(mvp.IsUnlocked("RESEARCH", s), Is.False);
-            s.Hero.AwakenRank = 1;
+            s.Party.Slots[0].AwakenRank = 1;
             Assert.That(mvp.IsUnlocked("RESEARCH", s), Is.True);
             Assert.That(Db.IsUnlocked("SHOP", s), Is.False, "MVP rows are filtered out of an M0 build");
             Assert.That(mvp.Awakening.Select(a => a.StageGate), Is.EqualTo(new[] { 50, 150, 300, 500, 800 }));

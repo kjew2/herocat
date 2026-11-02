@@ -2,9 +2,11 @@
 
 Every screen in 00 section 5.3: what it is for, how it is laid out on a portrait phone, which view-model fields each element binds to, which `Command` each action sends, which `Event`s it reacts to, and its empty, loading, error, locked and first-time states. Then the rules that hold across screens: formatting, palette, touch, haptics, sound, badges, modals, accessibility, localization, performance, the tutorial, the placeholder-art plan, the Unity implementation shape and the Unity project setup, builds and device QA (section 17). The client is presentation only (00 section 4): nothing here computes a game number; every number is read from a view-model that was filled from a sim snapshot or an event.
 
-Tiers covered: M0 (`SCR_BOOT`, `SCR_MAIN`, `SCR_HERO`, `SCR_WEAPONS`, `SCR_SKILLS`, `SCR_SUMMON`, `SCR_SUMMON_RESULT`, `SCR_OFFLINE_REWARD`, `SCR_ITEM_DETAIL`), MVP (the rest of 5.3 except P1 rows), P1 (`SCR_RUNES`, `SCR_GUILD`, `SCR_RANKING`, `SCR_EVENTS`) in outline.
+Tiers covered: M0 (`SCR_BOOT`, `SCR_MAIN`, `SCR_PARTY`, `SCR_WEAPONS`, `SCR_SKILLS`, `SCR_SUMMON`, `SCR_SUMMON_RESULT`, `SCR_OFFLINE_REWARD`, `SCR_ITEM_DETAIL`), MVP (the rest of 5.3 except P1 rows), P1 (`SCR_RUNES`, `SCR_GUILD`, `SCR_RANKING`, `SCR_EVENTS`) in outline.
 
-Depends on: 00 (screen IDs, commands, events, constants), 01 (`SessionRunner`, snapshot API, error taxonomy), 02 (`GameState` fields the view-models read), 03 (combat snapshot, Training, Awakening, Research), 04 (banners, collections), 05 (Fish Board), 06 (quests, dungeons, offline, shop, inbox), 09 (localization keys and length budgets).
+The player fights with a party of `PARTY_SLOTS` (5) companions; there is no hero in combat, and the squire is only the player's avatar (00 decision 109). Each slot holds one companion, one weapon, one skill, its own Awakening rank and its own MP pool; Training and the Party Level are party-wide. The screens below describe that design; the client is not yet built to it (implementation tracked in issue #309).
+
+Depends on: 00 (screen IDs, commands, events, constants), 01 (`SessionRunner`, snapshot API, error taxonomy), 02 (`GameState` fields the view-models read), 03 (combat snapshot, Training, per-slot Awakening, Research), 04 (banners, collections), 05 (Fish Board), 06 (quests, dungeons, offline, shop, inbox), 09 (localization keys and length budgets).
 
 ## 1. Navigation map
 
@@ -18,7 +20,7 @@ graph TD
     MAIN -->|on return, gap >= OFFLINE_MIN_S| OFFLINE[SCR_OFFLINE_REWARD · Modal · M0]
     MAIN -->|first launch| TUT[SCR_TUTORIAL · Overlay · MVP]
 
-    MAIN -->|tab Hero| HERO[SCR_HERO · Full · M0]
+    MAIN -->|tab Party| PARTY[SCR_PARTY · Full · M0]
     MAIN -->|tab Collection| WEAPONS[SCR_WEAPONS · Full · M0]
     WEAPONS <-->|chips| SKILLS[SCR_SKILLS · Full · M0]
     SKILLS <-->|chips| COMP[SCR_COMPANIONS · Full · M0]
@@ -30,7 +32,7 @@ graph TD
     MAIN -->|tab Quests| QUESTS[SCR_QUESTS · Full · MVP]
     MAIN -->|tab Shop| SHOP[SCR_SHOP · Full · MVP]
 
-    HERO -->|Research button| RESEARCH[SCR_RESEARCH · Full · MVP]
+    PARTY -->|Research button| RESEARCH[SCR_RESEARCH · Full · MVP]
     MAIN -->|Fish Board research button| RESEARCH
     MAIN -->|tap stage label| STAGE[SCR_STAGE_SELECT · Modal · MVP]
     MAIN -->|HUD inbox| INBOX[SCR_INBOX · Modal · MVP]
@@ -45,9 +47,11 @@ graph TD
     COMP --> DETAIL
     RUNES --> DETAIL
     RESULT -->|tap a card| DETAIL
-    HERO -->|tap equipped slot| DETAIL
+    PARTY -->|tap slot weapon, slot N| WEAPONS
+    PARTY -->|tap slot skill, slot N| SKILLS
+    PARTY -->|tap slot companion, slot N| COMP
 
-    HERO -->|Awaken| CONFIRM[SCR_CONFIRM · Modal · M0, added]
+    PARTY -->|Awaken slot N| CONFIRM[SCR_CONFIRM · Modal · M0, added]
     SHOP -->|buy| CONFIRM
     SETTINGS -->|delete account| CONFIRM
     BOOT -->|content/auth failure| ERROR[SCR_ERROR · Modal · M0, added]
@@ -74,8 +78,8 @@ Reference resolution 1080 x 1920; `CanvasScaler` Scale With Screen Size, match w
 +----------------------------------------------+
 |                                              |
 | Combat viewport                       800 rp |  about 45% of the usable height
-|   stage label, enemy, hero, HP bar, timer    |
-|   skill icons, companion icons, DPS          |
+|   stage label, enemy, HP bar, timer, DPS     |
+|   party: 5 companions in 2 rows, MP, skills  |
 +----------------------------------------------+
 | Action strip                          100 rp |  Boss button, quick toggles, red-dot shortcuts
 +----------------------------------------------+
@@ -83,7 +87,7 @@ Reference resolution 1080 x 1920; `CanvasScaler` Scale With Screen Size, match w
 | Fish Board                            640 rp |  about 35%: tank, 5x4 grid, merge/release buttons
 |                                              |
 +----------------------------------------------+
-| Tab bar                               160 rp |  Hero | Collection | Summon | Dungeons | Quests | Shop
+| Tab bar                               160 rp |  Party | Collection | Summon | Dungeons | Quests | Shop
 +----------------------------------------------+  safe area bottom (gesture bar)
 ```
 
@@ -92,8 +96,8 @@ Band budget: 120 + 800 + 100 + 640 + 160 = 1,820 rp. The remaining 100 rp of a 1
 | Element | Rule |
 |---|---|
 | Safe area | `SafeAreaFitter` on the root panel applies `Screen.safeArea` as padding on `Start` and on resolution change. Nothing is drawn outside it except the background. |
-| HUD wallet chips | Gold, Diamonds, Fish Coins (MVP adds Rock Candy). Each chip: icon 56 rp, value in 40 rp bold, tappable (gold opens `SCR_HERO`, diamonds opens `SCR_SHOP`, Fish Coins opens `SCR_RESEARCH`, Rock Candy opens `SCR_HERO` Awakening tab). Right side: avatar (opens `SCR_PROFILE`), inbox icon with badge, settings gear. |
-| Combat viewport | Full-width camera render texture or a world-space sorting layer; UI elements over it are the stage label (top-left, tappable: `SCR_STAGE_SELECT`), kill counter (top-right), enemy HP bar (under the enemy), boss timer bar (under HP bar, boss only), DPS readout (bottom-left), skill icon row and companion icon row (bottom, 6 + 4 icons, 88 rp each). Tap anywhere else = `TapZap(count)`. |
+| HUD wallet chips | Gold, Diamonds, Fish Coins (MVP adds Rock Candy). Each chip: icon 56 rp, value in 40 rp bold, tappable (gold opens `SCR_PARTY`, diamonds opens `SCR_SHOP`, Fish Coins opens `SCR_RESEARCH`, Rock Candy opens `SCR_PARTY` scrolled to the slot cards). Right side: avatar (opens `SCR_PROFILE`), inbox icon with badge, settings gear. |
+| Combat viewport | Full-width camera render texture or a world-space sorting layer; UI elements over it are the stage label (top-left, tappable: `SCR_STAGE_SELECT`), kill counter (top-right), enemy HP bar (under the enemy), boss timer bar (under HP bar, boss only), DPS readout (left, above the party line) and the party line (section 4.3). Reference split of the 800 rp: top row 72, enemy area 248 (sprite, HP bar, timer; the enemy sprite is bottom-anchored and may extend up behind the top row), DPS and damage-number line 40, party formation 440 (two rows, section 4.3). On short screens the enemy area shrinks first (to 200 rp); the party formation never shrinks. Tap anywhere except a skill icon = `TapZap(count)`. |
 | Action strip | Left: `[Boss]` button (visible only while walled, 06/03), `[Auto]` placeholder toggle (P1 Auto Merge). Right: shortcut pills with red dots for Quests claimable, Dungeon tickets unused, Inbox items; each opens its screen. |
 | Fish Board | Left column 160 rp: Magic Tank gauge (fill, `n / cap`, next-fish countdown), `[Release]` and `[Release max]` buttons, `[Merge all]`. Right: 5 x 4 grid, cell 176 rp with 8 rp gaps (5 x 176 + 4 x 8 = 912 rp wide), fish sprite 140 rp inside. A `[Research]` button (MVP) in the tank column bottom. |
 | Tab bar | Six tabs, 180 rp wide each, icon 64 rp over a 28 rp label. Red-dot badge at top-right of the icon. Active tab tinted `accent`. P1 adds a seventh "More" tab opening Guild / Ranking / Events. |
@@ -105,11 +109,13 @@ Band budget: 120 + 800 + 100 + 640 + 160 = 1,820 rp. The remaining 100 rp of a 1
 ## 3. Binding conventions used by every screen section
 
 - A screen is a uGUI prefab with a `ScreenBase` subclass. `Bind(vm)` resolves references once; `Refresh()` writes only changed values through change-only setters (`NumberLabel`, `IntLabel`, `TextKeyLabel`, `BarFill`, `BadgeDot`); `OnEvent(Event e)` handles the events listed per screen.
-- View-models live in `HeroCat.Client.Core` (`Assets/HeroCat.Client/Core/`, section 16), one class per screen named `<Screen>Vm` (`MainVm`, `HeroVm`, ...). They are plain C#, no `UnityEngine`. They are filled from `Simulation.Snapshot()` after any tick that ran and from events as they drain (01).
+- View-models live in `HeroCat.Client.Core` (`Assets/HeroCat.Client/Core/`, section 16), one class per screen named `<Screen>Vm` (`MainVm`, `PartyVm`, ...). They are plain C#, no `UnityEngine`. They are filled from `Simulation.Snapshot()` after any tick that ran and from events as they drain (01).
 - A view-model field listed as `bind` is read-only display; `cmd` means the element sends that `Command` through `Commands.Send(cmd)`; a rejection comes back as `ApplyResult.Reject(code, reason)` (01's `RejectCode` category plus a reason from the owning spec's closed list, issue #11) and renders as 01's `Reject` presentation (issue #30): a button shake plus a short toast anchored under the pressed button with the localized reason `reject.<reason_lower>`; the category only picks the toast styling. `err.<code_lower>.title` / `.body` keys are for 01's error taxonomy (`SCR_ERROR`), not for rejections. Codes and reasons stay UPPER_SNAKE as 01 section 7 and the owning specs list them (08's wire codes, issue #30); the client lowercases them when it builds the key (`NOT_ENOUGH_GOLD` -> `reject.not_enough_gold`, `NET_OFFLINE` -> `err.net_offline.title`), because 09's key pattern is lowercase (issue #248).
 - States every screen implements unless the section says otherwise: **Loading** (skeleton rows, shimmer, no spinner longer than 2 s before a retry link), **Empty** (illustration key + one-line copy + the primary action that fills it), **Error** (inline card from 01 taxonomy with Retry), **Locked** (greyed content, lock icon, unlock condition text, no interaction), **First-time** (one coach-mark overlay pointing at the primary action, shown once, stored in `ClientPrefs.SeenCoachMarks`).
 - `ClientPrefs` (issue #47) is a Runtime store, a local JSON file next to the save, never cloud-synced and never in `GameState`. It holds everything in this spec that does not change a game number: seen coach marks, new-item badges (issue #7), sort/filter and Training-step choices, and the `SCR_SETTINGS` toggles. Losing it on reinstall is acceptable.
-- Locked conditions come from the 09 `feature_unlocks` table (issue #45), the same rows the sim's rejections read, so a Locked state and the sim always agree. The table's MVP seed: Research at Awakening rank 1 (00 decision 11), Quests at stage 10, Dungeons at stage 30 (row `DUNGEONS`); Companions (banner and slot 1, 04) and Shop are never locked.
+- Locked conditions come from the 09 `feature_unlocks` table (issue #45), the same rows the sim's rejections read, so a Locked state and the sim always agree. The table's MVP seed: Research at Awakening rank 1 of any slot (`AWAKEN_RANK >= 1` reads the highest slot rank; 00 decisions 11 and 109), Quests at stage 10, Dungeons at stage 30 (row `DUNGEONS`); Companions (banner and all `PARTY_SLOTS` slots, 04) and Shop are never locked. No party slot is ever locked, at any tier.
+- Slot mode (00 decision 109): `SCR_WEAPONS`, `SCR_SKILLS` and `SCR_COMPANIONS` take an optional `TargetSlot` arg (0-4). Pushed from a `SCR_PARTY` slot card they open in slot mode: a 64 rp banner under the title row reads "Equipping slot {n}: {companion}" with an `[x]` that clears the mode, the selected panel's `[Equip]` sends straight into `TargetSlot`, and an accepted equip pops back to `SCR_PARTY`. Opened from the tab bar (no `TargetSlot`), `[Equip]` opens the slot picker: five rows (slot number, occupant companion icon, the slot's current item of this kind), the slot that already holds the item marked "here". `SCR_ITEM_DETAIL` uses the same picker. Slot numbers shown to the player are 1-5; commands carry 0-4.
+- Equip rejections (owners 02/04, 00 decision 109) render as `reject.bad_slot`, `reject.unknown_item`, `reject.item_not_owned`, `reject.already_equipped`, `reject.weapon_in_other_slot`, `reject.skill_in_other_slot`, `reject.companion_in_other_slot`. `reject.companion_slot_locked` is removed: no slot is locked. The screens avoid the "in other slot" rejections by design: an owned item in another slot shows "In slot {n}" on its tile and picker row, and its `[Equip]` becomes `[Move here]`, which sends `Unequip<Kind>(otherSlot)` then `Equip<Kind>(slot, id)` (two sim commands, no UI-only command).
 
 ## 4. Screens
 
@@ -164,7 +170,7 @@ Purpose: account pick on first launch and after logout; skipped when a guest or 
 | Platform buttons | `Auth.LinkOrSignIn(provider)`; only the platform's own provider is shown |
 | Legal links | open in-app browser; `TitleVm.AgeGateRequired` (08 compliance) shows a birth-year picker modal before any sign-in |
 
-States: Loading during the auth round-trip (buttons disabled, spinner on the pressed one). Error inline under the buttons (`err.<code_lower>.*` for 01's auth codes, e.g. `err.provider_already_linked.title`; issues #30, #248). Conflict: when the cloud save and the local save differ, the 02 conflict modal is shown here before `SCR_MAIN` with both saves' stage, hero level, server time and a `[Keep this device]` / `[Use cloud]` pair.
+States: Loading during the auth round-trip (buttons disabled, spinner on the pressed one). Error inline under the buttons (`err.<code_lower>.*` for 01's auth codes, e.g. `err.provider_already_linked.title`; issues #30, #248). Conflict: when the cloud save and the local save differ, the 02 conflict modal is shown here before `SCR_MAIN` with both saves' stage, Party Level, server time and a `[Keep this device]` / `[Use cloud]` pair.
 
 ### 4.3 `SCR_MAIN` (Full root, M0)
 
@@ -175,14 +181,15 @@ Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them
 | [G] 3.72M  [D] 1,240  [F] 812   (av) [in] [*]|  HUD
 +----------------------------------------------+
 | Stage 240  Ch.5  v        kills 9/10   WALL  |
-|                                              |
-|      (squire)                (boss)          |
-|        ~~~~                  ~~~~~~          |
-|                        HP |==========   | 1.2M|
-|                        T  |======       | 17s |
+|                    (boss)                    |
+|                    ~~~~~~                    |
+|            HP |==========       | 1.2M       |
+|            T  |======           | 17s        |
 | DPS 3.72K  +12.3K  +9.8K crit!               |  damage numbers float here
-| [sk1][sk2][sk3][sk4][ -- ][ -- ]  MP |===  | |  skill row, MP bar
-| [c1][c2][ -- ][ -- ]                         |  companion row
+|            (c4)[sk4]     (c5)[sk5]          |  back row: slots 4-5, behind
+|            |=== |        |==  |             |  MP bar inside each cell
+|    (c1)[sk1]     (c2)[sk2]     (c3)[ -- ]   |  front row: slots 1-3
+|    |=== |        |==  |        |====|       |  skill badge, cooldown ring
 +----------------------------------------------+
 | [ Boss: need ~2.3x ]        (Q*) (Dg*) (In)  |  action strip
 +----------------------------------------------+
@@ -193,7 +200,7 @@ Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them
 | [Rel.max]                                    |
 | [Merge all]                       [Research] |
 +----------------------------------------------+
-| Hero | Collection | Summon | Dungeons | Quests | Shop |
+| Party | Collection | Summon | Dungeons | Quests | Shop |
 +----------------------------------------------+
 ```
 
@@ -211,12 +218,11 @@ Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them
 | WALL badge | `Combat.IsWalled` | |
 | Enemy sprite, HP bar | `Combat.EnemyId`, `EnemyIsBoss`, `EnemyHp`, `EnemyMaxHp` | HP bar text "1.2M / 1.7M" |
 | Boss timer bar | `Combat.Fight.BossTicksLeft / BOSS_TIME_TICKS` | boss only; turns `bad` under 5 s |
-| Hero sprite | `Hero.AwakenRank` (tint/aura), `Loadout.Weapon` (held sprite) | |
-| Damage numbers | from `HitLanded` (hero hits, crit flag), `SkillCast`, `CompanionAbilityUsed` and `FishMissileHit` events (issue #11) | pooled, section 13 |
+| Party line | `Party.Slots[i]` x `PARTY_SLOTS` (5): `CompanionId` (battle sprite), `WeaponId` (not drawn: each chibi is drawn holding its own weapon, decision 113), `AwakenRank` (aura), `IsEmpty` | two rows (decision 110): a front row of slots 1-3 (3 x 280 + 2 x 16 = 872 rp, centred) and a back row of slots 4-5 (576 rp, centred, so each back cell sits behind a front gap), cells `UI_PARTY_CELL_W` x `UI_PARTY_CELL_H` (280 x 280 rp) with `UI_PARTY_GAP` (16 rp) gaps; the back row is raised by `UI_PARTY_CELL_H - UI_PARTY_ROW_OVERLAP` (160 rp) and drawn behind the front row, so the formation is 440 rp tall. Each cell carries its slot's MP bar (160 x 16 rp) along its bottom edge and its skill as an 88 rp badge with a 112 rp hit rect at its lower-right corner. Front and back are presentation only; no rule reads them. Pixel-art battle sprites (00 decision 106, section 15.3) idle, play attack frames on that slot's `HitLanded` and cast frames on its `CompanionAbilityUsed`. An empty slot shows a dashed outline and does nothing; a companion with no weapon attacks unarmed (no held sprite) |
+| Damage numbers | from `HitLanded(slot, ...)` (one slot's auto-attack, crit flag), `SkillCast(slot, ...)`, `CompanionAbilityUsed(slot, ...)` and `FishMissileHit` events (issue #11) | pooled, section 13; slot numbers rise from that slot's cell, missile numbers from the enemy |
 | DPS readout | `Combat.Dps` | updates at most 2 Hz |
-| Skill icons x6 | `Loadout.Skills[i]`: `IconId`, `CooldownPct`, `IsEmpty` | tap: push `SCR_ITEM_DETAIL`; long-press (P1 manual cast) |
-| MP bar | `Loadout.Mp / Loadout.MpMax` | |
-| Companion icons x4 | `Loadout.Companions[i]`: `IconId`, `AbilityReadyPct` | |
+| MP bar x5 | `Party.Slots[i].Mp / MpMax` (the slot's own pool, `Combat.Mp[slot]`; `MpMax` is party-wide) | 160 x 16 rp under each cell; set from `CompanionAbilityUsed.mpAfter`, otherwise from the snapshot; a full-pool glint when the ability is ready (`AbilityReadyPct` = 1); hidden for an empty slot |
+| Skill icon x5 | `Party.Slots[i].Skill`: `IconId`, `CooldownPct`, `IsEmpty` | 88 rp icon with a 112 rp hit rect, under its slot's MP bar; tap: push `SCR_ITEM_DETAIL`; long-press (P1 manual cast) |
 | Tap on viewport | `cmd TapZap(count)` | taps accumulated this frame, at most `TAP_ZAP_MAX_PER_SEC`; extra taps still play the tap VFX but send nothing |
 | Boss button | `Combat.IsWalled`, `Combat.BossClearable`, `Combat.NeedDpsRatio` | `cmd AttemptBoss`; label "Boss: need ~2.3x" or "Boss: clearable" (green border) |
 | Shortcut pills | `Badges.QuestsClaimable`, `Badges.DungeonTicketsUnused`, `Badges.InboxUnclaimed` | push the respective screen |
@@ -227,20 +233,24 @@ Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them
 | Research button (MVP) | `Badges.ResearchAffordable` dot | push `SCR_RESEARCH` |
 | Tab bar | `Badges.*` per tab | replace top Full screen |
 
-Events `SCR_MAIN` reacts to: `EnemySpawned` (new sprite, HP full), `HitLanded` / `SkillCast` / `CompanionAbilityUsed` / `FishMissileHit` (number), `EnemyKilled` (death VFX, gold burst toward chip), `StageCleared` (stage label pulse), `BossFailed` (WALL badge in, boss button in, toast with need ratio), `BossCleared` (green flash, first-clear diamond toast if `FirstClearGranted`), `LevelUp` (hero sprite flash, "Lv 32" float), `FishReleased` (cell pop-in), `FishMerged` (merge VFX, missile launch toward enemy), `FishDiscovered` (discovery card overlay 1.5 s with coins), `QuestCompleted` (Quests badge), `DayRolledOver` (toast, badges), `Awakened` (full-width card over the combat viewport, combat keeps running), `StageCapReached` (toast), `OfflineRewardComputed` (push `SCR_OFFLINE_REWARD`). Login diamonds are auto-granted on the first tick of the day (`CurrencyChanged(DIAMOND, LOGIN)`, issue #20) and toast "+{LOGIN_DIAMONDS} diamonds: daily login" with the `DayRolledOver` toast.
+Events `SCR_MAIN` reacts to: `EnemySpawned` (new sprite, HP full), `HitLanded` / `SkillCast` / `CompanionAbilityUsed` / `FishMissileHit` (number), `EnemyKilled` (death VFX, gold burst toward chip), `StageCleared` (stage label pulse), `BossFailed` (WALL badge in, boss button in, toast with need ratio), `BossCleared` (green flash, first-clear diamond toast if `FirstClearGranted`), `LevelUp` (Party Level: all five sprites flash, "Party Lv 32" float), `FishReleased` (cell pop-in), `FishMerged` (merge VFX, missile launch toward enemy), `FishDiscovered` (discovery card overlay 1.5 s with coins), `QuestCompleted` (Quests badge), `DayRolledOver` (toast, badges), `Awakened(slot, rank)` (that slot's aura swaps and a full-width card names the slot and companion over the combat viewport, combat keeps running), `StageCapReached` (toast), `OfflineRewardComputed` (push `SCR_OFFLINE_REWARD`). Login diamonds are auto-granted on the first tick of the day (`CurrencyChanged(DIAMOND, LOGIN)`, issue #20) and toast "+{LOGIN_DIAMONDS} diamonds: daily login" with the `DayRolledOver` toast.
 
 States: Loading never (boot covers it). First-time: `SCR_TUTORIAL` overlay. Error: 01's `Offline` banner is drawn as the non-blocking `SCR_ERROR` card in the action strip position (MVP), keeping the combat viewport clear while the sim keeps running offline (issue #30). Locked elements: Rock Candy chip, stage label tap, the Research button and the Dungeons/Quests tabs before their `feature_unlocks` condition (issue #45) show a lock glyph and a toast naming the condition; the HUD Fish Coin chip still opens `SCR_RESEARCH`, which shows its Locked state. The Shop tab is never locked.
 
-### 4.4 `SCR_HERO` (Full, M0)
+### 4.4 `SCR_PARTY` (Full, M0; 00 decision 109)
 
-Purpose: all gold and Rock Candy sinks on the hero: Training per stat, Hero Level readout, Awakening (MVP), the equipped loadout, and the entry to Research (MVP).
+Purpose: all gold and Rock Candy sinks on the party: party-wide Training per stat, the Party Level readout, the five slot cards (companion, weapon, skill, Awakening (MVP), MP pool), and the entry to Research (MVP). Replaces `SCR_HERO`.
 
 ```
 +----------------------------------------------+
-| <  Hero                        DPS 3.72K     |
-| (sqr)  Lv 32  |=========     | 4.2K / 9.8K   |
-| Awakening I   rank II at stage 150 [ Awaken ]|  MVP
-| Loadout: [wpn] [s1][s2][s3][s4][s5][s6] [c1][c2][c3][c4] |
+| <  Party                       DPS 3.72K     |
+| (sqr) Party Lv 32 |=======    | 4.2K / 9.8K  |
+| Slot 1 (Tabby)  [wpn Tuna] [sk Fish Rain]    |
+|   Awakening I  MP |====  | 120   [ Awaken ]  |  MVP: Awakening
+| Slot 2 (Mittens) [wpn --]  [sk Claw]         |
+|   Awakening -  MP |==    |  60   Reach 50    |
+| Slot 3 ... Slot 5 (same card)                |
+| [ Auto-equip all ]                           |
 | Training              [x1] [x10] [x100] [Max]|
 | ATK      Lv 64  x4.20   cost 3.80K  [ + ]    |
 | CRIT_RATE Lv 5  12.5%   cost 70     [ + ]    |
@@ -252,31 +262,34 @@ Purpose: all gold and Rock Candy sinks on the hero: Training per stat, Hero Leve
 +----------------------------------------------+
 ```
 
-| Element | `HeroVm` field or command |
+| Element | `PartyVm` field or command |
 |---|---|
-| Level, EXP bar | `Hero.Level`, `Hero.Exp / Hero.ExpToNext` (`HERO_LVL_EXP(l)`) |
-| DPS | `Combat.Dps` |
-| Awakening row (MVP) | `Awaken.Rank`, `Awaken.NextStage`, `Awaken.NextCost`, `Awaken.CanAfford`, `Awaken.StageReached`; `[Awaken]` opens `SCR_CONFIRM` with cost and balance-after, then `cmd Awaken` |
-| Loadout icons | `Loadout.Weapon`, `Loadout.Skills[6]`, `Loadout.Companions[4]`; tap: `SCR_ITEM_DETAIL`; empty slot tap: push the matching collection screen |
+| Avatar | `Profile.AvatarId` (the squire portrait: the player's identity, never a fighter) |
+| Party Level, EXP bar | `Party.Level`, `Party.Exp / Party.ExpToNext` (`PARTY_LVL_EXP(l)`); party-wide, auto, never spent |
+| DPS | `Combat.Dps` (party DPS) |
+| Slot card x5 | `Slots[i]` for i in 0..`PARTY_SLOTS`-1, 176 rp tall: companion portrait 128 rp (`CompanionId`, rarity frame; dashed "Empty" when none), weapon icon 112 rp (`WeaponId`, "Unarmed" when none), skill icon 112 rp (`SkillId`, "No skill" when none), Awakening rank glyph (`AwakenRank`), MP bar (`Mp / MpMax`). Tap the portrait, weapon or skill: push `SCR_COMPANIONS` / `SCR_WEAPONS` / `SCR_SKILLS` with `TargetSlot = i` (slot mode, section 3) |
+| Awaken button x5 (MVP) | `Slots[i].Awaken`: `NextStage`, `NextCost`, `CanAfford`, `StageReached`, `AtMax`; `[Awaken]` opens `SCR_CONFIRM` naming the slot, with cost and balance-after, then `cmd Awaken(i)`. Shown on an empty slot too: the rank belongs to the slot and is kept for its next companion |
+| Auto-equip all | `AutoEquipWouldChange` dot; sends `cmd AutoEquipBestCompanions`, `AutoEquipBestWeapons`, `AutoEquipBestSkills` in that order (04 rules, all five slots) |
 | Bulk step selector | `Training.Step` in `TRAIN_BULK_STEPS` {1, 10, 100, Max}; persisted in `ClientPrefs.TrainStep` (issue #47) |
-| Per-stat row x6 | one row per trainable stat (`stats.trainable`, 09; `HP` and `DEF` are not trainable in MVP, 00 decision 10): `Training.Rows[stat]`: `Level`, `EffectText` (from 03 per-stat formatter), `Cost` (bulk cost for the selected step), `Count` (levels the step buys; Max computes affordable), `CanAfford`, `AtCap`; `[+]` sends `cmd TrainStat(stat, count)` all-or-nothing |
+| Per-stat row x6 | one row per trainable stat (`stats.trainable`, 09; `HP` and `DEF` are not trainable in MVP, 00 decision 10); every stat buffs all five slots: `Training.Rows[stat]`: `Level`, `EffectText` (from 03 per-stat formatter), `Cost` (bulk cost for the selected step), `Count` (levels the step buys; Max computes affordable), `CanAfford`, `AtCap`; `[+]` sends `cmd TrainStat(stat, count)` all-or-nothing |
 | Research button (MVP) | `Badges.ResearchAffordable`; push `SCR_RESEARCH` |
 
-Events: `StatTrained(stat, count, cost)` (row flash, "+5%" float), `LevelUp`, `Awakened` (rank glyph animates), `CurrencyChanged(GOLD)` (re-evaluate `CanAfford`).
+Events: `StatTrained(stat, count, cost)` (row flash, "+5%" float), `LevelUp` (Party Level bar), `Awakened(slot, rank)` (that card's rank glyph animates), `ItemEquipped(kind, slot, id)` (that card's icon swaps), `CompanionAbilityUsed(slot, id, mpAfter)` (that card's MP bar), `CurrencyChanged(GOLD | ROCK_CANDY)` (re-evaluate `CanAfford`).
 
-States: a stat at its cap (03) shows "MAX" in place of the cost and a disabled button. Awakening before the stage gate: button disabled with "Reach stage {AWAKEN_STAGES[rank]}", e.g. "Reach stage 50" for rank I (`AWAKEN_STAGES[0]`) and "Reach stage 150" for rank II as in the sketch. First-time: coach mark on ATK `[+]`. The `Max` step shows "Buy 37 levels for 3.71M" so the player knows what they are tapping.
+States: a stat at its cap (03) shows "MAX" in place of the cost and a disabled button. Awakening before a slot's stage gate: that slot's button disabled with "Reach stage {AWAKEN_STAGES[rank]}", e.g. "Reach stage 50" for its rank I (`AWAKEN_STAGES[0]`) and "Reach stage 150" for its rank II; each slot reads its own rank, so slots can sit at different gates. At max rank: "Max rank". First-time: coach mark on ATK `[+]`. The `Max` step shows "Buy 37 levels for 3.71M" so the player knows what they are tapping. Locked: none (all five slots open from the start, 00 decision 109).
 
 ### 4.5 `SCR_WEAPONS` (Full, M0)
 
-Purpose: the 30-weapon collection, equip, level-up readout, and the owned-collection passive total that makes dupes and low rarities matter (00 decision 5).
+Purpose: the 30-weapon collection, equip into a slot (any weapon on any companion, one slot per weapon; 00 decision 109), level-up readout, and the owned-collection passive total that makes dupes and low rarities matter (00 decision 5).
 
 ```
 +----------------------------------------------+
 | <  Collection   [Weapons] Skills Companions  |  chips switch screens
-| Equipped: [L] Tuna Blade Lv3  ATK +120%      |
+| Equipping slot 2: Mittens               [x]  |  slot mode only
+| Slot 2: [L] Tuna Blade Lv3  ATK +120%        |
 | Collection passive: +86% ATK (24/30 owned)   |
 | Sort: [Rarity v]  Filter: [All v]  (3 new)   |
-| [M?] [L ] [L ] [E*] [E ] [E ]                |  6 per row, 5 rows
+| [M?] [L1] [L ] [E*] [E3] [E ]                |  6 per row, 5 rows; digit = slot
 | [R ] [R ] [R ] [R ] [R?] [R ]                |
 | ...                                          |
 | Selected: [E] Sardine Spear  Lv2 (4/6)       |
@@ -287,66 +300,68 @@ Purpose: the 30-weapon collection, equip, level-up readout, and the owned-collec
 | Element | `WeaponsVm` field or command |
 |---|---|
 | Chips | push sibling collection screen (replace, same stack depth) |
-| Equipped summary | `Equipped`: `Rarity`, `NameKey`, `Level`, `AtkPct` |
+| Equipped summary | `Equipped` for `TargetSlot` (slot mode), else slot index 0: `Rarity`, `NameKey`, `Level`, `AtkPct`; "Unarmed" when the slot has none |
 | Passive total | `PassiveTotalPct`, `OwnedCount / PoolSize` (04 `WEAPON_PASSIVE_PCT`) |
 | Sort / filter | `Sort` in {Rarity, Level, Newest, Owned first}, `Filter` in {All, Owned, Rarity r}; persisted in `ClientPrefs` |
-| Grid tile x30 | `Tiles[i]`: `Id`, `Rarity`, `IconId`, `Owned`, `Level`, `CopiesToNext`, `IsNew`, `IsEquipped`; unowned at 30% opacity with "?" |
-| Selected panel | `Selected`: stats, `NextLevelCopies` ("4/6"), `AtkPct`, `PassivePct`; `[Equip]` sends `cmd EquipWeapon(id)` (disabled when equipped or unowned); `[i]` pushes `SCR_ITEM_DETAIL` |
+| Grid tile x30 | `Tiles[i]`: `Id`, `Rarity`, `IconId`, `Owned`, `Level`, `CopiesToNext`, `IsNew`, `EquippedSlot?` (corner chip with the slot number 1-5); unowned at 30% opacity with "?" |
+| Selected panel | `Selected`: stats, `NextLevelCopies` ("4/6"), `AtkPct`, `PassivePct`; `[Equip]` sends `cmd EquipWeapon(TargetSlot, id)` in slot mode, else opens the slot picker (section 3); `[Move here]` when the weapon is in another slot; disabled "Equipped" when already in the target slot, hidden when unowned; `[Unequip]` in slot mode sends `cmd UnequipWeapon(TargetSlot)`; `[i]` pushes `SCR_ITEM_DETAIL` |
 
-Events: `ItemAcquired(kind=WEAPON)` (tile flips from "?" or copies tick up, `IsNew` set; a level change is read from the snapshot, level is derived from copies, 04), `ItemEquipped(WEAPON)` (equipped summary swap; also fires with `auto: true` after a summon's `AutoEquipBestWeapon`).
+Events: `ItemAcquired(kind=WEAPON)` (tile flips from "?" or copies tick up, `IsNew` set; a level change is read from the snapshot, level is derived from copies, 04), `ItemEquipped(WEAPON, slot, id)` (slot chips and equipped summary swap; also fires with `auto: true` after a summon's `AutoEquipBestWeapons`).
 
-States: Empty is impossible: profile creation grants the starter weapon `TUTORIAL_WEAPON_ID` (09 `tut_welcome`, issue #46). New badges clear when the tile is tapped or the screen is left (a `ClientPrefs` update, not a sim command; issues #7, #47). Locked: none.
+States: Empty is impossible: profile creation grants five Common starter weapons `TUTORIAL_WEAPON_IDS`, one equipped in each party slot (00 decision 111; 09 `tut_welcome`, issue #46). New badges clear when the tile is tapped or the screen is left (a `ClientPrefs` update, not a sim command; issues #7, #47). Locked: none.
 
 ### 4.6 `SCR_SKILLS` (Full, M0)
 
-Purpose: 40-skill collection, six auto-cast slots, slot order.
+Purpose: 40-skill collection and one auto-cast skill per party slot (`PARTY_SLOTS` = 5; 00 decision 109). Each slot casts its own skill, scaled by its own slot's attack; there is no shared cast order.
 
 ```
 +----------------------------------------------+
 | <  Collection   Weapons [Skills] Companions  |
-| Slots (auto-cast in order)   [ Auto-equip ]  |
-| [1:E Fish Rain][2:R Claw][3:R Pounce][4][5][6]|
+| Equipping slot 4: Biscuit               [x]  |  slot mode only
+| Party skills                 [ Auto-equip ]  |
+| [1 Tabby:Fish Rain][2:Claw][3:Pounce][4][5]  |
 | Sort / Filter row                            |
-| 40 tiles, 6 per row                          |
+| 40 tiles, 6 per row; digit = slot            |
 | Selected: [E] Fish Rain Lv2  DPS 85% CD 8s   |
-|  instant · 1/6 copies · [ Equip to slot v ]  |
+|  instant · 1/6 copies · in slot 1 [Equip v]  |
 +----------------------------------------------+
 ```
 
 | Element | `SkillsVm` field or command |
 |---|---|
-| Slot x6 | `Slots[i]`: `SkillId?`, `IconId`, `Rarity`, `Level`, `CooldownSec`; tap with a selection: `cmd EquipSkill(slot, id)`; tap without: `cmd UnequipSkill(slot)`; drag slot onto slot (MVP): reorder is sent as `cmd EquipSkill` calls for the two slots (04 section 7.2: the sim only sees `EquipSkill`) |
-| Auto-equip | `AutoEquipWouldChange` dot; `cmd AutoEquipBestSkills` (04 ordering rule) |
-| Tiles x40 | as weapons plus `DpsPct`, `CooldownTicks`, `CastType` (instant / dot / buff) glyph |
-| Selected panel | `[Equip to slot v]` lists the six slots with current occupant; disabled when unowned |
+| Slot chip x5 | `Slots[i]`: `CompanionIconId` (the slot's companion, so the player sees who casts it), `SkillId?`, `IconId`, `Rarity`, `Level`, `CooldownSec`; tap with a selection: `cmd EquipSkill(slot, id)` (`[Move here]` rule of section 3 when the skill is in another slot); tap without: `cmd UnequipSkill(slot)`. No drag reorder: slot order no longer matters |
+| Auto-equip | `AutoEquipWouldChange` dot; `cmd AutoEquipBestSkills` (04 rule, fills all five slots) |
+| Tiles x40 | as weapons (`EquippedSlot?` chip) plus `DpsPct`, `CooldownTicks`, `CastType` (instant / dot / buff) glyph; a buff skill's caption reads "buffs this companion's attacks" |
+| Selected panel | `[Equip]`: into `TargetSlot` in slot mode, else the slot picker (section 3); disabled when unowned |
 
-Events: `ItemAcquired(kind=SKILL)`, `ItemEquipped(SKILL)`.
+Events: `ItemAcquired(kind=SKILL)`, `ItemEquipped(SKILL, slot, id)`, `SkillCast(slot, id)` (slot chip cooldown ring).
 
-### 4.7 `SCR_COMPANIONS` (Full, M0; 00 decision 107)
+### 4.7 `SCR_COMPANIONS` (Full, M0; 00 decisions 107, 109)
 
-Purpose: 50-companion collection, four slots, the shared MP pool readout.
+Purpose: 50-companion collection, the five party slots (always open), and each slot's own MP pool.
 
 ```
 +----------------------------------------------+
 | <  Collection   Weapons Skills [Companions]  |
-| MP 120 / 200   regen 4.0/s   (Research +)    |
-| Slots [c1][c2][c3][ -- ]   total MP/s cost 3.2|
+| Equipping slot 3                        [x]  |  slot mode only
+| MP max 200   regen 4.0/s per pool (Research+)|
+| [1 c1 ===][2 c2 ==][3 -- ][4 c4 =][5 c5 ===] |  slot, companion, MP bar
 | Sort / Filter row                            |
-| 50 tiles, 6 per row                          |
+| 50 tiles, 6 per row; digit = slot            |
 | Selected: [L] Captain Mittens Lv1            |
 |  damage · 40 MP · every 6 s · DPS +60%       |
-|  [ Equip to slot v ]                         |
+|  own pool covers 80% of casts  [ Equip v ]   |
 +----------------------------------------------+
 ```
 
 | Element | `CompanionsVm` field or command |
 |---|---|
-| MP line | `Mp`, `MpMax`, `MpRegenPerSec` (03 Research); `(Research +)` pushes `SCR_RESEARCH` |
-| Slots x4 | `Slots[i]`; `cmd EquipCompanion(slot, id)`, `cmd UnequipCompanion(slot)` |
-| MP budget | `EquippedMpPerSec` vs `MpRegenPerSec`; shown `bad` when cost exceeds regen (04 explains the trade) |
-| Tiles x50 | plus `AbilityType` glyph (damage / buff / gold / MP regen), `MpCost`, `IntervalSec` |
+| MP line | `MpMax`, `MpRegenPerSec` (03 Research; the same for every pool); `(Research +)` pushes `SCR_RESEARCH` |
+| Slot chip x5 | `Slots[i]`: `CompanionId?`, `IconId`, `Mp / MpMax`, `MpSufficiencyPct` (03's `mpSufficiency` for that slot, read from the sim, never computed here; shown `bad` under 100%); tap with a selection: `cmd EquipCompanion(slot, id)` (`[Move here]` rule of section 3); tap without: `cmd UnequipCompanion(slot)` |
+| Tiles x50 | plus `EquippedSlot?` chip, `AbilityType` glyph (damage / buff / gold / MP regen), `MpCost`, `IntervalSec` |
+| Selected panel | `EffectText`; party-wide abilities (`BUFF_ATK`, `BUFF_GOLD`, `MP_REGEN`) say "whole party" (`MP_REGEN` restores every pool); `[Equip]`: into `TargetSlot` in slot mode, else the slot picker (section 3). Swapping the companion in a slot keeps that slot's weapon, skill and Awakening rank; the picker says so |
 
-Events: `ItemAcquired(kind=COMPANION)`, `ItemEquipped(COMPANION)`. Locked: none; the Companion banner and slot 1 are open from the start (04, issue #45).
+Events: `ItemAcquired(kind=COMPANION)`, `ItemEquipped(COMPANION, slot, id)`, `CompanionAbilityUsed(slot, id, mpAfter)` (slot chip MP bar). Locked: none; the Companion banner and all five slots are open from the start, at every tier (04, 00 decision 109, issue #45). Empty is impossible: profile creation equips the five starter companions (`TUTORIAL_COMPANION_IDS`, 09 `tut_welcome`).
 
 ### 4.8 `SCR_RUNES` (Full, P1)
 
@@ -354,7 +369,7 @@ Same grid grammar with six slots (`RUNE_SLOTS`) and a slot-type filter. Fourth c
 
 ### 4.9 `SCR_RESEARCH` (Full, MVP)
 
-Purpose: the Fish Coin sink (03 node list: MP pool, MP regen, tank capacity, tank refill, fish level cap, gold gain, offline cap extension).
+Purpose: the Fish Coin sink (03 node list: MP pool and MP regen (each raises all five slot pools equally), tank capacity, tank refill, fish level cap, gold gain, offline cap extension).
 
 ```
 +----------------------------------------------+
@@ -374,7 +389,7 @@ Purpose: the Fish Coin sink (03 node list: MP pool, MP regen, tank capacity, tan
 | Row per node | `Rows[node]`: `Level`, `MaxLevel`, `CurrentText`, `NextText`, `Cost`, `CanAfford`, `AtMax`; `[Buy]` sends `cmd Research(nodeId)` |
 | Header | `Wallet.FishCoin` |
 
-Events: `ResearchLeveled(nodeId, newLevel, cost)` (row flash, tank gauge on `SCR_MAIN` updates via snapshot), `CurrencyChanged(FISH_COIN)`. Locked before Awakening rank 1 (`feature_unlocks`, 00 decision 11, issue #45; the sim rejects with `RESEARCH_LOCKED`): greyed with "Unlocks at Awakening I". First-time coach mark on Tank capacity.
+Events: `ResearchLeveled(nodeId, newLevel, cost)` (row flash, tank gauge on `SCR_MAIN` updates via snapshot), `CurrencyChanged(FISH_COIN)`. Locked before Awakening rank 1 (`feature_unlocks`, 00 decision 11, issue #45; the sim rejects with `RESEARCH_LOCKED`): greyed with "Unlocks when any slot reaches Awakening I". First-time coach mark on Tank capacity.
 
 ### 4.10 `SCR_SUMMON` (Full, M0)
 
@@ -430,7 +445,7 @@ Purpose: the reveal. Driven entirely by the already-applied `SummonResultPayload
 | Summary | `Counts[rarity]`, `PityAfter` |
 | Again | `CanPullAgain`; `cmd Summon(sameBanner, sameCount, DIAMOND, newRequestId)`; disabled during the reveal and while a request is in flight |
 | Close | pops the overlay |
-| Tap a face-up card | push `SCR_ITEM_DETAIL` |
+| Tap a face-up card | push `SCR_ITEM_DETAIL`, whose `[Equip]` offers the slot picker (section 3) for the card's weapon, skill or companion |
 
 Reveal rules are in section 6. The `SummonResultPayload` of an "again" request replaces the cards in place.
 
@@ -479,11 +494,13 @@ Purpose: the fixed fight. Replaces the combat viewport region; the HUD stays. Th
 ```
 +----------------------------------------------+
 | Fish Coin Dungeon · Floor 5                  |
-|      (squire)                (floor boss)    |
-|                        HP |======       | 40%|
-|                        T  |=====        | 14s|
-| DPS 3.72K   [skill row]  [companion row]     |
-|                                              |
+|                    (floor boss)              |
+|            HP |======           | 40%        |
+|            T  |=====            | 14s        |
+| DPS 3.72K                                    |
+|            (c4)          (c5)               |  party formation as SCR_MAIN
+|    (c1)          (c2)          (c3)         |
+|    |=== |        |==  |        |====|       |
 | Reward on clear: 250 Fish Coins              |
 |                               [ Skip fight ] |
 +----------------------------------------------+
@@ -492,7 +509,7 @@ Purpose: the fixed fight. Replaces the combat viewport region; the HUD stays. Th
 | Element | `DungeonRunVm` field |
 |---|---|
 | Title | `Dungeon`, `Floor` |
-| Fight widgets | same bindings as `SCR_MAIN` combat viewport from the run's own snapshot |
+| Fight widgets | same bindings as `SCR_MAIN` combat viewport (party line included) from the run's own snapshot |
 | Skip fight | runs the remaining ticks headlessly in one frame (no player input can change the outcome, issue #40) and shows the result card |
 | Result card | `Outcome` (Cleared / Failed), `RewardText`, `RemainingHpPct`; `[Collect]` pops to `SCR_DUNGEONS`; a clear debits one ticket, a fail costs nothing (00 decision 16, issue #42); on Cleared with another ticket, `[Next floor]` sends `cmd StartDungeon(d, floor + 1)` if `Clearable` |
 
@@ -648,12 +665,12 @@ Purpose: any collectible's full card: stats, level, next-level cost, limit break
 | Stat block | kind-specific rows: weapon `AtkPct`, `PassivePct`; skill `DpsPct`, `CooldownSec`, `CastType`; companion `AbilityType`, `MpCost`, `IntervalSec`, `EffectPct`; rune (P1) `StatMods[]` |
 | Next-level preview | `NextLevelStatText` |
 | Source | `BannerCode`, `BaseRate` for its rarity |
-| Equip | `cmd EquipWeapon` / `EquipSkill(slot)` / `EquipCompanion(slot)`; for slotted kinds a slot picker row appears |
-| Compare (weapons) | toggles a side-by-side with the equipped weapon |
+| Equip | `cmd EquipWeapon(slot, id)` / `EquipSkill(slot, id)` / `EquipCompanion(slot, id)`; `[Equip]` opens the slot picker (section 3) for every kind, preselecting `TargetSlot` when opened from a collection screen in slot mode; `[Move here]` when the item is in another slot; a header chip "In slot {n}" when equipped |
+| Compare (weapons) | toggles a side-by-side with the weapon in the picked slot (`TargetSlot`, else slot index 0) |
 | Limit breaks line (MVP) | `LimitBreaks` / `LIMIT_BREAK_RANKS` ("Limit breaks 2 / 5"); hidden when unowned |
 | Limit break (MVP) | `Limit break (N Rock Candy)` with N = `NextLimitBreakCost` (04 sections 5.2 and 11); sends `cmd LimitBreak(id)`; shown when owned; disabled with reason `LIMIT_BREAK_CAPPED` when `NextLimitBreakCost == 0` and `NOT_ENOUGH_ROCK_CANDY` when Rock Candy is short |
 
-States: unowned item shows "Not owned" and no Equip or Limit break. Opened from `SCR_SUMMON_RESULT` it shows a "NEW" ribbon when `IsNew`.
+States: unowned item shows "Not owned" and no Equip or Limit break. Rune slots (P1) keep their own picker (`RUNE_SLOTS`). Opened from `SCR_SUMMON_RESULT` it shows a "NEW" ribbon when `IsNew`.
 
 ### 4.20 `SCR_SETTINGS` (Full, MVP)
 
@@ -694,8 +711,8 @@ States: offline shows account actions disabled with "Needs connection". Dev buil
 | Element | `ProfileVm` field or command |
 |---|---|
 | Name | `DisplayName`; `[Edit]` opens a text field (2 to 12 chars, server-filtered, 08); `Profile.Rename(name)` |
-| Avatar | `AvatarId` from a fixed set of 12 squire portraits; `Profile.SetAvatar(id)` |
-| Stats | `Progress.HighestCleared`, `Hero.Level`, `Hero.AwakenRank`, `Stats.Pulls`, `Stats.Merges`, `Collection counts x3`, `CreatedAt`, `PlayDays` |
+| Avatar | `AvatarId` from a fixed set of 12 squire portraits (the squire is the player's identity only and never fights, 00 decision 109); `Profile.SetAvatar(id)` |
+| Stats | `Progress.HighestCleared`, `Party.Level`, highest slot `AwakenRank`, `Stats.Pulls`, `Stats.Merges`, `Collection counts x3`, `CreatedAt`, `PlayDays` |
 | Player id | `PlayerId` with copy button (support) |
 
 ### 4.22 `SCR_GUILD` (Full, P1)
@@ -704,7 +721,7 @@ Outline: guild card (name, level, members 23/30), check-in button (`GUILD_COIN`)
 
 ### 4.23 `SCR_RANKING` (Full, P1)
 
-Outline: tabs Stage / Hero Level / Guild; top 100 plus your row pinned at the bottom; weekly reset countdown; rewards by rank tier delivered to Inbox. Server-fed from Redis (08).
+Outline: tabs Stage / Party Level / Guild; top 100 plus your row pinned at the bottom; weekly reset countdown; rewards by rank tier delivered to Inbox. Server-fed from Redis (08).
 
 ### 4.24 `SCR_EVENTS` (Full, P1)
 
@@ -870,32 +887,32 @@ Music: one combat loop per chapter skin, ducked 50% under modals, off during a r
 
 ## 13. Performance rules
 
-- 30 fps floor on a 2 GB Android 8 device (00 section 3) with the board full, a boss on screen, six skills casting and a toast; 60 fps target on 2019 mid-range.
-- Damage numbers: pooled 32 TMP labels; above 32 simultaneous, the oldest is recycled; per-tick aggregation merges hits of the same source within one tick into one number.
+- 30 fps floor on a 2 GB Android 8 device (00 section 3) with the board full, a boss on screen, five companions attacking and casting skills and abilities, and a toast; 60 fps target on 2019 mid-range.
+- Damage numbers: pooled 32 TMP labels; above 32 simultaneous, the oldest is recycled; per-tick aggregation merges hits of the same source (one slot's attack, skill or ability, or the missiles) within one tick into one number.
 - Particles: at most 3 active systems in the combat viewport and 1 on the board; total live particles under 300; VFX prefabs are pooled per type with a cap of 8 instances.
 - One Canvas per band (HUD, combat UI, action strip, Fish Board, tab bar, Full screen, modal, overlay, toasts) so a changing number rebuilds only its band. Per-frame text updates limited to the HP bar text, boss timer and damage numbers; everything else updates on change (change-only setters) at most 10 Hz.
 - Zero steady-state managed allocation from `SessionRunner.Update` and `*Vm.Refresh` when no event arrived; under 1 KB per second while farming. No LINQ, closures, boxing or `string.Format` in the update path.
-- Atlases: `ui_icons`, `ui_frames` (shared); one sprite atlas per Full screen (`scr_hero`, `scr_collection` shared by the three collection screens, `scr_summon`, `scr_dungeons`, `scr_quests`, `scr_shop`); `fish` (`UI_FISH_SPRITE_LEVELS` = 12 levels, tint/frame variants, crown), `weapons_icons`, `skills_icons`, `companions_icons`; combat: one atlas per chapter skin (enemy + background), hero atlas, VFX atlas. Addressables groups mirror this list (section 16).
+- Atlases: `ui_icons`, `ui_frames` (shared); one sprite atlas per Full screen (`scr_party`, `scr_collection` shared by the three collection screens, `scr_summon`, `scr_dungeons`, `scr_quests`, `scr_shop`); `fish` (`UI_FISH_SPRITE_LEVELS` = 12 levels, tint/frame variants, crown), `weapons_icons`, `skills_icons`, `companions_icons`; combat: one atlas per chapter skin (enemy + background), `party_battle` (50 companion battle sprites, 30 weapon held sprites, 5 awakening auras), VFX atlas. Addressables groups mirror this list (section 16).
 - Cold boot to `SCR_MAIN` under 4 s on the floor device (10 budget); `SCR_MAIN` assets are in the always-loaded group; everything else loads on first push with the skeleton state covering the load.
 - Memory under 350 MB PSS on the 2 GB device with two Full screens cached; screens not visited for 5 minutes are unloaded (`ScreenRouter` LRU of 3 cached Full screens).
 
 ## 14. Tutorial flow (MVP)
 
-Goal: by minute three the player has trained, merged, summoned and seen a boss, without reading. Steps are content rows (09 `tutorial_steps`) so copy and gating are data. Each step waits on events, stored as the row's `expect_event` and `expect_count` (issue #46): `expect_event` is one event name or a `|`-separated list, and an occurrence of any listed event counts (09 section 5.29; issue #246); the spotlight blocks everything else except the HUD. Steps waiting on a screen push or an overlay close observe `ScreenRouter`, not the sim. State is `GameState.Tutorial.Step` in the save (02), advanced by the `SetTutorialStep(step)` command (01) when a step completes; `TUTORIAL_DONE` is the row count of `tutorial_steps`. Ticks keep running during every step except step 1, where the enemy waits for the player's taps (issue #46; 01 Open question 1).
+Goal: by minute three the player has trained the party, merged, summoned, equipped and seen a boss, without reading. Steps are content rows (09 `tutorial_steps`) so copy and gating are data. Each step waits on events, stored as the row's `expect_event` and `expect_count` (issue #46): `expect_event` is one event name or a `|`-separated list, and an occurrence of any listed event counts (09 section 5.29; issue #246); the spotlight blocks everything else except the HUD. Steps waiting on a screen push or an overlay close observe `ScreenRouter`, not the sim. State is `GameState.Tutorial.Step` in the save (02), advanced by the `SetTutorialStep(step)` command (01) when a step completes; `TUTORIAL_DONE` is the row count of `tutorial_steps`. Ticks keep running during every step except step 1, where the enemy waits for the player's taps (issue #46; 01 Open question 1).
 
 | Step | Spotlight | Caption key | Waits for (`expect_event` x `expect_count`) | Grant |
 |---|---|---|---|---|
-| 1 | combat viewport | `tut.1.tap` "Tap the monster!" | 3 x `TapZap` accepted | row `tut_welcome` (09, trigger `PROFILE_CREATED`): its `TUTORIAL_DIAMONDS` and `TUTORIAL_WEAPON_ID` grants are applied once at profile creation, guarded by `Tutorial.TutorialDiamondsGranted` (02) |
+| 1 | combat viewport | `tut.1.tap` "Tap the monster!" | 3 x `TapZap` accepted | row `tut_welcome` (09, trigger `PROFILE_CREATED`): its grants are applied once at profile creation, guarded by `Tutorial.TutorialDiamondsGranted` (02): `TUTORIAL_DIAMONDS` (1500), the five Common starter companions `TUTORIAL_COMPANION_IDS` equipped in slots 0-4, and the five Common starter weapons `TUTORIAL_WEAPON_IDS` equipped in slots 0-4 (00 decisions 109, 111). The party is on screen and attacking from the first frame |
 | 2 | `SCR_MAIN` gold chip after first kills | `tut.2.gold` | `EnemyKilled` x3 | |
-| 3 | Hero tab | `tut.3.hero` "Make your squire stronger" | `SCR_HERO` pushed | |
-| 4 | ATK `[+]` | `tut.4.train` | `StatTrained` | |
+| 3 | Party tab | `tut.3.party` "Make your party stronger" | `SCR_PARTY` pushed | |
+| 4 | ATK `[+]` | `tut.4.train` "Training powers up all five" | `StatTrained` | |
 | 5 | back chevron | `tut.5.back` | `SCR_MAIN` on top | |
 | 6 | Release button | `tut.6.release` "Release a fish" | `FishReleased` x2 | |
 | 7 | the two level-1 fish | `tut.7.merge` "Drag one onto the other" | `FishMerged` | `FishDiscovered(2)` plays naturally |
-| 8 | Summon tab | `tut.8.summon` | `SCR_SUMMON` pushed | `TUTORIAL_DIAMONDS` (1500) and the starter weapon `TUTORIAL_WEAPON_ID` are already granted at profile creation (09 `tut_welcome`, issue #46) |
+| 8 | Summon tab | `tut.8.summon` | `SCR_SUMMON` pushed | `TUTORIAL_DIAMONDS` (1500), the starter party and the starter weapon are already granted at profile creation (09 `tut_welcome`, issue #46) |
 | 9 | Summon x10 (Weapon) | `tut.9.pull` "Summon 10 weapons" | `ItemAcquired(kind=WEAPON)` x10 (after `ApplySummonResult`) | the tutorial's 10-pull is a normal server/local roll; no rigged result |
 | 10 | Skip on the reveal (if still running after 3 s) | `tut.10.skip` | overlay closed | |
-| 11 | Equip on the best new weapon (`SCR_WEAPONS` auto-pushed) | `tut.11.equip` | `ItemEquipped(WEAPON)` | |
+| 11 | Equip on the best weapon the pull gave (`SCR_WEAPONS` auto-pushed in slot mode for slot index 0, where the best weapon goes; every slot is already armed with a starter weapon, 00 decision 111) | `tut.11.equip` "Equip your new weapon" | `ItemEquipped(WEAPON)` | |
 | 12 | back to `SCR_MAIN`; stage 10 boss approaching | `tut.12.boss` "A boss! Merge fish to fire missiles" | `BossCleared\|BossFailed` x1 (either completes it) | tutorial ends; `Tutorial.Step = TUTORIAL_DONE` |
 
 Rules: `[Skip tutorial]` is available from step 3 onward (steps 1 and 2 take under 20 s) and completes all grants a skipped step would have made (none are conditional). Skip sends `SetTutorialStep(TUTORIAL_DONE)` and sets `Tutorial.Skipped`. Steps are resumable: `Tutorial.Step` is in the save, so a relaunch resumes at that step with the spotlight re-aimed. Coach marks for MVP screens (Quests, Dungeons, Shop, Research) are separate one-shot overlays shown on first push of each screen (`ClientPrefs.SeenCoachMarks`), not part of this flow. The whole flow is skipped for a restored cloud save with `Tutorial.Step == TUTORIAL_DONE`.
@@ -908,7 +925,7 @@ No artist in M0. Everything is a coloured `Image` with a TMP label, so the slice
 
 | Thing | Placeholder |
 |---|---|
-| Hero | 200 rp rounded square in `accent`, label "SQUIRE", awakening rank as a coloured outline |
+| Party slot | five 264 x 264 rp rounded rects in the companion's rarity colour in the two-row formation, label = pool index and slot (`C03 · 2`), the slot's awakening rank as a coloured outline, a small weapon chip (`W07`) when armed; an empty slot is a dashed outline |
 | Enemy / boss | 180 / 260 rp square, hue = `(chapter * 23) mod 360` at 60% saturation, label "s37" / "BOSS 40" |
 | Weapon / skill / companion icons | 96 rp circle in rarity colour with the rarity glyph and a pool index (`W07`, `S12`, `C03`) |
 | Fish | 140 rp circle, hue stepping 30 degrees per level, level number centred |
@@ -923,17 +940,16 @@ Fish art is a fixed set of `UI_FISH_SPRITE_LEVELS` (12) sprites (issue #48). A l
 
 | Category | Count | Spec |
 |---|---|---|
-| Hero squire | 1 body, 5 awakening auras; pixel frames (section 15.3): idle 4, attack 6, hurt 2 | 512 rp tall (64 px native) |
-| Weapon held sprites | 30 (one per weapon, pixel art held in the squire's hand, section 15.3) | 160 rp (20 px native) |
+| Awakening auras | 5, one per rank, pixel art drawn behind a slot's battle sprite (the rank belongs to the slot, 00 decision 109) | fits the 280 x 280 rp party cell |
 | Weapon icons | 30 | 128 rp, atlas `weapons_icons` |
 | Skill icons | 40 | 128 rp, atlas `skills_icons` |
-| Companions | 50 portraits + 50 icons (illustrated), 50 battle chibis with pixel frames idle 4 + cast 6 (section 15.3). Addresses: icon = the row's `icon`, chibi = the row's `sprite` (`spr_comp_*`, the in-battle sprite as for weapons), portrait = `portrait_<id>` derived from the id like the splash (00 decision 108) | portrait 256 rp, icon 128 rp, chibi about 48 px native (the prototypes are 46-57 px; display scale set by the art bible, issue #287) |
+| Companions | 50 portraits + 50 icons (illustrated), 50 battle chibis with pixel frames idle 4 + attack 6 + cast 6 each drawn holding its own weapon; the equipped weapon is never drawn in battle (00 decision 113). Addresses: icon = the row's `icon`, chibi = the row's `sprite` (`spr_comp_*`, the in-battle sprite as for weapons), portrait = `portrait_<id>` derived from the id like the splash (00 decision 108) | portrait 256 rp, icon 128 rp, chibi about 48 px native (the prototypes are 46-57 px), drawn at 4 rp per pixel to fit the 280 x 280 rp party cell (at most 70 px, 00 decision 110) (display scale confirmed by the art bible, issue #287) |
 | Enemies | 8 chapter skins x 3 mob variants = 24 mobs, 8 bosses, each with idle + hurt + death (3 pixel frames each, section 15.3) | mobs 320 rp (40 px native), bosses 480 rp (60 px native) |
 | Backgrounds | 8 chapter backgrounds (static + 2 parallax layers) | 1080 x 900 rp |
 | Fish | 12 levels (`UI_FISH_SPRITE_LEVELS`) + tint/frame variants for levels above 12 + crown overlay + tank gauge art (issue #48) | 140 rp |
 | UI icons | 48 line icons (currencies 5, tabs 7, dungeons 3, ability types 4, quest kinds 3, misc 26) | 64 rp, atlas `ui_icons` |
 | UI frames | 9-slice panels x 4, buttons x 3 states x 2 styles, chips, badges, rarity frames x 5 | atlas `ui_frames` |
-| Avatars | 12 squire portraits | 256 rp |
+| Avatars | 12 squire portraits (the player's avatar; the squire has no battle sprite, 00 decision 109) | 256 rp |
 | VFX | hit 3, crit 1, kill 2, missile 1 + trail, merge 1, discovery 1, level up 1, awaken 1, summon card flip 1, rarity flashes 3, coin burst 1, boss enter 1 = 17 systems | under 300 live particles total |
 | Summon cards | card back x 1, card frames x 5 rarities | 400 x 560 rp |
 | Companion splash | 8 illustrations, Legendary and Mythic companions only (00 decision 108), address `art_splash_<companion id>`, no baked-in text; full-screen character art, drawn to cover the screen (section 4.11), so keep the face and the key silhouette inside the centred 810 x 1440 rp safe zone (what survives from about 4:3 to 20:9 screens) | 1080 x 1920 rp |
@@ -946,7 +962,7 @@ Fish art is a fixed set of `UI_FISH_SPRITE_LEVELS` (12) sprites (issue #48). A l
 
 Two art styles, after the artist's prototypes in `art/reference/` (00 decisions 104-106, issues #284-#286):
 
-- **Pixel art** for everything that moves in the combat viewport: the squire, weapon held sprites, companion battle chibis and enemies. One sprite pixel is 8 rp, so a 512 rp hero is 64 px native. These are starting sizes; the art bible (issue #287) may revise them.
+- **Pixel art** for everything that moves in the combat viewport: the five companion battle chibis (each drawn with its own weapon; equipped weapons are not drawn, 00 decision 113), their awakening auras, and enemies. Battle shows the companions; the squire is the player's avatar only and never appears there (00 decisions 104 as amended and 109). Enemies use 8 rp per sprite pixel (a 40 px mob is 320 rp); the party uses 4 rp per sprite pixel in a two-row formation (00 decision 110), so the current 46-69 px chibis fit a 280 rp cell. These are starting sizes; the art bible (issue #287) may revise them.
 - **Illustrated art** for everything else: portraits, icons, summon cards, splash art, backgrounds, key art and UI.
 
 Pixel sprites are animated frame by frame. There is no skeletal rig, because rotating parts breaks the pixel grid. Frame counts are in section 15.2. Rendering rules:
@@ -970,7 +986,7 @@ Pixel sprites are animated frame by frame. There is no skeletal rig, because rot
 - **Engine-free core** (issue #23): view-models and every piece of client logic that does not need the engine live in `Assets/HeroCat.Client/Core/` (asmdef `HeroCat.Client.Core`, `noEngineReferences: true`, namespace `HeroCat.Client.Core`), which `src/HeroCat.Runtime.Tests` compiles and tests under dotnet without Unity. That is: one vm per screen plus `HudVm`, `BadgesVm`, `ToastQueue`, `RevealSequencer`, and the logic of `ScreenRouter` (stack, modal queue, Android back mapping, LRU), the Fish Board interaction state machine, the Tap Zap throttle, the damage-number pool, badge rules, tutorial step logic and `SafeAreaMath`. MonoBehaviours, prefabs and uGUI code only adapt these to the engine. `GameViewModel` owns them and is the only client type holding a `Simulation` reference besides `SessionRunner`. `Refresh()` runs on frames where a tick ran, an event arrived or a command marked dirty (01); screens update from their vm with change-only setters.
 - **Binding approach**: explicit. No reflection binding, no per-frame polling of properties. A screen's `Refresh()` is a flat list of setter calls; `OnEvent` is a `switch` on event type. Reasons: zero allocation is easy to audit, and the bot harness's view-model tests (10) run without Unity.
 - **Commands**: `Commands.Send(Command)` -> `Simulation.Apply` on the main thread between frames; result `ApplyResult.Accepted` or `ApplyResult.Reject(code, reason)`; the screen toasts `reject.<reason_lower>` (section 3). Server-backed commands (summon, inbox, shop) go through `HeroCat.Runtime` clients and return a `Task<Result>`; the vm sets `InFlight` flags for spinners.
-- **Addressables groups**: `always` (`SCR_MAIN`, HUD, tab bar, fish atlas, `ui_icons`, `ui_frames`, chapter 1 skin, hero), one group per Full screen prefab + its atlas, `chapters` (one bundle per chapter skin, downloaded ahead when the player enters the previous chapter), `audio_sfx`, `audio_music` (one bundle per loop), `collection_icons` (three icon atlases, loaded on first collection screen).
+- **Addressables groups**: `always` (`SCR_MAIN`, HUD, tab bar, fish atlas, `ui_icons`, `ui_frames`, chapter 1 skin, `party_battle`), one group per Full screen prefab + its atlas, `chapters` (one bundle per chapter skin, downloaded ahead when the player enters the previous chapter), `audio_sfx`, `audio_music` (one bundle per loop), `collection_icons` (three icon atlases, loaded on first collection screen).
 - **Input**: Input System package; `TapZap` from a full-viewport `IPointerClickHandler` behind the combat UI; Fish Board drag through `IBeginDragHandler` / `IDragHandler` / `IEndDragHandler` on cells; back button via `Keyboard.current.escapeKey`.
 - **Safe area**: one `SafeAreaFitter` on the root `RectTransform`; bands are children with fixed heights and the combat band `flexibleHeight = 1`. Details in section 17.2.
 - **Localization**: `TextKeyLabel` component holds the key; a locale change re-resolves every live label through an event. A hot-applied content swap (00's four tables: `localization`, `shop_products`, `shop_packages`, `inbox_templates`; issue #54) re-resolves labels the same way and makes `ShopVm` and `InboxVm` re-read their rows. Fonts: one TMP font asset with fallback chain `latin -> ja -> ko -> zh-Hans`.
@@ -1122,7 +1138,7 @@ Release build
 
 ## Open questions
 
-1. **Tab bar membership.** Six tabs (Hero, Collection, Summon, Dungeons, Quests, Shop) with Research and Settings off the bar. Owner: UX. Default: keep six; P1 adds "More" for Guild / Ranking / Events.
+1. **Tab bar membership.** Six tabs (Party, Collection, Summon, Dungeons, Quests, Shop) with Research and Settings off the bar. Owner: UX. Default: keep six; P1 adds "More" for Guild / Ranking / Events.
 2. **Modal deferral during bosses.** Rule 4 in section 10 delays player-invoked modals during a 30 s boss. Owner: UX. Default: shift the modal down over the Fish Board region instead of delaying, except `SCR_OFFLINE_REWARD`, which is never shown mid-boss (boot and resume happen before the first tick anyway).
 3. **Screen reader support.** uGUI has no built-in accessibility tree. Owner: client lead. Default: ship MVP without, add Unity Accessibility package labels in P1.
 4. **CJK number ladders.** ja/ko/zh players expect 万/億 grouping. Owner: localization. Default: K/M/B everywhere in MVP; revisit with soft-launch feedback.
@@ -1147,12 +1163,16 @@ How each criterion runs (issue #23): **[core]** criteria test logic in `HeroCat.
 14. [manual] Cold boot to first `SCR_MAIN` frame under 4 s on the floor device; `SCR_SHOP` first push shows skeleton rows within one frame and prices within 2 s on Wi-Fi (device-farm checklist, 10).
 15. [core] 10-pull reveal: card `i` starts at `0.3 + 0.12 i` s with +0.4 s per preceding L/M card; Skip faces every card up in the same frame; Summon again is disabled until the sequencer reports complete (EditMode `RevealSequencer` test).
 16. [core] Fish Board: dragging onto an equal-level fish sends exactly one `MergeFish`; dropping onto a different level sends nothing and plays the invalid-drop shake; dropping onto an empty cell sends one `MoveFish`; `[Merge all]` and `[Release max]` each send exactly one `MergeAll` / `ReleaseMax` command (vm unit test with a scripted board).
-17. [core] Tutorial: a fresh profile completes steps 1 to 12 with the scripted inputs in under 3 minutes of sim time; killing the app at step 7 and relaunching resumes at step 7; Skip at step 3 sets `Tutorial.Step = TUTORIAL_DONE` and `Tutorial.Skipped`, and leaves `Wallet.Diamond` = 1,500 and the starter weapon owned.
+17. [core] Tutorial: a fresh profile completes steps 1 to 12 with the scripted inputs in under 3 minutes of sim time; killing the app at step 7 and relaunching resumes at step 7; Skip at step 3 sets `Tutorial.Step = TUTORIAL_DONE` and `Tutorial.Skipped`, and leaves `Wallet.Diamond` = 1,500, the five starter companions in slots 0-4 and the starter weapon owned and in slot 0.
 18. [core] Red dots: with one `COMPLETED` quest, one unused dungeon ticket and one inbox item the Quests, Dungeons and Inbox badges show counts 1/1/1; claiming each clears its dot immediately; no dot appears for an affordable Training level.
 19. [unity] Every disabled primary button in the catalog has a non-empty reason label (EditMode test over `ReasonLabel` components).
 20. [core] Every screen's `Refresh()` writes a label only when its value changed (counting fake labels, one test per vm).
 21. [core] No tick runs while `SCR_OFFLINE_REWARD` is open, and the amounts credited by `ClaimOfflineReward` equal the ones the modal showed (issue #21).
 22. [manual] The section 17.5 device QA checklist passes on both platforms for every playtest build.
+23. [core] `PartyVm` on a fresh profile shows five slot cards bound to `Party.Slots[0..4]` with the five starter companions and the starter weapon in slot 0; tapping slot 3's weapon pushes `SCR_WEAPONS` with `TargetSlot = 2`, and `[Equip]` there sends exactly one `EquipWeapon(2, id)` and pops back; `[Awaken]` on a slot confirms and sends `Awaken(slot)` for that slot only (vm and router unit test).
+24. [core] Slot picker and `[Move here]`: an owned weapon, skill or companion equipped in slot a shows "In slot a+1" on its tile; moving it to slot b sends exactly `Unequip<Kind>(a)` then `Equip<Kind>(b, id)`, and no screen shows a lock state on any party slot (vm unit test per collection screen).
+25. [core] `SCR_MAIN`'s party line vm: a `HitLanded(slot, ...)` raises its damage number from that slot's cell, `CompanionAbilityUsed(slot, id, mpAfter)` sets only that slot's MP bar to `mpAfter`, and an empty slot reports `IsEmpty` with no MP bar (vm unit test).
+26. [unity] The party formation fits: the three-cell front row and the two-cell back row (`UI_PARTY_CELL_W`, `UI_PARTY_GAP`, `UI_PARTY_ROW_OVERLAP`) lie inside the safe area at 1080 rp width on a 16:9 phone with 100 rp insets, do not overlap the enemy HP bar, and keep their size when the combat band shrinks (EditMode rect test).
 
 ## Constants introduced
 
@@ -1167,8 +1187,9 @@ How each criterion runs (issue #23): **[core]** criteria test logic in `HeroCat.
 | `UI_RELEASE_MAX_ANIM_MS`, `UI_MERGE_ALL_ANIM_MS` | 60, 80 | S | Referenced by 05 section 6 |
 | `UI_DAMAGE_LABEL_POOL`, `UI_MAX_PARTICLES` | 32, 300 | S | Acceptance 13 |
 | `UI_SCREEN_CACHE` | 3 Full screens | S | Memory budget in section 13 |
+| `UI_PARTY_CELL_W`, `UI_PARTY_CELL_H`, `UI_PARTY_GAP`, `UI_PARTY_ROW_OVERLAP` | 280, 280, 16, 120 rp | S | Two-row party formation on `SCR_MAIN` and `SCR_DUNGEON_RUN`: front row 872 rp wide, formation 440 rp tall; never shrinks; acceptance 26 (decision 110) |
 | `UI_FISH_SPRITE_LEVELS` | 12 | S | Fish sprite and merge-sound count; levels above use tint variants; 09 warns when content exceeds it (issue #48) |
 | `UI_BACK_EXIT_WINDOW_SEC` | 2 | S | |
 | `UI_QUEST_EXPIRY_WARN_SEC` | 3600 | S | 06 Open question 2 |
 | Rarity palette, shape glyphs | section 8 | S | Contrast table |
-| Commands and events | 00 section 5.1 names, plus owner-spec names 00 adds (issue #11): `UnequipSkill`, `UnequipCompanion`, `AutoEquipBestSkills` (04), `ClaimAllInbox`, `QuestClaimed`, `QuestsBulkClaimed`, `WeekRolledOver`, `DungeonFloorFirstCleared`, `OfflineRewardComputed` (01/06), `BannerLeveledUp` (01/04), `EnemySpawned`, `BossCleared`, `StageCapReached`, `StatTrained` (03/01); P1 `EquipRune`, `UnequipRune` | | 07 follows the sim owners; no UI-only commands or events |
+| Commands and events | 00 section 5.1 names, plus owner-spec names 00 adds (issue #11): `UnequipWeapon`, `UnequipSkill`, `UnequipCompanion`, `AutoEquipBestWeapons`, `AutoEquipBestSkills`, `AutoEquipBestCompanions` (04; every equip command and `Awaken` take a slot, and `HitLanded`, `SkillCast`, `CompanionAbilityUsed`, `ItemEquipped`, `Awakened` carry it, 00 decision 109), `ClaimAllInbox`, `QuestClaimed`, `QuestsBulkClaimed`, `WeekRolledOver`, `DungeonFloorFirstCleared`, `OfflineRewardComputed` (01/06), `BannerLeveledUp` (01/04), `EnemySpawned`, `BossCleared`, `StageCapReached`, `StatTrained` (03/01); P1 `EquipRune`, `UnequipRune` | | 07 follows the sim owners; no UI-only commands or events |

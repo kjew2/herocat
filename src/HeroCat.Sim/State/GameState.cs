@@ -25,7 +25,7 @@ namespace HeroCat.Sim.State
         public long   SaveSeq         { get; set; }                           // +1 per write; same-device tiebreak
 
         public TimeState        Time        { get; init; } = new TimeState();
-        public HeroState        Hero        { get; init; } = new HeroState();
+        public PartyState       Party       { get; init; } = new PartyState();
         public TrainingState    Training    { get; init; } = new TrainingState();
         public Wallet           Wallet      { get; init; } = new Wallet();
         public CollectionState  Weapons     { get; init; } = new CollectionState();
@@ -63,11 +63,31 @@ namespace HeroCat.Sim.State
         public int  LoginDayKey          { get; set; } = -1;  // DayKey on which LOGIN_DIAMONDS was last granted (issue #20)
     }
 
-    public sealed class HeroState
+    /// <summary>
+    /// The five companions who fight (02 section 3.1, 00 decision 109): one party-wide level and EXP, and PARTY_SLOTS
+    /// slots. Progression belongs to the slot: swapping its companion keeps its weapon, skill and Awakening rank.
+    /// </summary>
+    public sealed class PartyState
     {
-        public int    Level        { get; set; } = 1;         // >= 1; 03 HERO_LVL_EXP curve
-        public double Exp          { get; set; }              // HERO_EXP toward next level; reset on level up
-        public int    AwakenRank   { get; set; }              // 0..AWAKEN_STAGES.Length; 03
+        public int    Level { get; set; } = 1;               // >= 1; 03 PARTY_LVL_EXP curve
+        public double Exp   { get; set; }                    // PARTY_EXP toward next level; reset on level up
+        public PartySlot[] Slots { get; set; } = NewSlots(5);   // PARTY_SLOTS; never null elements   // literal-ok: 02 default size
+
+        public static PartySlot[] NewSlots(int n)
+        {
+            var r = new PartySlot[n];
+            for (int i = 0; i < n; i++) r[i] = new PartySlot();
+            return r;
+        }
+    }
+
+    /// <summary>One party slot (02 section 3.1). Null ids = empty; an item is in at most one slot (02 rule P8).</summary>
+    public sealed class PartySlot
+    {
+        public string Companion  { get; set; }               // companion id; null = empty slot (does nothing)
+        public string Weapon     { get; set; }               // weapon id; null = unarmed
+        public string Skill      { get; set; }               // skill id; null = no skill
+        public int    AwakenRank { get; set; }               // 0..AWAKEN_STAGES.Length; the slot's, not the companion's (03 section 5.3)
     }
 
     public sealed class TrainingState
@@ -87,14 +107,14 @@ namespace HeroCat.Sim.State
         public long   Diamond       { get; set; }             // DIAMOND; server-reconciled in MVP
         public double FishCoin      { get; set; }             // FISH_COIN
         public long   RockCandy     { get; set; }             // ROCK_CANDY
-        public double HeroExp       => 0;                     // HERO_EXP is not a balance; it is Hero.Exp. Present in CurrencyDelta only.
+        public double PartyExp       => 0;                     // PARTY_EXP is not a balance; it is Party.Exp. Present in CurrencyDelta only.
         public int[]  DungeonTicket { get; set; } = new int[3];      // by Dungeon ordinal: FISH_COIN, ROCK_CANDY, EXP   // literal-ok: 02 default size
         public int[]  SummonTicket  { get; set; } = new int[4];      // by Banner ordinal: WEAPON, SKILL, COMPANION, RUNE (issue #26); Remote mode mirrors the server ledger   // literal-ok: 02 default size
         public long   GuildCoin     { get; set; }             // P1
 
-        public bool ShouldSerializeHeroExp() => false;        // Json.NET convention, no attribute: HeroExp is never written
+        public bool ShouldSerializePartyExp() => false;       // Json.NET convention, no attribute: PartyExp is never written
 
-        /// <summary>The balance of <paramref name="c"/>. HERO_EXP is not a balance and reads 0 (see Hero.Exp).</summary>
+        /// <summary>The balance of <paramref name="c"/>. PARTY_EXP is not a balance and reads 0 (see Party.Exp).</summary>
         public double Get(Currency c)
         {
             switch (c)
@@ -103,7 +123,7 @@ namespace HeroCat.Sim.State
                 case Currency.DIAMOND: return Diamond;
                 case Currency.FISH_COIN: return FishCoin;
                 case Currency.ROCK_CANDY: return RockCandy;
-                case Currency.HERO_EXP: return 0;
+                case Currency.PARTY_EXP: return 0;
                 case Currency.GUILD_COIN: return GuildCoin;
                 default:
                     int d = DungeonTicketIndex(c);
@@ -137,7 +157,7 @@ namespace HeroCat.Sim.State
 
         /// <summary>Counted (long/int) currencies take whole amounts only (00 contract 9).</summary>
         public static bool IsCounted(Currency c) =>
-            !(c == Currency.GOLD || c == Currency.FISH_COIN || c == Currency.HERO_EXP);
+            !(c == Currency.GOLD || c == Currency.FISH_COIN || c == Currency.PARTY_EXP);
 
         /// <summary>Dungeon ordinal for a dungeon ticket currency, else -1.</summary>
         public static int DungeonTicketIndex(Currency c)
@@ -180,9 +200,6 @@ namespace HeroCat.Sim.State
 
     public sealed class LoadoutState
     {
-        public string   Weapon     { get; set; }                         // equipped weapon id; TUTORIAL_WEAPON_ID from profile creation (issue #46)
-        public string[] Skills     { get; set; } = new string[6];        // SKILL_SLOTS; null = empty slot; order = auto-cast priority (04)   // literal-ok: 02 default size
-        public string[] Companions { get; set; } = new string[4];        // COMPANION_SLOTS   // literal-ok: 02 default size
         public string[] Runes      { get; set; } = new string[6];        // RUNE_SLOTS, P1   // literal-ok: 02 default size
     }
 
@@ -217,9 +234,9 @@ namespace HeroCat.Sim.State
         public BossPhase Boss           { get; set; }          // None/Pending/Walled, so a wall survives a reload (issue #7)
         public int    BossFailsOnStage  { get; set; }          // reset on advance (03)
         public int?   Selected          { get; set; }          // MVP side-stage farm target <= HighestCleared; null = frontier (issue #35)
-        public double Mp                { get; set; }          // shared MP pool (04)
-        public int[]  SkillCooldowns    { get; set; } = new int[6];   // ticks left per skill slot   // literal-ok: 02 default size
-        public int[]  CompanionCooldowns { get; set; } = new int[4];  // ticks left per companion slot (03 section 2.4)   // literal-ok: 02 default size
+        public double[] Mp              { get; set; } = new double[5];   // one MP pool per party slot (03 section 2.4, 00 decision 109)   // literal-ok: 02 default size
+        public int[]  SkillCooldowns    { get; set; } = new int[5];   // ticks left per party slot's skill   // literal-ok: 02 default size
+        public int[]  CompanionCooldowns { get; set; } = new int[5];  // ticks left per party slot's ability (03 section 2.4)   // literal-ok: 02 default size
         public List<double> MissileQueue { get; init; } = new List<double>();   // queued fish-missile hit fractions, FIFO (issue #7)
         public DungeonRunState DungeonRun { get; set; }        // non-null only while Mode == Dungeon; Fight stays the frozen frontier fight
         public FightState Fight         { get; set; }          // transient fight state; never saved (3.3)
@@ -236,10 +253,12 @@ namespace HeroCat.Sim.State
         public double EnemyMaxHp       { get; set; }
         public bool   EnemyIsBoss      { get; set; }
         public int    BossTicksLeft    { get; set; }          // 0..BOSS_TIME_TICKS
-        public int    AttackProgress   { get; set; }          // fixed point, ATTACK_PROGRESS_UNIT (03 section 2.1)
-        public List<DotInstance> ActiveDots { get; init; } = new List<DotInstance>();   // max 6 (03 section 2.3)
-        public double AtkBuffPct       { get; set; }          // strongest active BUFF, percentage points
+        public int[]  AttackProgress   { get; set; } = new int[5];   // per party slot, fixed point ATTACK_PROGRESS_UNIT (03 section 2.1)   // literal-ok: 02 default size
+        public List<DotInstance> ActiveDots { get; init; } = new List<DotInstance>();   // max PARTY_SLOTS (03 section 2.3)
+        public double AtkBuffPct       { get; set; }          // party ATK buff: strongest active BUFF_ATK companion, percentage points
         public int    AtkBuffTicksLeft { get; set; }
+        public double[] SlotAtkBuffPct { get; set; } = new double[5];      // per slot: its own strongest BUFF skill (03 section 2.3)   // literal-ok: 02 default size
+        public int[]  SlotAtkBuffTicksLeft { get; set; } = new int[5];     // literal-ok: 02 default size
         public double GoldBuffPct      { get; set; }          // strongest active BUFF_GOLD companion, percentage points (04 section 8.1)
         public int    GoldBuffTicksLeft { get; set; }
         public int    PendingTaps      { get; set; }          // taps accepted since the last tick
@@ -253,18 +272,20 @@ namespace HeroCat.Sim.State
     /// </summary>
     public readonly struct DotInstance : IEquatable<DotInstance>
     {
-        public DotInstance(int ticksLeft, double damagePerTick)
+        public DotInstance(int slot, int ticksLeft, double damagePerTick)
         {
+            Slot = slot;
             TicksLeft = ticksLeft;
             DamagePerTick = damagePerTick;
         }
 
+        public int Slot { get; }                    // the casting party slot; damage is in that slot's SlotUnit (03 section 2.3)
         public int TicksLeft { get; }
         public double DamagePerTick { get; }
 
-        public bool Equals(DotInstance o) => TicksLeft == o.TicksLeft && DamagePerTick.Equals(o.DamagePerTick);
+        public bool Equals(DotInstance o) => Slot == o.Slot && TicksLeft == o.TicksLeft && DamagePerTick.Equals(o.DamagePerTick);
         public override bool Equals(object obj) => obj is DotInstance o && Equals(o);
-        public override int GetHashCode() => (TicksLeft * 397) ^ DamagePerTick.GetHashCode();   // literal-ok: hash mixing, not balance
+        public override int GetHashCode() => (((Slot * 397) ^ TicksLeft) * 397) ^ DamagePerTick.GetHashCode();   // literal-ok: hash mixing, not balance
         public static bool operator ==(DotInstance a, DotInstance b) => a.Equals(b);
         public static bool operator !=(DotInstance a, DotInstance b) => !a.Equals(b);
     }
@@ -373,7 +394,7 @@ namespace HeroCat.Sim.State
 
     public sealed class LifetimeStats
     {
-        public long Kills, BossKills, BossFails, HeroHits, Taps, Pulls, Merges, FishReleased, FishDiscards, DungeonClears, TrainingLevelsBought;
+        public long Kills, BossKills, BossFails, PartyHits, Taps, Pulls, Merges, FishReleased, FishDiscards, DungeonClears, TrainingLevelsBought;
         public int  FirstWallStage;                   // stage of the first BossFail ever; 0 = never walled (03)
         public long ActiveSeconds;                    // ticked time; analytics only
         public double GoldEarned, GoldSpent, FishCoinEarned;

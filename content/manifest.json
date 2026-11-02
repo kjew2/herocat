@@ -1,19 +1,19 @@
 {
   "schema_version": 1,
-  "content_version": "2026.11.02.7",
-  "min_client_version": "0.1.0",
+  "content_version": "2026.11.02.9",
+  "min_client_version": "0.2.0",
   "source_revision": "2026-11-01 m0 skeleton, spec 00 seed values (agent)",
   "hot_apply": false,
   "tables": {
     "achievements": {
       "file": "achievements.json",
       "rows": 54,
-      "sha256": "5b4ef7246bbd6c351bca08ae4e0ca9703793f0a6cc33c17fa3e11b809c0b82f0"
+      "sha256": "785095fcf338499bfebc377f29ad0174ac349c06a52a2d2bcd68e2a457f76f9e"
     },
     "awakening": {
       "file": "awakening.json",
       "rows": 5,
-      "sha256": "1e5ec6c6eb3d52f5f07a9564045941ba35d0b49c1c800d7c270188e6920255be"
+      "sha256": "1cac3f6f85d4df46385fc430b00d57532543db5cfa324dca7792fb06f5d6581a"
     },
     "awakening_targets": {
       "file": "awakening_targets.json",
@@ -23,7 +23,7 @@
     "banner_levels": {
       "file": "banner_levels.json",
       "rows": 30,
-      "sha256": "7b39d7af528f00aadfe5c2c49cd154b3f39c83549eee89f943ef9cd76af61ad4"
+      "sha256": "bd5e253fd6c0b5421b9ce81d0a2c8fd4631c074b11686203ccfe932fc947ce08"
     },
     "banners": {
       "file": "banners.json",
@@ -38,12 +38,12 @@
     "companions": {
       "file": "companions.json",
       "rows": 50,
-      "sha256": "4a4762cbaa38f1abbcaef675a83f8903d8d4208af56741fc3b1ba312db7eedef"
+      "sha256": "d400534fd6ff0afb8df1145aa6677e58ccbb334e21d199e62255563a41c36c7b"
     },
     "constants": {
       "file": "constants.json",
-      "rows": 43,
-      "sha256": "32d0946697285b6e0c93bb1542ce69400e623bc9509e90c0acfca657e0dda830"
+      "rows": 42,
+      "sha256": "8222b2d15bbce63f627b9500fd6d43450d039ef098b9d83615126d304aec8b24"
     },
     "curves": {
       "file": "curves.json",
@@ -53,7 +53,7 @@
     "dungeon_floors": {
       "file": "dungeon_floors.json",
       "rows": 120,
-      "sha256": "e86754d6fd47f6e7dc7d111bbebcc7fe5079029e5e7918849b8e2d70a03958b6"
+      "sha256": "877f109f6ed45e0cfbc20ddbd959087e9e8b444c06e7257c793a096bd2a9ac8a"
     },
     "dungeons": {
       "file": "dungeons.json",
@@ -75,10 +75,10 @@
       "rows": 20,
       "sha256": "b5ce7f4895cde9b0f1ec2fdbe3ce141217411e5af4c241944b40cdc6ad15283b"
     },
-    "hero_levels": {
-      "file": "hero_levels.json",
+    "party_levels": {
+      "file": "party_levels.json",
       "rows": 1,
-      "sha256": "1ddbec0594520c4a393a9d946734b36c5286562e80ac41072a3ebd0e4673b35b"
+      "sha256": "530aa20ae2d0e9cc0525ed063ef2f1180f863a4af8db1d31ab814ae7f381cc43"
     },
     "progress_targets": {
       "file": "progress_targets.json",
@@ -98,7 +98,7 @@
     "rarities": {
       "file": "rarities.json",
       "rows": 5,
-      "sha256": "7da59786cbad1e1ef75456d4650edfb888dac3da043f38a8609dbbe314dcf329"
+      "sha256": "9a3b1b7ee39078d5ecca794d33ed35ae69f5d6e0444ea83d6a923a84bd720cb4"
     },
     "research": {
       "file": "research.json",
@@ -138,7 +138,7 @@
     "tutorial_steps": {
       "file": "tutorial_steps.json",
       "rows": 12,
-      "sha256": "6bb0fdaf33df711614791b88e61119122b9ab41087fb648e3a8820413d6e3b16"
+      "sha256": "b7f0ef9b02f1cd3b1096fbe7e6479a9b68a0bc11debe498f8cefbf5173eda256"
     },
     "weapons": {
       "file": "weapons.json",
@@ -149,18 +149,17 @@
   "localization": {
     "en": {
       "file": "localization.en.json",
-      "rows": 691,
-      "sha256": "3223a7bc26af6475af5454b42785121f3dc3237b9040e1a8714bc2d2820edc0c"
+      "rows": 689,
+      "sha256": "e6a3cb1acae4ae63a140a452f52a847ce3a71189933703b0a04cf0aec7ebe5cc"
     }
   },
-  "content_hash": "87d5552f4651a172776f721d427f40f7a1534e25e9b0f9bc575fa09672c8db8e",
+  "content_hash": "323fdcd36cd1b288b0a78bc3867760bdfefcd9ec89f737b0b307aac72af02a52",
   "s_constants": [
     "BASE_HP",
     "BOSS_ROCK_CANDY_P",
     "BOSS_TIME_TICKS",
     "CHAPTER_WIDTH",
     "CLOCK_BACKWARDS_TOLERANCE_S",
-    "COMPANION_SLOTS",
     "CRIT_DMG_BASE",
     "DAILY_GIFT_WEAPON_TICKETS",
     "DIAMONDS_PER_DAY_F2P",
@@ -182,5 +181,5 @@
     "TAP_ZAP_DMG_PCT",
     "TAP_ZAP_MAX_PER_SEC"
   ],
-  "notes": "M0 skeleton: values are spec 00 section 6 seeds; S values pending tools/power_curve_model.py and fish_model.py"
+  "notes": "M0 skeleton: values are spec 00 section 6 seeds; S values pending tools/power_curve_model.py and fish_model.py. Party model (00 decisions 109, 110): BASE_ATK per companion, PARTY_SLOTS, MP_REGEN0 0.5 per slot pool; decision 111: COMPANION_ATK_MULT, COMPANION_DPS_PCT +25%, Awakening costs /5, five starter weapons; BANNER_LVL_EXP x0.26 (decision 70 rule)"
 }

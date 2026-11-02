@@ -71,7 +71,7 @@ namespace HeroCat.Sim
         /// 11) and the rank reaches the node's own unlock_awaken_rank (09 section 5.18; E063 keeps it at or above the gate).
         /// </summary>
         public static bool IsOpen(ContentDb db, GameState s, ResearchDef node) =>
-            db.IsUnlocked(AwakeningRules.ResearchFeature, s) && AwakeningRules.Rank(db, s) >= node.UnlockAwakenRank;
+            db.IsUnlocked(AwakeningRules.ResearchFeature, s) && AwakeningRules.HighestRank(db, s) >= node.UnlockAwakenRank;
 
         /// <summary>Fish Coins the next Research(<paramref name="nodeId"/>) charges; 0 when unknown or maxed.</summary>
         public static double NextCost(ContentDb db, GameState s, string nodeId)

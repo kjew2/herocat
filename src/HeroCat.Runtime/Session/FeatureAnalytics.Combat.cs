@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using HeroCat.Runtime.Services;
+using HeroCat.Runtime.Power;
 using HeroCat.Sim;
 using HeroCat.Sim.Events;
 using HeroCat.Sim.Power;
@@ -84,7 +85,7 @@ namespace HeroCat.Runtime.Session
                     foreach (PowerLayer l in Enum.GetValues(typeof(PowerLayer)))
                     {
                         if (l == PowerLayer.Base) continue;
-                        double a = _wallPower.Factor(l), b = power.Factor(l);
+                        double a = LayerFactors.Factor(_wallPower, l), b = LayerFactors.Factor(power, l);
                         if (Math.Abs(b - a) > 1e-12 * Math.Max(1.0, Math.Abs(a))) changed.Add(l.ToString());
                     }
                     Track(new AnalyticsEvents.WallBroken(stage, ServerSecAt(e.Tick) - _wallOpenServerSec,

@@ -20,6 +20,51 @@
           "kind": "WEAPON",
           "id": "weapon_c_01",
           "amount": 1
+        },
+        {
+          "kind": "WEAPON",
+          "id": "weapon_c_02",
+          "amount": 1
+        },
+        {
+          "kind": "WEAPON",
+          "id": "weapon_c_03",
+          "amount": 1
+        },
+        {
+          "kind": "WEAPON",
+          "id": "weapon_c_04",
+          "amount": 1
+        },
+        {
+          "kind": "WEAPON",
+          "id": "weapon_c_05",
+          "amount": 1
+        },
+        {
+          "kind": "COMPANION",
+          "id": "comp_c_01",
+          "amount": 1
+        },
+        {
+          "kind": "COMPANION",
+          "id": "comp_c_02",
+          "amount": 1
+        },
+        {
+          "kind": "COMPANION",
+          "id": "comp_c_03",
+          "amount": 1
+        },
+        {
+          "kind": "COMPANION",
+          "id": "comp_c_04",
+          "amount": 1
+        },
+        {
+          "kind": "COMPANION",
+          "id": "comp_c_05",
+          "amount": 1
         }
       ],
       "skippable": false,
@@ -45,8 +90,8 @@
       "trigger": "PREVIOUS_DONE",
       "trigger_value": null,
       "screen": "SCR_MAIN",
-      "highlight": "tab_hero",
-      "text_key": "tut.3.hero",
+      "highlight": "tab_party",
+      "text_key": "tut.3.party",
       "expect_event": null,
       "expect_count": null,
       "grants": null,
@@ -58,7 +103,7 @@
       "order": 4,
       "trigger": "PREVIOUS_DONE",
       "trigger_value": null,
-      "screen": "SCR_HERO",
+      "screen": "SCR_PARTY",
       "highlight": "train_atk",
       "text_key": "tut.4.train",
       "expect_event": "StatTrained",
@@ -72,7 +117,7 @@
       "order": 5,
       "trigger": "PREVIOUS_DONE",
       "trigger_value": null,
-      "screen": "SCR_HERO",
+      "screen": "SCR_PARTY",
       "highlight": "back",
       "text_key": "tut.5.back",
       "expect_event": null,

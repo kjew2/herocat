@@ -51,7 +51,19 @@ namespace HeroCat.Sim.Replay
             w.I64(t.Tick); w.I64(t.LastTickServerTime); w.I64(t.AnchorServerTime); w.I64(t.AnchorTick);
             w.I64(t.CreatedServerTime); w.I32(t.DayKey); w.I32(t.WeekKey); w.I32(t.LoginDayKey);
 
-            w.I32(s.Hero.Level); w.F64(s.Hero.Exp); w.I32(s.Hero.AwakenRank);
+            var pa = s.Party;
+            w.I32(pa.Level); w.F64(pa.Exp);
+            if (pa.Slots == null) w.I32(-1);
+            else
+            {
+                w.I32(pa.Slots.Length);
+                foreach (var ps in pa.Slots)
+                {
+                    w.Bool(ps != null);
+                    if (ps == null) continue;
+                    w.Str(ps.Companion); w.Str(ps.Weapon); w.Str(ps.Skill); w.I32(ps.AwakenRank);
+                }
+            }
             w.Ints(s.Training.Level);
 
             var wa = s.Wallet;
@@ -61,7 +73,7 @@ namespace HeroCat.Sim.Replay
             Collection(w, s.Weapons); Collection(w, s.Skills); Collection(w, s.Companions); Collection(w, s.Runes);
 
             var lo = s.Loadout;
-            w.Str(lo.Weapon); w.Strs(lo.Skills); w.Strs(lo.Companions); w.Strs(lo.Runes);
+            w.Strs(lo.Runes);
 
             var f = s.Fish;
             w.Ints(f.Cells); w.I32(f.TankCount); w.I32(f.TankRefillTick); w.I32(f.TankReleaseLevel);
@@ -80,7 +92,7 @@ namespace HeroCat.Sim.Replay
 
             var c = s.Combat;
             w.I32((int)c.Mode); w.I32(c.Stage); w.I32(c.KillsInStage); w.I32((int)c.Boss); w.I32(c.BossFailsOnStage);
-            w.Bool(c.Selected.HasValue); w.I32(c.Selected.GetValueOrDefault()); w.F64(c.Mp);
+            w.Bool(c.Selected.HasValue); w.I32(c.Selected.GetValueOrDefault()); F64s(w, c.Mp);
             w.Ints(c.SkillCooldowns); w.Ints(c.CompanionCooldowns);
             if (c.MissileQueue == null) w.I32(-1); else { w.I32(c.MissileQueue.Count); foreach (var m in c.MissileQueue) w.F64(m); }
             var dr = c.DungeonRun;
@@ -149,7 +161,7 @@ namespace HeroCat.Sim.Replay
             }
 
             var x = s.Stats;
-            w.I64(x.Kills); w.I64(x.BossKills); w.I64(x.BossFails); w.I64(x.HeroHits); w.I64(x.Taps); w.I64(x.Pulls);
+            w.I64(x.Kills); w.I64(x.BossKills); w.I64(x.BossFails); w.I64(x.PartyHits); w.I64(x.Taps); w.I64(x.Pulls);
             w.I64(x.Merges); w.I64(x.FishReleased); w.I64(x.FishDiscards); w.I64(x.DungeonClears); w.I64(x.TrainingLevelsBought);
             w.I32(x.FirstWallStage); w.I64(x.ActiveSeconds);
             w.F64(x.GoldEarned); w.F64(x.GoldSpent); w.F64(x.FishCoinEarned);
@@ -177,16 +189,23 @@ namespace HeroCat.Sim.Replay
             }
         }
 
+        static void F64s(CanonicalWriter w, double[] a)
+        {
+            if (a == null) { w.I32(-1); return; }
+            w.I32(a.Length);
+            foreach (var v in a) w.F64(v);
+        }
+
         /// <summary>A transient FightState: a presence byte, then its fields (the frontier fight and a dungeon run's boss fight).</summary>
         static void Fight(CanonicalWriter w, FightState fi)
         {
             w.Bool(fi != null);
             if (fi == null) return;
             w.I32((int)fi.Phase); w.I32(fi.SpawnTimer); w.F64(fi.EnemyHp); w.F64(fi.EnemyMaxHp); w.Bool(fi.EnemyIsBoss);
-            w.I32(fi.BossTicksLeft); w.I32(fi.AttackProgress);
+            w.I32(fi.BossTicksLeft); w.Ints(fi.AttackProgress);
             w.I32(fi.ActiveDots.Count);
-            foreach (var d in fi.ActiveDots) { w.I32(d.TicksLeft); w.F64(d.DamagePerTick); }
-            w.F64(fi.AtkBuffPct); w.I32(fi.AtkBuffTicksLeft); w.F64(fi.GoldBuffPct); w.I32(fi.GoldBuffTicksLeft);
+            foreach (var d in fi.ActiveDots) { w.I32(d.Slot); w.I32(d.TicksLeft); w.F64(d.DamagePerTick); }
+            w.F64(fi.AtkBuffPct); w.I32(fi.AtkBuffTicksLeft); F64s(w, fi.SlotAtkBuffPct); w.Ints(fi.SlotAtkBuffTicksLeft); w.F64(fi.GoldBuffPct); w.I32(fi.GoldBuffTicksLeft);
             w.I32(fi.PendingTaps); w.I32(fi.TapsThisSecond);
             w.I64(fi.TapWindowTick);
         }

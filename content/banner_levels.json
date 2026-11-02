@@ -16,7 +16,7 @@
     {
       "banner": "WEAPON",
       "level": 2,
-      "exp_required": 10,
+      "exp_required": 15,
       "rates": {
         "COMMON": 0.58,
         "RARE": 0.292,
@@ -28,7 +28,7 @@
     {
       "banner": "WEAPON",
       "level": 3,
-      "exp_required": 25,
+      "exp_required": 40,
       "rates": {
         "COMMON": 0.56,
         "RARE": 0.304,
@@ -40,7 +40,7 @@
     {
       "banner": "WEAPON",
       "level": 4,
-      "exp_required": 55,
+      "exp_required": 80,
       "rates": {
         "COMMON": 0.54,
         "RARE": 0.316,
@@ -52,7 +52,7 @@
     {
       "banner": "WEAPON",
       "level": 5,
-      "exp_required": 90,
+      "exp_required": 130,
       "rates": {
         "COMMON": 0.52,
         "RARE": 0.328,
@@ -64,7 +64,7 @@
     {
       "banner": "WEAPON",
       "level": 6,
-      "exp_required": 145,
+      "exp_required": 210,
       "rates": {
         "COMMON": 0.5,
         "RARE": 0.34,
@@ -76,7 +76,7 @@
     {
       "banner": "WEAPON",
       "level": 7,
-      "exp_required": 215,
+      "exp_required": 310,
       "rates": {
         "COMMON": 0.48,
         "RARE": 0.352,
@@ -88,7 +88,7 @@
     {
       "banner": "WEAPON",
       "level": 8,
-      "exp_required": 305,
+      "exp_required": 440,
       "rates": {
         "COMMON": 0.46,
         "RARE": 0.364,
@@ -100,7 +100,7 @@
     {
       "banner": "WEAPON",
       "level": 9,
-      "exp_required": 415,
+      "exp_required": 600,
       "rates": {
         "COMMON": 0.44,
         "RARE": 0.376,
@@ -112,7 +112,7 @@
     {
       "banner": "WEAPON",
       "level": 10,
-      "exp_required": 540,
+      "exp_required": 780,
       "rates": {
         "COMMON": 0.42,
         "RARE": 0.388,
@@ -136,7 +136,7 @@
     {
       "banner": "SKILL",
       "level": 2,
-      "exp_required": 10,
+      "exp_required": 15,
       "rates": {
         "COMMON": 0.58,
         "RARE": 0.292,
@@ -148,7 +148,7 @@
     {
       "banner": "SKILL",
       "level": 3,
-      "exp_required": 25,
+      "exp_required": 40,
       "rates": {
         "COMMON": 0.56,
         "RARE": 0.304,
@@ -160,7 +160,7 @@
     {
       "banner": "SKILL",
       "level": 4,
-      "exp_required": 55,
+      "exp_required": 80,
       "rates": {
         "COMMON": 0.54,
         "RARE": 0.316,
@@ -172,7 +172,7 @@
     {
       "banner": "SKILL",
       "level": 5,
-      "exp_required": 90,
+      "exp_required": 130,
       "rates": {
         "COMMON": 0.52,
         "RARE": 0.328,
@@ -184,7 +184,7 @@
     {
       "banner": "SKILL",
       "level": 6,
-      "exp_required": 145,
+      "exp_required": 210,
       "rates": {
         "COMMON": 0.5,
         "RARE": 0.34,
@@ -196,7 +196,7 @@
     {
       "banner": "SKILL",
       "level": 7,
-      "exp_required": 215,
+      "exp_required": 310,
       "rates": {
         "COMMON": 0.48,
         "RARE": 0.352,
@@ -208,7 +208,7 @@
     {
       "banner": "SKILL",
       "level": 8,
-      "exp_required": 305,
+      "exp_required": 440,
       "rates": {
         "COMMON": 0.46,
         "RARE": 0.364,
@@ -220,7 +220,7 @@
     {
       "banner": "SKILL",
       "level": 9,
-      "exp_required": 415,
+      "exp_required": 600,
       "rates": {
         "COMMON": 0.44,
         "RARE": 0.376,
@@ -232,7 +232,7 @@
     {
       "banner": "SKILL",
       "level": 10,
-      "exp_required": 540,
+      "exp_required": 780,
       "rates": {
         "COMMON": 0.42,
         "RARE": 0.388,
@@ -256,7 +256,7 @@
     {
       "banner": "COMPANION",
       "level": 2,
-      "exp_required": 10,
+      "exp_required": 15,
       "rates": {
         "COMMON": 0.58,
         "RARE": 0.292,
@@ -268,7 +268,7 @@
     {
       "banner": "COMPANION",
       "level": 3,
-      "exp_required": 25,
+      "exp_required": 40,
       "rates": {
         "COMMON": 0.56,
         "RARE": 0.304,
@@ -280,7 +280,7 @@
     {
       "banner": "COMPANION",
       "level": 4,
-      "exp_required": 55,
+      "exp_required": 80,
       "rates": {
         "COMMON": 0.54,
         "RARE": 0.316,
@@ -292,7 +292,7 @@
     {
       "banner": "COMPANION",
       "level": 5,
-      "exp_required": 90,
+      "exp_required": 130,
       "rates": {
         "COMMON": 0.52,
         "RARE": 0.328,
@@ -304,7 +304,7 @@
     {
       "banner": "COMPANION",
       "level": 6,
-      "exp_required": 145,
+      "exp_required": 210,
       "rates": {
         "COMMON": 0.5,
         "RARE": 0.34,
@@ -316,7 +316,7 @@
     {
       "banner": "COMPANION",
       "level": 7,
-      "exp_required": 215,
+      "exp_required": 310,
       "rates": {
         "COMMON": 0.48,
         "RARE": 0.352,
@@ -328,7 +328,7 @@
     {
       "banner": "COMPANION",
       "level": 8,
-      "exp_required": 305,
+      "exp_required": 440,
       "rates": {
         "COMMON": 0.46,
         "RARE": 0.364,
@@ -340,7 +340,7 @@
     {
       "banner": "COMPANION",
       "level": 9,
-      "exp_required": 415,
+      "exp_required": 600,
       "rates": {
         "COMMON": 0.44,
         "RARE": 0.376,
@@ -352,7 +352,7 @@
     {
       "banner": "COMPANION",
       "level": 10,
-      "exp_required": 540,
+      "exp_required": 780,
       "rates": {
         "COMMON": 0.42,
         "RARE": 0.388,

@@ -10,13 +10,13 @@ achievement.stage_08.name,Clear stage 400,,,,40,false,
 achievement.stage_09.name,Clear stage 500,,,,40,false,
 achievement.stage_10.name,Clear stage 700,,,,40,false,
 achievement.stage_11.name,"Clear stage 1,000",,,,40,false,
-achievement.hero_level_01.name,Reach hero level 10,,,,40,false,
-achievement.hero_level_02.name,Reach hero level 25,,,,40,false,
-achievement.hero_level_03.name,Reach hero level 50,,,,40,false,
-achievement.hero_level_04.name,Reach hero level 75,,,,40,false,
-achievement.hero_level_05.name,Reach hero level 100,,,,40,false,
-achievement.hero_level_06.name,Reach hero level 150,,,,40,false,
-achievement.hero_level_07.name,Reach hero level 200,,,,40,false,
+achievement.hero_level_01.name,Reach party level 10,,,,40,false,
+achievement.hero_level_02.name,Reach party level 25,,,,40,false,
+achievement.hero_level_03.name,Reach party level 50,,,,40,false,
+achievement.hero_level_04.name,Reach party level 75,,,,40,false,
+achievement.hero_level_05.name,Reach party level 100,,,,40,false,
+achievement.hero_level_06.name,Reach party level 150,,,,40,false,
+achievement.hero_level_07.name,Reach party level 200,,,,40,false,
 achievement.weapons_01.name,Own 5 different weapons,,,,40,false,
 achievement.weapons_02.name,Own 10 different weapons,,,,40,false,
 achievement.weapons_03.name,Own 20 different weapons,,,,40,false,
@@ -216,7 +216,7 @@ reject.not_enough_diamond,Not enough diamonds,,,,48,false,
 reject.not_enough_fish_coin,Not enough Fish Coins,,,,48,false,
 reject.not_enough_gold,Not enough gold,,,,48,false,
 reject.not_enough_guild_coin,Not enough Guild Coins,,,,48,false,
-reject.not_enough_hero_exp,Not enough EXP,,,,48,false,
+reject.not_enough_party_exp,Not enough EXP,,,,48,false,
 reject.not_enough_rock_candy,Not enough Rock Candy,,,,48,false,
 reject.not_enough_ticket_exp,Not enough EXP tickets,,,,48,false,
 reject.not_enough_ticket_fish_coin,Not enough Fish Coin tickets,,,,48,false,
@@ -235,8 +235,7 @@ reject.rate_limited,"Too fast, try again",,,,48,false,
 reject.shop_locked,Shop not available yet,,,,48,false,
 reject.skill_in_other_slot,Equipped in another slot,,,,48,false,
 reject.companion_in_other_slot,Equipped in another slot,,,,48,false,
-reject.companion_slot_locked,Unlocks with Awakening,,,,48,false,
-reject.slot_empty,That slot is empty,,,,48,false,
+reject.weapon_in_other_slot,Equipped in another slot,,,,48,false,
 reject.slot_occupied,That slot is taken,,,,48,false,
 reject.stage_not_cleared,Clear this stage first,,,,48,false,
 reject.stage_out_of_range,No such stage,,,,48,false,
@@ -279,9 +278,7 @@ scr.companions.ability_damage,damage,,,,18,false,07 M0 screens
 scr.companions.ability_mp_regen,MP regen,,,,18,false,07 M0 screens
 scr.companions.budget,Equipped cost {0} MP/s,,,,40,false,07 M0 screens
 scr.companions.mp,MP {0} / {1} · regen {2}/s,,,,48,false,07 M0 screens
-scr.companions.slot_awaken,Awakening {0},,,,18,false,07 M0 screens
-scr.companions.slot_locked,Locked,,,,18,false,07 M0 screens
-scr.companions.slots,Slots (cast in order),,,,28,false,07 M0 screens
+scr.companions.slots,Party slots,,,,28,false,07 M0 screens
 scr.companions.stats,{0} · DPS {1} · every {2},,,,60,false,07 M0 screens
 scr.companions.title,Companions,,,,28,false,07 M0 screens
 scr.confirm.cancel,Cancel,,,,18,false,07 M0 screens
@@ -298,15 +295,16 @@ scr.error.reset_profile,Reset profile,,,,18,false,07 M0 screens
 scr.error.restore_cloud,Restore from cloud,,,,18,false,07 M0 screens
 scr.error.retry,Retry,,,,18,false,07 M0 screens
 scr.error.update_app,Update,,,,18,false,07 M0 screens
-scr.hero.buy_levels,Buy {0} levels for {1},,,,28,false,07 M0 screens
-scr.hero.level,Lv {0},,,,18,false,07 M0 screens
-scr.hero.loadout,Loadout,,,,28,false,07 M0 screens
-scr.hero.max,MAX,,,,18,false,07 M0 screens
-scr.hero.plus,+,,,,18,false,07 M0 screens
-scr.hero.step_max,Max,,,,18,false,07 M0 screens
-scr.hero.step_n,x{0},,,,18,false,07 M0 screens
-scr.hero.title,Hero,,,,28,false,07 M0 screens
-scr.hero.training,Training,,,,28,false,07 M0 screens
+scr.party.buy_levels,Buy {0} levels for {1},,,,28,false,07 M0 screens
+scr.party.awaken_gate,Reach stage {0},,,,28,false,07 M0 screens
+scr.party.level,Lv {0},,,,18,false,07 M0 screens
+scr.party.loadout,Party,,,,28,false,07 M0 screens
+scr.party.max,MAX,,,,18,false,07 M0 screens
+scr.party.plus,+,,,,18,false,07 M0 screens
+scr.party.step_max,Max,,,,18,false,07 M0 screens
+scr.party.step_n,x{0},,,,18,false,07 M0 screens
+scr.party.title,Party,,,,28,false,07 M0 screens
+scr.party.training,Training,,,,28,false,07 M0 screens
 scr.item_detail.at_max,Max level,,,,28,false,07 M0 screens
 scr.item_detail.compare,Equipped weapon: ATK {0},,,,60,false,07 M0 screens
 scr.item_detail.compare_button,Compare,,,,18,false,07 M0 screens
@@ -343,7 +341,7 @@ scr.main.stage,Stage {0} · Ch.{1},,,,28,false,07 M0 screens
 scr.main.stage_farming,Farming {0} · frontier {1},,,,28,false,07 M0 screens
 scr.main.tab_collection,Collection,,,,10,false,07 M0 screens
 scr.main.tab_dungeons,Dungeons,,,,10,false,07 M0 screens
-scr.main.tab_hero,Hero,,,,10,false,07 M0 screens
+scr.main.tab_party,Party,,,,10,false,07 M0 screens
 scr.main.tab_quests,Quests,,,,10,false,07 M0 screens
 scr.main.tab_shop,Shop,,,,10,false,07 M0 screens
 scr.main.tab_summon,Summon,,,,10,false,07 M0 screens
@@ -491,7 +489,7 @@ tut.10.skip,Tap to skip.,,,,48,false,
 tut.11.equip,Equip your best weapon.,,,,48,false,
 tut.12.boss,A boss! Merge fish to fire missiles,,,,48,false,
 tut.2.gold,Monsters drop gold.,,,,48,false,
-tut.3.hero,Make your squire stronger,,,,48,false,
+tut.3.party,Make your party stronger,,,,48,false,
 tut.4.train,Train Attack.,,,,48,false,
 tut.5.back,Back to the fight.,,,,48,false,
 tut.6.release,Release a fish,,,,48,false,
@@ -684,7 +682,7 @@ dungeon.dungeon_fish.desc,Earn Fish Coins for Research,,,,64,false,
 dungeon.dungeon_candy.name,Rock Candy Dungeon,,,,32,false,
 dungeon.dungeon_candy.desc,Earn Rock Candy for Awakening,,,,64,false,
 dungeon.dungeon_exp.name,EXP Dungeon,,,,32,false,
-dungeon.dungeon_exp.desc,Earn hero EXP,,,,64,false,
+dungeon.dungeon_exp.desc,Earn party EXP,,,,64,false,
 reject.dungeon_locked,Dungeons unlock at stage 30,,,,48,false,
 reject.dungeon_floor_not_unlocked,Clear the previous floor first,,,,48,false,
 reject.boss_attempt_in_progress,Finish the boss fight first,,,,48,false,

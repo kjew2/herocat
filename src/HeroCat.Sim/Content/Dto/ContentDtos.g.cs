@@ -26,7 +26,7 @@ namespace HeroCat.Sim.Content.Dto
         public BannerLevelRowDto[] BannerLevels;
         public DupeLevelRowDto[] DupeLevels;
         public AwakeningRowDto[] Awakening;
-        public HeroLevelsRowDto[] HeroLevels;
+        public PartyLevelsRowDto[] PartyLevels;
         public ResearchRowDto[] Research;
         public FishLevelRowDto[] FishLevels;
         public TankRowDto[] Tank;
@@ -162,6 +162,7 @@ namespace HeroCat.Sim.Content.Dto
         public double WeaponPassivePct;
         public double SkillDpsPct;
         public double CompanionDpsPct;
+        public double CompanionAtkMult;
         public double RuneStatPct;
         public long LimitBreakCost;
         public long DupeOverflowRockCandy;
@@ -278,15 +279,14 @@ namespace HeroCat.Sim.Content.Dto
         public int StageGate;
         public long RockCandyCost;
         public double Mult;
-        public int CompanionSlotsAfter;
         public int RuneSlotsAfter;
         public string Tier;
         public string NameKey;
         public string Icon;
     }
 
-    /// <summary>hero_levels (09 section 5).</summary>
-    public sealed class HeroLevelsRowDto
+    /// <summary>party_levels (09 section 5).</summary>
+    public sealed class PartyLevelsRowDto
     {
         public string Id;
         public double Exp0;
@@ -518,7 +518,7 @@ namespace HeroCat.Sim.Content.Dto
         public static readonly string[] TableOrder =
         {
             "constants", "curves", "stats", "training_curves", "chapters", "enemies", "bosses", "rarities", "weapons",
-            "skills", "companions", "runes", "banners", "banner_levels", "dupe_levels", "awakening", "hero_levels",
+            "skills", "companions", "runes", "banners", "banner_levels", "dupe_levels", "awakening", "party_levels",
             "research", "fish_levels", "tank", "quests_daily", "quests_weekly", "achievements", "dungeons", "dungeon_floors",
             "shop_products", "shop_packages", "inbox_templates", "tutorial_steps", "progress_targets", "feature_unlocks",
             "awakening_targets", "plausibility_stage_bound", "shop_exchange",
@@ -528,10 +528,9 @@ namespace HeroCat.Sim.Content.Dto
         public static readonly string[] Positive =
         {
             "TICK_HZ", "ATTACK_INTERVAL_TICKS", "BOSS_TIME_TICKS", "KILLS_PER_STAGE", "BOSS_EVERY", "CHAPTER_WIDTH",
-            "STAGE_CAP", "TAP_ZAP_MAX_PER_SEC", "DAY_SECONDS", "OFFLINE_MIN_S", "SKILL_SLOTS", "COMPANION_SLOTS",
-            "RUNE_SLOTS", "FISH_BOARD_W", "FISH_BOARD_H", "FISH_MAX_LVL0", "ATTACK_PROGRESS_UNIT", "LIMIT_BREAK_RANKS",
-            "BASE_ATK", "BASE_HP", "BOSS_HP_MULT", "BOSS_GOLD_MULT", "OFFLINE_CAP_H", "DUPE_LVL_BONUS", "MP_POOL0",
-            "MP_REGEN0",
+            "STAGE_CAP", "TAP_ZAP_MAX_PER_SEC", "DAY_SECONDS", "OFFLINE_MIN_S", "PARTY_SLOTS", "RUNE_SLOTS", "FISH_BOARD_W",
+            "FISH_BOARD_H", "FISH_MAX_LVL0", "ATTACK_PROGRESS_UNIT", "LIMIT_BREAK_RANKS", "BASE_ATK", "BASE_HP", "BOSS_HP_MULT",
+            "BOSS_GOLD_MULT", "OFFLINE_CAP_H", "DUPE_LVL_BONUS", "MP_POOL0", "MP_REGEN0",
         };
 
         /// <summary>Constants that must be &gt;= 0.</summary>

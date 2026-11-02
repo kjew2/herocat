@@ -200,13 +200,14 @@ namespace HeroCat.Sim.Tests
             var sim = Sim();
             Give(sim, Currency.DIAMOND, 100_000);
             var def = Db.Banners[Banner.WEAPON];
-            int pullsToLevel2 = def.Levels[1].ExpRequired / def.ExpPerPull;
+            int pullsToLevel2 = (def.Levels[1].ExpRequired + def.ExpPerPull - 1) / def.ExpPerPull;
+            int tenPulls = (pullsToLevel2 + 9) / 10;   // the 10-pull that crosses the threshold
             int levelUps = 0;
-            for (int i = 0; i < pullsToLevel2 / 10; i++)
+            for (int i = 0; i < tenPulls; i++)
             {
                 sim.Apply(new ApplySummonResult(Roll(sim, Banner.WEAPON, 10)));
                 var ups = sim.DrainEvents().OfType<BannerLeveledUp>().ToList();
-                if (i < pullsToLevel2 / 10 - 1) Assert.That(ups, Is.Empty);
+                if (i < tenPulls - 1) Assert.That(ups, Is.Empty);
                 levelUps += ups.Count;
                 if (ups.Count > 0) Assert.That((ups[0].Banner, ups[0].Level), Is.EqualTo((Banner.WEAPON, 2)));
             }
@@ -263,14 +264,13 @@ namespace HeroCat.Sim.Tests
             var p = new SummonResultPayload(Guid.NewGuid().ToString("N"), Banner.WEAPON, 1,
                 new[] { new SummonPull(m, Rarity.MYTHIC, true, 0, 1, 1, 0, false) }, 0, 1, 1,
                 new[] { new CurrencyDelta(Currency.DIAMOND, -Db.Banners[Banner.WEAPON].PullCostDiamonds) }, null, counter + 3, TestContent.T0);
-            string before = sim.State.Loadout.Weapon;
+            string before = sim.State.Party.Slots[0].Weapon;
             Assert.That(sim.Apply(new ApplySummonResult(p)).Ok, Is.True);
-            Assert.That(sim.State.Loadout.Weapon, Is.EqualTo(m));
-            var eq = sim.DrainEvents().OfType<ItemEquipped>().Single();
-            Assert.That(eq.Auto, Is.True);
-            Assert.That(eq.Banner, Is.EqualTo(Banner.WEAPON));
-            Assert.That(eq.Slot, Is.EqualTo(0));
-            Assert.That(eq.PreviousItemId, Is.EqualTo(before));
+            Assert.That(sim.State.Party.Slots[0].Weapon, Is.EqualTo(m), "the best weapon to the heaviest slot (ties: slot 0)");
+            Assert.That(sim.State.Party.Slots.Select(x => x.Weapon), Does.Contain(before), "the displaced starter weapon moves down a slot");
+            var eq = sim.DrainEvents().OfType<ItemEquipped>().ToList();
+            Assert.That(eq.First(), Is.EqualTo(new ItemEquipped(Banner.WEAPON, 0, m, before, true)));
+            Assert.That(eq.All(e => e.Auto && e.Banner == Banner.WEAPON), Is.True, "one auto event per changed slot");
         }
 
         [Test]
@@ -279,7 +279,7 @@ namespace HeroCat.Sim.Tests
             var sim = Sim();
             Give(sim, Currency.DIAMOND, 100_000);
             Assert.That(sim.Apply(new ApplySummonResult(Roll(sim, Banner.SKILL, 10))).Ok, Is.True);
-            Assert.That(sim.State.Loadout.Skills.All(x => x == null));
+            Assert.That(sim.State.Party.Slots.All(x => x.Skill == null));
             Assert.That(sim.DrainEvents().OfType<ItemEquipped>(), Is.Empty);
             Assert.That(CollectionRules.BetterSkillAvailable(Db, sim.State), Is.True);
         }

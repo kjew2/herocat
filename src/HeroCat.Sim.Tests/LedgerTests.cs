@@ -51,9 +51,9 @@ namespace HeroCat.Sim.Tests
         {
             var s = TestContent.NewState();
             var sink = new Sink();
-            Assert.That(Ledger.Apply(s, new CurrencyDelta(Currency.HERO_EXP, 12.5), CurrencyReason.KILL, sink), Is.True);
-            Assert.That(s.Hero.Exp, Is.EqualTo(12.5));
-            Assert.That(s.Wallet.HeroExp, Is.EqualTo(0));
+            Assert.That(Ledger.Apply(s, new CurrencyDelta(Currency.PARTY_EXP, 12.5), CurrencyReason.KILL, sink), Is.True);
+            Assert.That(s.Party.Exp, Is.EqualTo(12.5));
+            Assert.That(s.Wallet.PartyExp, Is.EqualTo(0));
             Assert.That(((CurrencyChanged)sink.Events[0]).BalanceAfter, Is.EqualTo(12.5));
         }
 

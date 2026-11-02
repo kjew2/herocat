@@ -18,9 +18,6 @@ namespace HeroCat.Client.Screens
         /// <summary>Reference pixels per chibi sprite pixel; the art bible (issue #287) owns the final value (07 section 15.3).</summary>
         const float ChibiRpPerPixel = 4f;
 
-        /// <summary>Reference pixels per held-weapon sprite pixel: 07 section 15.2 sets 160 rp for a 20 px held sprite.</summary>
-        const float HeldRpPerPixel = 8f;
-
         RectTransform _hud, _combat, _action, _board, _tabs;
         RectTransform _goldChip, _diamondChip, _fishChip, _stageLabel, _enemy, _hero, _mergeAllBtn, _grid;
         Image _enemyImg, _heroOutline, _bossTimerFill;
@@ -151,30 +148,12 @@ namespace HeroCat.Client.Screens
             _heroOutline = _hero.GetComponent<Image>();
             var heroLabel = UiKit.Text("Label", _hero, UiKit.Title, 0x121212, TextAlignmentOptions.Center, bold: true);
             UiKit.Fill(heroLabel.rectTransform);
-            heroLabel.text = "SQUIRE";   // placeholder art label (07 section 15.1), not player copy
+            heroLabel.text = "PARTY";   // placeholder art label (07 section 15.1), not player copy; the squire never fights (00 decision 109)
             var outline = _hero.gameObject.AddComponent<Outline>();
             outline.effectDistance = new Vector2(6, 6);
-            c.AwakenRank.Bind(new ActionSink<int>(r =>
-            {
-                outline.enabled = r > 0;
-                outline.effectColor = UiKit.C(Palette.Gold);
-            }));
-
-            // The equipped weapon's held pixel sprite at the squire's hand (07 sections 15.2-15.3, issue #290): native size x
-            // HeldRpPerPixel, point-filtered by ArtImportSettings. Hidden when the weapon has no art yet.
-            var heldRt = UiKit.Rect("Held", _hero);
-            heldRt.anchorMin = heldRt.anchorMax = new Vector2(0.8f, 0.35f);
-            heldRt.pivot = new Vector2(0.2f, 0.2f);
-            var held = heldRt.gameObject.AddComponent<Image>();
-            held.raycastTarget = false;
-            held.gameObject.SetActive(false);
-            c.WeaponId.Bind(new ActionSink<string>(id =>
-            {
-                var sprite = id != null && Vm.Context.Db.Weapons.TryGetValue(id, out var w) ? SpriteLibrary.Get(w.Sprite) : null;
-                held.sprite = sprite;
-                held.gameObject.SetActive(sprite != null);
-                if (sprite != null) heldRt.sizeDelta = new Vector2(sprite.rect.width * HeldRpPerPixel, sprite.rect.height * HeldRpPerPixel);
-            }));
+            outline.effectColor = UiKit.C(Palette.Gold);
+            for (int i = 0; i < c.AwakenRanks.Length; i++)
+                c.AwakenRanks[i].Bind(new ActionSink<int>(_ => outline.enabled = System.Array.Exists(c.AwakenRanks, r => r.Value > 0)));
 
             _enemyImg = UiKit.Panel("Enemy", _combat, Palette.Muted);
             _enemy = _enemyImg.rectTransform;
@@ -279,11 +258,17 @@ namespace HeroCat.Client.Screens
                     ccdRt.anchorMax = new Vector2(1, s.Cooldown01);
                 }));
             }
-            var mp = UiKit.Bar("Mp", _combat, Palette.Diamond, out var mpFill);
-            mp.anchorMin = mp.anchorMax = mp.pivot = new Vector2(0, 0);
-            mp.anchoredPosition = new Vector2(632, 140);
-            mp.sizeDelta = new Vector2(400, 24);
-            c.MpFill.Bind(mpFill.Sink());
+            // One MP bar per slot in the two-row formation (07 section 4.3, 00 decision 110): slots 1-3 in front, 4-5 behind.
+            for (int i = 0; i < c.SlotMp.Length; i++)
+            {
+                int row = CombatVm.RowOf(i), col = row == 0 ? i : i - 3;
+                float x = row == 0 ? 104 + col * 296 : 252 + col * 296;
+                var mp = UiKit.Bar("Mp" + i, _combat, Palette.Diamond, out var mpFill);
+                mp.anchorMin = mp.anchorMax = mp.pivot = new Vector2(0, 0);
+                mp.anchoredPosition = new Vector2(x, row == 0 ? 24 : 184);
+                mp.sizeDelta = new Vector2(160, 16);
+                c.SlotMp[i].Bind(mpFill.Sink());
+            }
 
             for (int i = 0; i < _damage.Length; i++)
             {
@@ -570,7 +555,7 @@ namespace HeroCat.Client.Screens
                 case CueKind.BossFailed: Ui.Tweens.Pulse(_enemy, now, 0.25f, 0.4); break;
                 case CueKind.LevelUpFloat:
                     _levelFloat.gameObject.SetActive(true);
-                    _levelFloat.text = Vm.Localizer.Format(UiKeys.HeroLevel, c.Level.ToString());
+                    _levelFloat.text = Vm.Localizer.Format(UiKeys.PartyLevel, c.Level.ToString());
                     _levelFloatUntil = now + 1.0;
                     Ui.Tweens.Float(_levelFloat.rectTransform, now, 60, 1.0);
                     break;
