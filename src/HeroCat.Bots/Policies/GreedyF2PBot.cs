@@ -5,6 +5,7 @@ using HeroCat.Sim.Commands;
 using HeroCat.Sim.Content;
 using HeroCat.Sim.Fish;
 using HeroCat.Sim.Power;
+using HeroCat.Sim.Rng;
 using HeroCat.Sim.State;
 using HeroCat.Sim.Summons;
 
@@ -17,10 +18,10 @@ namespace HeroCat.Bots.Policies
     /// referenced to 03 section 8.3 (tools/power_curve_model.py follows the same order):
     ///
     ///   OnSessionStart: offline reward (step 7: ClaimOfflineReward, as closing SCR_OFFLINE_REWARD does), tickets then
-    ///                   diamonds (step 2), Fish Board (step 5), gold (step 1), boss (step 6).
-    ///   Decide (every active minute): gold (step 1), Fish Board (step 5), boss (step 6). Steps 3-4 (Rock Candy, Fish
-    ///                   Coins) are MVP systems (Awakening, limit breaks, Research): stubbed until the content tier has them
-    ///                   (TODO(#214)).
+    ///                   diamonds (step 2), dungeons, Awakening (step 3), Fish Board (step 5), gold (step 1), boss (step 6).
+    ///   Decide (every active minute): dungeons, Awakening (step 3), gold (step 1), Fish Board (step 5), boss (step 6).
+    ///                   Awakening and the Rock Candy Dungeon are M0 (decision #249 item 9b). Step 3's limit breaks and step 4
+    ///                   (Fish Coins -> Research) are MVP systems: stubbed until the MVP bots land (TODO(#214)).
     ///   Quests:         10 section 3.4's "claim every quest when claimable" (ClaimAllQuests DAILY / WEEKLY, issue #170) is
     ///                   an MVP-tier step: the M0 build has no quest rows, so it joins with the MVP bots (TODO(#214)).
     ///   OnSessionEnd:   diamonds (step 2: what first clears paid this session), gold (step 1), release the tank (step 5).
@@ -31,9 +32,6 @@ namespace HeroCat.Bots.Policies
     {
         /// <summary>05 section 8 / issue #19: the attentive player's merge cap.</summary>
         public const int MergesPerMinuteCap = 60;
-
-        /// <summary>10 section 3.4: singles only when a 10-pull is unaffordable and pity is within this many pulls of PITY_HARD.</summary>
-        public const int SinglePullPityWindow = 10;
 
         /// <summary>03 section 8.3 step 1: GOLD_GAIN and EXP_GAIN are valued at half of what their income increase buys.</summary>
         public const double IncomeStatWeight = 0.5;
@@ -51,6 +49,8 @@ namespace HeroCat.Bots.Policies
             ClaimOfflineReward(ctx);
             SpendTickets(ctx);
             SpendDiamonds(ctx);
+            RunDungeons(ctx);
+            TryAwaken(ctx);
             FishPolicies.OnSessionStart(ctx, Fish);
             SpendGold(ctx);
             RetryBoss(ctx);
@@ -58,6 +58,8 @@ namespace HeroCat.Bots.Policies
 
         public virtual void Decide(BotContext ctx)
         {
+            RunDungeons(ctx);
+            TryAwaken(ctx);
             SpendGold(ctx);
             FishPolicies.OnActiveMinute(ctx, Fish);
             RetryBoss(ctx);
@@ -127,10 +129,45 @@ namespace HeroCat.Bots.Policies
 
         /// <summary>
         /// 03 section 8.3 step 3's first half: awaken as soon as the stage gate and the cost both pass (03 section 5.3).
-        /// True when a rank was bought. Not called from Decide yet: wiring step 3 changes the bot's runs, the golden files
-        /// and the acceptance sweep, and the Rock Candy cadence is decision #249 items 3 and 5. TODO(#214).
+        /// True when at least one rank was bought (several when the candy covers them).
         /// </summary>
-        public static bool TryAwaken(BotContext ctx) => ctx.Query.CanAwaken && ctx.Apply(new Awaken()).Ok;
+        public static bool TryAwaken(BotContext ctx)
+        {
+            bool any = false;
+            while (ctx.Query.CanAwaken && ctx.Apply(new Awaken()).Ok) any = true;
+            return any;
+        }
+
+        // ============================================================================================ dungeons
+
+        /// <summary>
+        /// 06 section 6.2's ladder as tools/power_curve_model.py plays it: for each dungeon this build ships, while a ticket
+        /// is left, run the next floor if PreviewDungeon says it falls (on the same local seed the run then gets), else sweep
+        /// the best floor. A run is ticked by the main loop (issue #42), so at most one run starts per call; it ends inside the
+        /// next active minute and the next call carries on. Sweeps are instant. Does nothing while a run or a boss fight is on.
+        /// </summary>
+        public static void RunDungeons(BotContext ctx)
+        {
+            var s = ctx.State;
+            if (!ctx.Content.IsUnlocked("DUNGEONS", s)) return;   // feature_unlocks DUNGEONS (stage 30)
+            foreach (Dungeon kind in Enum.GetValues(typeof(Dungeon)))
+            {
+                var def = ctx.Content.DungeonOf(kind);
+                if (def?.TicketCurrency is not Currency ticket) continue;   // not in this build
+                while (s.Combat.Mode != CombatMode.Dungeon && s.Wallet.Get(ticket) >= 1)
+                {
+                    int next = s.Dungeons.BestFloor[(int)kind] + 1;
+                    if (def.Floor(next) != null && ctx.Sim.PreviewDungeon(kind, next).Cleared)
+                    {
+                        // One run at a time: it is ticked from here on. A reject (feature locked, boss fight in
+                        // progress) also ends this call, and the next active minute retries.
+                        ctx.Apply(new StartDungeon(kind, next, LocalDungeonSeed.Peek(s), "", true));
+                        return;
+                    }
+                    if (!ctx.Apply(new SweepDungeon(kind)).Ok) break;
+                }
+            }
+        }
 
         /// <summary>
         /// 03 section 8.3's <c>NextAwakenWithin(sim, 50)</c>: the next rank's gate is at most <paramref name="stages"/> above
@@ -148,7 +185,7 @@ namespace HeroCat.Bots.Policies
         /// 03 section 8.3 step 4's purchase: one level of <paramref name="nodeId"/> when Research accepts it (unlocked at
         /// Awakening rank 1, below max_level, affordable; 03 section 6). True when a level was bought. Not called from
         /// Decide yet, and the node ranking (MP-starved -> res_mp_regen, else best ln(DPS) per coin) is not written: wiring
-        /// step 4 changes the bot's runs, the golden files and the acceptance sweep, and waits on decision #249. TODO(#214).
+        /// step 4 changes the bot's runs, the golden files and the acceptance sweep; it lands with the MVP bots. TODO(#214).
         /// </summary>
         public static bool TryResearch(BotContext ctx, string nodeId) => ctx.Query.CanResearch(nodeId) && ctx.Apply(new Research(nodeId)).Ok;
 
@@ -250,8 +287,7 @@ namespace HeroCat.Bots.Policies
 
         /// <summary>
         /// Diamonds to the banner with the highest expected ln(DPS) gain per diamond (03 section 8.3 step 2, 10 section 3.4):
-        /// a 10-pull when affordable; a single only when the 10-pull is not and pity is within
-        /// <see cref="SinglePullPityWindow"/> of PITY_HARD; otherwise save up. Re-evaluated after every pull.
+        /// a 10-pull when affordable, else singles (decision #249 item 10). Re-evaluated after every pull.
         /// </summary>
         public static void SpendDiamonds(BotContext ctx)
         {
@@ -263,7 +299,7 @@ namespace HeroCat.Bots.Policies
                 long dia = ctx.State.Wallet.Diamond;
                 int count;
                 if (dia >= (long)def.PullCostDiamonds * def.GuaranteeBatchSize) count = def.GuaranteeBatchSize;
-                else if (dia >= def.PullCostDiamonds && def.PityHard - Pity(ctx, b.Value) <= SinglePullPityWindow) count = 1;
+                else if (dia >= def.PullCostDiamonds) count = 1;
                 else return;
                 if (!ctx.Summon(b.Value, count, SummonPayment.Diamonds)) return;
                 AutoEquip(ctx, b.Value);
@@ -338,8 +374,6 @@ namespace HeroCat.Bots.Policies
 
         static bool Open(BotContext ctx, Banner b, out BannerDef def) =>
             ctx.Content.Banners.TryGetValue(b, out def) && def.Enabled && def.Levels.Count > 0 && ctx.State.Banners.ContainsKey(b);
-
-        static int Pity(BotContext ctx, Banner b) => ctx.State.Banners.TryGetValue(b, out var bs) && bs != null ? bs.Pity : 0;
 
         /// <summary>AutoEquipBest* after every pull (10 section 3.4). Weapons are also auto-equipped by ApplySummonResult.</summary>
         static void AutoEquip(BotContext ctx, Banner b)

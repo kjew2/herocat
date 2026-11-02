@@ -34,12 +34,17 @@ class PowerCurveModelTests(unittest.TestCase):
     def test_m0_drops_mvp_layers(self):
         self.assertEqual(self.m0.banner_ids, ["WEAPON", "SKILL"])
         self.assertEqual(self.m0.research, {})
-        self.assertEqual(self.m0.awakening, [])   # awakening rows are tier MVP
-        bot = pcm.Bot(self.m0, 7).run(2, 120, 2)
+        self.assertEqual([r["rank"] for r in self.m0.awakening], [1, 2, 3, 4, 5])   # Awakening is M0 (#249 item 9b)
+        self.assertEqual(self.m0.dungeon_kinds, {"ROCK_CANDY"})                    # and its Rock Candy source
+        self.assertEqual(self.p.dungeon_kinds, {"FISH_COIN", "ROCK_CANDY", "EXP"})
+        bot = pcm.Bot(self.m0, 7).run(3, 120, 2)
         for row in bot.daily:
             self.assertEqual(row["layers"]["Companions"], 1.0)
             self.assertEqual(row["layers"]["Research"], 1.0)
-            self.assertEqual(row["layers"]["Awaken"], 1.0)
+        self.assertGreater(bot.econ["candy_dungeon"], 0)
+        self.assertEqual(bot.econ["coins_dungeon"], 0)
+        self.assertEqual(bot.econ["candy_limit_break"], 0)   # limit breaks stay MVP
+        self.assertGreater(bot.daily[-1]["layers"]["Awaken"], 1.0)
 
     def test_boss_wall_condition(self):
         """03 section 2.8 / AC3: a boss needing exactly 30 * speedFactor hits is cleared, one more hit fails."""
@@ -106,10 +111,10 @@ class EconomyCheckTests(unittest.TestCase):
             bot.day_counters["kills"] = 3000
             bot.claim_quests()
             if day == 1:
-                self.assertEqual(bot.econ["diamonds_by_source"]["QUEST_WEEKLY"], 50)   # w_kills only
+                self.assertEqual(bot.econ["diamonds_by_source"]["QUEST_WEEKLY"], 60)   # w_kills only
             if day == 5:
-                self.assertEqual(bot.econ["diamonds_by_source"]["QUEST_WEEKLY"], 100)  # + w_login on its 5th day
-        self.assertEqual(bot.econ["diamonds_by_source"]["QUEST_WEEKLY"], 150)          # day 8 starts a new week
+                self.assertEqual(bot.econ["diamonds_by_source"]["QUEST_WEEKLY"], 120)  # + w_login on its 5th day
+        self.assertEqual(bot.econ["diamonds_by_source"]["QUEST_WEEKLY"], 180)          # day 8 starts a new week
 
     def test_achievement_rungs_pay_once(self):
         bot = pcm.Bot(self.p, 7)

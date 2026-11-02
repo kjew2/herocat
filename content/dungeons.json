@@ -23,7 +23,7 @@
       "floor_stage_step": 20,
       "floors": 40,
       "sweep_allowed": true,
-      "tier": "MVP",
+      "tier": "M0",
       "name_key": "dungeon.dungeon_candy.name",
       "desc_key": "dungeon.dungeon_candy.desc",
       "icon": "icon_dungeon_candy",

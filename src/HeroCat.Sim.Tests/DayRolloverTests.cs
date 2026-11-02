@@ -50,7 +50,7 @@ namespace HeroCat.Sim.Tests
             var ev = sim.DrainEvents();
             Assert.That(ev.OfType<DayRolledOver>().Count(), Is.EqualTo(1));
             Assert.That(ev.OfType<WeekRolledOver>().Count(), Is.EqualTo(1));
-            var login = ev.OfType<CurrencyChanged>().Single();
+            var login = ev.OfType<CurrencyChanged>().Single(e => e.Reason != CurrencyReason.DAILY_RESET);   // M0 also tops up Rock Candy tickets
             Assert.That((login.Currency, login.Delta, login.Reason), Is.EqualTo((Currency.DIAMOND, (double)Login, CurrencyReason.LOGIN)),
                         "the login reason is LOGIN, not QUEST");
             Assert.That(sim.State.Time.DayKey, Is.EqualTo(DayKeys.DayKey(T0, DaySec)));

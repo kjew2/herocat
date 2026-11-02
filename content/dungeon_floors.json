@@ -365,7 +365,7 @@
       "dungeon": "dungeon_candy",
       "floor": 1,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 10,
+      "reward_amount": 15,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -374,7 +374,7 @@
       "dungeon": "dungeon_candy",
       "floor": 2,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 20,
+      "reward_amount": 30,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -383,7 +383,7 @@
       "dungeon": "dungeon_candy",
       "floor": 3,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 30,
+      "reward_amount": 45,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -392,7 +392,7 @@
       "dungeon": "dungeon_candy",
       "floor": 4,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 40,
+      "reward_amount": 60,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -401,7 +401,7 @@
       "dungeon": "dungeon_candy",
       "floor": 5,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 50,
+      "reward_amount": 75,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -410,7 +410,7 @@
       "dungeon": "dungeon_candy",
       "floor": 6,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 60,
+      "reward_amount": 90,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -419,7 +419,7 @@
       "dungeon": "dungeon_candy",
       "floor": 7,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 70,
+      "reward_amount": 105,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -428,7 +428,7 @@
       "dungeon": "dungeon_candy",
       "floor": 8,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 80,
+      "reward_amount": 120,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -437,7 +437,7 @@
       "dungeon": "dungeon_candy",
       "floor": 9,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 90,
+      "reward_amount": 135,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -446,7 +446,7 @@
       "dungeon": "dungeon_candy",
       "floor": 10,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 100,
+      "reward_amount": 150,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -455,7 +455,7 @@
       "dungeon": "dungeon_candy",
       "floor": 11,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 110,
+      "reward_amount": 165,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -464,7 +464,7 @@
       "dungeon": "dungeon_candy",
       "floor": 12,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 120,
+      "reward_amount": 180,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -473,7 +473,7 @@
       "dungeon": "dungeon_candy",
       "floor": 13,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 130,
+      "reward_amount": 195,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -482,7 +482,7 @@
       "dungeon": "dungeon_candy",
       "floor": 14,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 140,
+      "reward_amount": 210,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -491,7 +491,7 @@
       "dungeon": "dungeon_candy",
       "floor": 15,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 150,
+      "reward_amount": 225,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -500,7 +500,7 @@
       "dungeon": "dungeon_candy",
       "floor": 16,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 160,
+      "reward_amount": 240,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -509,7 +509,7 @@
       "dungeon": "dungeon_candy",
       "floor": 17,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 170,
+      "reward_amount": 255,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -518,7 +518,7 @@
       "dungeon": "dungeon_candy",
       "floor": 18,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 180,
+      "reward_amount": 270,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -527,7 +527,7 @@
       "dungeon": "dungeon_candy",
       "floor": 19,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 190,
+      "reward_amount": 285,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -536,7 +536,7 @@
       "dungeon": "dungeon_candy",
       "floor": 20,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 200,
+      "reward_amount": 300,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -545,7 +545,7 @@
       "dungeon": "dungeon_candy",
       "floor": 21,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 210,
+      "reward_amount": 315,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -554,7 +554,7 @@
       "dungeon": "dungeon_candy",
       "floor": 22,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 220,
+      "reward_amount": 330,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -563,7 +563,7 @@
       "dungeon": "dungeon_candy",
       "floor": 23,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 230,
+      "reward_amount": 345,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -572,7 +572,7 @@
       "dungeon": "dungeon_candy",
       "floor": 24,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 240,
+      "reward_amount": 360,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -581,7 +581,7 @@
       "dungeon": "dungeon_candy",
       "floor": 25,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 250,
+      "reward_amount": 375,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -590,7 +590,7 @@
       "dungeon": "dungeon_candy",
       "floor": 26,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 260,
+      "reward_amount": 390,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -599,7 +599,7 @@
       "dungeon": "dungeon_candy",
       "floor": 27,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 270,
+      "reward_amount": 405,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -608,7 +608,7 @@
       "dungeon": "dungeon_candy",
       "floor": 28,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 280,
+      "reward_amount": 420,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -617,7 +617,7 @@
       "dungeon": "dungeon_candy",
       "floor": 29,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 290,
+      "reward_amount": 435,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -626,7 +626,7 @@
       "dungeon": "dungeon_candy",
       "floor": 30,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 300,
+      "reward_amount": 450,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -635,7 +635,7 @@
       "dungeon": "dungeon_candy",
       "floor": 31,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 310,
+      "reward_amount": 465,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -644,7 +644,7 @@
       "dungeon": "dungeon_candy",
       "floor": 32,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 320,
+      "reward_amount": 480,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -653,7 +653,7 @@
       "dungeon": "dungeon_candy",
       "floor": 33,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 330,
+      "reward_amount": 495,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -662,7 +662,7 @@
       "dungeon": "dungeon_candy",
       "floor": 34,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 340,
+      "reward_amount": 510,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -671,7 +671,7 @@
       "dungeon": "dungeon_candy",
       "floor": 35,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 350,
+      "reward_amount": 525,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -680,7 +680,7 @@
       "dungeon": "dungeon_candy",
       "floor": 36,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 360,
+      "reward_amount": 540,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -689,7 +689,7 @@
       "dungeon": "dungeon_candy",
       "floor": 37,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 370,
+      "reward_amount": 555,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -698,7 +698,7 @@
       "dungeon": "dungeon_candy",
       "floor": 38,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 380,
+      "reward_amount": 570,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -707,7 +707,7 @@
       "dungeon": "dungeon_candy",
       "floor": 39,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 390,
+      "reward_amount": 585,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null
@@ -716,7 +716,7 @@
       "dungeon": "dungeon_candy",
       "floor": 40,
       "reward_currency": "ROCK_CANDY",
-      "reward_amount": 400,
+      "reward_amount": 600,
       "reward_kills_equiv": null,
       "boss": null,
       "first_clear_bonus": null

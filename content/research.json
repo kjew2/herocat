@@ -4,7 +4,7 @@
     {
       "id": "res_atk",
       "effect": "RESEARCH_PCT",
-      "effect_per_level": 0.05,
+      "effect_per_level": 0.08,
       "effect_floor": null,
       "max_level": 50,
       "cost0": 150.0,

@@ -149,16 +149,14 @@ namespace HeroCat.Sim.Tests
         }
 
         [Test]
-        public void M0Content_HasNoRanks()   // Awakening is MVP; the M0 build has no awakening rows
+        public void M0Content_HasTheRanks_ButNoResearch()   // Awakening is M0 (decision #249 item 9b); Research stays MVP
         {
             var sim = Sim(highestCleared: 1000, rockCandy: 1_000_000, db: TestContent.Db);
-            Assert.That(TestContent.Db.Awakening, Is.Empty);
-            AssertRejectIsPure(sim, RejectCode.Capped, CombatRejectReasons.AWAKEN_MAX_RANK);
-            Assert.That(sim.Query.NextAwakenStageGate, Is.Null);
-            Assert.That(sim.Query.CompanionSlotsUnlocked, Is.EqualTo(1));
-            Assert.That(sim.Query.RuneSlotsUnlocked, Is.EqualTo(0));
-            Assert.That(sim.Query.AwakenMult, Is.EqualTo(1.0));
-            Assert.That(sim.Query.ResearchUnlocked, Is.False, "no feature_unlocks rows in M0");
+            Assert.That(TestContent.Db.Awakening.Select(a => a.Rank), Is.EqualTo(new[] { 1, 2, 3, 4, 5 }));
+            Assert.That(sim.Query.NextAwakenStageGate, Is.EqualTo(50));
+            Assert.That(sim.Apply(new Awaken()).Ok, Is.True);
+            Assert.That(sim.Query.AwakenMult, Is.EqualTo(1.5));
+            Assert.That(sim.Query.ResearchUnlocked, Is.False, "no RESEARCH feature_unlocks row in M0");
         }
 
         [Test]

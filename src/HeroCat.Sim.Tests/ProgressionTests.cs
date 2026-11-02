@@ -203,8 +203,8 @@ namespace HeroCat.Sim.Tests
             Assert.That(q.SpeedFactor, Is.EqualTo(2.0).Within(1e-12).Percent);
             Assert.That(q.HeroMult, Is.EqualTo(hero).Within(1e-12).Percent);
             Assert.That(q.AwakenMult, Is.EqualTo(2.25).Within(1e-12).Percent);
-            Assert.That(q.ResearchPct, Is.EqualTo(0.35).Within(1e-12).Percent, "res_atk 7 x 0.05");
-            Assert.That(q.Power.Research, Is.EqualTo(1.35).Within(1e-12).Percent);
+            Assert.That(q.ResearchPct, Is.EqualTo(0.56).Within(1e-12).Percent, "res_atk 7 x 0.08");
+            Assert.That(q.Power.Research, Is.EqualTo(1.56).Within(1e-12).Percent);
         }
 
         [Test]

@@ -8,7 +8,7 @@
       "mult": 1.5,
       "companion_slots_after": 2,
       "rune_slots_after": 0,
-      "tier": "MVP",
+      "tier": "M0",
       "name_key": "awakening.rank_1.name",
       "icon": "icon_awaken_1"
     },
@@ -19,7 +19,7 @@
       "mult": 1.5,
       "companion_slots_after": 3,
       "rune_slots_after": 0,
-      "tier": "MVP",
+      "tier": "M0",
       "name_key": "awakening.rank_2.name",
       "icon": "icon_awaken_2"
     },
@@ -30,7 +30,7 @@
       "mult": 1.5,
       "companion_slots_after": 4,
       "rune_slots_after": 0,
-      "tier": "MVP",
+      "tier": "M0",
       "name_key": "awakening.rank_3.name",
       "icon": "icon_awaken_3"
     },
@@ -41,7 +41,7 @@
       "mult": 1.5,
       "companion_slots_after": 4,
       "rune_slots_after": 3,
-      "tier": "MVP",
+      "tier": "M0",
       "name_key": "awakening.rank_4.name",
       "icon": "icon_awaken_4"
     },
@@ -52,7 +52,7 @@
       "mult": 1.5,
       "companion_slots_after": 4,
       "rune_slots_after": 6,
-      "tier": "MVP",
+      "tier": "M0",
       "name_key": "awakening.rank_5.name",
       "icon": "icon_awaken_5"
     }

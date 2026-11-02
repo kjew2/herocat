@@ -85,7 +85,7 @@ namespace HeroCat.Sim.Tests
         // ------------------------------------------------------------------------------------------------ content
 
         [Test]
-        public void Content_ThreeDungeons_TwoTicketsADay_Step20_FortyFloors_M0HasNone()
+        public void Content_ThreeDungeons_TwoTicketsADay_Step20_FortyFloors_M0HasRockCandyOnly()
         {
             foreach (var (kind, id, ticket) in new[]
                      {
@@ -101,8 +101,9 @@ namespace HeroCat.Sim.Tests
                 Assert.That(d.FloorDefs.Select(f => f.StageEquiv), Is.EqualTo(Enumerable.Range(1, 40).Select(f => 20 * f)));
                 Assert.That(Mvp.Dungeons[id], Is.SameAs(d));
             }
-            Assert.That(TestContent.Db.Dungeons, Is.Empty, "dungeons are MVP");
+            Assert.That(TestContent.Db.Dungeons.Keys, Is.EqualTo(new[] { "dungeon_candy" }), "only the Rock Candy Dungeon is M0 (decision #249 item 9b)");
             Assert.That(TestContent.Db.DungeonOf(Fish), Is.Null);
+            Assert.That(TestContent.Db.DungeonOf(Dungeon.EXP), Is.Null);
             Assert.That(Mvp.DungeonOf((Dungeon)7), Is.Null);
         }
 
@@ -115,7 +116,7 @@ namespace HeroCat.Sim.Tests
             var fish = Simulation.RewardOf(Mvp.DungeonOf(Dungeon.FISH_COIN).Floor(f));
             var candy = Simulation.RewardOf(Mvp.DungeonOf(Dungeon.ROCK_CANDY).Floor(f));
             Assert.That((fish.Currency, fish.Amount), Is.EqualTo((Currency.FISH_COIN, 50.0 * f)), "FISH_COIN_FLOOR(f) = 50 f");   // settled in #165
-            Assert.That((candy.Currency, candy.Amount), Is.EqualTo((Currency.ROCK_CANDY, 10.0 * f)), "ROCK_CANDY_FLOOR(f) = 10 f");
+            Assert.That((candy.Currency, candy.Amount), Is.EqualTo((Currency.ROCK_CANDY, 15.0 * f)), "ROCK_CANDY_FLOOR(f) = 15 f");   // #249 item 3
         }
 
         [Test]
@@ -276,10 +277,12 @@ namespace HeroCat.Sim.Tests
         }
 
         [Test]
-        public void Rollover_M0HasNoTickets()
+        public void Rollover_M0TopsUpOnlyRockCandyTickets()
         {
             var sim = NewSim(db: TestContent.Db);
-            Assert.That(sim.State.Wallet.DungeonTicket, Is.EqualTo(new[] { 0, 0, 0 }));
+            var t = new int[3];
+            t[(int)Dungeon.ROCK_CANDY] = 2;
+            Assert.That(sim.State.Wallet.DungeonTicket, Is.EqualTo(t));
         }
 
         // ------------------------------------------------------------------------------------------------ StartDungeon (AC 13, 14)
@@ -310,10 +313,12 @@ namespace HeroCat.Sim.Tests
         }
 
         [Test]
-        public void AC14_M0_IsLocked()
+        public void AC14_M0_HasOnlyTheRockCandyDungeon_LockedBeforeStage30()
         {
             var sim = NewSim(db: TestContent.Db);
-            AssertRejectIsPure(sim, new StartDungeon(Fish, 1, 1, "", false), RejectCode.Locked, DungeonRejectReasons.DUNGEON_LOCKED);
+            AssertRejectIsPure(sim, new StartDungeon(Fish, 1, 1, "", false), RejectCode.BadArgument, DungeonRejectReasons.INVALID_DUNGEON);
+            var locked = NewSim(unlocked: false, db: TestContent.Db);
+            AssertRejectIsPure(locked, new StartDungeon(Dungeon.ROCK_CANDY, 1, 1, "", false), RejectCode.Locked, DungeonRejectReasons.DUNGEON_LOCKED);
         }
 
         [Test]
@@ -434,7 +439,7 @@ namespace HeroCat.Sim.Tests
             sim.State.Dungeons.BestFloor[(int)Dungeon.ROCK_CANDY] = 40;
             AssertRejectIsPure(sim, Local(sim, Dungeon.ROCK_CANDY, 41), RejectCode.Locked, DungeonRejectReasons.DUNGEON_FLOOR_NOT_UNLOCKED);
             Assert.That(sim.Apply(new SweepDungeon(Dungeon.ROCK_CANDY)).Ok, Is.True);
-            Assert.That(sim.DrainEvents().OfType<DungeonSwept>().Single().RewardAmount, Is.EqualTo(400));
+            Assert.That(sim.DrainEvents().OfType<DungeonSwept>().Single().RewardAmount, Is.EqualTo(600));
         }
     }
 }

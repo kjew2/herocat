@@ -1,4 +1,4 @@
 id,kind,ticket_currency,tickets_per_day,floor_stage_step,floors,sweep_allowed,tier,name_key,desc_key,icon,background
 dungeon_fish,FISH_COIN,TICKET_FISH_COIN,2,20,40,true,MVP,dungeon.dungeon_fish.name,dungeon.dungeon_fish.desc,icon_dungeon_fish,bg_dungeon_fish
-dungeon_candy,ROCK_CANDY,TICKET_ROCK_CANDY,2,20,40,true,MVP,dungeon.dungeon_candy.name,dungeon.dungeon_candy.desc,icon_dungeon_candy,bg_dungeon_candy
+dungeon_candy,ROCK_CANDY,TICKET_ROCK_CANDY,2,20,40,true,M0,dungeon.dungeon_candy.name,dungeon.dungeon_candy.desc,icon_dungeon_candy,bg_dungeon_candy
 dungeon_exp,EXP,TICKET_EXP,2,20,40,true,MVP,dungeon.dungeon_exp.name,dungeon.dungeon_exp.desc,icon_dungeon_exp,bg_dungeon_exp

@@ -44,7 +44,7 @@ namespace HeroCat.Sim.Tests
         public void Content_HasTheSpecRanksAndPerRankCosts()   // 00 section 6.5, 04 section 5.2 table (placeholders, #36)
         {
             Assert.That(Db.Constants.LimitBreakRanks, Is.EqualTo(5));
-            Assert.That(Enum.GetValues(typeof(Rarity)).Cast<Rarity>().Select(CostPerRank), Is.EqualTo(new long[] { 10, 20, 40, 80, 150 }));
+            Assert.That(Enum.GetValues(typeof(Rarity)).Cast<Rarity>().Select(CostPerRank), Is.EqualTo(new long[] { 15, 30, 60, 120, 225 }));   // x1.5, #249 item 5
         }
 
         [Test]

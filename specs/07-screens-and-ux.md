@@ -92,7 +92,7 @@ Band budget: 120 + 800 + 100 + 640 + 160 = 1,820 rp. The remaining 100 rp of a 1
 | Element | Rule |
 |---|---|
 | Safe area | `SafeAreaFitter` on the root panel applies `Screen.safeArea` as padding on `Start` and on resolution change. Nothing is drawn outside it except the background. |
-| HUD wallet chips | Gold, Diamonds, Fish Coins (MVP adds Rock Candy). Each chip: icon 56 rp, value in 40 rp bold, tappable (gold opens `SCR_HERO`, diamonds opens `SCR_SHOP`, Fish Coins opens `SCR_RESEARCH`, Rock Candy opens `SCR_HERO` Awakening tab). Right side: avatar (opens `SCR_PROFILE`), inbox icon with badge, settings gear. |
+| HUD wallet chips | Gold, Diamonds, Fish Coins, Rock Candy (M0 with Awakening, decision #249 item 9b). Each chip: icon 56 rp, value in 40 rp bold, tappable (gold opens `SCR_HERO`, diamonds opens `SCR_SHOP`, Fish Coins opens `SCR_RESEARCH`, Rock Candy opens `SCR_HERO` Awakening tab). Right side: avatar (opens `SCR_PROFILE`), inbox icon with badge, settings gear. |
 | Combat viewport | Full-width camera render texture or a world-space sorting layer; UI elements over it are the stage label (top-left, tappable: `SCR_STAGE_SELECT`), kill counter (top-right), enemy HP bar (under the enemy), boss timer bar (under HP bar, boss only), DPS readout (bottom-left), skill icon row and companion icon row (bottom, 6 + 4 icons, 88 rp each). Tap anywhere else = `TapZap(count)`. |
 | Action strip | Left: `[Boss]` button (visible only while walled, 06/03), `[Auto]` placeholder toggle (P1 Auto Merge). Right: shortcut pills with red dots for Quests claimable, Dungeon tickets unused, Inbox items; each opens its screen. |
 | Fish Board | Left column 160 rp: Magic Tank gauge (fill, `n / cap`, next-fish countdown), `[Release]` and `[Release max]` buttons, `[Merge all]`. Right: 5 x 4 grid, cell 176 rp with 8 rp gaps (5 x 176 + 4 x 8 = 912 rp wide), fish sprite 140 rp inside. A `[Research]` button (MVP) in the tank column bottom. |
@@ -202,7 +202,7 @@ Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them
 | Gold chip | `Wallet.Gold` | suffix ladder; pulses on increase from `BOSS`/`OFFLINE` only, not per kill |
 | Diamond chip | `Wallet.Diamond` | pulses on any increase |
 | Fish Coin chip | `Wallet.FishCoin` | |
-| Rock Candy chip (MVP) | `Wallet.RockCandy` | shown once `Progress.HighestCleared >= AWAKEN_STAGES[0]` |
+| Rock Candy chip (M0) | `Wallet.RockCandy` | shown once `Progress.HighestCleared >= AWAKEN_STAGES[0]` |
 | Avatar | `Profile.AvatarId` | tap: push `SCR_PROFILE` |
 | Inbox icon | `Inbox.UnclaimedCount` badge | tap: push `SCR_INBOX` |
 | Settings gear | | tap: push `SCR_SETTINGS` |
@@ -233,13 +233,13 @@ States: Loading never (boot covers it). First-time: `SCR_TUTORIAL` overlay. Erro
 
 ### 4.4 `SCR_HERO` (Full, M0)
 
-Purpose: all gold and Rock Candy sinks on the hero: Training per stat, Hero Level readout, Awakening (MVP), the equipped loadout, and the entry to Research (MVP).
+Purpose: all gold and Rock Candy sinks on the hero: Training per stat, Hero Level readout, Awakening (M0, decision #249 item 9b), the equipped loadout, and the entry to Research (MVP).
 
 ```
 +----------------------------------------------+
 | <  Hero                        DPS 3.72K     |
 | (cat)  Lv 32  |=========     | 4.2K / 9.8K   |
-| Awakening I   rank II at stage 150 [ Awaken ]|  MVP
+| Awakening I   rank II at stage 150 [ Awaken ]|  M0
 | Loadout: [wpn] [s1][s2][s3][s4][s5][s6] [c1][c2][c3][c4] |
 | Training              [x1] [x10] [x100] [Max]|
 | ATK      Lv 64  x4.20   cost 3.80K  [ + ]    |
@@ -256,7 +256,7 @@ Purpose: all gold and Rock Candy sinks on the hero: Training per stat, Hero Leve
 |---|---|
 | Level, EXP bar | `Hero.Level`, `Hero.Exp / Hero.ExpToNext` (`HERO_LVL_EXP(l)`) |
 | DPS | `Combat.Dps` |
-| Awakening row (MVP) | `Awaken.Rank`, `Awaken.NextStage`, `Awaken.NextCost`, `Awaken.CanAfford`, `Awaken.StageReached`; `[Awaken]` opens `SCR_CONFIRM` with cost and balance-after, then `cmd Awaken` |
+| Awakening row (M0) | `Awaken.Rank`, `Awaken.NextStage`, `Awaken.NextCost`, `Awaken.CanAfford`, `Awaken.StageReached`; `[Awaken]` opens `SCR_CONFIRM` with cost and balance-after, then `cmd Awaken` |
 | Loadout icons | `Loadout.Weapon`, `Loadout.Skills[6]`, `Loadout.Companions[4]`; tap: `SCR_ITEM_DETAIL`; empty slot tap: push the matching collection screen |
 | Bulk step selector | `Training.Step` in `TRAIN_BULK_STEPS` {1, 10, 100, Max}; persisted in `ClientPrefs.TrainStep` (issue #47) |
 | Per-stat row x6 | one row per trainable stat (`stats.trainable`, 09; `HP` and `DEF` are not trainable in MVP, 00 decision 10): `Training.Rows[stat]`: `Level`, `EffectText` (from 03 per-stat formatter), `Cost` (bulk cost for the selected step), `Count` (levels the step buys; Max computes affordable), `CanAfford`, `AtCap`; `[+]` sends `cmd TrainStat(stat, count)` all-or-nothing |
@@ -634,7 +634,7 @@ Purpose: any collectible's full card: stats, level, next-level cost, limit break
 | Collection passive +4.8%  (4% x 1.2)         |
 | Max level 10: 2.8x base (DUPE_LVL_BONUS)     |
 | Source: Weapon banner (Epic 9%)              |
-| [ Limit break (40 Rock Candy) ]              |
+| [ Limit break (60 Rock Candy) ]              |
 |                     [ Equip ]  [ Compare ]   |
 +----------------------------------------------+
 ```

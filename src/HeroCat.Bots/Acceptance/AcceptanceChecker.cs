@@ -32,6 +32,9 @@ namespace HeroCat.Bots.Acceptance
         public int[] StageCheckDays { get; set; }
         public int[] ShareMaxCheckDays { get; set; }
         public int[] ShareMinCheckDays { get; set; }
+
+        /// <summary>Layers floor-checked on other days than <see cref="ShareMinCheckDays"/> (Skills, Companions: day 30 only; #249 item 1).</summary>
+        public Dictionary<string, int[]> ShareMinCheckDaysByLayer { get; set; }
         public double ShareMax { get; set; }
         public double ShareMin { get; set; }
         public string[] ShareFloorExcluded { get; set; }
@@ -66,6 +69,10 @@ namespace HeroCat.Bots.Acceptance
         /// <summary>The per-tier floor exemptions (WARN instead of FAIL) for <paramref name="tier"/>.</summary>
         public IReadOnlyCollection<string> ExemptFor(Tier tier) =>
             ShareFloorExempt != null && ShareFloorExempt.TryGetValue(tier.ToString(), out var l) && l != null ? l : Array.Empty<string>();
+
+        /// <summary>The days <paramref name="layer"/>'s share floor is checked on.</summary>
+        public int[] MinCheckDaysFor(string layer) =>
+            ShareMinCheckDaysByLayer != null && ShareMinCheckDaysByLayer.TryGetValue(layer, out var d) && d != null ? d : ShareMinCheckDays;
     }
 
     public enum CheckStatus { Pass, Fail, Warn, Skip }
@@ -163,11 +170,13 @@ namespace HeroCat.Bots.Acceptance
 
             var excluded = new HashSet<string>(t.ShareFloorExcluded ?? Array.Empty<string>(), StringComparer.Ordinal) { "Base" };
             var exempt = new HashSet<string>(t.ExemptFor(db.BuildTier), StringComparer.Ordinal);
-            foreach (int day in t.ShareMinCheckDays.Where(d => d <= sw.Days))
+            var floorDays = t.ShareMinCheckDays.Concat(t.ShareMinCheckDaysByLayer?.Values.SelectMany(d => d) ?? Enumerable.Empty<int>())
+                .Distinct().OrderBy(d => d);
+            foreach (int day in floorDays.Where(d => d <= sw.Days))
             {
                 foreach (var n in layers)
                 {
-                    if (excluded.Contains(n)) continue;
+                    if (excluded.Contains(n) || Array.IndexOf(t.MinCheckDaysFor(n), day) < 0) continue;
                     var below = new List<string>();
                     int active = 0;
                     double min = double.PositiveInfinity;
@@ -252,7 +261,7 @@ namespace HeroCat.Bots.Acceptance
         {
             if (db.Awakening.Count == 0 || db.AwakeningTargets.Count == 0)
             {
-                results.Add(new CheckResult("AC11", CheckStatus.Skip, F("no awakening rows at tier {0} (Awakening is MVP)", db.BuildTier), None));
+                results.Add(new CheckResult("AC11", CheckStatus.Skip, F("no awakening rows at tier {0}", db.BuildTier), None));
                 return;
             }
             var bad = new List<string>();

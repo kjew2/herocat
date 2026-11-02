@@ -20,7 +20,7 @@ namespace HeroCat.Sim.Tests
         // id, effect, effect per level, max level, RES_COST0, RES_COST_G, cost of the last level (3 significant figures).
         static readonly (string id, ResearchEffect effect, double per, int max, double cost0, double g, double last)[] Table =
         {
-            ("res_atk", ResearchEffect.RESEARCH_PCT, 0.05, 50, 150, 1.20, 1.14e6),
+            ("res_atk", ResearchEffect.RESEARCH_PCT, 0.08, 50, 150, 1.20, 1.14e6),   // 0.08: #249 item 1
             ("res_gold_gain", ResearchEffect.GOLD_MULT, 0.05, 20, 250, 1.40, 1.49e5),
             ("res_mp_pool", ResearchEffect.MP_POOL, 20, 10, 200, 1.50, 7.69e3),
             ("res_mp_regen", ResearchEffect.MP_REGEN, 0.5, 10, 300, 1.50, 1.15e4),
@@ -221,8 +221,8 @@ namespace HeroCat.Sim.Tests
             var sim = Sim(fishCoin: 150);
             double dps = sim.Query.RatedDps;
             Assert.That(sim.Apply(new Research("res_atk")).Ok, Is.True);
-            Assert.That(sim.Query.ResearchPct, Is.EqualTo(0.05).Within(1e-12).Percent);
-            Assert.That(sim.Query.RatedDps, Is.EqualTo(dps * 1.05).Within(1e-9).Percent);
+            Assert.That(sim.Query.ResearchPct, Is.EqualTo(0.08).Within(1e-12).Percent);
+            Assert.That(sim.Query.RatedDps, Is.EqualTo(dps * 1.08).Within(1e-9).Percent);
         }
 
         [Test]

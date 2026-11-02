@@ -38,7 +38,7 @@ Each row maps a reference-game feature to our system name, its tier, and the spe
 | Hero level via EXP | **Hero Level** | M0 | 03 |
 | Gold stat training | **Training** | M0 | 03 |
 | Fish Coin research (MP pool, fish cap, misc) | **Research** | MVP | 03, 05 |
-| Class / awakening milestones | **Awakening** | MVP | 03 |
+| Class / awakening milestones | **Awakening** | M0 | 03 |
 | Weapon summon, weapon equip + passive collection bonus | **Weapons**, **Summon** | M0 | 04 |
 | Skill summon, 6 auto-cast skill slots | **Skills**, **Summon** | M0 | 04 |
 | Companion summon, companion slots, shared MP pool | **Companions**, **Summon** | MVP | 04 |
@@ -51,7 +51,7 @@ Each row maps a reference-game feature to our system name, its tier, and the spe
 | Gold, Diamonds, Fish Coin, Rock Candy, tickets | **Wallet** | M0 | 06 |
 | Offline earnings (24 h cap) | **Offline Catch-up** | M0 | 06, 02 |
 | Daily missions, weekly missions, achievements | **Quests** | MVP | 06 |
-| Fish Coin / Rock Candy / EXP daily dungeons | **Dungeons** | MVP | 06 |
+| Fish Coin / Rock Candy / EXP daily dungeons | **Dungeons** | Rock Candy Dungeon M0 (sim and bots; the dungeon screens stay MVP, issue #182); Fish Coin and EXP dungeons MVP | 06 |
 | Tower (unlocks dungeons, ladder of fixed fights) | **Tower** | P1 | 06 |
 | Shop: diamond packs, packages, daily free | **Shop**, **IAP** | MVP | 06, 08 |
 | Watch-ad rewards | **Rewarded Ads** | P1 | 06, 08 |
@@ -261,7 +261,8 @@ Code must read every constant from content data (spec 09), never from a literal.
 | `DUNGEON_TICKETS_PER_DAY` | 2 | S | Per dungeon; rollover tops each `TICKET_*` dungeon balance up to it, never down (06 section 4.2). |
 | `DUNGEON_FLOOR_STAGE_STEP` | 20 | S | Dungeon floor `f` is as hard as the stage-`20f` boss (06 section 6.1). |
 | `DUNGEON_FLOORS_MVP` | 40 | S | Floors per dungeon in MVP (06 section 6.4). |
-| `EXP_DUNGEON_KILLS` | 300 | S | EXP Dungeon floor `f` pays this many kills' EXP at stage `20f` (06 section 6.3). |
+| `EXP_DUNGEON_KILLS` | 300 | S | EXP Dungeon floor `f` pays this many kills' EXP at stage `20f` (06 section 6.3). A small top-up: its share of hero EXP is reported, not banded (decision #266 item A). |
+| `ROCK_CANDY_FLOOR(f)` | `15 * f` | S | Rock Candy Dungeon floor `f` reward (06 section 6.3); raised from `10 * f` (decision #249 item 3). |
 | `DAILY_GIFT_WEAPON_TICKETS` | 1 | S | `TICKET_SUMMON_WEAPON` per day from `ClaimDailyGift`, reason `DAILY_GIFT` (06 section 8.3). |
 | `INBOX_EXPIRY_DAYS` | 30 | S | Default inbox item lifetime from `availableAt`; `IAP` items never expire (06 section 9). |
 
@@ -324,7 +325,7 @@ Assumed F2P player: 2 h active per day (the bot harness splits it into two 60-mi
 | 14 | 480 |
 | 30 | 550 |
 
-Days 14 and 30 match the sibling's targets by construction; days 1-7 are higher because `HP_G` is flatter and there is no gear-tier layer to wait for. These numbers come from 03's scratch model and are provisional until `tools/power_curve_model.py` reproduces them. They are also a content table (`progress_targets`, 09) so the bots read them from `ContentDb`. Known open balance problem: the scratch model still shows a ~460-active-minute wall around day 20 when the summon layers saturate. The fix is chosen from 03 section 9's levers (candidates `RES_ATK` 0.08 per level, limit-break repricing) using `tools/power_curve_model.py` output, and is pending that tool; 03 AC18 gains a day-14-to-30 wall bound (issue #36).
+Days 14 and 30 match the sibling's targets by construction; days 1-7 are higher because `HP_G` is flatter and there is no gear-tier layer to wait for. These numbers come from 03's scratch model and are provisional until `tools/power_curve_model.py` reproduces them. They are also a content table (`progress_targets`, 09) so the bots read them from `ContentDb`. Known open balance problem: a long wall around day 20 when the summon layers saturate. From `tools/power_curve_model.py` output the levers applied are `RES_ATK` 0.08 per level, Rock Candy Dungeon `15 * f` and limit breaks x1.5, and 03 AC18's day-15-to-30 bound `lateWallMaxActiveMinutes` is 360 active minutes (decision #249 items 1-3 and 5, issue #36). The tool still measures a median of about 490 minutes; the fix is issue #283 item G3.
 
 ## 7. The power formula
 
@@ -421,7 +422,7 @@ Fixtures/Summon/            summon vectors (Python-generated) and the C# stream-
 
 | Milestone | Contents | Exit criterion |
 |---|---|---|
-| **M0 vertical slice** | Sim: combat, stages, training, hero level, weapon + skill summon (local), fish board, offline catch-up, local save. Client: `SCR_MAIN`, `SCR_HERO`, `SCR_WEAPONS`, `SCR_SKILLS`, `SCR_SUMMON`, `SCR_OFFLINE_REWARD`, `SCR_ITEM_DETAIL` with placeholder art. Bots print the day table. | Two weeks of simulated play within tolerance; one real person plays 20 minutes on device without being told what to do. |
+| **M0 vertical slice** | Sim: combat, stages, training, hero level, Awakening and its Rock Candy source (the Rock Candy Dungeon), weapon + skill summon (local), fish board, offline catch-up, local save (decision #249 item 9b). Client: `SCR_MAIN`, `SCR_HERO` (with the Awakening row), `SCR_WEAPONS`, `SCR_SKILLS`, `SCR_SUMMON`, `SCR_OFFLINE_REWARD`, `SCR_ITEM_DETAIL` with placeholder art; the dungeon screens stay MVP (issue #182). Bots print the day table; the M0 bot runs the Rock Candy Dungeon and awakens as soon as it can. | Two weeks of simulated play within tolerance (the M0 sweep meets the `progress_targets` stage table on days 1, 7 and 14; whether its walls and Awakening cadence also gate M0 is issue #283 item G6); one real person plays 20 minutes on device without being told what to do. |
 | **MVP** | Everything tagged MVP in section 2.1. Backend: auth, cloud save, server summons, IAP, inbox, config. Analytics. Tutorial. Localization: EN ships (`ship_locales = en` in shipped meta); `ja` is fully translated in the pipeline and CI fixtures use `en,ja` so the second-locale path is tested (issue #57). | Closed beta of 50 players, D7 retention measured, no save-loss reports. |
 | **Soft launch** | Store compliance checklist (10) complete, staged rollout in two small markets. | D1 >= 40%, D7 >= 15%, crash-free sessions >= 99.5%, no P0 economy exploit. |
 | **P1** | Runes, Research expansion, Tower, Guild, Rewarded Ads, Events, Leaderboards, Coupons, Auto Merge. | Scheduled by soft-launch data. |
@@ -453,7 +454,7 @@ These were open or contradictory across the writer-produced specs and are now se
 15. **Summon tickets are a server ledger from MVP** (authority table, section 4). 06's per-day ticket income (1 weapon ticket from the daily gift; about 0.15 skill and 0.15 companion tickets per day from weeklies and achievements) is the figure 04's banner-level model must use; 04's bot assumed W 2 / S 1 / C 1 and needs a re-sync.
 16. **Dungeon tickets are debited on clear only.** Failed and abandoned runs cost nothing; `SCR_DUNGEONS` previews clearability with the deterministic sim. 02's recovery rule P16 was patched to drop the refund.
 17. **Quests are three-state** (`IN_PROGRESS` / `COMPLETED` / `CLAIMED`) with an explicit claim; unclaimed daily rewards are forfeited at rollover. Quest progress is keyed by string quest id, never positionally (02, 06, 09).
-18. **Diamond budget.** `DIAMONDS_PER_DAY_F2P = 400` is met as a steady-state floor by counting 8 of 11 dailies plus weekly missions amortised at 50/day; late-game income tapers to about 384-407/day, which is inside tolerance. The daily free gift adds one weapon ticket (~100 diamonds of pull value) on top.
+18. **Diamond budget.** `DIAMONDS_PER_DAY_F2P = 400` is met as a steady-state floor by counting 8 of 11 dailies plus weekly missions amortised at 50/day (60/day since decision 114); late-game income tapers to about 384-407/day, which is inside tolerance. The daily free gift adds one weapon ticket (~100 diamonds of pull value) on top.
 19. **Packages are diamonds on a delivery schedule only** (starter 600; weekly 300 + 100/day; monthly 1000 + 100/day). No ticket or collectible bundles, so decision 7 stays strict. Reopen only with soft-launch revenue data.
 20. **Reason enum completed** (contract 6). `TUTORIAL` replaces 01's and 06's earlier use of `ADMIN` for the tutorial grant; both were patched.
 21. **Week key** is `floor((dayKey - 4) / 7)`, Monday 00:00 UTC. 06 was patched from an off-by-one form.
@@ -484,7 +485,7 @@ The Fish Coin Dungeon reward is settled at `50 * f`, with its income-share band 
 41. **Seeds derive from an immutable `RngRoot`** in `GameState` (SHA-256 in Runtime), never from `PlayerId`/`DeviceId` at load time; migrations that add a stream derive its seed from `RngRoot` inside the step. Issue #9.
 42. **Rated vs realised damage are split.** Section 7's `DPS` is the rated value; hero hits exclude the skill, companion and missile layers, which deal their own multiples of the hit (03 section 7.1). Issue #10.
 43. **00's command and event names win, extended** with the names owner specs define (section 5.1); rejects use 01's `RejectCode` plus a closed per-spec reason string; malformed input is rejected with `BadArgument`, never thrown; ids `res_*`, constant `TRAIN_CAP`; `RetreatFromBoss` is out of MVP. Issue #11.
-44. **Layer-share gate**: 40% ceiling on days 1, 7 and 30; 5% floor on days 7 and 30 with per-tier exemptions as data in `acceptance-targets.json` reported as `WARN` (section 7). Issue #12.
+44. **Layer-share gate**: 40% ceiling on days 1, 7 and 30; 5% floor on days 7 and 30 (Skills and Companions day 30 only, decision 104) with per-tier exemptions as data in `acceptance-targets.json` reported as `WARN` (section 7). Issue #12.
 45. **01's `SummonResultPayload` is the summon contract**, extended per pull with `CopiesAfter` and `OverflowRockCandy`; `ApplySummonResult(payload)` is the only mutator; `LocalSummonService` rolls on cloned state and checks the wallet first; Remote mode takes the server's balances; event `BannerLeveledUp`; one merged `summon` analytics schema. Issue #13.
 46. **Summon vectors**: `gacha_model.py --vectors` owns the scripted-`u` vectors in `Fixtures/Summon/`; the C# stream-sequence fixture stays as a determinism golden that Python's SplitMix64 must reproduce. Issue #14.
 47. **`missileDpsPct` is rated-only** and never enters the live hit; any live display average is runtime-only, outside the save and `StateHash`. Issue #15.
@@ -508,7 +509,7 @@ The Fish Coin Dungeon reward is settled at `50 * f`, with its income-share band 
 65. **Server schema is plain versioned SQL migrations**, applied by a small runner (no EF Core migrations; EF Core for queries only is allowed), checked by a Postgres-guarded `check.sh` job (section 3). Issue #33.
 66. **08 owns the cloud-save wire**: `If-Match: *` for a first upload, metadata in `X-Save-Meta`, body the raw save, 08's routes, same-device lower `saveSeq` rejected `409 SAVE_STALE`; 02 section 12 adds `granted_items`, `ticket_ledger`, P1 `coupons`/`coupon_redemptions` and the `events` DDL. Issue #34.
 67. **Stage select farms a side stage**: `Combat.Stage` stays the frontier, `SelectStage(s)` farms `s <= HighestCleared` (02's meaning: any stage completed) without advancing anything, `SelectStage(null)` returns, first clears key off `HighestFirstClearBoss`, and the list's boss challenge is the frontier boss only (section 5.1). Issue #35.
-68. **Day-20 wall and floor misses are fixed with the tool**: levers come from 03 section 9 using `tools/power_curve_model.py` output (pending; candidates `RES_ATK` 0.08, limit-break repricing), 03 AC18 gains a day-14-to-30 wall bound, and speed is permanently exempt from the 5% floor (sections 6.6, 7). Issue #36.
+68. **Day-20 wall and floor misses are fixed with the tool**: levers come from 03 section 9 using `tools/power_curve_model.py` output (applied in decisions 104-108), 03 AC18 gains a day-14-to-30 wall bound, and speed is permanently exempt from the 5% floor (sections 6.6, 7). Issue #36.
 69. **Limit-break names**: reason `LIMIT_BREAK`, constant `LIMIT_BREAK_RANKS` (in `REQUIRED_CONSTANTS`), per-rarity columns `rarities.limit_break_cost` and `rarities.dupe_overflow_rock_candy` (section 6.5). Issue #37.
 70. **Banner-level cadence comes from the tool**: per-banner F2P pulls are computed from 06's income and 03's bot policy, and `BANNER_LVL_EXP` is retuned so weapon banner level 4 lands in days 20-35; hand-entered pulls-per-day figures are removed. Applied: the placeholder thresholds scaled by 0.18 (rounded to 5) give 0, 10, 25, 55, 90, 145, 215, 305, 415, 540 and a 20-seed median weapon level-4 day of 27 (section 6.3; supersedes decision 15's re-sync note). Issue #38.
 71. **`mpSufficiency` counts `MP_REGEN` companions**: the net MP they restore counts as regen in the rated formula (03 adopts 04's form); 04 criterion 11 is corrected to about 15.6 +/- 1 casts per minute for the other three (section 7). Issue #39.
@@ -544,3 +545,16 @@ The Fish Coin Dungeon reward is settled at `50 * f`, with its income-share band 
 101. **`CLOCK_BACKWARDS_TOLERANCE_S = 5` (S)**, a content constant: `ClockWentBackwards` and `clock_anomaly{backwards}` fire only when server time is behind the virtual clock (or behind `LastTickServerTime` at resume) by more than it; less is resync jitter (01 section 3.2, 06 section 4.2). Issue #246 item 5.
 102. **Error, reject and notice localization keys are lowercase**: `err.<code_lower>.title` / `.body`, `reject.<reason_lower>` (a reasonless reject uses the snake-cased `RejectCode`), `notice.<code_lower>.title` / `.body`; wire codes and reasons stay UPPER_SNAKE and the client lowercases them when it builds the key, so 09's lowercase key pattern holds. This replaces decision 62's `err.<CODE>` spelling; English rows exist for every code and reason the client can show (01 section 7, AC 14). Issue #248 item 1.
 103. **No readable save copy is a new profile, not a fatal error**: 02 section 8.3 wins; the copies are quarantined, a new profile starts, analytics gets `save_corrupt_all{supportId}` and `SCR_MAIN` shows a one-time notice with the support id; 01's Fatal `SAVE_CORRUPT_ALL` class and table row are removed. Issue #248 item 2.
+104. **Layer floor by layer, and a stronger `res_atk`**: Skills and Companions are floor-checked on day 30 only, since they are still unlocking on day 7 (`acceptance-targets.json` key `shareMinCheckDaysByLayer`); every other layer stays on days 7 and 30. `res_atk` gives 0.08 per level, up from 0.05 (03 sections 6, 8.5; amends decision 44). Issue #249 item 1.
+105. **Late-wall bound is 360 active minutes**: `lateWallMaxActiveMinutes = 360` for walls opened on days 15-30 (03 AC18, 10 section 3.6). Issue #249 item 2.
+106. **Rock Candy Dungeon pays `15 * f`** (was `10 * f`), about 50% more; the ladder rule (the next floor, two tickets a day) stays (06 section 6.3). Issue #249 item 3.
+107. **Hero Level per stage band is 0.25-0.55** (was 0.25-0.45; 03 section 8.6). Issue #249 item 4.
+108. **Limit breaks cost x1.5**: `rarities.limit_break_cost` C 15 / R 30 / E 60 / L 120 / M 225 per rank (04 section 5.2). Issue #249 item 5.
+109. **Two tool checks narrowed**: capped Training stats (`CRIT_RATE`, `ATK_SPD`) are exempt from the 5-50% Training-gold band and only reported; "every Research node has a level by day 7" covers only the nodes 03 section 8.3 always values (`res_atk`, `res_gold_gain`, `res_tank_cap`, `res_tank_refill`, `res_fish_cap`) (03 section 8.6). Issue #249 items 7 and 8.
+110. **Awakening and the Rock Candy Dungeon are M0**: the `awakening` rows, the `dungeon_candy` row and the `DUNGEONS` `feature_unlocks` row (stage 30) are tier M0; the Fish Coin and EXP dungeons, limit breaks, Research, Companions, quests and the shop exchange stay MVP. The M0 sim, the tools and the greedy F2P bot run the Rock Candy Dungeon and awaken as soon as they can. The M0 client has `SCR_HERO`'s Awakening row but no dungeon screen (`SCR_DUNGEONS` / `SCR_DUNGEON_RUN` stay MVP, issue #182). `progress_targets` stays one table, 240/330/430/480/550, for both tiers (section 11). Issue #249 item 9b.
+111. **Bot diamonds: a 10-pull when affordable, else singles** (03 section 8.3); 10 section 3.4 follows it. Issue #249 item 10.
+112. **No Common level-5 target**: 04 section 14's "a specific Common reaches level 5 inside 30 days of F2P weapon pulls" is dropped; collection depth comes from the passive bonus of owning many items. `gacha_model.py --cadence` has no report-only checks left. Issue #249 item 11.
+113. **The EXP Dungeon is a small top-up**: its 10-20% band of the day's hero EXP is dropped; the tool reports the share only (06 Constants introduced). Issue #266 item A.
+114. **Weekly rows: lower targets, 60 diamonds each**: `w_summons` 20 (was 30), `w_train` 100 (was 300), and each of the seven weekly missions pays 60 diamonds (was 50); the two bonus rows still grant tickets. The budget check's 10% tolerance under `DIAMONDS_PER_DAY_F2P` is confirmed (06 sections 2, 5.3, open question 1). Issue #266 items B and C.
+115. **Pull affordability is checked, pity resolution is reported**: 06 section 2's check that income affords a 10-pull every 2.5 / 5 / 7.5 days stays; whether the bot's pulls resolve pity on every banner within 30 days is reported only, not a bot target (issue #283 item G7). Issue #266 item D.
+116. **First-clear diamonds are checked as a 30-day total**: within 20% of what the target stage curve gives, not per day window; the stage gate already covers the curve's shape (06 section 2). Issue #266 item E.

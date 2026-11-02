@@ -57,23 +57,27 @@ COMPANION_SLOTS_AT_RANK0 = 1   # 03 section 5.3: companion slot 1 is open from t
 # ---- 03 section 8.5 / 10 section 3.6 share rule (acceptance-targets.json mirrors it for the C# sweep)
 SHARE_MAX, SHARE_MIN = 0.40, 0.05
 SHARE_MAX_DAYS, SHARE_MIN_DAYS = (1, 7, 30), (7, 30)
+SHARE_MIN_DAYS_BY_LAYER = {"Skills": (30,), "Companions": (30,)}   # still unlocking on day 7 (#249 item 1)
 SHARE_FLOOR_EXCLUDED = {"Speed", "Runes"}                 # speed permanently exempt (issue #36); runes not before P1
 SHARE_FLOOR_EXEMPT = {"M0": {"Research", "Companions"}}   # WARN instead of FAIL (issue #12)
 STAGE_CHECK_DAYS = (1, 7, 30)                              # 03 AC16
 FIRST_WALL_BAND = (60, 200)                                # 03 section 8.6, AC18
 EARLY_WALL_MAX_ACTIVE_MIN, EARLY_WALL_LAST_DAY = 240, 14   # 03 AC18
-LATE_WALL_MAX_ACTIVE_MIN = None                            # acceptance-targets.json lateWallMaxActiveMinutes: pending (issue #36)
-TRAIN_GOLD_SHARE_BAND = (0.05, 0.50)
-HERO_LEVEL_PER_STAGE_BAND = (0.25, 0.45)
+LATE_WALL_MAX_ACTIVE_MIN = 360                             # acceptance-targets.json lateWallMaxActiveMinutes (#249 item 2)
+TRAIN_GOLD_SHARE_BAND = (0.05, 0.50)                       # capped stats (CRIT_RATE, ATK_SPD) exempt (#249 item 7)
+HERO_LEVEL_PER_STAGE_BAND = (0.25, 0.55)                   # #249 item 4
 TAP_WALL_SPEEDUP_MAX = 2.5
 BOSS_CANDY_SHARE_MAX = 0.20
 RESEARCH_ALL_NODES_BY_DAY, FISH_CAP_2_BY_DAY = 7, 10
+# 03 section 8.3 item 4's always-valued nodes: the day-7 "every node has a level" check covers only these (#249 item 8).
+# res_mp_regen is bought only while companions are MP-starved; res_mp_pool and res_offline_cap are never valued.
+RESEARCH_POLICY_NODES = ("res_atk", "res_gold_gain", "res_tank_cap", "res_tank_refill", "res_fish_cap")
 LIMIT_BREAK_DAILY_FROM_DAY, LIMIT_BREAK_CANDY_SHARE_MAX = 10, 0.60   # 04 section 5.2
 FISH_DUNGEON_SHARE_BAND, FISH_DUNGEON_DAYS = (0.20, 0.50), (7, 30)  # 06 section 6.3 (a); #249 item 6, agreed
 
 # ---- MVP tables the M0 content does not ship yet. Each is the owning spec's row set, used only when content lacks it.
 RESEARCH_FALLBACK = [   # 03 section 6 / 09 section 5.18. Only for content without a research table (content/ ships it, #158).
-    {"id": "res_atk", "effect": "ATK_PCT", "effect_per_level": 0.05, "effect_floor": None, "max_level": 50, "cost0": 150.0, "cost_g": 1.20, "unlock_awaken_rank": 1},
+    {"id": "res_atk", "effect": "ATK_PCT", "effect_per_level": 0.08, "effect_floor": None, "max_level": 50, "cost0": 150.0, "cost_g": 1.20, "unlock_awaken_rank": 1},
     {"id": "res_gold_gain", "effect": "GOLD_GAIN", "effect_per_level": 0.05, "effect_floor": None, "max_level": 20, "cost0": 250.0, "cost_g": 1.40, "unlock_awaken_rank": 1},
     {"id": "res_mp_pool", "effect": "MP_POOL", "effect_per_level": 20.0, "effect_floor": None, "max_level": 10, "cost0": 200.0, "cost_g": 1.50, "unlock_awaken_rank": 1},
     {"id": "res_mp_regen", "effect": "MP_REGEN", "effect_per_level": 0.5, "effect_floor": None, "max_level": 10, "cost0": 300.0, "cost_g": 1.50, "unlock_awaken_rank": 1},
@@ -87,10 +91,11 @@ RESEARCH_FALLBACK = [   # 03 section 6 / 09 section 5.18. Only for content witho
 # dps_pct from rarities.companion_dps_pct.
 COMPANION_FALLBACK = {"mix": [("DAMAGE", 0.50), ("BUFF_ATK", 0.20), ("BUFF_GOLD", 0.15), ("MP_REGEN", 0.15)],
                       "mp_cost": 10, "cooldown_ticks": 100}
-# 06 sections 6.1-6.3 / 09 sections 5.24-5.25: equal to content/dungeons.json and dungeon_floors.json today.
-# The Fish Coin curve is settled at 50 * f (#165).
+# 06 sections 6.1-6.3 / 09 sections 5.24-5.25: used only when content has no dungeons / dungeon_floors table; the
+# per-floor slopes are read from dungeon_floors when it ships. The Fish Coin curve is settled at 50 * f (#165); Rock
+# Candy is 15 * f (#249 item 3).
 DUNGEON_FALLBACK = {"tickets_per_day": 2, "floor_stage_step": 20, "floors": 40,
-                    "FISH_COIN": 50.0, "ROCK_CANDY": 10.0, "EXP_KILLS": 300}
+                    "FISH_COIN": 50.0, "ROCK_CANDY": 15.0, "EXP_KILLS": 300}
 # 06 section 1 / 00 decision 15: weeklies and achievements pay about 0.15 skill and 0.15 companion tickets a day.
 # The weekly share is content now (w_bonus_all_skill / w_bonus_all_companion, 1 a week each); the achievement share is not.
 # TODO(#171): derive both from quests_weekly + achievements rows once achievements ship. The weapon ticket is content.
@@ -115,11 +120,11 @@ WEEK_DAYS = 7                                  # bot epoch is a Monday (00 decis
 DIAMOND_STEADY_DAYS = (15, 28)                 # 06 section 2 "steady state after day 14": the two whole weeks after it
 DIAMOND_BUDGET_TOL = 0.10                      # 06 open question 1 names no number; E039's 10% (09) is used
 FIRST_CLEAR_TOL = 0.20                         # 06 Constants introduced, FIRST_CLEAR_DIAMONDS
-FIRST_CLEAR_PERIODS = ((1, 1), (2, 3), (4, 7), (8, 14), (15, 30))   # 06 section 2 table rows, as day ranges
+FIRST_CLEAR_PERIODS = ((1, 30),)               # 06 section 2: the 30-day total only (#266 item E)
 TENPULL_MAX_DAYS = {"WEAPON": 2.5, "SKILL": 5.0, "COMPANION": 7.5}   # 06 section 2: income affords a 10-pull every N days
 DIAMOND_HOLD_MAX_DAYS = 2.5                    # 06 section 11 observation 2
 GOLD_SPENT_MIN = 0.99                          # 06 section 11 observation 1: "100% of gold is spent", less rounding
-EXP_DUNGEON_SHARE_BAND, EXP_DUNGEON_DAYS = (0.10, 0.20), (7, 30)    # 06 Constants introduced, EXP_DUNGEON_KILLS
+EXP_DUNGEON_DAYS = (7, 30)                     # EXP Dungeon share: reported only, a small top-up (#266 item A)
 BEST_FLOOR_BAND, BEST_FLOOR_DAY = (25, 29), 30                      # 06 open question 5
 SECTION11_DAYS, SECTION2_DAYS = (1, 7, 30), (1, 3, 7, 14, 30)
 DIAMOND_SOURCES = ("TUTORIAL", "LOGIN", "QUEST_DAILY", "QUEST_WEEKLY", "FIRST_CLEAR", "ACHIEVEMENT", "FLAT")
@@ -182,10 +187,20 @@ class Params:
             c[f"RES_EFFECT[{rid}]"], c[f"RES_MAX[{rid}]"] = r["effect_per_level"], r["max_level"]
 
         dungeons = db.table("dungeons", None)
-        if not m0 and dungeons is None:
-            self.fallbacks.append("dungeons: 06 section 6.3 formulas 50f / 10f / 300 kills (content has no dungeons table)")
+        if dungeons is None:
+            # No table: MVP runs all three dungeons on the 06 formulas; M0 has the Rock Candy Dungeon only (#249 item 9b).
+            self.dungeon_kinds = {"ROCK_CANDY"} if m0 else {"FISH_COIN", "ROCK_CANDY", "EXP"}
+            self.fallbacks.append("dungeons: 06 section 6.3 formulas 50f / 15f / 300 kills (content has no dungeons table)")
+        else:
+            self.dungeon_kinds = {r["kind"] for r in dungeons if tier_ok(r)}
         for k, v in DUNGEON_FALLBACK.items():
             c[f"DUNGEON_{k}"] = v
+        floors = db.table("dungeon_floors", None)
+        if dungeons is not None and floors is not None:
+            kind_of = {r["id"]: r["kind"] for r in dungeons}
+            for r in floors:   # floor 1's reward is the linear slope (06 section 6.3: reward = slope * f)
+                if r["floor"] == 1 and kind_of.get(r["dungeon"]) in ("FISH_COIN", "ROCK_CANDY") and r.get("reward_amount"):
+                    c[f"DUNGEON_{kind_of[r['dungeon']]}"] = float(r["reward_amount"])
         if not m0:
             for b, v in SUMMON_TICKETS_FALLBACK.items():
                 c[f"TICKETS_PER_DAY[{b}]"] = v
@@ -888,7 +903,7 @@ class Bot:
     # ------------------------------------------------------------------------------------------ dungeons (06 6)
     def dungeons_open(self):
         u = self.p.unlocks.get("DUNGEONS")
-        if self.p.m0 or u is None:
+        if u is None or not self.p.dungeon_kinds:
             return False
         return u["condition"] != "STAGE_HIGHEST" or self.highest >= (u["threshold"] or 0)
 
@@ -900,6 +915,8 @@ class Bot:
         dps = self.dps() / L["Fish"] * (1 + self._board_pct / 100.0)   # passive board only, no missiles (issue #40)
         step = c["DUNGEON_floor_stage_step"]
         for kind in self.best_floor:
+            if kind not in self.p.dungeon_kinds:
+                continue
             while self.dungeon_tickets[kind] >= 1:
                 nxt = self.best_floor[kind] + 1
                 floor = self.best_floor[kind]
@@ -1044,8 +1061,8 @@ class Bot:
         self.start_day_diamonds()
         for b in BANNERS:
             self.tickets[b] += self.ticket_income.get(b, 0)
-        if not self.p.m0:
-            for k in self.dungeon_tickets:
+        for k in self.dungeon_tickets:
+            if k in self.p.dungeon_kinds:
                 self.dungeon_tickets[k] = max(self.dungeon_tickets[k], c["DUNGEON_tickets_per_day"])
         if c["ROCK_CANDY_PER_DAY"] is not None:
             self.candy += c["ROCK_CANDY_PER_DAY"]
@@ -1210,7 +1227,7 @@ def steady_diamonds(bot):
 
 
 def economy_checks(p, bot):
-    """[(status, name, value)] for the 06 economy checks (issue #178). MVP only: M0 has no quests or dungeons."""
+    """[(status, name, value)] for the 06 economy checks (issue #178). MVP only: M0 has no quests or diamond sources."""
     out = []
 
     def add(ok, name, val):
@@ -1256,15 +1273,15 @@ def economy_checks(p, bot):
         n = e["pulls_ticket"][b] + e["pulls_diamond"][b]
         out.append(("INFO", f"{b} pulls the bot actually made (its value-per-diamond choice, 03 8.3 item 2)",
                     f"{n} over {last} days, a 10-pull's worth every {last / (n / 10) if n else float('inf'):.2f} days"))
-        add(e["lplus"][b] >= 1, f"PITY_HARD (06 2): {b} pity resolves (a Legendary or better) within {last} days",
-            f"{e['lplus'][b]} L+")
+        # #266 item D: the 06 rule is affordability (above); whether the bot's own pulls resolve pity is reported only.
+        out.append(("INFO", f"PITY_HARD (06 2): {b} Legendary-or-better copies the bot pulled in {last} days",
+                    f"{e['lplus'][b]} L+"))
     for d in EXP_DUNGEON_DAYS:
         if d <= last:
             f = day_flow(bot, d)
             sh = f["exp_dungeon"] / f["exp_total"] if f["exp_total"] else 0.0
-            add(EXP_DUNGEON_SHARE_BAND[0] <= sh <= EXP_DUNGEON_SHARE_BAND[1],
-                f"EXP_DUNGEON_KILLS (06 consts): EXP Dungeon share of day-{d} EXP in "
-                f"{EXP_DUNGEON_SHARE_BAND[0]:.0%}..{EXP_DUNGEON_SHARE_BAND[1]:.0%}", f"{sh:.1%}")
+            out.append(("INFO", f"EXP_DUNGEON_KILLS (06 consts): EXP Dungeon share of day-{d} EXP (a small top-up)",
+                        f"{sh:.1%}"))
     if last >= BEST_FLOOR_DAY:
         floors = bot.daily[BEST_FLOOR_DAY - 1]["best_floor"]
         for k, v in floors.items():
@@ -1291,7 +1308,7 @@ def checks_for(p, bot):
                 sh = days[d]["shares"][layer]
                 if sh > SHARE_MAX:
                     add(False, f"share {layer} <= 40% on day {d}", f"{sh:.1%}")
-        for d in SHARE_MIN_DAYS:
+        for d in SHARE_MIN_DAYS_BY_LAYER.get(layer, SHARE_MIN_DAYS):
             if d not in days or layer in SHARE_FLOOR_EXCLUDED:
                 continue
             if days[d]["layers"][layer] == 1.0:
@@ -1300,7 +1317,8 @@ def checks_for(p, bot):
             if sh < SHARE_MIN:
                 add(False, f"share {layer} >= 5% on day {d}", f"{sh:.1%}", warn=layer in exempt)
     if not any(n.startswith("share ") for _, n, _ in out):
-        add(True, "shares: every layer <= 40% on days 1/7/30 and >= 5% on days 7/30 (03 8.5)", "all in band")
+        add(True, "shares: every layer <= 40% on days 1/7/30 and >= 5% on days 7/30 (Skills, Companions: day 30; 03 8.5)",
+            "all in band")
 
     # Walls (AC18)
     fw = bot.first_wall_stage
@@ -1323,13 +1341,18 @@ def checks_for(p, bot):
     total = sum(spent.values()) or 1.0
     for s in TRAINABLE:
         sh = spent[s] / total
+        if p.c[f"TRAIN_CAP[{s}]"] is not None:
+            out.append(("INFO", f"TRAIN_PER_LVL/TRAIN_CAP[{s}]: share of Training gold over {last} days (capped stat, "
+                                "exempt from the 5%..50% band)", f"{sh:.2%}"))
+            continue
         add(TRAIN_GOLD_SHARE_BAND[0] <= sh <= TRAIN_GOLD_SHARE_BAND[1],
             f"TRAIN_PER_LVL/TRAIN_CAP[{s}]: share of Training gold over {last} days in 5%..50%", f"{sh:.2%}")
 
     # Hero level per stage
     bad = [(d, days[d]["hero_level"] / days[d]["stage"]) for d in REPORT_DAYS if d in days
            and not HERO_LEVEL_PER_STAGE_BAND[0] <= days[d]["hero_level"] / days[d]["stage"] <= HERO_LEVEL_PER_STAGE_BAND[1]]
-    add(not bad, "EXP0/HERO_LVL_EXP: hero level between 0.25 s and 0.45 s at every reported day",
+    add(not bad, f"EXP0/HERO_LVL_EXP: hero level between {HERO_LEVEL_PER_STAGE_BAND[0]} s and "
+                 f"{HERO_LEVEL_PER_STAGE_BAND[1]} s at every reported day",
         ", ".join(f"day {d}: {r:.2f} s" for d, r in bad) if bad else
         ", ".join(f"{days[d]['hero_level'] / days[d]['stage']:.2f}" for d in REPORT_DAYS if d in days))
 
@@ -1351,8 +1374,8 @@ def checks_for(p, bot):
     if not p.m0 and p.research:
         d7 = days.get(RESEARCH_ALL_NODES_BY_DAY)
         if d7:
-            zero = [rid for rid, k in d7["research"].items() if k == 0]
-            add(not zero, f"RES_*: every node has a level by day {RESEARCH_ALL_NODES_BY_DAY}",
+            zero = [rid for rid, k in d7["research"].items() if k == 0 and rid in RESEARCH_POLICY_NODES]
+            add(not zero, f"RES_*: every node the 03 8.3 policy values has a level by day {RESEARCH_ALL_NODES_BY_DAY}",
                 "none at 0" if not zero else "at 0: " + ", ".join(zero))
         d10 = days.get(FISH_CAP_2_BY_DAY)
         if d10 and "res_fish_cap" in d10["research"]:
@@ -1598,7 +1621,7 @@ def main(argv=None):
     ap.add_argument("--policy", default="greedy", choices=("greedy", "lazy", "spender20", "whale"))
     ap.add_argument("--diamonds", default="content", choices=("content", "flat"),
                     help="content: 06's login, quests, first clears and achievements (default); flat: DIAMONDS_PER_DAY_F2P a day")
-    ap.add_argument("--m0", action="store_true", help="M0 tier: no Companions, Research, dungeons or summon tickets")
+    ap.add_argument("--m0", action="store_true", help="M0 tier: no Companions, Research, limit breaks or summon tickets; Awakening and the Rock Candy Dungeon only")
     ap.add_argument("--check", action="store_true", help="20-seed sweep + every S-constant check; exit 1 on FAIL")
     ap.add_argument("--seeds", default="1-20")
     ap.add_argument("--out", default=os.path.join(HERE, "out"))

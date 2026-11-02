@@ -110,7 +110,11 @@ namespace HeroCat.Sim.Tests
             Assert.That(sim.State.Time.WeekKey, Is.EqualTo((int)Math.Floor((T0 / k.DaySeconds - 4) / 7.0)));
             Assert.That(sim.State.Time.LoginDayKey, Is.EqualTo(sim.State.Time.DayKey));
             Assert.That(sim.State.Wallet.Diamond, Is.EqualTo(1500 + k.LoginDiamonds));
-            var ev = sim.DrainEvents();
+            var all = sim.DrainEvents();
+            var reset = all.OfType<CurrencyChanged>().Where(e => e.Reason == CurrencyReason.DAILY_RESET).ToList();
+            Assert.That(reset.Select(e => (e.Currency, e.Delta)), Is.EqualTo(new[] { (Currency.TICKET_ROCK_CANDY, 2.0) }),
+                        "the M0 Rock Candy Dungeon's tickets top up at the rollover (decision #249 item 9b)");
+            var ev = all.Except(reset).ToList();
             Assert.That(ev.Select(e => e.GetType().Name), Is.EqualTo(new[] { "WeekRolledOver", "DayRolledOver", "CurrencyChanged" }));
             var cc = (CurrencyChanged)ev[2];
             Assert.That((cc.Currency, cc.Delta, cc.BalanceAfter, cc.Reason), Is.EqualTo((Currency.DIAMOND, (double)k.LoginDiamonds, 1550.0, CurrencyReason.LOGIN)));

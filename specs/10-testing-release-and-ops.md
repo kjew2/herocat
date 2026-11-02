@@ -216,7 +216,7 @@ public interface IBotPolicy
 
 | Policy | `Name` | Behaviour | Spend |
 |---|---|---|---|
-| Greedy F2P | `greedy-f2p` | 03 section 8.3 verbatim: Training `Max` on ATK then the stat with the best marginal log-DPS per gold; Research by the same rule with Fish Coins; Awakening when both gates pass; weapon tickets pulled immediately; diamonds -> 10-pulls on the banner with the lowest `pullsToNextLevelOrPity`-weighted expected log-DPS gain, singles only when a 10-pull is unaffordable and pity is within 10; `AutoEquipBest*` after every pull; dungeons run as soon as tickets exist, sweep when allowed; fish: release the whole tank with `ReleaseMax`, then `MergeAll` (lowest level first, 05's "attentive" policy at 60 merges/min cap; issue #19); `AttemptBoss` when `Query.BossClearable`; claim every quest when claimable. | 0 |
+| Greedy F2P | `greedy-f2p` | 03 section 8.3 verbatim: Training `Max` on ATK then the stat with the best marginal log-DPS per gold; Research by the same rule with Fish Coins; Awakening when both gates pass (M0 too, decision #249 item 9b); weapon tickets pulled immediately; diamonds to the banner with the highest expected log-DPS gain per diamond: a 10-pull when affordable, else singles (decision #249 item 10); `AutoEquipBest*` after every pull; dungeons run as soon as tickets exist: the next floor when `PreviewDungeon` clears it, else a sweep of the best floor (the M0 build has only the Rock Candy Dungeon); fish: release the whole tank with `ReleaseMax`, then `MergeAll` (lowest level first, 05's "attentive" policy at 60 merges/min cap; issue #19); `AttemptBoss` when `Query.BossClearable`; claim every quest when claimable. | 0 |
 | Lazy F2P | `lazy-f2p` | `OnSessionStart` only: claim offline reward, daily gift, quests, run or sweep dungeons, Training `Max` on ATK, pull tickets, release and merge once, then `Decide` does nothing. Models 00 pillar 1's "logs in to claim and spend" player. | 0 |
 | Light spender | `light-spender` | Greedy F2P plus `pkg_monthly` on day 1 (drip via Inbox: every portion is created at purchase with a future `availableAt` and claimed as it comes due, issue #51) and `dia_3` with first-purchase double on day 2; $19.98, within `LightSpenderUsdPerMonth`, and nothing else in the month (issue #58). Purchases go through `LocalInboxService` so the IAP -> inbox -> claim path is exercised. | $20 |
 | Whale | `whale` | Greedy F2P plus `dia_6` on day 1 and `dia_4` every third day; always 10-pulls; buys every package once; limit-breaks as soon as affordable. | ~$300 / month |
@@ -248,12 +248,13 @@ Targets are read from `ContentDb.ProgressTargets` (09 section 5.31) and `Content
 {
   "sweepBot": "greedy-f2p", "seeds": "1-20", "days": 30,
   "stageCheckDays": [1, 7, 30],
-  "shareMaxCheckDays": [1, 7, 30], "shareMinCheckDays": [7, 30], "shareMax": 0.40, "shareMin": 0.05,
+  "shareMaxCheckDays": [1, 7, 30], "shareMinCheckDays": [7, 30],
+  "shareMinCheckDaysByLayer": { "Skills": [30], "Companions": [30] }, "shareMax": 0.40, "shareMin": 0.05,
   "shareFloorExcluded": ["Base", "Speed"],
   "shareFloorExempt": { "M0": ["Research", "Companions"] },
   "firstWallMinStage": 60, "firstWallMaxStage": 200,
   "maxWallActiveMinutesThroughDay14": 240,
-  "lateWallMaxActiveMinutes": null,
+  "lateWallMaxActiveMinutes": 360,
   "lazyFraction": { "day7": 0.55, "day30": 0.60 },
   "whaleGapStagesDay7": [25, 60],
   "diamondsPerDayTolerance": 0.15,
@@ -264,9 +265,9 @@ Targets are read from `ContentDb.ProgressTargets` (09 section 5.31) and `Content
 | Id | Check (greedy-f2p sweep unless stated) | Source |
 |---|---|---|
 | AC1 | For each day in `stageCheckDays`: median stage within `+/- tolerance` of `progress_targets[day]` | 00 section 6.6 (+/-20%) |
-| AC2 | For each seed: every layer share `<= shareMax` on each day in `shareMaxCheckDays`, and every layer share with a non-zero multiplier `>= shareMin` on each day in `shareMinCheckDays` (issue #12). `Base` and `Speed` are never floor-checked (speed is permanently exempt: it cannot reach 5% once `ATK_SPD` is capped, issue #36); crit is. Layers in `shareFloorExempt[tier]` that miss the floor print `WARN` and do not fail; the ceiling always gates. The M0 exemptions are removed at MVP once 03's retune lands (levers chosen from `power_curve_model.py` output, pending the tool, issue #36) | 00 section 7 (40% / 5% rule), 03 section 8.5 |
+| AC2 | For each seed: every layer share `<= shareMax` on each day in `shareMaxCheckDays`, and every layer share with a non-zero multiplier `>= shareMin` on each day in `shareMinCheckDays`, or in `shareMinCheckDaysByLayer[layer]` where the layer has an entry (Skills and Companions: day 30 only, since they are still unlocking on day 7; decision #249 item 1) (issue #12). `Base` and `Speed` are never floor-checked (speed is permanently exempt: it cannot reach 5% once `ATK_SPD` is capped, issue #36); crit is. Layers in `shareFloorExempt[tier]` that miss the floor print `WARN` and do not fail; the ceiling always gates. The M0 exemptions are removed at MVP once 03's retune lands (levers chosen from `power_curve_model.py` output, issue #36; decision #249 applied `res_atk` 0.08, and Research still misses on day 30, issue #283 item G4) | 00 section 7 (40% / 5% rule), 03 section 8.5 |
 | AC3 | For each seed: `FirstWallStage` at day 30 in `[60, 200]` | 03 section 8.6 |
-| AC4 | For each seed: every wall opened by day 14 has active minutes `<= 240`; walls opened on days 15-30 have active minutes `<= lateWallMaxActiveMinutes` (03 AC18), whose value `power_curve_model.py` sets (pending the tool; until then the key is `null` and they print `WARN`, issue #36) | 03 section 8.6, AC18 |
+| AC4 | For each seed: every wall opened by day 14 has active minutes `<= 240`; walls opened on days 15-30 have active minutes `<= lateWallMaxActiveMinutes` = 360 (03 AC18, decision #249 item 2; a `null` key prints `WARN`, issue #36) | 03 section 8.6, AC18 |
 | AC5 | Median `DiamondsEarned` per day over days 2-30 within `diamondsPerDayTolerance` of `DIAMONDS_PER_DAY_F2P` | 06 section 2 |
 | AC6 | `lazy-f2p` median stage at day 7 and 30 is at least `lazyFraction` of `greedy-f2p`'s | 00 pillar 1 |
 | AC7 | `whale` minus `greedy-f2p` median stage at day 7 in `whaleGapStagesDay7` | 00 pillar 4: paying is sooner, not elsewhere |
@@ -419,7 +420,7 @@ dotnet run -c Release --no-build --project src/HeroCat.Bots -- report --layer-sh
 dotnet run -c Release --no-build --project src/HeroCat.Bots -- golden --check
 ```
 
-During the M0 rewrite both `acceptance` runs are report-only (`REWRITE_REPORT_ONLY=1` in `check.sh`, until the balance decision #249 and issue #136), and so is `power_curve_model.py --check`; the PR comment says so. `gacha_model.py --cadence` is a hard gate except two report-only checks (04 section 14). Not yet in `--content`: the exporter's `--previous`, `--strict-warnings` and `--ui-keys` (09 issues #122, #123, #128) and `stage-bound --check` (issue #60, needs the whale bot).
+During the M0 rewrite both `acceptance` runs are report-only (`REWRITE_REPORT_ONLY=1` in `check.sh`, until the balance decisions left after #249 in issue #283, and issue #136), and so is `power_curve_model.py --check`; the PR comment says so. `gacha_model.py --cadence` is a hard gate with no report-only checks left (04 section 14, decision #249 items 1 and 11). Not yet in `--content`: the exporter's `--previous`, `--strict-warnings` and `--ui-keys` (09 issues #122, #123, #128) and `stage-bound --check` (issue #60, needs the whale bot).
 
 `.github/workflows/nightly-bots.yml` (02:00 UTC and manual dispatch) calls `./check.sh --nightly` on `ubuntu-latest`, and `./check.sh --nightly --replay-only` on `windows-latest` and `macos-14` (ARM64, under bash) for the cross-platform determinism check; each leg uploads `$CHECK_OUT_DIR` as an artifact:
 
@@ -650,9 +651,9 @@ Team-weeks for a 2-3 person team (one gameplay/sim engineer, one client engineer
 | Month | Milestone | Scope | Exit (00 section 11) | Team-weeks (2-3 people) | Solo-dev variant |
 |---|---|---|---|---|---|
 | 1 | M0 foundations | Repo, `HeroCat.Sim` combat + stages + Training + hero level, `ContentDb` + exporter (09), RNG streams, `HeroCat.Bots` greedy F2P with the day table, `pr.yml` | bots print the day table; determinism test green on x64 | 8 | 5 weeks, same scope minus Windows/mac golden runners |
-| 2 | M0 systems | Weapon + skill summon (local), Fish Board + tank, offline catch-up, local save with migrations v1, `content.yml` with AC1-AC4, AC9 | `acceptance --tier M0 --days 14` passes | 9 | 6 weeks |
+| 2 | M0 systems | Weapon + skill summon (local), Fish Board + tank, offline catch-up, Awakening and the Rock Candy Dungeon (sim and bots; decision #249 item 9b), local save with migrations v1, `content.yml` with AC1-AC4, AC9, AC11 | `acceptance --tier M0 --days 14` passes (AC1 does today; whether AC3, AC4 and AC11 gate M0 is issue #283 item G6) | 9 | 6 weeks |
 | 3 | M0 client | Unity project, `SCR_MAIN`, `SCR_HERO`, `SCR_WEAPONS`, `SCR_SKILLS`, `SCR_SUMMON`, `SCR_SUMMON_RESULT`, `SCR_OFFLINE_REWARD`, `SCR_ITEM_DETAIL`, placeholder art, `build-android.yml` | one person plays 20 min on device unprompted | 10 | 7 weeks |
-| 4 | MVP sim | Companions + MP, Research, Awakening, quests, dungeons, day/week keys, inbox (local), bots: lazy, light spender, whale; AC5-AC8, AC11 | all bots within tolerance; 03 layer shares in band | 9 | 6 weeks |
+| 4 | MVP sim | Companions + MP, Research, limit breaks, quests, the Fish Coin and EXP dungeons, day/week keys, inbox (local), bots: lazy, light spender, whale; AC5-AC8 | all bots within tolerance; 03 layer shares in band | 9 | 6 weeks |
 | 5 | MVP backend 1 | ASP.NET skeleton, auth (guest + link), cloud save with conflict rules, config, server summons with audit log, `HeroCat.Server.Tests`, `deploy.yml` to stage | summon test vs Python model green; idempotency replay green | 10 | skip; keep local seams. 2 weeks hardening local save instead |
 | 6 | MVP backend 2 + client 2 | IAP receipts both stores, inbox, plausibility checks, admin mail; client: `SCR_COMPANIONS`, `SCR_RESEARCH`, `SCR_DUNGEONS`, `SCR_DUNGEON_RUN`, `SCR_QUESTS`, `SCR_SHOP`, `SCR_INBOX`, `SCR_SETTINGS`, `SCR_TITLE` | sandbox purchase grants end to end on stage | 11 | 6 weeks client only; no shop, settings without account |
 | 7 | MVP polish | Tutorial, analytics, localization: EN ships, `ja` fully translated in the pipeline so the second-locale checks run (`ship_locales = en,ja` in CI fixtures, `en` in shipped meta; issue #57), art pass on hero/fish/boards, `SCR_STAGE_SELECT`, `SCR_PROFILE`, PlayMode smoke, device farm, perf budgets | section 5 budgets met on 4 devices | 9 | 6 weeks, EN only |

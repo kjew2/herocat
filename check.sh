@@ -33,7 +33,8 @@ MODE_SERVER=0
 # M0 rewrite (specs/00 decision 33): the user agreed to run the acceptance sweep report-only until the new bots meet
 # the day-stage targets. The golden files are regenerated from the new bots and are a hard gate again (#138).
 # TODO(#136): set to 0 (acceptance a hard gate again) once the greedy-f2p sweep passes honestly. Offline catch-up
-# (#108) has landed and the sweep still misses AC1/AC3/AC4; it waits on the balance decision #249.
+# (#108) and the #249/#266 retune have landed; the sweep still misses AC1 (day 30), AC3, AC4 and AC11 and waits on
+# the balance decision #283.
 REWRITE_REPORT_ONLY=1
 REPORT_ONLY_FAILED=0
 for arg in "$@"; do
@@ -137,7 +138,7 @@ content_python() {
 
   # Report-only: several of 03 section 8.6's S-constant bands and 06's economy checks (issue #178) miss under the
   # current content (layer floors, walls, Awakening cadence, dungeon shares, ...). Retuning is the user's balance call
-  # (decision #249); make this a hard gate once the checks pass.
+  # (#249 and #266 are applied; what still misses is decision #283); make this a hard gate once the checks pass.
   if [ "$FAST" -eq 0 ]; then
     step "Tools: power_curve_model.py --check, 20-seed sweep, S-constant and economy checks (03 section 8.6, 06 sections 2/11; report-only)"
     if ! $PY tools/power_curve_model.py --check --quiet; then
@@ -150,13 +151,13 @@ content_python() {
     $PY tools/fish_model.py --quiet --out "$OUT_DIR/fish" --research-schedule tools/out/power_curve_7.json --dungeon-curves \
       | sed -n '/^Fish Coin Dungeon curves/,$p'
 
-    # 04 section 14 (issue #164): the weapon level-4 day, level-10 P(E+), Legendary pace and passive share are hard; the
-    # Common level-5 pace (04 open question 8) and the companion day-7 floor wait on #249 items 11 and 1: report-only.
-    step "Tools: gacha_model.py --cadence, F2P pull cadence and 04 section 14 S-constant checks (two report-only)"
+    # 04 section 14 (issue #164): every check is hard since #249 (the Common level-5 target is dropped, item 11; the
+    # companion floor is day 30, item 1). A check marked report-only in the tool would still only warn here.
+    step "Tools: gacha_model.py --cadence, F2P pull cadence and 04 section 14 S-constant checks"
     to_file gacha-cadence.txt $PY tools/gacha_model.py --cadence --quiet
     if grep -q '^  REPORT-ONLY:' "$OUT_DIR/gacha-cadence.txt"; then
       GACHA_SOFT_FAILED=1
-      printf '\nWARNING: report-only gacha_model.py checks missed (#249 items 1 and 11). Not a full pass.\n'
+      printf '\nWARNING: report-only gacha_model.py checks missed. Not a full pass.\n'
     fi
   fi
 }
@@ -191,7 +192,7 @@ soft() {
   if [ "$REWRITE_REPORT_ONLY" -eq 1 ]; then
     if ! "$@"; then
       REPORT_ONLY_FAILED=1
-      printf '\nWARNING: report-only step failed (until the balance decision #249, TODO(#136)). Not a full pass.\n'
+      printf '\nWARNING: report-only step failed (until the balance decision #283, TODO(#136)). Not a full pass.\n'
     fi
   else
     "$@"
@@ -300,14 +301,14 @@ content_dotnet() {
 
   rm -f "$OUT_DIR/acceptance.report-only"
   if [ "$REWRITE_REPORT_ONLY" -eq 1 ]; then
-    echo "the acceptance sweep is report-only until the balance decision #249 (TODO(#136)); it does not block merge yet" \
+    echo "the acceptance sweep is report-only until the balance decision #283 (TODO(#136)); it does not block merge yet" \
       > "$OUT_DIR/acceptance.report-only"
   fi
   # GNU timeout guards a hung sweep (specs/10 section 6.2); macOS has none, where the bots' own time budget applies.
   local TIMEOUT=()
   if command -v timeout >/dev/null 2>&1; then TIMEOUT=(timeout 400); fi
 
-  step "Bots: acceptance sweep (greedy-f2p, 20 seeds x 30 days, tier M0; report-only until #249)"
+  step "Bots: acceptance sweep (greedy-f2p, 20 seeds x 30 days, tier M0; report-only until #283)"
   soft to_file acceptance.txt ${TIMEOUT[@]+"${TIMEOUT[@]}"} $BOTS acceptance --tier M0 --seeds 1-20 --days 30 --time-budget-s 240 --table --verbose
 
   step "Bots: M0 exit criterion, two weeks of simulated play (specs/00 section 11, specs/10 section 3.8; report-only)"
@@ -347,7 +348,7 @@ if [ "$MODE_CONTENT" -eq 1 ]; then content_python; fi
 if [ "$DOTNET" -eq 0 ]; then
   printf '\nSkipped .NET checks (--no-dotnet). Not a full pass.\n'
   [ "$POWER_CURVE_FAILED" -eq 1 ] && printf 'Report-only: power_curve_model.py --check FAILED (balance call pending).\n'
-  [ "$GACHA_SOFT_FAILED" -eq 1 ] && printf 'Report-only: gacha_model.py --cadence checks missed (#249 items 1 and 11).\n'
+  [ "$GACHA_SOFT_FAILED" -eq 1 ] && printf 'Report-only: gacha_model.py --cadence checks missed.\n'
   exit 0
 fi
 
@@ -361,14 +362,14 @@ if [ "$POWER_CURVE_FAILED" -eq 1 ]; then
   printf '\nHard checks passed; report-only power_curve_model.py --check FAILED (03 section 8.6 bands, balance call pending). Not a full pass.\n'
 fi
 if [ "$GACHA_SOFT_FAILED" -eq 1 ]; then
-  printf '\nHard checks passed; report-only gacha_model.py --cadence checks missed (#249 items 1 and 11). Not a full pass.\n'
+  printf '\nHard checks passed; report-only gacha_model.py --cadence checks missed. Not a full pass.\n'
 fi
 if [ "$REPORT_ONLY_FAILED" -eq 1 ]; then
-  printf '\nHard checks passed; the report-only acceptance sweep FAILED (until the balance decision #249, TODO(#136)). Not a full pass.\n'
+  printf '\nHard checks passed; the report-only acceptance sweep FAILED (until the balance decision #283, TODO(#136)). Not a full pass.\n'
 elif [ "$POWER_CURVE_FAILED" -eq 1 ] || [ "$GACHA_SOFT_FAILED" -eq 1 ]; then
   :
 elif [ "$REWRITE_REPORT_ONLY" -eq 1 ] && [ "$FAST" -eq 0 ] && [ "$MODE_CONTENT" -eq 1 ]; then
-  printf '\nAll checks passed (the acceptance sweep is report-only until the balance decision #249).\n'
+  printf '\nAll checks passed (the acceptance sweep is report-only until the balance decision #283).\n'
 else
   printf '\nAll checks passed.\n'
 fi

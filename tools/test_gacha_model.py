@@ -84,11 +84,12 @@ class CadenceCheckTests(unittest.TestCase):
         cls.base = gm.cadence_checks(cls.p, cls.cad, dict(gm.SHIFTS))
 
     def test_every_rule_is_a_named_check_with_its_gate_kind(self):
-        kinds = {L4: True, EPLUS: True, COMMON: False, LEGEND: True, PASSIVE: True, COMPANION: False}
+        kinds = {L4: True, EPLUS: True, LEGEND: True, PASSIVE: True, COMPANION: True}
         for prefix, hard in kinds.items():
             for c in find(self.base, prefix):
                 self.assertEqual(c[3], hard, c[1])
         self.assertEqual(len(find(self.base, PASSIVE)), 2)   # days 7 and 30
+        self.assertFalse([c for c in self.base if c[1].startswith(COMMON)])   # target dropped (#249 item 11)
 
     def test_current_content_passes_the_decided_pool_and_passive_checks(self):
         for prefix in (EPLUS, LEGEND, PASSIVE):
@@ -105,12 +106,10 @@ class CadenceCheckTests(unittest.TestCase):
         (c,) = find(gm.cadence_checks(p, cad, dict(gm.SHIFTS)), L4)
         self.assertEqual(c[0], "FAIL", c[2])
 
-    def test_legendary_check_trips_and_common_check_passes_at_a_whale_cadence(self):
+    def test_legendary_check_trips_at_a_whale_cadence(self):
         p, cad = cadence({"TICKETS_PER_DAY[WEAPON]": "20"})
         checks = gm.cadence_checks(p, cad, dict(gm.SHIFTS))
         self.assertEqual(find(checks, LEGEND)[0][0], "FAIL")
-        self.assertEqual(find(checks, COMMON)[0][0], "PASS")
-        self.assertEqual(find(self.base, COMMON)[0][0], "FAIL")   # 04 open question 8: unreachable at F2P cadence
 
     def test_passive_check_trips_when_the_passive_dominates(self):
         over = {f"WEAPON_PASSIVE_PCT[{r}]": str(v * 10) for r, v in

@@ -2,7 +2,7 @@
 
 Every currency in 00 section 5.2, where it comes from and where it goes, at what rate per day for the reference F2P player; the daily and weekly rhythm (quests, dungeons, login, rollover); Offline Catch-up; the Shop and Inbox as the diamond entry points; Awakening as the Rock Candy exit. Combat, Training and Research produce or consume these currencies but their rules live in 03; summons are the main diamond sink and live in 04; the Fish Board's coin income lives in 05. This spec owns the ledger, the schedule and the grants.
 
-Tiers covered: M0 (Wallet, Offline Catch-up), MVP (Quests, Dungeons, Shop, Inbox, Awakening cadence), P1 (Tower, Rewarded Ads, Events, Guild Coins) in outline.
+Tiers covered: M0 (Wallet, Offline Catch-up, the Rock Candy Dungeon and the Awakening cadence; decision #249 item 9b), MVP (Quests, the Fish Coin and EXP dungeons, Shop, Inbox), P1 (Tower, Rewarded Ads, Events, Guild Coins) in outline.
 
 Depends on: 00 (constants, names, authority split), 02 (`GameState` fields this spec writes, `IClock`), 03 (`KillTimeSeconds`, `GoldPerKill`, `ExpPerKill`, Awakening gates, Research costs), 04 (pull pricing, ticket consumption), 05 (`CatchUpTank`, Fish Coin income), 08 (Inbox and IAP server contracts).
 
@@ -58,9 +58,10 @@ public sealed partial class Wallet
 | `GOLD` | M0 | Kills (`KILL`), boss kills x`BOSS_GOLD_MULT` (`BOSS`), Offline Catch-up (`OFFLINE`); no dungeon grants gold | Training (`TRAINING`) | 100% of income is spent; see section 11 |
 | `DIAMOND` | M0 | Login (`LOGIN`), daily/weekly quests (`QUEST`), boss first clears (`FIRST_CLEAR`), achievements (`ACHIEVEMENT`), tutorial grant (`TUTORIAL`), IAP via Inbox (`IAP`), mail (`MAIL`) | Summons (`SUMMON`), ticket exchange (`SHOP_EXCHANGE`) | `DIAMONDS_PER_DAY_F2P` = 400 (section 2) |
 | `FISH_COIN` | M0 source, MVP sink | Fish discovery (`FISH_DISCOVERY`), repeat merges and discards (`FISH_MERGE`, 05), Fish Coin Dungeon (`DUNGEON`) | Research (`RESEARCH`) | board income (05) plus `2 x FISH_COIN_FLOOR(f)`; per-day totals from the tool, section 11 |
-| `ROCK_CANDY` | MVP | Rock Candy Dungeon (`DUNGEON`), boss kills by chance (`BOSS`, rate in 03), copies past `DUPE_LVL_CUM[10]` = 160 converted at pull time (`SUMMON`, 04 section 5.3) | Awakening (`AWAKENING`), limit breaks (`LIMIT_BREAK`, rules in 04) | 2 x `ROCK_CANDY_FLOOR(f)`, section 6; boss drops and overflow are small next to it |
+| `ROCK_CANDY` | M0 (decision #249 item 9b) | Rock Candy Dungeon (`DUNGEON`), boss kills by chance (`BOSS`, rate in 03), copies past `DUPE_LVL_CUM[10]` = 160 converted at pull time (`SUMMON`, 04 section 5.3) | Awakening (`AWAKENING`, M0), limit breaks (`LIMIT_BREAK`, MVP, rules in 04) | 2 x `ROCK_CANDY_FLOOR(f)`, section 6; boss drops and overflow are small next to it |
 | `HERO_EXP` | M0 | Kills (`KILL`), Offline Catch-up (`OFFLINE`), EXP Dungeon (`DUNGEON`) | Hero Level, consumed automatically by 03 | never spent manually |
-| `TICKET_FISH_COIN`, `TICKET_ROCK_CANDY`, `TICKET_EXP` | MVP | Daily reset to `DUNGEON_TICKETS_PER_DAY` (`DAILY_RESET`), exchange (`SHOP_EXCHANGE`), mail | Dungeon clear or sweep (`DUNGEON`) | 2 each, reset not stacked |
+| `TICKET_ROCK_CANDY` | M0 (decision #249 item 9b) | Daily reset to `DUNGEON_TICKETS_PER_DAY` (`DAILY_RESET`); exchange (`SHOP_EXCHANGE`) and mail from MVP | Dungeon clear or sweep (`DUNGEON`) | 2, reset not stacked |
+| `TICKET_FISH_COIN`, `TICKET_EXP` | MVP | Daily reset to `DUNGEON_TICKETS_PER_DAY` (`DAILY_RESET`), exchange (`SHOP_EXCHANGE`), mail | Dungeon clear or sweep (`DUNGEON`) | 2 each, reset not stacked |
 | `TICKET_SUMMON_WEAPON` | MVP | Daily free gift (`DAILY_GIFT`), quests, weekly bonus, events, mail | One pull (`SUMMON`) | 1 per day from the gift |
 | `TICKET_SUMMON_SKILL`, `TICKET_SUMMON_COMPANION` | MVP | Weekly complete-all bonus, achievements, events, mail | One pull (`SUMMON`) | about 0.15 per day each |
 | `GUILD_COIN` | P1 | Guild activity | Guild shop | 0 before P1 |
@@ -77,7 +78,7 @@ Rules that hold for every row:
 
 ### 1.2 M0 subset
 
-M0 ships `GOLD`, `DIAMOND`, `FISH_COIN`, `HERO_EXP`; the tutorial grant (`TUTORIAL_DIAMONDS` plus the starter weapon `TUTORIAL_WEAPON_ID`, 09 `tut_welcome`, issue #46); Offline Catch-up; `LOGIN_DIAMONDS`; boss first-clear diamonds (`FIRST_CLEAR_DIAMONDS`, paid by 03's boss clear with `CurrencyReason.FIRST_CLEAR`). Quests, Dungeons, Shop, Inbox and Awakening are MVP. The M0 bot therefore earns diamonds only from login, first clears and the tutorial grant, which is why the M0 exit criterion in 00 section 11 is two weeks, not thirty days.
+M0 ships `GOLD`, `DIAMOND`, `FISH_COIN`, `HERO_EXP`, `ROCK_CANDY` and `TICKET_ROCK_CANDY`; the Rock Candy Dungeon and Awakening (decision #249 item 9b); the tutorial grant (`TUTORIAL_DIAMONDS` plus the starter weapon `TUTORIAL_WEAPON_ID`, 09 `tut_welcome`, issue #46); Offline Catch-up; `LOGIN_DIAMONDS`; boss first-clear diamonds (`FIRST_CLEAR_DIAMONDS`, paid by 03's boss clear with `CurrencyReason.FIRST_CLEAR`). Quests, the Fish Coin and EXP dungeons, limit breaks, Shop and Inbox are MVP. The M0 Rock Candy Dungeon is a sim and bot feature: the M0 client has no dungeon screen (`SCR_DUNGEONS` and `SCR_DUNGEON_RUN` stay MVP, issue #182), so on device M0 Rock Candy comes only from boss drops. The M0 bot runs the dungeon (two tickets a day, the next floor if it clears, else a sweep) and awakens as soon as it can. It earns diamonds only from login, first clears and the tutorial grant, which is why the M0 exit criterion in 00 section 11 is two weeks, not thirty days.
 
 ### 1.3 Reject reasons
 
@@ -115,30 +116,31 @@ The target `DIAMONDS_PER_DAY_F2P` = 400 (S) is a steady-state floor for a player
 | Daily missions | 10 paying mission rows at 20 diamonds each (`reward_amount`); `d_login` pays nothing (section 5.2). Reference day: `REF_DAILIES_DONE` = 8 of 10 completed (the Skill and Companion summon missions need diamond pulls and are skipped on a non-pull day) | 160 |
 | Daily progress bonus | rows `d_bonus_5` (30) at 5 missions, `d_bonus_8` (70) at 8 missions | 100 |
 | First clears | `FIRST_CLEAR_DIAMONDS` (10) per boss stage cleared for the first time; reference day assumes `REF_NEW_BOSSES` = 4 new boss stages | 40 |
-| Weekly missions, amortised | 7 mission rows at 50 diamonds each = 350 per week = 50 per day | 50 |
-| **Total** | | **400** |
+| Weekly missions, amortised | 7 mission rows at 60 diamonds each = 420 per week = 60 per day (decision #266 item C) | 60 |
+| **Total** | | **410** |
 
-`50 + 8 * 20 + (30 + 70) + 4 * 10 + 350 / 7 = 50 + 160 + 100 + 40 + 50 = 400`.
+`50 + 8 * 20 + (30 + 70) + 4 * 10 + 420 / 7 = 50 + 160 + 100 + 40 + 60 = 410`, 2.5% above the target and inside `E039`'s 10%. The weekly rows were raised from 50 so the late-game bot, which misses some rows, still lands near the target.
 
 Quest rows are the single source of quest diamond amounts: there are no per-mission or bonus constants (issues #55, #244). The 09 exporter rule `E039` recomputes this reference day from the quest rows, `LOGIN_DIAMONDS`, `FIRST_CLEAR_DIAMONDS` and the two reference constants `REF_DAILIES_DONE` and `REF_NEW_BOSSES` (formula in 09), and fails when it is more than 10% from `DIAMONDS_PER_DAY_F2P`.
 
-Income by day for the greedy F2P bot. **Model output** of `tools/power_curve_model.py --check` (20-seed medians, each column its own median, for content 2026.11.01.2 with the section 5.4 ladders from the spec rows until the `achievements` table ships, issue #171; issue #178). The tool pays every source by its rule: `LOGIN_DIAMONDS` at day start, the daily and weekly rows the bot's day actually completes (claimed at the end of the day), `FIRST_CLEAR_DIAMONDS` per boss stage the bot clears for the first time, and each achievement rung when the bot's state crosses it. Weeks are days 1-7, 8-14, ... (the bot epoch is a Monday, 00 decision 25); the weekly column is the week's weekly-row diamonds divided by 7, and day 30 (a week the run cuts short) uses the last whole week. Rerun the tool after any content change; the numbers move with the stage curve.
+Income by day for the greedy F2P bot. **Model output** of `tools/power_curve_model.py --check` (20-seed medians, each column its own median, for content 2026.11.02.4 with the section 5.4 ladders from the spec rows until the `achievements` table ships, issue #171; issue #178). The tool pays every source by its rule: `LOGIN_DIAMONDS` at day start, the daily and weekly rows the bot's day actually completes (claimed at the end of the day), `FIRST_CLEAR_DIAMONDS` per boss stage the bot clears for the first time, and each achievement rung when the bot's state crosses it. Weeks are days 1-7, 8-14, ... (the bot epoch is a Monday, 00 decision 25); the weekly column is the week's weekly-row diamonds divided by 7, and day 30 (a week the run cuts short) uses the last whole week. Rerun the tool after any content change; the numbers move with the stage curve.
 
 | Day | Stage | New boss stages | Dailies done (of 11) | Login | Dailies + bonus | First clears | Weekly (amortised) | Achievements (section 5.4, one-time) | Day total |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | 210 | 20 | 10 | 50 | 280 | 200 | 50 | 1,070 (plus the 1,500 tutorial grant) | 3,190 |
-| 3 | 360 | 4 | 11 | 50 | 300 | 40 | 50 | 100 | 575 |
-| 7 | 430 | 1 | 11 | 50 | 300 | 10 | 50 | 200 | 610 |
-| 14 | 510 | 1 | 9 | 50 | 260 | 10 | 36 | 100 | 471 |
-| 30 | 590 | 0 | 10 | 50 | 280 | 0 | 36 | 0 | 366 |
+| 1 | 214 | 20.5 | 10 | 50 | 280 | 205 | 60 | 1,070 (plus the 1,500 tutorial grant) | 3,195 |
+| 3 | 370 | 4 | 10 | 50 | 280 | 40 | 60 | 100 | 550 |
+| 7 | 460 | 3 | 10 | 50 | 280 | 30 | 60 | 275 | 700 |
+| 14 | 550 | 1 | 10 | 50 | 280 | 10 | 60 | 30 | 420 |
+| 30 | 610 | 0 | 10 | 50 | 280 | 0 | 51 | 0 | 381 |
 
-Reading the table: diamonds are front-loaded on purpose (the first week is where the player learns that pulls feel good). The steady state, days 15-28 (the two whole weeks after day 14), is a median 380 a day, 5% under the target: the bot completes 9-10 dailies on most days (more than the reference day's 8, because it pulls on the Skill or Companion banner on many days), and that offsets the weekly rows it misses and the achievements running dry. From week 2 the bot misses `w_summons` (30 pulls; about 4 a day) and `w_train` (300 Training levels: costs grow faster than gold late, so the "far more" in section 5.3 holds only in week 1) on most seeds, and `w_merges` on some, so the weekly column is 36 rather than 50 and `w_bonus_all` would rarely pay (decision #266 item B). Whether to accept that taper or raise the weekly rows' reward is Open question 1. Over 30 days the median bot earns 1,500 login, 7,870 daily-quest, 1,200 weekly, 580 first-clear and 3,410 achievement diamonds.
+Reading the table: diamonds are front-loaded on purpose (the first week is where the player learns that pulls feel good). The steady state, days 15-28 (the two whole weeks after day 14), is a median 382 a day, 4.5% under the target and inside the check's 10% tolerance (Open question 1): the bot completes about 10 dailies on most days (more than the reference day's 8, because it pulls on the Skill or Companion banner on many days), and that offsets the achievements running dry. With `w_summons` at 20 and `w_train` at 100 (decision #266 item B) the median bot completes all seven weekly rows in weeks 1 and 2 (60 a day); in week 4 (days 22-28, the day-30 row) it misses some on some seeds (median 51). Per-source 30-day totals are in the tool's output.
 
-What the tuning tool (`tools/power_curve_model.py`, spec 03) checks about `DIAMONDS_PER_DAY_F2P` (issue #178; report-only like the rest of `--check` until decision #249):
+What the tuning tool (`tools/power_curve_model.py`, spec 03) checks about `DIAMONDS_PER_DAY_F2P` (issue #178; report-only like the rest of `--check` while issue #283 is open):
 
-- **Budget:** the steady-state income (mean of days 15-28) is at least `DIAMONDS_PER_DAY_F2P` less 10% (the tolerance `E039` uses, 09; Open question 1 names no number). Model: median 380, below 360 on 4 of 20 seeds.
-- **First clears:** the bot's first-clear diamonds over days 1, 2-3, 4-7, 8-14 and 15-30 are within 20% of what the 00 section 6.6 target curve gives (stages gained under the targets, interpolated linearly from stage 0 at day 0, divided by `BOSS_EVERY`, times `FIRST_CLEAR_DIAMONDS`). Model: fails on most seeds outside day 1, because the bot's stage curve is not the target curve (it runs ahead on days 2-3 and 8-30 and behind on days 4-7).
-- **Affordability and pity:** each banner's pull cadence comes from this section's income (diamonds plus the ticket sources in section 1.1) and 03's bot policy; no spec hand-enters a pulls-per-day figure, and 04's `BANNER_LVL_EXP` thresholds are retuned from that output (issue #38). With the pull prices in 00 section 6.3 the steady-state income, plus that banner's tickets at its pull price, must afford one 10-pull every 2.5 days on the Weapon banner, every 5 days on the Skill banner and every 7.5 days on the Companion banner, and every banner's pity counter (`PITY_HARD` 80) must resolve (a Legendary or better) within the 30-day window at least once. If it does not, the number is too low for the summon layer to carry its 03 share of log-power. Model: Weapon every 2.1 days, Skill every 4.8, Companion every 7.0 on the median seed (Skill misses on 6 of 20 seeds, Companion on 4); the bot itself spreads its diamonds by value per diamond, so its actual cadence is 2.37 Weapon, 1.37 Skill and 0.58 Companion pulls a day, and the Companion banner gives no Legendary in 30 days on 7 of 20 seeds (Skill on 3).
+- **Budget:** the steady-state income (mean of days 15-28) is at least `DIAMONDS_PER_DAY_F2P` less 10% (the tolerance `E039` uses, 09; confirmed by decision #266 item C, Open question 1). Model: median 382, below 360 on 2 of 20 seeds.
+- **First clears:** the bot's first-clear diamonds over days 1-30 are within 20% of what the 00 section 6.6 target curve gives (stages gained under the targets, interpolated linearly from stage 0 at day 0, divided by `BOSS_EVERY`, times `FIRST_CLEAR_DIAMONDS`). Only the 30-day total is checked, not each day window: the stage gate already checks the curve's shape (decision #266 item E). Model: passes on 20 of 20 seeds.
+- **Affordability:** each banner's pull cadence comes from this section's income (diamonds plus the ticket sources in section 1.1) and 03's bot policy; no spec hand-enters a pulls-per-day figure, and 04's `BANNER_LVL_EXP` thresholds are retuned from that output (issue #38). With the pull prices in 00 section 6.3 the steady-state income, plus that banner's tickets at its pull price, must afford one 10-pull every 2.5 days on the Weapon banner, every 5 days on the Skill banner and every 7.5 days on the Companion banner. If it does not, the number is too low for the summon layer to carry its 03 share of log-power. Model: Weapon every 2.09 days, Skill every 4.90, Companion every 7.09 on seed 7 (Skill misses on 2 of 20 seeds, Companion on 1).
+- **Pity (reported only):** whether the bot's own pulls resolve each banner's pity (`PITY_HARD` 80, a Legendary or better) within 30 days is printed for information, not checked: the rule above is about affordability, and the bot spreads its diamonds by value per diamond (decision #266 item D; issue #283 item G7 asks to confirm). Model: the bot's actual cadence is 2.40 Weapon, 1.43 Skill and 0.58 Companion pulls a day (medians), and the Companion banner gives no Legendary in 30 days on most seeds.
 - **Spending:** diamonds are spent within 2.5 days in steady state (the end-of-day balance on days 15-28 is never above 2.5 times the steady-state daily income). Model: passes.
 
 `--diamonds flat` replaces every source above with a flat `DIAMONDS_PER_DAY_F2P` at day start (plus the tutorial grant), the parity mode the C# bot also keeps (10).
@@ -160,7 +162,7 @@ Assumed session shape, matching 00 section 6.6 and what the bot in spec 10 plays
 
 What each login shows, in order: `SCR_OFFLINE_REWARD` if the gap was at least `OFFLINE_MIN_S` and the reward is not yet claimed; then any `DayRolledOver` toast; then `SCR_INBOX` badge if unclaimed items exist. No other modal is auto-opened at login (07 section 14 rule: never stack two modals).
 
-## 4. Day and week rollover (M0 login grant, MVP quests and tickets)
+## 4. Day and week rollover (M0 login grant and Rock Candy tickets, MVP quests and other tickets)
 
 ### 4.1 Keys
 
@@ -183,7 +185,7 @@ void EnsureDay(long now)
     State.Time.DayKey = day;
 
     State.Quests.ResetKind(QuestKind.DAILY);                // progress 0, state IN_PROGRESS; unclaimed rewards are forfeited (Open question 2)
-    foreach (var t in DungeonTickets)                       // TICKET_FISH_COIN, TICKET_ROCK_CANDY, TICKET_EXP
+    foreach (var t in DungeonTickets)                       // the build's dungeons: TICKET_ROCK_CANDY (M0), TICKET_FISH_COIN, TICKET_EXP (MVP)
         if (Wallet.Get(t) < DUNGEON_TICKETS_PER_DAY)
             Wallet.Apply(new(t, DUNGEON_TICKETS_PER_DAY - Wallet.Get(t)), CurrencyReason.DAILY_RESET, Sink);
     State.Shop.DailyGiftClaimed = false;
@@ -301,17 +303,17 @@ P1: `d_watch_ad` (`WATCH_AD`, target 1, reward 20) is added as a twelfth row and
 
 ### 5.3 Weekly missions
 
-Each row's `reward_amount` is 50 diamonds (issue #55). All seven complete-able by a player who does the dailies six days out of seven.
+Each row's `reward_amount` is 60 diamonds (issue #55; raised from 50 by decision #266 item C). All seven complete-able by a player who does the dailies six days out of seven.
 
 | Id | Goal | Target | Per-day equivalent |
 |---|---|---|---|
 | `w_login` | `LOGIN_DAYS` | 5 | |
 | `w_kills` | `KILL_ENEMIES` | 3000 | 430 per day, above `d_kills` so it needs the second session |
 | `w_dailies` | `DAILIES_COMPLETED` | 40 | 8 per day for 5 days |
-| `w_summons` | `SUMMON` (any banner) | 30 | Three 10-pulls, or two plus seven gift tickets |
+| `w_summons` | `SUMMON` (any banner) | 20 | Two 10-pulls, or one plus the seven gift tickets and three singles (lowered from 30, decision #266 item B) |
 | `w_merges` | `MERGE_FISH` | 100 | 15 per day |
 | `w_dungeons` | `CLEAR_DUNGEON` (any) | 25 | 6 per day for 4 days |
-| `w_train` | `TRAIN_LEVELS` | 300 | Training levels bought, any stat; the bot buys far more |
+| `w_train` | `TRAIN_LEVELS` | 100 | Training levels bought, any stat; about 15 a day (lowered from 300, decision #266 item B: late Training costs outgrow gold) |
 
 Weekly complete-all bonus: 1 `TICKET_SUMMON_SKILL` + 1 `TICKET_SUMMON_COMPANION` for completing all seven missions above. A `QuestDef` carries one reward, so the bonus is two rows (issue #170, the user's call):
 
@@ -353,7 +355,7 @@ Collection rungs pay for a count, never for a complete set (pillar 4): every `OW
 
 Both run `EnsureDay` first (section 4.2), then the `QUESTS` gate (`QUESTS_LOCKED`), then the checks above. `ClaimQuest` looks the id up in `quests_daily`, then `quests_weekly`, then `achievements` (MVP ids are `d_*` / `w_*` / `ach_*`); a quest with no progress entry is `IN_PROGRESS`. An achievement claim pays with `CurrencyReason.ACHIEVEMENT`, and `ClaimAllQuests(ACHIEVEMENT)` claims every completed rung (issue #171). `ClaimAllQuests` with a `kind` outside `QuestKind` is rejected `(InvalidTarget, UNKNOWN_ID)`. Each claim emits `QuestClaimed` and then its `CurrencyChanged`; `QuestsBulkClaimed.totals` holds one `CurrencyDelta` per currency claimed, in `Currency` order.
 
-## 6. Dungeons (MVP) and Tower (P1)
+## 6. Dungeons (MVP; the Rock Candy Dungeon is M0) and Tower (P1)
 
 ### 6.1 Shape
 
@@ -362,6 +364,8 @@ Three dungeons, each a ladder of floors. Floor `f` is one fixed fight: a single 
 The fight is a deterministic sim run ticked in the main loop (issue #42): `StartDungeon` switches `Combat.Mode = Dungeon` and stores `Combat.DungeonRun { Kind, Floor, Seed, GrantId, EnemyIndex, TicksLeft }` (02). Each tick then runs the normal hero, skill and companion code (03) against the floor's boss on a *temporary* `dungeon_run` RNG stream seeded with `seed`; the persistent `dungeon` stream is untouched in MVP. The boss fight is transient (`Combat.DungeonRun.Fight`, never saved, like `Combat.Fight`), and the frontier fight in `Combat.Fight` is frozen for the run: its enemy, HP, timers and buffs resume exactly where they were. Steps 3 (fish missiles) and 7 (Tap Zap) of 03 section 2.1 do not run, and `TapZap` and `AttemptBoss` are rejected `(NotAvailable, DUNGEON_RUN_IN_PROGRESS)` during a run (issue #172); the boss's kill pays no kill gold, EXP, loot or quest progress, only the floor reward. The run ends `Cleared` when the boss dies or `Failed(remainingHpPct)` when `TicksLeft` reaches 0, and `Combat.Mode` returns to `Stage` at the same stage and kill count. One boss per floor, so `EnemyIndex` is always 0 in MVP. `seed` comes from the `IDungeonSeedService` seam (00 contract 11, issue #25): in MVP `RemoteDungeonSeedService` gets it from the server per run request (08 `POST /dungeon/seed`, with a `grantId`); in M0 and bots `LocalDungeonSeedService` returns the next `dungeon` stream draw, `Derive(seed(dungeon), dungeon.Counter)`, peeked without advancing it (the sim's `Rng.LocalDungeonSeed.Peek`, 01 section 8.8 step 2), and `StartDungeon(..., localSeed: true)` consumes that one draw. Server validation is correlation only (issue #52): the save keeps a short `Dungeons.RecentRuns[{GrantId, Kind, Floor, Cleared}]` list (02) that the server matches against issued seeds, flagging clears without a seed (08 `DUNGEON_WITHOUT_SEED`); together with the soft-currency bounds (`GOLD_DELTA_BOUND`, `RESEARCH_WITHOUT_COINS`) that is the MVP check. Replaying runs from a power snapshot is a P1 follow-up if soft-launch data shows abuse.
 
 The Fish Board is hidden and frozen during a run (issue #40): the fight uses only the board's passive DPS, the tank keeps refilling, and board commands are rejected while `Combat.Mode == Dungeon` (`Locked`, reason `BOARD_LOCKED`, 05). No player input changes the outcome, which is what makes `PreviewDungeon` exact under the same seed (issue #277 for a server seed).
+
+Tiers: the Rock Candy Dungeon is M0 with its `dungeons` row and the `DUNGEONS` unlock row; the Fish Coin and EXP dungeons are MVP (decision #249 item 9b). The M0 sim and bots run it; the M0 client has no dungeon screen (issue #182).
 
 Unlock: the `feature_unlocks` row `DUNGEONS` (`STAGE_HIGHEST >= 30`, 09; issue #45) for all three; `SCR_DUNGEONS` is visible but locked before that. The row replaces the former `DUNGEON_UNLOCK_STAGE` constant, so the sim rejection and the client's Locked state read one value. The Tower (P1) later gates floor ranges: Tower floor 10 unlocks dungeon floors 11 to 20, and so on; in MVP all floors are open to whoever can clear the previous one.
 
@@ -419,10 +423,10 @@ void EndDungeonRun(bool cleared, double remainingFraction)   // fraction of the 
 | Dungeon | Reward of floor `f` | Floor 1 | Floor 4 | Floor 12 | Floor 27 |
 |---|---|---|---|---|---|
 | `FISH_COIN` | `FISH_COIN_FLOOR(f) = 50 * f` | 50 | 200 | 600 | 1,350 |
-| `ROCK_CANDY` | `ROCK_CANDY_FLOOR(f) = 10 * f` | 10 | 40 | 120 | 270 |
+| `ROCK_CANDY` | `ROCK_CANDY_FLOOR(f) = 15 * f` (decision #249 item 3; was `10 * f`) | 15 | 60 | 180 | 405 |
 | `EXP` | `EXP_FLOOR(f) = EXP_DUNGEON_KILLS * ExpPerKill(stage = 20 f)` with `EXP_DUNGEON_KILLS` = 300 | 300 x `EXP0 * EXP_G^20` = 300 x 5 x 1.025^20 = 2,458 | 300 x 5 x 1.025^80 = 10.8K | 300 x 5 x 1.025^240 = 562K | 300 x 5 x 1.025^540 = 927M |
 
-The columns are formula vectors (`EXP0` = 5, `EXP_G` = 1.025, 00 section 6.2; `ExpPerKill` before `EXP_GAIN` training), not day markers. Where the bot stands: a floor needs about stage `20 f` to clear, and the ladder (6.2: the next floor only, two tickets a day) adds at most `DUNGEON_TICKETS_PER_DAY` = 2 floors per dungeon per day from the stage-30 unlock. Against the 00 section 6.6 targets the best floor is therefore about 2 at the end of day 1, 6 on day 3 and 14 on day 7; the stage limit `floor(s / 20)` (23 at day 12, 24 at day 14, 27 at day 30) takes over from about day 12. Illustrative; the tool tracks the real ladder, and whether the ladder rule stays is decision #249 item 3.
+The columns are formula vectors (`EXP0` = 5, `EXP_G` = 1.025, 00 section 6.2; `ExpPerKill` before `EXP_GAIN` training), not day markers. Where the bot stands: a floor needs about stage `20 f` to clear, and the ladder (6.2: the next floor only, two tickets a day) adds at most `DUNGEON_TICKETS_PER_DAY` = 2 floors per dungeon per day from the stage-30 unlock. Against the 00 section 6.6 targets the best floor is therefore about 2 at the end of day 1, 6 on day 3 and 14 on day 7; the stage limit `floor(s / 20)` (23 at day 12, 24 at day 14, 27 at day 30) takes over from about day 12. Illustrative; the tool tracks the real ladder. The ladder rule stays (decision #249 item 3).
 
 Linear tables for Fish Coins and Rock Candy are deliberate: both sinks (Research in 03, Awakening in 6.5) have cost ladders that grow faster than linearly, so the dungeon's share of each currency falls over time and the active sources (board, bosses) stay the main income. The tuning tool must check: (a) `2 * FISH_COIN_FLOOR(f)` is between 20% and 50% of the day's total Fish Coin income at days 7 and 30 (the rest from the board, 05). Day 1 is exempt: the dungeon opens at stage 30 on floor 2 while the board pays its discovery coins, so no sane curve reaches the band there (decision #249 item 6 and issue #165, agreed with the user: band 20-50% from day 7, curve stays `50 * f`); (b) the Rock Candy cadence in 6.5 holds. `power_curve_model.py --check` runs (a) on the bot's own dungeon runs; `fish_model.py --research-schedule tools/out/power_curve_7.json --dungeon-curves` reports it per candidate curve against the attentive board (report only, open question 4).
 
@@ -436,13 +440,13 @@ Awakening rules (gates, multiplier) are 03's; this section checks that the Rock 
 
 | Rank | `AWAKEN_STAGES` | Gate reached (00 section 6.6) | `AWAKEN_COST_ROCK_CANDY` | Cumulative cost | Cumulative dungeon Rock Candy | Affordable | Days after gate |
 |---|---|---|---|---|---|---|---|
-| 1 | 50 | day 1 | 100 | 100 | 100 by day 2 (30 + 70) | day 2 | 1 |
-| 2 | 150 | day 1 | 300 | 400 | 360 by day 4, 550 by day 5 | day 5 | 4 |
-| 3 | 300 | day 3 | 800 | 1,200 | 1,050 by day 7, 1,360 by day 8 | day 8 | 5 |
-| 4 | 500 | day 19 | 2,000 | 3,200 | 2,530 by day 11, then 2 x floor 23 = 460 a day: 3,450 by day 13 | before the gate | 0 |
+| 1 | 50 | day 1 | 100 | 100 | 150 by day 2 (45 + 105) | day 2 | 1 |
+| 2 | 150 | day 1 | 300 | 400 | 315 by day 3, 540 by day 4 | day 4 | 3 |
+| 3 | 300 | day 3 | 800 | 1,200 | 1,170 by day 6, 1,575 by day 7 | day 7 | 4 |
+| 4 | 500 | day 19 | 2,000 | 3,200 | 3,150 by day 10, 3,795 by day 11 | before the gate | 0 |
 | 5 | 800 | beyond day 30 | 5,000 | 8,200 | | | |
 
-Reading: the intended feel is that every rank lands at most `max_days_after_gate` (2) days after its stage gate ("I can see it, I will have it tomorrow"). Under the current ladder and `ROCK_CANDY_FLOOR` that holds for ranks 1 and 4 but not for ranks 2 and 3, which arrive about 4 and 5 days after their gates; `tools/power_curve_model.py --check` reports the same miss (AC 18). The fix (more Rock Candy per floor, a different ladder rule, or limit-break repricing) is decision #249 items 3 and 5, not this table. Once rank 4 is bought Rock Candy accumulates, and 04's limit breaks are the sink for the surplus. `Awaken` command: validation, reject reasons and effect in 03; debits Rock Candy with `CurrencyReason.AWAKENING`; emits `Awakened(rank)`; progress `AWAKEN_RANK` ladder.
+Reading: the intended feel is that every rank lands at most `max_days_after_gate` (2) days after its stage gate ("I can see it, I will have it tomorrow"). Under the current ladder and `ROCK_CANDY_FLOOR(f) = 15 * f` that holds for ranks 1 and 4 but not for ranks 2 and 3, which arrive about 3 and 4 days after their gates; `tools/power_curve_model.py --check` reports the same miss on every seed (median 3 and 5 days, AC 18). Raising the floor reward from `10 * f` and limit-break costs x1.5 (decision #249 items 3 and 5) did not close it: the rank 2 gate (stage 150) is reached on day 1, when the dungeon has paid 45 candy against a cumulative cost of 400. The fix (later stage gates, cheaper ranks 2-3, or a different measure) is issue #283 item G1, not this table. Once rank 4 is bought Rock Candy accumulates, and 04's limit breaks are the sink for the surplus. `Awaken` command: validation, reject reasons and effect in 03; debits Rock Candy with `CurrencyReason.AWAKENING`; emits `Awakened(rank)`; progress `AWAKEN_RANK` ladder.
 
 ### 6.6 Tower (P1 outline)
 
@@ -640,22 +644,22 @@ As built (issue #176): Runtime's `InboxFlow` runs `ClaimInbox` / `ClaimAllInbox`
 
 ## 11. Sinks by day (greedy F2P bot)
 
-**Model output** of `tools/power_curve_model.py --check`: 20-seed medians of what the greedy F2P bot earns and spends on the day, each column its own median, for content 2026.11.01.2 with the fallback rows the tool names (Research, dungeons, companions, achievements; issue #178). The tool prints this table and the section 2 table on every `--check` run; rerun it after a content change rather than editing the numbers by hand. Gold is kills plus Offline Catch-up; diamonds are section 2's sources; the Fish Coin columns split the board's income (05: discovery, merges, discards) from the Fish Coin Dungeon's; the dungeon floor is the 6.2 ladder's best floor at the end of the day (the same in all three dungeons).
+**Model output** of `tools/power_curve_model.py --check`: 20-seed medians of what the greedy F2P bot earns and spends on the day, each column its own median, for content 2026.11.02.4 with the fallback rows the tool names (achievement tickets; issue #178). The tool prints this table and the section 2 table on every `--check` run; rerun it after a content change rather than editing the numbers by hand. Gold is kills plus Offline Catch-up; diamonds are section 2's sources; the Fish Coin columns split the board's income (05: discovery, merges, discards) from the Fish Coin Dungeon's; the dungeon floor is the 6.2 ladder's best floor at the end of the day (the same in all three dungeons).
 
 | Day | Stage | Gold earned | Gold spent (Training) | Diamonds earned | Diamonds spent | Fish Coins: board | Fish Coins: dungeon (floor) | Fish Coins spent (Research) | Rock Candy earned (dungeon / boss) | Rock Candy spent | Awakening rank |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 1 | 210 | 3.1e6 | 3.1e6 | 3,240 (with the 1,500 tutorial grant) | 1,500 | 12,093 | 150 (floor 2) | 0: Research opens at Awakening rank 1, bought day 2 | 41 (30 / 11) | 0 (rank 1 bought day 2) | 0 |
-| 7 | 430 | 4.6e10 | 4.6e10 | 560 | 500 | 5,031 | 1,350 (floor 14) | 7,017 | 271 (270 / 1) | 0: banking toward rank 3 (bought day 8) | 2 |
-| 30 | 590 | 9.8e12 | 9.9e12 | 380 | 400 | 10,670 | 2,900 (floor 29) | 24,727 (from income and savings) | 580 (580 / 0) | 580, all to limit breaks (04) | 4 |
+| 1 | 214 | 3.3e6 | 3.3e6 | 3,255 (with the 1,500 tutorial grant) | 1,500 | 12,093 | 150 (floor 2) | 0: Research opens at Awakening rank 1, bought day 2 | 56 (45 / 11) | 0 (rank 1 bought day 2) | 0 |
+| 7 | 460 | 9.2e10 | 9.1e10 | 640 | 450 | 2,515 | 1,350 (floor 14) | 3,846 | 407 (405 / 2) | 1,190 (800 to Awakening rank 3, 390 to limit breaks) | 3 |
+| 30 | 610 | 1.8e13 | 1.8e13 | 390 | 400 | 10,680 | 3,000 (floor 30) | 9,921 | 900 (900 / 0) | 900, all to limit breaks (04) | 4 |
 
-What the tool checks against this table (issue #178; report-only until decision #249):
+What the tool checks against this table (issue #178; report-only while issue #283 is open):
 
-1. Gold is fully spent: Training gets at least 99% of the gold earned over 30 days, so Training alone sets the gold layer's share. Model: 99.85%, passes.
+1. Gold is fully spent: Training gets at least 99% of the gold earned over 30 days, so Training alone sets the gold layer's share. Model: 99.71% (seed 7), passes.
 2. Diamonds are spent within 2.5 days in steady state (section 2). Model: passes.
-3. The Fish Coin Dungeon's share of the day's Fish Coin income sits in the 6.3 band (20% to 50% on days 7 and 30; day 1 exempt). Model: 21.2% and 22.3% (medians), inside the band (day 1: 1.2%, for information). Settled in issue #165 and decision #249 item 6 (Open question 4, closed).
-4. The EXP Dungeon is 10% to 20% of the day's hero EXP (`EXP_DUNGEON_KILLS`, checked on days 7 and 30). Model: 0.02% and 0.5%. Two clears of `300 * ExpPerKill(20 f)` are small next to the day's kills and Offline Catch-up (about 23,000 kill-equivalents at the frontier), and on day 7 the ladder's floor 14 is the stage-280 boss against a frontier at 430. This is a balance call (the band or `EXP_DUNGEON_KILLS`), decision #266 item A.
-5. The best dungeon floor on day 30 is 25 to 29 (Open question 5). Model: median 29, 30 on 5 of 20 seeds.
-6. Rock Candy cadence (6.5, AC 18) and the boss-drop share are the Awakening checks 03 section 8.6 already runs; limit breaks take 75% of Rock Candy spend (decision #249 item 5).
+3. The Fish Coin Dungeon's share of the day's Fish Coin income sits in the 6.3 band (20% to 50% on days 7 and 30; day 1 exempt). Model: 21.2% and 22.9% on seed 7, inside the band, but day 7 is under 20% on 10 of 20 seeds (day 1: 1.2%, for information). Settled in issue #165 and decision #249 item 6 (Open question 4, closed).
+4. The EXP Dungeon's share of the day's hero EXP on days 7 and 30 is reported, not checked: the EXP Dungeon is a small top-up (decision #266 item A; the former 10-20% band is dropped). Model: 0.0% and 0.6% (day-30 median). Two clears of `300 * ExpPerKill(20 f)` are small next to the day's kills and Offline Catch-up, and the ladder's floor trails the frontier.
+5. The best dungeon floor on day 30 is 25 to 29 (Open question 5). Model: median 30 (31 on seed 7), outside the band on 12 of 20 seeds; the #249 changes moved the stage curve up (issue #283 item G5).
+6. Rock Candy cadence (6.5, AC 18) and the boss-drop share are the Awakening checks 03 section 8.6 already runs; limit breaks take 84% of Rock Candy spend against 04's 60% cap even after the x1.5 repricing (decision #249 item 5; issue #283 item G2).
 
 ## 12. Anti-frustration rules
 
@@ -698,16 +702,16 @@ The other rows as built (`HeroCat.Runtime.Session.FeatureAnalytics`, attached ne
 
 ## Open questions
 
-1. **Late-game diamond taper.** Steady state (days 15-28) is a median 380 per day against the 400 target in `tools/power_curve_model.py` (section 2; the tool's check allows 10% under, `E039`'s tolerance). Owner: economy. Default: accept. Alternative: raise the seven weekly rows' `reward_amount` to 60 (adds 10 per day).
+1. **Late-game diamond taper.** Resolved (decision #266 items B and C): the weekly targets `w_summons` and `w_train` were lowered, the seven weekly rows' `reward_amount` raised to 60, and the check's tolerance of 10% under `DIAMONDS_PER_DAY_F2P` (`E039`'s) is confirmed. Steady state (days 15-28) is now a median 382 per day in `tools/power_curve_model.py` (section 2).
 2. **Forfeit unclaimed daily rewards at rollover.** Owner: product. Default: forfeit (genre standard), with a P1 push notification one hour before rollover when anything is claimable.
 3. **Daily free gift content.** One `TICKET_SUMMON_WEAPON` per day adds 100 diamonds of pull value per day (25% on top of the diamond budget); its effect on banner levels comes from the tool's cadence output (issue #38). Owner: economy with 04. Default: keep; the Weapon banner is the cheapest and the gift is what makes `d_summon_weapon` free.
 4. **Fish Coin dungeon share (closed).** Decided with the user (issue #165, #249 item 6): `FISH_COIN_FLOOR` stays linear `50 * f` and the band is 20% to 50% on days 7 and 30. The history: whether linear `FISH_COIN_FLOOR` keeps the dungeon inside the original 25% to 50% band of daily Fish Coin income. This spec's earlier merge estimate had it overshooting by day 7; the current `tools/power_curve_model.py` run has it under the band on days 1, 7 and 30 (1%, 21%, 22%; section 11). Owner: economy with 05. Default: the tool output decides the curve (issue #165; `50 * f^0.7` was the candidate for an overshoot), and the band and the days it applies to are decision #249 item 6. Tool output (`fish_model.py --dungeon-curves`, seed-7 research and floor schedule, best floor 2 / 14 / 30): `50 * f` gives 1.6% / 21.7% / 22.3% on days 1 / 7 / 30 and `50 * f^0.7` gives 1.3% / 11.2% / 9.4%, so the sublinear curve moves away from the band. A linear `K * f` reaches 25% with K of about 60 on days 7 and 30; day 1 would need K of about 1,000, because the dungeon opens at stage 30 at floor 2 while the board pays about 12,000 discovery coins. Decided: option (a) of issue #165, keep `50 * f` and apply the 20-50% band from day 7.
-5. **Dungeon floor difficulty step.** `DUNGEON_FLOOR_STAGE_STEP` = 20 ties floor progress to stage progress 1:20. Owner: 03. Default: keep; the tool checks that the bot's best floor at day 30 is 25 to 29.
+5. **Dungeon floor difficulty step.** `DUNGEON_FLOOR_STAGE_STEP` = 20 ties floor progress to stage progress 1:20. Owner: 03. Default: keep; the tool checks that the bot's best floor at day 30 is 25 to 29. Still open: after decision #249 the bot's day-30 floor is about 30-31 (section 11); widening the band or a step of 22 is issue #283 item G5.
 6. **Ticket consumed on clear only.** Removes all risk from dungeon runs. Owner: product. Default: keep (anti-frustration rule 1); if runs feel weightless in playtest, add a cosmetic "attempt" counter, not a ticket cost.
 
 ## Acceptance criteria
 
-1. Scripted reference day (login, 8 dailies completed and claimed including both bonus rows, 4 new boss stages, one seventh of the weekly set) adds exactly 400 diamonds to `Wallet`.
+1. Scripted reference day (login, 8 dailies completed and claimed including both bonus rows, 4 new boss stages, one seventh of the weekly set) adds exactly 410 diamonds to `Wallet` (section 2).
 2. `DayKey(DAY_SECONDS - 1) != DayKey(DAY_SECONDS)`; `WeekKey` changes between day 3 and day 4 of the epoch (Sunday to Monday) and not between day 4 and day 10.
 3. `EnsureDay` with `now` smaller than the stored day key's start changes nothing and emits no `DayRolledOver`; a subsequent larger `now` on the same day key also grants nothing.
 4. Rollover with `TICKET_FISH_COIN` = 0, 1, 2, 5 leaves 2, 2, 2, 5.
@@ -723,7 +727,7 @@ The other rows as built (`HeroCat.Runtime.Session.FeatureAnalytics`, attached ne
 14. `StartDungeon(d, bestFloor + 2)` is rejected `(Locked, DUNGEON_FLOOR_NOT_UNLOCKED)`; `StartDungeon` at `Progress.HighestCleared` = 29 is rejected `(Locked, DUNGEON_LOCKED)`; with 0 tickets it is rejected `(CannotAfford, NOT_ENOUGH_TICKET_FISH_COIN)` for the Fish Coin dungeon; during a boss fight it is rejected `(NotAvailable, BOSS_ATTEMPT_IN_PROGRESS)`; while a run is active `StartDungeon` and `SweepDungeon` are rejected `(NotAvailable, DUNGEON_RUN_IN_PROGRESS)`; board commands during a run are rejected `(Locked, BOARD_LOCKED)` (05).
 15. Same save, same seed, same floor: the ticked run and `PreviewDungeon` return identical outcomes and identical `dungeon_run` stream counters on x64 and ARM64 (golden test, 10); the persistent `dungeon` stream counter is unchanged by an MVP run.
 16. `SweepDungeon` grants exactly `RewardOf(d, bestFloor)`, emits `DungeonSwept`, and is rejected `(NotAvailable, NOTHING_TO_SWEEP)` when `bestFloor` = 0.
-17. `ROCK_CANDY_FLOOR(f)` = 10 f and `FISH_COIN_FLOOR(f)` = 50 f for f in {1, 4, 12, 27}; `EXP_FLOOR(4)` = 300 x 5 x 1.025^80 (`EXP_G` = 1.025, 00 section 6.2; about 10,814) within 1e-9 relative.
+17. `ROCK_CANDY_FLOOR(f)` = 15 f and `FISH_COIN_FLOOR(f)` = 50 f for f in {1, 4, 12, 27}; `EXP_FLOOR(4)` = 300 x 5 x 1.025^80 (`EXP_G` = 1.025, 00 section 6.2; about 10,814) within 1e-9 relative.
 18. Awakening cadence: for every rank in `awakening_targets`, the bot run (10) buys the rank no more than `max_days_after_gate` (2) days after the day it first reaches that rank's `AWAKEN_STAGES` gate (issue #43).
 19. `ClaimDailyGift` twice in one day key: second is rejected `(AlreadyClaimed, DAILY_GIFT_ALREADY_CLAIMED)`; after rollover it succeeds.
 20. `ExchangeItem(ex_ticket_fish, 3)` is rejected `(Capped, EXCHANGE_LIMIT_REACHED)`; `(ex_ticket_fish, 2)` debits 100 diamonds and grants 2 tickets; a further `(ex_ticket_fish, 1)` the same day is rejected.
@@ -744,17 +748,17 @@ The other rows as built (`HeroCat.Runtime.Session.FeatureAnalytics`, attached ne
 
 | Name | Value | Kind | Tuning tool check |
 |---|---|---|---|
-| Quest rows' `reward_amount` (5.2, 5.3) | 20 daily, 30 / 70 bonus, 50 weekly | S | Single source of quest diamonds; `E039` reference day within 10% of 400 (issues #55, #244) |
+| Quest rows' `reward_amount` (5.2, 5.3) | 20 daily, 30 / 70 bonus, 60 weekly | S | Single source of quest diamonds; `E039` reference day within 10% of 400 (issues #55, #244) |
 | `REF_DAILIES_DONE` | 8 | S | Reference-day input to `E039` (issue #55) |
 | `REF_NEW_BOSSES` | 4 | S | Reference-day input to `E039` (issues #55, #244) |
-| `FIRST_CLEAR_DIAMONDS` | 10 | I (sibling `FIRST_CLEAR_GEMS`) | Bot's first-clear diamonds over days 1, 2-3, 4-7, 8-14 and 15-30 within 20% of what the 00 section 6.6 target curve gives (section 2). M0 (section 1.2) |
+| `FIRST_CLEAR_DIAMONDS` | 10 | I (sibling `FIRST_CLEAR_GEMS`) | Bot's first-clear diamonds over days 1-30 (the total only, decision #266 item E) within 20% of what the 00 section 6.6 target curve gives (section 2). M0 (section 1.2) |
 | `DUNGEON_TICKETS_PER_DAY` | 2 | S | Rock Candy cadence in 6.5 |
 | `feature_unlocks` rows `DUNGEONS`, `QUESTS` | `STAGE_HIGHEST >= 30`, `>= 10` | S | Bot unlocks dungeons on day 1; replaces `DUNGEON_UNLOCK_STAGE` (issue #45) |
-| `DUNGEON_FLOOR_STAGE_STEP` | 20 | S | Best floor at day 30 in 25 to 29 |
+| `DUNGEON_FLOOR_STAGE_STEP` | 20 | S | Best floor at day 30 in 25 to 29 (missed, issue #283 item G5) |
 | `DUNGEON_FLOORS_MVP` | 40 | S | |
 | `FISH_COIN_FLOOR(f)` | `50 * f` | S | 20% to 50% of daily Fish Coin income on days 7 and 30 (issue #165) |
-| `ROCK_CANDY_FLOOR(f)` | `10 * f` | S | Every rank affordable within `awakening_targets.max_days_after_gate` (2) days of its gate (issue #43) |
-| `EXP_DUNGEON_KILLS` | 300 | S | EXP dungeon is 10% to 20% of daily EXP on days 7 and 30 (section 11) |
+| `ROCK_CANDY_FLOOR(f)` | `15 * f` (decision #249 item 3) | S | Every rank affordable within `awakening_targets.max_days_after_gate` (2) days of its gate (issue #43) |
+| `EXP_DUNGEON_KILLS` | 300 | S | None: the EXP Dungeon is a small top-up, and its share of the day's EXP on days 7 and 30 is reported only (section 11, decision #266 item A) |
 | `TOWER_FLOOR_STAGE_STEP` (P1) | 10 | S | |
 | `OFFLINE_X2_DIAMONDS` (P1) | 100 | S | |
 | `DAILY_GIFT_WEAPON_TICKETS` | 1 | S | Open question 3; input to the tool's per-banner pull cadence (issue #38) |

@@ -306,7 +306,7 @@ Per-rarity facts shared by every collectible kind. 04 section 6.1, 7.1 and 8.1 d
 | `override_tolerance` | double | Fraction a collectible row may deviate from the default (`0.10`). |
 | `name_key` | key | |
 
-Example: `{"id": "EPIC", "code": "E", "color": "#9B59B6", "shape_icon": "icon_rarity_diamond", "weapon_atk_pct": 120.0, "weapon_passive_pct": 4.0, "skill_dps_pct": 40.0, "companion_dps_pct": 64.0, "rune_stat_pct": 8.0, "limit_break_cost": 40, "dupe_overflow_rock_candy": 5, "override_tolerance": 0.1, "name_key": "rarity.epic.name"}`.
+Example: `{"id": "EPIC", "code": "E", "color": "#9B59B6", "shape_icon": "icon_rarity_diamond", "weapon_atk_pct": 120.0, "weapon_passive_pct": 4.0, "skill_dps_pct": 40.0, "companion_dps_pct": 64.0, "rune_stat_pct": 8.0, "limit_break_cost": 60, "dupe_overflow_rock_candy": 5, "override_tolerance": 0.1, "name_key": "rarity.epic.name"}`.
 
 ### 5.9 `weapons` (30 rows)
 
@@ -433,14 +433,16 @@ Example row: `{"banner": "WEAPON", "level": 4, "exp_required": 300, "rates": {"C
 | `rank` | int | Key. Exactly `1..N` (`E060`). |
 | `stage_gate` | int | `AWAKEN_STAGES[rank]`; strictly increasing (`E032`). |
 | `rock_candy_cost` | long | `AWAKEN_COST_ROCK_CANDY[rank]`; strictly increasing. |
-| `mult` | double | `AWAKEN_MULT`; `> 1`. Every MVP row carries `1.5`. |
+| `mult` | double | `AWAKEN_MULT`; `> 1`. Every shipped row carries `1.5`. |
 | `companion_slots_after` | int | Total companion slots unlocked after this rank; non-decreasing; `<= COMPANION_SLOTS` (`E048`). |
 | `rune_slots_after` | int | Same for runes; `<= RUNE_SLOTS`. |
 | `tier` | enum(Tier) | |
 | `name_key` | key | Rank title shown on `SCR_HERO`. |
 | `icon` | asset | |
 
-Example: `{"rank": 2, "stage_gate": 150, "rock_candy_cost": 300, "mult": 1.5, "companion_slots_after": 3, "rune_slots_after": 0, "tier": "MVP", "name_key": "awakening.rank_2.name", "icon": "icon_awaken_2"}`.
+Every row is `tier = M0`: Awakening ships in M0 (decision #249 item 9b, 00 decision 110).
+
+Example: `{"rank": 2, "stage_gate": 150, "rock_candy_cost": 300, "mult": 1.5, "companion_slots_after": 3, "rune_slots_after": 0, "tier": "M0", "name_key": "awakening.rank_2.name", "icon": "icon_awaken_2"}`.
 
 ### 5.17 `hero_levels` (1 row)
 
@@ -549,13 +551,13 @@ Example: `{"id": "ach_merges_04", "ladder": "merges", "rung": 4, "goal": "LIFETI
 | Column | Type | Constraint |
 |---|---|---|
 | `id` | id | Key. `dungeon_fish`, `dungeon_candy`, `dungeon_exp`, `tower` (P1). |
-| `kind` | enum(Dungeon)? | Required for the three MVP rows; empty for `tower` (`E054`). Unique. |
+| `kind` | enum(Dungeon)? | Required for the three dungeon rows; empty for `tower` (`E054`). Unique. |
 | `ticket_currency` | enum(Currency)? | `TICKET_*` of the kind (`E059`); empty for `tower`. |
 | `tickets_per_day` | int | `DUNGEON_TICKETS_PER_DAY`; `>= 0`. |
 | `floor_stage_step` | int | `DUNGEON_FLOOR_STAGE_STEP`; floor `f` fights at stage-equivalent `f * floor_stage_step`; `>= 1`. |
 | `floors` | int | `DUNGEON_FLOORS_MVP`; must equal the `dungeon_floors` row count for this dungeon (`E034`). |
 | `sweep_allowed` | bool | |
-| `tier` | enum(Tier) | |
+| `tier` | enum(Tier) | `dungeon_candy` is `M0` (the Rock Candy Dungeon, decision #249 item 9b); `dungeon_fish` and `dungeon_exp` are `MVP`; `tower` is `P1`. |
 | `name_key`, `desc_key` | key | |
 | `icon`, `background` | asset | |
 
@@ -668,7 +670,7 @@ Emitted per locale as `content/localization.<locale>.json` (section 6.1). Every 
 
 ### 5.32 Tier filtering
 
-Every table with a `tier` column is filtered at build: `ContentDb.Build(dtos, Tier buildTier)` keeps rows with `tier <= buildTier` and drops the rest, then re-runs the count rules against what is left. An M0 build therefore sees 2 banners, no companions, no quests, and `E034` is evaluated against `pool_size` only for enabled banners whose `tier <= buildTier`. The exporter validates the full MVP set; the per-tier re-validation happens in `Build`.
+Every table with a `tier` column is filtered at build: `ContentDb.Build(dtos, Tier buildTier)` keeps rows with `tier <= buildTier` and drops the rest, then re-runs the count rules against what is left. An M0 build therefore sees 2 banners, no companions, no quests, the Awakening rows and one dungeon (`dungeon_candy`), and `E034` is evaluated against `pool_size` only for enabled banners whose `tier <= buildTier`. The exporter validates the full MVP set; the per-tier re-validation happens in `Build`.
 
 ### 5.33 `meta`
 
@@ -693,7 +695,7 @@ One gate per feature, read both by sim rejections (`RESEARCH_LOCKED`, `DUNGEON_L
 | `locked_text_key` | key? | "Unlocks at ..." text; empty for `ALWAYS`. |
 | `tier` | enum(Tier) | |
 
-MVP seed: `RESEARCH` `AWAKEN_RANK` 1 (00 decision 11), `COMPANIONS` `ALWAYS` (04: slot 1 open from the start), `QUESTS` `STAGE_HIGHEST` 10, `DUNGEONS` `STAGE_HIGHEST` 30 (all three dungeons; it replaces the former `DUNGEON_UNLOCK_STAGE` constant and `dungeons.unlock_stage` column), `SHOP` `ALWAYS` (the Shop is never locked). Rule `E063`: `feature_unlocks[SHOP].condition = ALWAYS`; every `research.unlock_awaken_rank >= feature_unlocks[RESEARCH].threshold`.
+MVP seed: `RESEARCH` `AWAKEN_RANK` 1 (00 decision 11), `COMPANIONS` `ALWAYS` (04: slot 1 open from the start), `QUESTS` `STAGE_HIGHEST` 10, `DUNGEONS` `STAGE_HIGHEST` 30 (all three dungeons; tier `M0`, since the Rock Candy Dungeon is M0, decision #249 item 9b; the other rows are `MVP`; it replaces the former `DUNGEON_UNLOCK_STAGE` constant and `dungeons.unlock_stage` column), `SHOP` `ALWAYS` (the Shop is never locked). Rule `E063`: `feature_unlocks[SHOP].condition = ALWAYS`; every `research.unlock_awaken_rank >= feature_unlocks[RESEARCH].threshold`.
 
 ### 5.35 `awakening_targets`
 
@@ -702,7 +704,7 @@ The Awakening cadence target as data, read by `power_curve_model.py` (03) and th
 | Column | Type | Constraint |
 |---|---|---|
 | `rank` | int | Key. Exactly the `awakening` ranks `1..N` (`E060`, `E034` against `awakening`). |
-| `max_days_after_gate` | int | `>= 0`. Rank `k` must be affordable (Rock Candy) within this many days of the day the bot first reaches `awakening[k].stage_gate`. MVP: `2` for every rank. |
+| `max_days_after_gate` | int | `>= 0`. Rank `k` must be affordable (Rock Candy) within this many days of the day the bot first reaches `awakening[k].stage_gate`. `2` for every rank, read at M0 and MVP (Awakening is M0, decision #249 item 9b). |
 
 ### 5.36 `plausibility_stage_bound` (generated)
 

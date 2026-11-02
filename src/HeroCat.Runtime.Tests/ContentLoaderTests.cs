@@ -26,7 +26,7 @@ namespace HeroCat.Runtime.Tests
             Assert.That(m0.Banners.Values.Count(b => b.Enabled), Is.EqualTo(2));
             Assert.That(m0.Banners[Banner.COMPANION].Enabled, Is.False);
             Assert.That(mvp.Banners[Banner.COMPANION].Enabled, Is.True);
-            Assert.That(m0.Awakening, Is.Empty, "awakening rows are MVP");
+            Assert.That(m0.Awakening, Has.Count.EqualTo(5), "awakening rows are M0 (decision #249 item 9b)");
             Assert.That(mvp.Awakening, Has.Count.EqualTo(5));
             Assert.That(m0.TutorialSteps, Has.Count.EqualTo(1), "only tut_welcome is M0");
             Assert.That(mvp.TutorialSteps, Has.Count.EqualTo(12));

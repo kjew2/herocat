@@ -399,10 +399,9 @@ CADENCE_ITEM_DAYS = (7, 30, 90)
 CADENCE_TAIL_DAYS = 15        # days past the run are extrapolated at the median pulls/day of its last 15 days
 WEAPON_L4_BAND = (20, 35)     # 00 decision 70, 04 section 4: 20-seed median day the F2P bot reaches weapon level 4
 EPLUS_L10_MAX = 0.20          # 04 section 14: level-10 P(E+), the paid E+ edge stays under 1.7x
-COMMON_L5_LEVEL, COMMON_L5_DAYS = 5, 30        # 04 section 14 / open question 8 (report-only, #249 item 11)
 LEGEND_L3_LEVEL, LEGEND_L3_DAYS = 3, 60        # 04 section 14
 PASSIVE_SHARE_BAND, PASSIVE_SHARE_DAYS = (0.10, 0.40), (7, 30)   # 04 sections 6.2, 14
-COMPANION_SHARE_MIN, COMPANION_SHARE_DAY = 0.05, 7               # 04 section 14 with 03 section 8.5
+COMPANION_SHARE_MIN, COMPANION_SHARE_DAY = 0.05, 30              # 04 section 14 with 03 section 8.5 (day 30: #249 item 1)
 
 
 def run_bots(content_dir, overrides, seeds, days):
@@ -480,7 +479,7 @@ def item_level_day(b, cad, rarity, level, horizon=3650):
 
 def cadence_checks(p, cad, shifts):
     """[(status, name, value, hard)] for the S constants 04 section 14 validates. status PASS/FAIL; hard=False marks
-    the report-only checks whose target is undecided or whose fix is the pending balance call (#249)."""
+    the report-only checks (none since #249: the Common level-5 target was dropped, item 11)."""
     out = []
 
     def add(ok, name, val, hard=True):
@@ -500,14 +499,6 @@ def cadence_checks(p, cad, shifts):
     add(pe <= EPLUS_L10_MAX + 1e-12, f"BANNER_LVL_*_SHIFT: level-{rows[-1][0]} P(E+) <= {EPLUS_L10_MAX}",
         f"{pe:.3f} (x{pe / eplus(w, rows[0][2]):.2f} the level-1 rate)")
 
-    # TODO(#249): item 11 (04 open question 8) decides whether this target stays; report-only until then.
-    cd = item_level_day(w, cad, "COMMON", COMMON_L5_LEVEL)
-    add(cd is not None and cd <= COMMON_L5_DAYS,
-        f"weapon pool size: a specific Common reaches level {COMMON_L5_LEVEL} within {COMMON_L5_DAYS} days "
-        "(04 open question 8, report-only until #249 item 11)",
-        f"expected level {w.dupe_level(expected_copies(w, 'COMMON', cad.pulls_by('WEAPON', COMMON_L5_DAYS)))} on day "
-        f"{COMMON_L5_DAYS}; level {COMMON_L5_LEVEL} on day {cd if cd is not None else '> 3650'}", hard=False)
-
     ld = item_level_day(w, cad, "LEGENDARY", LEGEND_L3_LEVEL)
     add(ld is None or ld > LEGEND_L3_DAYS,
         f"weapon pool size: a specific Legendary does not reach level {LEGEND_L3_LEVEL} within {LEGEND_L3_DAYS} days",
@@ -523,11 +514,10 @@ def cadence_checks(p, cad, shifts):
             f"on day {d} (median)", f"{sh:.1%}")
 
     if cad.companion_share is not None:
-        # TODO(#249): item 1 (layer floors). Misses under the current content, as power_curve_model.py's share check
-        # does; retuning companions is the pending balance call, so this stays report-only like that check.
+        # Day 30, not 7: the companion layer is still unlocking on day 7 (#249 item 1, as power_curve_model.py's floor).
         add(cad.companion_share >= COMPANION_SHARE_MIN,
             f"COMPANION_SLOTS / companion dps_pct: companion layer >= {COMPANION_SHARE_MIN:.0%} of ln(DPS) by day "
-            f"{COMPANION_SHARE_DAY} (median, report-only until #249 item 1)", f"{cad.companion_share:.1%}", hard=False)
+            f"{COMPANION_SHARE_DAY} (median)", f"{cad.companion_share:.1%}")
     return out
 
 
@@ -571,7 +561,7 @@ def run_cadence(content_dir, overrides, shifts, seeds, days, quiet):
     hard_fail = [c for c in checks if c[0] == "FAIL" and c[3]]
     soft_fail = [c for c in checks if c[0] == "FAIL" and not c[3]]
     if soft_fail:
-        print(f"  REPORT-ONLY: {len(soft_fail)} check(s) miss (balance decision #249 items 1 and 11 pending)")
+        print(f"  REPORT-ONLY: {len(soft_fail)} check(s) miss")
     return checks, (1 if hard_fail else 0)
 
 

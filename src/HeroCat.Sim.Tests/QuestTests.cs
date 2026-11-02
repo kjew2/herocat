@@ -72,7 +72,7 @@ namespace HeroCat.Sim.Tests
             Assert.That(Mvp.QuestsDaily.Where(q => q.Goal != QuestGoal.DAILIES_COMPLETED && q.Id != "d_login").Select(q => q.RewardAmount).Distinct(), Is.EqualTo(new[] { 20L }));
             Assert.That((Q("d_login").RewardAmount, Q("d_bonus_5").RewardAmount, Q("d_bonus_8").RewardAmount), Is.EqualTo((0L, 30L, 70L)));
             Assert.That(Mvp.QuestsWeekly.Where(q => q.Goal != QuestGoal.WEEKLIES_COMPLETED).Select(q => (q.RewardCurrency, q.RewardAmount)).Distinct(),
-                        Is.EqualTo(new[] { (Currency.DIAMOND, 50L) }));
+                        Is.EqualTo(new[] { (Currency.DIAMOND, 60L) }));   // 60: #266 item C
             Assert.That(Mvp.QuestsWeekly.Where(q => q.Goal == QuestGoal.WEEKLIES_COMPLETED).Select(q => (q.Id, q.Target, q.RewardCurrency, q.RewardAmount)),
                         Is.EqualTo(new[]
                         {
@@ -377,13 +377,13 @@ namespace HeroCat.Sim.Tests
             var bulk = ev.OfType<QuestsBulkClaimed>().Single();
             Assert.That((bulk.Kind, bulk.Count), Is.EqualTo((QuestKind.WEEKLY, 9)));
             Assert.That(bulk.Totals.Select(t => (t.Currency, t.Amount)),
-                        Is.EqualTo(new[] { (Currency.DIAMOND, 350.0), (Currency.TICKET_SUMMON_SKILL, 1.0), (Currency.TICKET_SUMMON_COMPANION, 1.0) }));
+                        Is.EqualTo(new[] { (Currency.DIAMOND, 420.0), (Currency.TICKET_SUMMON_SKILL, 1.0), (Currency.TICKET_SUMMON_COMPANION, 1.0) }));
         }
 
         // ------------------------------------------------------------------------------------------------ AC 1, 06:251
 
         [Test]
-        public void AC1_ReferenceDay_LoginEightDailiesBothBonusesAndASeventhOfTheWeeklySet_PlusFourFirstClears_Is400()
+        public void AC1_ReferenceDay_LoginEightDailiesBothBonusesAndASeventhOfTheWeeklySet_PlusFourFirstClears_Is410()
         {
             var sim = NewSim(now: T0 - 60);   // the day before, so the reference day starts with its own rollover
             sim.Apply(new ApplyServerTime(T0));
@@ -409,12 +409,13 @@ namespace HeroCat.Sim.Tests
             Progress(sim, QuestGoal.TRAIN_LEVELS, 300);
             Assert.That(sim.Apply(new ClaimQuest("w_train")).Ok, Is.True, "one seventh of the weekly set");
             double questsAndLogin = sim.State.Wallet.Diamond - start;
-            Assert.That(questsAndLogin, Is.EqualTo(50 + 7 * 20 + 30 + 70 + 50), "login + 7 claimed paying dailies + both bonuses + one weekly");
+            Assert.That(questsAndLogin, Is.EqualTo(50 + 7 * 20 + 30 + 70 + 60), "login + 7 claimed paying dailies + both bonuses + one weekly");
 
             // The eighth paying daily and the four first clears complete the day (first clears are 03's, paid per boss stage).
             Assert.That(sim.Apply(new ClaimQuest("d_dungeon_exp")).Ok, Is.True);
             var k = Mvp.Constants;
-            Assert.That(sim.State.Wallet.Diamond - start + k.FirstClearDiamonds * k.RefNewBosses, Is.EqualTo(k.DiamondsPerDayF2p));
+            // 410: the weekly rows pay 60 since #266 item C, 10 over DIAMONDS_PER_DAY_F2P (E039 allows 10%).
+            Assert.That(sim.State.Wallet.Diamond - start + k.FirstClearDiamonds * k.RefNewBosses, Is.EqualTo(k.DiamondsPerDayF2p + 10));
         }
 
         // ------------------------------------------------------------------------------------------------ id-keyed, replay

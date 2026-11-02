@@ -1,6 +1,6 @@
 rank,stage_gate,rock_candy_cost,mult,companion_slots_after,rune_slots_after,tier,name_key,icon
-1,50,100,1.5,2,0,MVP,awakening.rank_1.name,icon_awaken_1
-2,150,300,1.5,3,0,MVP,awakening.rank_2.name,icon_awaken_2
-3,300,800,1.5,4,0,MVP,awakening.rank_3.name,icon_awaken_3
-4,500,2000,1.5,4,3,MVP,awakening.rank_4.name,icon_awaken_4
-5,800,5000,1.5,4,6,MVP,awakening.rank_5.name,icon_awaken_5
+1,50,100,1.5,2,0,M0,awakening.rank_1.name,icon_awaken_1
+2,150,300,1.5,3,0,M0,awakening.rank_2.name,icon_awaken_2
+3,300,800,1.5,4,0,M0,awakening.rank_3.name,icon_awaken_3
+4,500,2000,1.5,4,3,M0,awakening.rank_4.name,icon_awaken_4
+5,800,5000,1.5,4,6,M0,awakening.rank_5.name,icon_awaken_5

@@ -2,5 +2,5 @@ feature,condition,threshold,screen,locked_text_key,tier
 RESEARCH,AWAKEN_RANK,1,SCR_RESEARCH,feature.research.locked,MVP
 COMPANIONS,ALWAYS,,SCR_COMPANIONS,,MVP
 QUESTS,STAGE_HIGHEST,10,SCR_QUESTS,feature.quests.locked,MVP
-DUNGEONS,STAGE_HIGHEST,30,SCR_DUNGEONS,feature.dungeons.locked,MVP
+DUNGEONS,STAGE_HIGHEST,30,SCR_DUNGEONS,feature.dungeons.locked,M0
 SHOP,ALWAYS,,SCR_SHOP,,MVP

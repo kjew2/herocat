@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "2026.11.02.3",
+  "content_version": "2026.11.02.4",
   "min_client_version": "0.1.0",
   "source_revision": "2026-11-01 m0 skeleton, spec 00 seed values (agent)",
   "hot_apply": false,
@@ -13,7 +13,7 @@
     "awakening": {
       "file": "awakening.json",
       "rows": 5,
-      "sha256": "1e5ec6c6eb3d52f5f07a9564045941ba35d0b49c1c800d7c270188e6920255be"
+      "sha256": "a2985ca4f1541007cc97b407c9027987e4b830590bd5ff638893f5cd7c8abd7c"
     },
     "awakening_targets": {
       "file": "awakening_targets.json",
@@ -53,12 +53,12 @@
     "dungeon_floors": {
       "file": "dungeon_floors.json",
       "rows": 120,
-      "sha256": "e86754d6fd47f6e7dc7d111bbebcc7fe5079029e5e7918849b8e2d70a03958b6"
+      "sha256": "12b4f4789ce00c02b77b1ee3c44073d1aefaa50e933df8cc56cc615cc1fb6df3"
     },
     "dungeons": {
       "file": "dungeons.json",
       "rows": 3,
-      "sha256": "8d275990ede514c890613022f34d5d33ff19b0d258676ae401f6fe630e9ee96f"
+      "sha256": "975cc7d65332931c47a5c8563f9c325507fa97fa6328912bd334ed9590c635ec"
     },
     "dupe_levels": {
       "file": "dupe_levels.json",
@@ -68,7 +68,7 @@
     "feature_unlocks": {
       "file": "feature_unlocks.json",
       "rows": 5,
-      "sha256": "e42c21a9d1be334fd73ede0678646abec03223bccb6b9ea7455cbb430cac0573"
+      "sha256": "1c078fae754a0b889f7c10a4723e3d132a6339207bc146d028c89f59afb67bb6"
     },
     "fish_levels": {
       "file": "fish_levels.json",
@@ -93,17 +93,17 @@
     "quests_weekly": {
       "file": "quests_weekly.json",
       "rows": 9,
-      "sha256": "beb9a2912a70980edfb2e6c4349041fd59baf3e525817bb8e0d52a027bb9c383"
+      "sha256": "db58ca87922f78d0443da7699e8304675e119a59a69fc60468debd8ecbbb6ab7"
     },
     "rarities": {
       "file": "rarities.json",
       "rows": 5,
-      "sha256": "7da59786cbad1e1ef75456d4650edfb888dac3da043f38a8609dbbe314dcf329"
+      "sha256": "a4db5affe5294e91811e8a282d749b517181a9260ff6a1913b8ac426bdf338eb"
     },
     "research": {
       "file": "research.json",
       "rows": 8,
-      "sha256": "2a52acfb7c5f875333adac9796eb0d25ec6a9e62fa190db88a76aa817ff34cc1"
+      "sha256": "14a343d1316137665b699595f36106be7ba56b3f08e14920def6ba82bd1d55ec"
     },
     "runes": {
       "file": "runes.json",
@@ -153,7 +153,7 @@
       "sha256": "d40322acfaacb9c23eb0e847ab0f861420a2d5ed28c0df719ec1f30af9f941a9"
     }
   },
-  "content_hash": "a0c2056dab085388314f357ceac7e4d9e6bab7a0eb81686ae5ed766d345bbdeb",
+  "content_hash": "5cd36242a425b16152de5945d765d77481e9eb8c389a988fbde1430648822589",
   "s_constants": [
     "BASE_HP",
     "BOSS_ROCK_CANDY_P",

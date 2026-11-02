@@ -296,19 +296,53 @@ namespace HeroCat.Bots.Tests
         }
 
         [Test]
-        public void Diamonds_SingleOnlyWhenPityIsWithinTen()
+        public void Diamonds_TenPullWhenAffordable_ElseSingles()   // 03 section 8.3 step 2 (decision #249 item 10)
         {
             var ctx = Started();
             var def = ctx.Content.Banners[Banner.WEAPON];
             ctx.State.Wallet.Diamond = def.PullCostDiamonds * 3;   // a single is affordable, a 10-pull is not
             long before = ctx.State.Banners.Values.Sum(x => x.TotalPulls);
             GreedyF2PBot.SpendDiamonds(ctx);
-            Assert.That(ctx.State.Banners.Values.Sum(x => x.TotalPulls), Is.EqualTo(before), "pity far from PITY_HARD: save up");
+            long singles = ctx.State.Banners.Values.Sum(x => x.TotalPulls) - before;
+            Assert.That(singles, Is.InRange(1, 3), "singles while a 10-pull is unaffordable, pity far from PITY_HARD");
 
-            ctx.State.Banners[Banner.WEAPON].Pity = def.PityHard - 5;
-            ctx.State.Banners[Banner.SKILL].Pity = ctx.Content.Banners[Banner.SKILL].PityHard - 5;
+            var best = GreedyF2PBot.BestBanner(ctx, out _).Value;
+            var bd = ctx.Content.Banners[best];
+            ctx.State.Wallet.Diamond = bd.PullCostDiamonds * bd.GuaranteeBatchSize;
+            long onBest = ctx.State.Banners[best].TotalPulls;
             GreedyF2PBot.SpendDiamonds(ctx);
-            Assert.That(ctx.State.Banners.Values.Sum(x => x.TotalPulls), Is.GreaterThan(before), "pity within 10: singles");
+            Assert.That(ctx.State.Banners[best].TotalPulls - onBest, Is.EqualTo(bd.GuaranteeBatchSize), "one 10-pull on the best banner");
+        }
+
+        [Test]
+        public void Dungeons_M0_SweepsTheBestFloor_AndLeavesOtherDungeonsAlone()   // decision #249 item 9b
+        {
+            var ctx = Started();
+            var s = ctx.State;
+            Assert.That(s.Wallet.Get(Currency.TICKET_ROCK_CANDY), Is.EqualTo(2), "M0 rollover tops up the Rock Candy tickets");
+            s.Progress.HighestCleared = 29;
+            GreedyF2PBot.RunDungeons(ctx);
+            Assert.That(s.Wallet.Get(Currency.TICKET_ROCK_CANDY), Is.EqualTo(2), "locked before stage 30: nothing happens");
+
+            s.Progress.HighestCleared = 30;
+            s.Dungeons.BestFloor[(int)Dungeon.ROCK_CANDY] = 40;   // no next floor: both tickets sweep floor 40
+            double candy = s.Wallet.RockCandy;
+            GreedyF2PBot.RunDungeons(ctx);
+            Assert.That(s.Wallet.Get(Currency.TICKET_ROCK_CANDY), Is.EqualTo(0));
+            Assert.That(s.Wallet.RockCandy - candy, Is.EqualTo(2 * 15 * 40), "2 x ROCK_CANDY_FLOOR(40)");
+            Assert.That(s.Combat.Mode, Is.EqualTo(CombatMode.Stage));
+        }
+
+        [Test]
+        public void Dungeons_StartsTheNextFloorOnlyWhenThePreviewClears()
+        {
+            var ctx = Started();
+            var s = ctx.State;
+            s.Progress.HighestCleared = 30;
+            bool clears = ctx.Sim.PreviewDungeon(Dungeon.ROCK_CANDY, 1).Cleared;
+            GreedyF2PBot.RunDungeons(ctx);
+            Assert.That(s.Combat.Mode, Is.EqualTo(clears ? CombatMode.Dungeon : CombatMode.Stage));
+            Assert.That(s.Wallet.Get(Currency.TICKET_ROCK_CANDY), Is.EqualTo(2), "a run debits on clear; nothing to sweep at floor 0");
         }
 
         [Test]
@@ -464,13 +498,16 @@ namespace HeroCat.Bots.Tests
             Assert.That(T.StageCheckDays, Is.EqualTo(new[] { 1, 7, 30 }));
             Assert.That(T.ShareMaxCheckDays, Is.EqualTo(new[] { 1, 7, 30 }));
             Assert.That(T.ShareMinCheckDays, Is.EqualTo(new[] { 7, 30 }));
+            Assert.That(T.MinCheckDaysFor("Skills"), Is.EqualTo(new[] { 30 }));
+            Assert.That(T.MinCheckDaysFor("Companions"), Is.EqualTo(new[] { 30 }));
+            Assert.That(T.MinCheckDaysFor("Training"), Is.EqualTo(new[] { 7, 30 }));
             Assert.That((T.ShareMax, T.ShareMin), Is.EqualTo((0.40, 0.05)));
             Assert.That(T.ShareFloorExcluded, Is.EquivalentTo(new[] { "Base", "Speed" }));
             Assert.That(T.ExemptFor(Tier.M0), Is.EquivalentTo(new[] { "Research", "Companions" }));
             Assert.That(T.ExemptFor(Tier.MVP), Is.Empty);
             Assert.That((T.FirstWallMinStage, T.FirstWallMaxStage), Is.EqualTo((60, 200)));
             Assert.That(T.MaxWallActiveMinutesThroughDay14, Is.EqualTo(240));
-            Assert.That(T.LateWallMaxActiveMinutes, Is.Null);
+            Assert.That(T.LateWallMaxActiveMinutes, Is.EqualTo(360));
             Assert.That((T.LazyFraction.Day7, T.LazyFraction.Day30), Is.EqualTo((0.55, 0.60)));
             Assert.That(T.WhaleGapStagesDay7, Is.EqualTo(new[] { 25, 60 }));
             Assert.That(T.DiamondsPerDayTolerance, Is.EqualTo(0.15));
@@ -523,7 +560,7 @@ namespace HeroCat.Bots.Tests
             var sw = Sweep.Run(Content.Db, "greedy-f2p", "1-2", 14, 2);
             var r = AcceptanceChecker.Check(sw, Content.Db, T, null);
             Assert.That(r.Where(x => x.Id == "AC1").Select(x => x.Message.Split(':')[0]), Is.EqualTo(new[] { "day 1", "day 7" }));
-            Assert.That(r.Single(x => x.Id == "AC11").Status, Is.EqualTo(CheckStatus.Skip), "no awakening at M0");
+            Assert.That(r.Single(x => x.Id == "AC11").Status, Is.Not.EqualTo(CheckStatus.Skip), "Awakening is M0 (decision #249 item 9b)");
             Assert.That(r.Where(x => x.Id == "AC2" && x.Message.Contains("Research")).All(x => x.Status != CheckStatus.Fail), "M0 exemption");
         }
 

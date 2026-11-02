@@ -11,7 +11,7 @@
       "skill_dps_pct": 10.0,
       "companion_dps_pct": 16.0,
       "rune_stat_pct": 2.0,
-      "limit_break_cost": 10,
+      "limit_break_cost": 15,
       "dupe_overflow_rock_candy": 1,
       "override_tolerance": 0.1,
       "name_key": "rarity.common.name"
@@ -26,7 +26,7 @@
       "skill_dps_pct": 20.0,
       "companion_dps_pct": 32.0,
       "rune_stat_pct": 4.0,
-      "limit_break_cost": 20,
+      "limit_break_cost": 30,
       "dupe_overflow_rock_candy": 2,
       "override_tolerance": 0.1,
       "name_key": "rarity.rare.name"
@@ -41,7 +41,7 @@
       "skill_dps_pct": 40.0,
       "companion_dps_pct": 64.0,
       "rune_stat_pct": 8.0,
-      "limit_break_cost": 40,
+      "limit_break_cost": 60,
       "dupe_overflow_rock_candy": 5,
       "override_tolerance": 0.1,
       "name_key": "rarity.epic.name"
@@ -56,7 +56,7 @@
       "skill_dps_pct": 80.0,
       "companion_dps_pct": 128.0,
       "rune_stat_pct": 16.0,
-      "limit_break_cost": 80,
+      "limit_break_cost": 120,
       "dupe_overflow_rock_candy": 20,
       "override_tolerance": 0.1,
       "name_key": "rarity.legendary.name"
@@ -71,7 +71,7 @@
       "skill_dps_pct": 160.0,
       "companion_dps_pct": 256.0,
       "rune_stat_pct": 32.0,
-      "limit_break_cost": 150,
+      "limit_break_cost": 225,
       "dupe_overflow_rock_candy": 50,
       "override_tolerance": 0.1,
       "name_key": "rarity.mythic.name"
