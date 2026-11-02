@@ -21,4 +21,4 @@ The images in Unity are **stand-ins cut from the reference** by `tools/art/cut_p
 | Icon `icon_weapon_*` (128 rp) | square crop of the sheet inside its frame, background included | icon drawn for 88-128 rp |
 | Held sprite `spr_weapon_*` (160 rp, 20 px native) | the front blade masked off the background and sampled down to 20 px, 12 colours, 1 px dark outline | pixel sprite on the locked palette (`specs/07` section 15.3) |
 
-Open for the art bible (issue #287): **dual weapons.** The squire has one held-sprite slot, so the stand-in holds only the front blade. A pair either needs a second sprite in the off hand (a second address, plus squire frames that show both hands), or it stays a one-blade look in battle and shows the pair only on the icon.
+**Held sprites after the party swap.** Under the party model (00 decisions 109-110, PR #310), companions don't hold weapons, so held sprites are not drawn in battle (owner decision, 2026-11-02). Weapons stay as items with icons, names and their stats. Until the swap lands, `SCR_MAIN` still draws the held sprite at the squire placeholder. That makes the dual-weapon question (one held sprite for a pair) moot.
