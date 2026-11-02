@@ -379,11 +379,11 @@ Awakening is per party slot (00 decision 109): each slot has its own `Party.Slot
 
 | Rank | Stage gate (`AWAKEN_STAGES`) | Rock Candy cost per slot (`AWAKEN_COST_ROCK_CANDY`) | Slot multiplier after | Unlocks (highest rank of any slot) |
 |---|---|---|---|---|
-| 1 | 50 | 100 | x1.5 | `SCR_RESEARCH` tab |
-| 2 | 150 | 300 | x2.25 | - |
-| 3 | 300 | 800 | x3.375 | - |
-| 4 | 500 | 2000 | x5.06 | Rune slots 1-3 (P1) |
-| 5 | 800 | 5000 | x7.59 | Rune slots 4-6 (P1) |
+| 1 | 50 | 20 | x1.5 | `SCR_RESEARCH` tab |
+| 2 | 150 | 60 | x2.25 | - |
+| 3 | 300 | 160 | x3.375 | - |
+| 4 | 500 | 400 | x5.06 | Rune slots 1-3 (P1) |
+| 5 | 800 | 1000 | x7.59 | Rune slots 4-6 (P1) |
 
 ```
 Awaken(slot):                                               # command, from the slot card in SCR_PARTY
@@ -438,6 +438,7 @@ For each occupied slot `i` (companion `c_i`, weapon `w_i`, skill `k_i`, Awakenin
 
 ```
 SlotHit_i  = BASE_ATK                                                         # one companion's auto-attack (00 decision 109)
+           * COMPANION_ATK_MULT[rarity(c_i)]                                  # the companion's rarity, not level (00 decision 111)
            * (1 + TRAIN_PER_LVL[ATK] * trainLvl[ATK])                         # Training        (gold, party-wide)
            * PARTY_LVL_MULT ^ partyLevel                                      # Party Level     (EXP, party-wide)
            * (1 + (equippedWeaponPct(w_i) + sum_owned weaponPassivePct) / 100) # Weapons        (summons; slot's own + party passive)
@@ -571,7 +572,7 @@ The bot is the reference player for every balance number. It plays `ACTIVE_MIN =
 
 1. **Gold**: every active minute, buy Training levels while any stat is affordable, always the stat with the highest marginal `ln(DPS)` per gold. `GOLD_GAIN` and `EXP_GAIN` are valued at half the `ATK` levels (or party levels) their income increase will eventually buy.
 2. **Diamonds and tickets**: at the start of each day, spend every ticket on its banner, then spend diamonds on the banner with the highest expected `ln(DPS)` gain per diamond, where the expectation is over the banner's current published rate table and the gain of each pool item is evaluated against the current collection. Use a 10-pull when the chosen banner's 10x price is affordable, else singles. Re-evaluate after every pull. A pull's gain is evaluated with the item placed by step 8, so a weapon or skill is worth what it adds in its best slot.
-3. **Rock Candy** (proposal, #309): awaken the slot whose next rank gives the most `ln(RatedDps)` per candy as soon as that slot's stage gate and cost are both met; a rank multiplies `SlotDps_i` by `AWAKEN_MULT`, so this is the slot with the largest `SlotDps_i` among those that can awaken (ties: lowest slot index). Empty slots are never awakened. Otherwise, if every slot's next gate is more than 50 stages away, spend on limit breaks (04 section 5) on whichever item gives the most `ln(DPS)` per candy, keeping nothing in reserve.
+3. **Rock Candy** (proposal, #309): awaken, among the slots whose stage gate and cost are both met, the one with the largest `SlotDps_i` (a rank multiplies `SlotDps_i` by `AWAKEN_MULT`; ties: lowest slot index). Empty slots are never awakened. Rock Candy is reserved only for the strongest slot's next rank (00 decision 111): the occupied slot with the largest `SlotDps_i` that still has a next rank, gate and cost aside, which is the slot this rule awakens next. While that slot's next gate is at most 50 stages away the bot saves; otherwise it spends on limit breaks (04 section 5) on whichever item gives the most `ln(DPS)` per candy. The other slots' ranks reserve nothing. The C# bot (`GreedyF2PBot.StrongestAwakenSlot`, `NextAwakenWithin`) and `tools/power_curve_model.py` use this same rule.
 4. **Fish Coins**: every active minute, if any equipped companion's pool is MP-starved (`mpSufficiency_i < 1`) buy `res_mp_regen`; else buy the node with the best `ln(DPS)` per coin among `res_atk`, `res_gold_gain` (payback proxy as for gold), `res_tank_*` (valued at 0.08 nats per level, the measured board growth per 10% more fish) and `res_fish_cap` (valued at `0.5 * ln 1.5 * fraction of board already at the cap`).
 5. **Fish Board**: the attentive policy from 05 section 8 every active minute: release until the board is full or the tank is empty, merge every equal pair lowest level first, repeat; if the board is full with no merge and the tank is not empty, discard the lowest-level fish.
 6. **Boss**: the first attempt is automatic; when walled, retry at the start of every active minute (the real player presses the button; `AttemptBoss` is free).
@@ -714,9 +715,9 @@ As built (`HeroCat.Runtime.Session.FeatureAnalytics`, issue #274): the sim's eve
 7. **Auto boss retry** (`BOSS_AUTO_RETRY_S = 60`) is P1 here; 07 may want it in MVP for the idle-on-desk player. Default: P1.
 8. **Tap Zap and the server plausibility check.** Resolved: a tapping player's stage-vs-time bound is up to 4x the idle bound during bosses (section 2.5), so 08 uses `DPS * (1 + TAP_ZAP_DMG_PCT * TAP_ZAP_MAX_PER_SEC)` as the upper bound (00 decision 26). Still an upper bound under the party model: a tap is a fraction of `PartyHit`, and `PartyHit` is at most one second of `RatedDps`.
 9. **MP does not bind with per-slot pools.** Resolved by 00 decision 110: `MP_REGEN0 = 0.5` per pool (option (a)); the balance pass may still tune the value. Original question: Every content companion costs 10 MP per 10 s (1 MP/s) and each pool regenerates `MP_REGEN0 = 2` MP/s, so `mpSufficiency` is 1 in every slot at Research 0: `res_mp_regen`, `res_mp_pool` and `MP_REGEN` companions add no DPS, and section 6's MP nodes lose their job (section 2.4). Options: (a) lower `MP_REGEN0` per pool (0.5 MP/s would make a default companion run at half uptime, as the shared pool did with four companions); (b) raise `mp_cost` or vary it by rarity (04); (c) accept that MP is cosmetic and repurpose the MP nodes. Recommendation: (a), set by the balance pass. Owner: the user, via #249. Until then the values are kept per pool and nothing else depends on the outcome.
-10. **Per-slot Awakening budget.** Awakening is now five times the ranks at the hero-model cost each (25 ranks, 5 x 8,200 = 41,000 Rock Candy to max), and each rank is worth about a fifth of what it was. Undecided: whether `AWAKEN_MULT`, `AWAKEN_COST_ROCK_CANDY` or 06's Rock Candy income change, and whether the `awakening_targets` cadence applies to every slot or only the first. Default until #249: values unchanged, the cadence check reads the first slot to reach each rank (section 5.3).
+10. **Per-slot Awakening budget.** Resolved by 00 decision 111: `AWAKEN_COST_ROCK_CANDY` = 20, 60, 160, 400, 1000 per slot (a fifth), `AWAKEN_MULT` stays 1.5, the cadence check reads the first slot to reach each rank. Original question: Awakening is now five times the ranks at the hero-model cost each (25 ranks, 5 x 8,200 = 41,000 Rock Candy to max), and each rank is worth about a fifth of what it was. Undecided: whether `AWAKEN_MULT`, `AWAKEN_COST_ROCK_CANDY` or 06's Rock Candy income change, and whether the `awakening_targets` cadence applies to every slot or only the first. Default until #249: values unchanged, the cadence check reads the first slot to reach each rank (section 5.3).
 11. **Layer shares with a sum over slots.** Section 8.5's share rule assumed a product of layer factors. Section 7.4 proposes a DPS-weighted geometric mean of the per-slot factors with the slot-spread entropy in `Base`, which keeps the shares exact; the alternative is a leave-one-out ratio per layer, which does not add up. Default: section 7.4, implemented in #309; the 40%/5% thresholds themselves are #249's.
-12. **Companion auto-attack by rarity.** Every companion's auto-attack is `BASE_ATK` (00 decision 109); rarity and dupes drive only its ability. Open for the balance pass (#249): whether auto-attack should scale with companion rarity or level.
+12. **Companion auto-attack by rarity.** Resolved by 00 decision 111: hybrid, `COMPANION_ATK_MULT[r]` (C 1.0 / R 1.1 / E 1.25 / L 1.5 / M 2.0) on the auto-attack and `COMPANION_DPS_PCT` raised 25% on the ability. Original question: Every companion's auto-attack is `BASE_ATK` (00 decision 109); rarity and dupes drive only its ability. Open for the balance pass (#249): whether auto-attack should scale with companion rarity or level.
 
 ## 13. Acceptance criteria
 
@@ -774,7 +775,8 @@ Every constant this spec adds or changes, for lifting into 00 section 6. Tag `S`
 | `BOSS_ROCK_CANDY_P` | 0.5 | S | 2.6 | One Rock Candy per boss kill at this chance, `loot` stream. |
 | `BOSS_AUTO_RETRY_S` | 60 (P1) | S | 2.7 | |
 | `AWAKEN_UNLOCKS` | Research at highest slot rank 1, Rune slots at highest slot rank 4/5 | - | 5.3 | Companion-slot unlocks removed (00 decision 109). |
-| `AWAKEN_STAGES`, `AWAKEN_COST_ROCK_CANDY`, `AWAKEN_MULT` | 00's values, now per slot | I/S | 5.3 | Unchanged until #249 (section 12 question 10). |
+| `AWAKEN_STAGES`, `AWAKEN_COST_ROCK_CANDY`, `AWAKEN_MULT` | 00's values, now per slot; costs 20, 60, 160, 400, 1000 | I/S | 5.3 | Costs cut to a fifth by 00 decision 111. |
+| `COMPANION_ATK_MULT[r]` | C 1.0 / R 1.1 / E 1.25 / L 1.5 / M 2.0 | S | 7.1 | 00 decision 111; a `rarities` column (09). |
 | `research` table (`res_*` nodes) | section 6 (8 nodes: cost0, growth, max, effect) | S | 6 | `res_fish_cap` validated jointly with 05's tool. |
 | `awakening_targets` table (`rank`, `max_days_after_gate`) | 2 for every rank | S | 5.3 | Awakening cadence target read by the tool, 06 and the bots (issue #43). Ticket and Rock Candy income are read from 06's content, not assumed (issues #38, #43). |
 | Day-stage targets | 240 / 330 / 430 / 480 / 550 | S | 8.4 | Hero-model; stale until the tool reruns on the party model (#309, #249). |

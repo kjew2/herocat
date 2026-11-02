@@ -308,7 +308,7 @@ Purpose: the 30-weapon collection, equip into a slot (any weapon on any companio
 
 Events: `ItemAcquired(kind=WEAPON)` (tile flips from "?" or copies tick up, `IsNew` set; a level change is read from the snapshot, level is derived from copies, 04), `ItemEquipped(WEAPON, slot, id)` (slot chips and equipped summary swap; also fires with `auto: true` after a summon's `AutoEquipBestWeapons`).
 
-States: Empty is impossible: profile creation grants the starter weapon `TUTORIAL_WEAPON_ID`, equipped in slot index 0 (shown as slot 1; 09 `tut_welcome`, issue #46). New badges clear when the tile is tapped or the screen is left (a `ClientPrefs` update, not a sim command; issues #7, #47). Locked: none.
+States: Empty is impossible: profile creation grants five Common starter weapons `TUTORIAL_WEAPON_IDS`, one equipped in each party slot (00 decision 111; 09 `tut_welcome`, issue #46). New badges clear when the tile is tapped or the screen is left (a `ClientPrefs` update, not a sim command; issues #7, #47). Locked: none.
 
 ### 4.6 `SCR_SKILLS` (Full, M0)
 
@@ -902,7 +902,7 @@ Goal: by minute three the player has trained the party, merged, summoned, equipp
 
 | Step | Spotlight | Caption key | Waits for (`expect_event` x `expect_count`) | Grant |
 |---|---|---|---|---|
-| 1 | combat viewport | `tut.1.tap` "Tap the monster!" | 3 x `TapZap` accepted | row `tut_welcome` (09, trigger `PROFILE_CREATED`): its grants are applied once at profile creation, guarded by `Tutorial.TutorialDiamondsGranted` (02): `TUTORIAL_DIAMONDS` (1500), the five Common starter companions `TUTORIAL_COMPANION_IDS` equipped in slots 0-4, and the starter weapon `TUTORIAL_WEAPON_ID` equipped in slot 0 (00 decision 109). The party is on screen and attacking from the first frame |
+| 1 | combat viewport | `tut.1.tap` "Tap the monster!" | 3 x `TapZap` accepted | row `tut_welcome` (09, trigger `PROFILE_CREATED`): its grants are applied once at profile creation, guarded by `Tutorial.TutorialDiamondsGranted` (02): `TUTORIAL_DIAMONDS` (1500), the five Common starter companions `TUTORIAL_COMPANION_IDS` equipped in slots 0-4, and the five Common starter weapons `TUTORIAL_WEAPON_IDS` equipped in slots 0-4 (00 decisions 109, 111). The party is on screen and attacking from the first frame |
 | 2 | `SCR_MAIN` gold chip after first kills | `tut.2.gold` | `EnemyKilled` x3 | |
 | 3 | Party tab | `tut.3.party` "Make your party stronger" | `SCR_PARTY` pushed | |
 | 4 | ATK `[+]` | `tut.4.train` "Training powers up all five" | `StatTrained` | |
@@ -912,7 +912,7 @@ Goal: by minute three the player has trained the party, merged, summoned, equipp
 | 8 | Summon tab | `tut.8.summon` | `SCR_SUMMON` pushed | `TUTORIAL_DIAMONDS` (1500), the starter party and the starter weapon are already granted at profile creation (09 `tut_welcome`, issue #46) |
 | 9 | Summon x10 (Weapon) | `tut.9.pull` "Summon 10 weapons" | `ItemAcquired(kind=WEAPON)` x10 (after `ApplySummonResult`) | the tutorial's 10-pull is a normal server/local roll; no rigged result |
 | 10 | Skip on the reveal (if still running after 3 s) | `tut.10.skip` | overlay closed | |
-| 11 | Equip on the best new weapon (`SCR_WEAPONS` auto-pushed in slot mode for the first slot with no weapon: slot index 1 on a fresh profile; slot index 0 if every slot is armed) | `tut.11.equip` "Arm another companion" | `ItemEquipped(WEAPON)` | |
+| 11 | Equip on the best weapon the pull gave (`SCR_WEAPONS` auto-pushed in slot mode for slot index 0, where the best weapon goes; every slot is already armed with a starter weapon, 00 decision 111) | `tut.11.equip` "Equip your new weapon" | `ItemEquipped(WEAPON)` | |
 | 12 | back to `SCR_MAIN`; stage 10 boss approaching | `tut.12.boss` "A boss! Merge fish to fire missiles" | `BossCleared\|BossFailed` x1 (either completes it) | tutorial ends; `Tutorial.Step = TUTORIAL_DONE` |
 
 Rules: `[Skip tutorial]` is available from step 3 onward (steps 1 and 2 take under 20 s) and completes all grants a skipped step would have made (none are conditional). Skip sends `SetTutorialStep(TUTORIAL_DONE)` and sets `Tutorial.Skipped`. Steps are resumable: `Tutorial.Step` is in the save, so a relaunch resumes at that step with the spotlight re-aimed. Coach marks for MVP screens (Quests, Dungeons, Shop, Research) are separate one-shot overlays shown on first push of each screen (`ClientPrefs.SeenCoachMarks`), not part of this flow. The whole flow is skipped for a restored cloud save with `Tutorial.Step == TUTORIAL_DONE`.

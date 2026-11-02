@@ -314,7 +314,7 @@ public sealed class TutorialState                          // issue #46
 {
     public int  Step      { get; set; }        // 0..TUTORIAL_DONE, where TUTORIAL_DONE = row count of tutorial_steps (09; 12 in MVP); advanced only by SetTutorialStep (01, 07)
     public bool Skipped   { get; set; }
-    public bool TutorialDiamondsGranted { get; set; }   // set when 09's tut_welcome grant (TUTORIAL_DIAMONDS with reason TUTORIAL, the starter weapon TUTORIAL_WEAPON_ID and the five starter companions TUTORIAL_COMPANION_IDS; 3.5) is applied at profile creation; guards it to exactly once
+    public bool TutorialDiamondsGranted { get; set; }   // set when 09's tut_welcome grant (TUTORIAL_DIAMONDS with reason TUTORIAL, the five starter weapons TUTORIAL_WEAPON_IDS and the five starter companions TUTORIAL_COMPANION_IDS; 3.5) is applied at profile creation; guards it to exactly once
 }
 
 public sealed class RngStreamState
@@ -388,8 +388,8 @@ Summon streams exist in every save, in every mode (00 decision 14), so M0, bots 
 
 `HeroCat.Runtime.ProfileFactory.Create(playerId, now, db)` returns the defaults of 3.1 plus the following, and every new profile passes 6.4 with zero repairs (00 decision 109; issue #46):
 
-- `Tutorial.TutorialDiamondsGranted = true` with 09's `tut_welcome` grant applied once: `TUTORIAL_DIAMONDS` (reason `TUTORIAL`), one copy of `TUTORIAL_WEAPON_ID` and one copy of each of the five distinct Common companions `TUTORIAL_COMPANION_IDS` (09).
-- `Party.Level = 1`, `Party.Exp = 0`. `Party.Slots[i].Companion = TUTORIAL_COMPANION_IDS[i]` for `i = 0..4`; `Party.Slots[0].Weapon = TUTORIAL_WEAPON_ID`, slots 1-4 unarmed; no skills; every `AwakenRank = 0`.
+- `Tutorial.TutorialDiamondsGranted = true` with 09's `tut_welcome` grant applied once: `TUTORIAL_DIAMONDS` (reason `TUTORIAL`), one copy of each of the five distinct Common weapons `TUTORIAL_WEAPON_IDS` (00 decision 111) and of the five distinct Common companions `TUTORIAL_COMPANION_IDS` (09).
+- `Party.Level = 1`, `Party.Exp = 0`. `Party.Slots[i].Companion = TUTORIAL_COMPANION_IDS[i]` for `i = 0..4`; `Party.Slots[i].Weapon = TUTORIAL_WEAPON_IDS[i]` for `i = 0..4` (00 decision 111); no skills; every `AwakenRank = 0`.
 - `Combat.Mp[i] = 0` in every pool (issue #246); every cooldown 0.
 - `Fish.TankCount` = TankCap (full tank, `TANK_CAP0` at Research 0; issue #246); `Fish.TankRefillTick = 0`.
 - The eight streams of 3.4 seeded from `RngRoot`, every counter 0.
@@ -903,7 +903,7 @@ The server runs these on every upload and attaches `flags[]` to the response. Th
 | `DPS_VS_STAGE` | DPS re-derived via `HeroCat.Sim` from the uploaded state cannot clear `HighestCleared`'s boss in `BOSS_TIME_TICKS`. |
 | `GOLD_DELTA_BOUND` | Gold gained since the previous upload exceeds the maximum the sim could produce in the elapsed time at `HighestCleared`. |
 | `DIAMOND_LEDGER_MISMATCH` | `Wallet.Diamond` exceeds the server ledger (grants - spends, after this upload's client-earnings credit; issue #49) by more than the per-day F2P cap times days. |
-| `ITEM_WITHOUT_PULL` | A collection copy count exceeds what `summon_log` plus `granted_items` account for (plus one copy of `TUTORIAL_WEAPON_ID` and one of each `TUTORIAL_COMPANION_IDS` companion, granted at profile creation; 3.5, issue #46). |
+| `ITEM_WITHOUT_PULL` | A collection copy count exceeds what `summon_log` plus `granted_items` account for (plus one copy of each `TUTORIAL_WEAPON_IDS` weapon and each `TUTORIAL_COMPANION_IDS` companion, granted at profile creation; 3.5, issue #46). |
 | `PITY_MISMATCH` | Client `Banners[b].Pity` differs from server pity (informational; the server value is used regardless). |
 | `DUPLICATE_REQUEST_ID` | A `requestId` seen on a different player. |
 | `OFFLINE_WINDOW_OVERLAP` | Lifetime offline credited exceeds wall-clock gaps observable from upload timestamps. |
@@ -1452,7 +1452,7 @@ As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
 17. Moved to 06 acceptance 25 (`currency_changed` is owned by 06 section 13; issue #245).
 18. No `UnityEngine`, `DateTime*.Now`, `Stopwatch` in `HeroCat.Sim`; in `HeroCat.Runtime` only `ServerClock.cs` and `SessionRunner.cs` reference the clock APIs (CI grep: `tools/check_clock_apis.py` in `check.sh`, with a self-test that proves it catches a bad line).
 19. IL2CPP build: a save produced by the editor loads on an ARM64 device build and vice versa with zero repairs (device-farm test, 10).
-20. New profile (3.5): `ProfileFactory.Create` yields `Party.Slots[i].Companion == TUTORIAL_COMPANION_IDS[i]` for slots 0-4, `Slots[0].Weapon == TUTORIAL_WEAPON_ID`, one copy of each in its collection, every `Combat.Mp[i] == 0`, a full tank, and validates with zero repairs. A body with root `Hero` and no `Party` is rejected by R3.
+20. New profile (3.5): `ProfileFactory.Create` yields `Party.Slots[i].Companion == TUTORIAL_COMPANION_IDS[i]` for slots 0-4, `Slots[i].Weapon == TUTORIAL_WEAPON_IDS[i]`, one copy of each in its collection, every `Combat.Mp[i] == 0`, a full tank, and validates with zero repairs. A body with root `Hero` and no `Party` is rejected by R3.
 
 ## Constants introduced
 

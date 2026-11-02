@@ -77,7 +77,7 @@ Rules that hold for every row:
 
 ### 1.2 M0 subset
 
-M0 ships `GOLD`, `DIAMOND`, `FISH_COIN`, `PARTY_EXP`; the tutorial grant (`TUTORIAL_DIAMONDS`, the five distinct Common starter companions `TUTORIAL_COMPANION_IDS` equipped in party slots 0-4, and the starter weapon `TUTORIAL_WEAPON_ID` in slot 0; 09 `tut_welcome`, issue #46, 00 decision 109; summons upgrade the party rather than build it); Offline Catch-up; `LOGIN_DIAMONDS`; boss first-clear diamonds (`FIRST_CLEAR_DIAMONDS`, paid by 03's boss clear with `CurrencyReason.FIRST_CLEAR`). Quests, Dungeons, Shop, Inbox and Awakening are MVP. The M0 bot therefore earns diamonds only from login, first clears and the tutorial grant, which is why the M0 exit criterion in 00 section 11 is two weeks, not thirty days.
+M0 ships `GOLD`, `DIAMOND`, `FISH_COIN`, `PARTY_EXP`; the tutorial grant (`TUTORIAL_DIAMONDS`, the five distinct Common starter companions `TUTORIAL_COMPANION_IDS` equipped in party slots 0-4, and the five distinct Common starter weapons `TUTORIAL_WEAPON_IDS` in slots 0-4; 09 `tut_welcome`, issue #46, 00 decisions 109, 111; summons upgrade the party rather than build it); Offline Catch-up; `LOGIN_DIAMONDS`; boss first-clear diamonds (`FIRST_CLEAR_DIAMONDS`, paid by 03's boss clear with `CurrencyReason.FIRST_CLEAR`). Quests, Dungeons, Shop, Inbox and Awakening are MVP. The M0 bot therefore earns diamonds only from login, first clears and the tutorial grant, which is why the M0 exit criterion in 00 section 11 is two weeks, not thirty days.
 
 ### 1.3 Reject reasons
 
@@ -436,11 +436,13 @@ Awakening rules (gates, multiplier) are 03's; this section checks that the Rock 
 
 | Rank | `AWAKEN_STAGES` | Gate reached (00 section 6.6) | `AWAKEN_COST_ROCK_CANDY` | Cumulative cost | Cumulative dungeon Rock Candy | Affordable | Days after gate |
 |---|---|---|---|---|---|---|---|
-| 1 | 50 | day 1 | 100 | 100 | 100 by day 2 (30 + 70) | day 2 | 1 |
-| 2 | 150 | day 1 | 300 | 400 | 360 by day 4, 550 by day 5 | day 5 | 4 |
-| 3 | 300 | day 3 | 800 | 1,200 | 1,050 by day 7, 1,360 by day 8 | day 8 | 5 |
-| 4 | 500 | day 19 | 2,000 | 3,200 | 2,530 by day 11, then 2 x floor 23 = 460 a day: 3,450 by day 13 | before the gate | 0 |
-| 5 | 800 | beyond day 30 | 5,000 | 8,200 | | | |
+| 1 | 50 | day 1 | 20 | 20 | 100 by day 2 (30 + 70) | day 1-2 | 0-1 |
+| 2 | 150 | day 1 | 60 | 80 | 100 by day 2 | day 2 | 1 |
+| 3 | 300 | day 3 | 160 | 240 | 360 by day 4 | before the gate | 0 |
+| 4 | 500 | day 19 | 400 | 640 | 1,050 by day 7 | before the gate | 0 |
+| 5 | 800 | beyond day 30 | 1,000 | 1,640 | 2,530 by day 11 | before the gate | 0 |
+
+Costs per slot after 00 decision 111 (a fifth of the hero model's); the income column is the hero-model run's and the gate days come from 00 section 6.6, so the last two columns are one slot's reading until `tools/power_curve_model.py` re-reports them on the party model (#249).
 
 Reading: the intended feel is that every rank lands at most `max_days_after_gate` (2) days after its stage gate ("I can see it, I will have it tomorrow"). Under the current ladder and `ROCK_CANDY_FLOOR` that holds for ranks 1 and 4 but not for ranks 2 and 3, which arrive about 4 and 5 days after their gates; `tools/power_curve_model.py --check` reports the same miss (AC 18). The fix (more Rock Candy per floor, a different ladder rule, or limit-break repricing) is decision #249 items 3 and 5, not this table. Once rank 4 is bought Rock Candy accumulates, and 04's limit breaks are the sink for the surplus. `Awaken(slot)` command: validation, reject reasons and effect in 03; debits Rock Candy with `CurrencyReason.AWAKENING`; emits `Awakened(slot, rank)`; progress `AWAKEN_RANK` ladder (highest slot rank, 5.4).
 

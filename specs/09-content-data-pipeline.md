@@ -137,6 +137,7 @@ The exporter checks `constants` against this list (`E040` missing, `E042` unknow
 | `OFFLINE_RATE`, `OFFLINE_CAP_H`, `OFFLINE_MIN_S` | `constants` | double, double, int |
 | `TUTORIAL_DIAMONDS` | `tutorial_steps[tut_welcome].grants` | grantlist |
 | `TUTORIAL_COMPANION_IDS` (5 ids, 00 decision 109) | `tutorial_steps[tut_welcome].grants`, its `COMPANION` item grants in slot order (`E066`) | grantlist |
+| `TUTORIAL_WEAPON_IDS` (5 ids, 00 decision 111) | `tutorial_steps[tut_welcome].grants`, its `WEAPON` item grants in slot order (`E066`); `TUTORIAL_WEAPON_ID` is the first | grantlist |
 | `LOGIN_DIAMONDS` | `constants` (auto-granted by `EnsureDay` with reason `LOGIN`; `d_login` pays nothing, issue #20) | int |
 | Base rates C..M | `banner_levels` rows with `level = 1`, per banner | double x5 |
 | `PITY_SOFT_START`, `PITY_SOFT_STEP`, `PITY_HARD`, `M_SHARE_OF_LPLUS` | `banners` | int, double, int, double |
@@ -302,7 +303,8 @@ Per-rarity facts shared by every collectible kind. 04 section 6.1, 7.1 and 8.1 d
 | `weapon_atk_pct` | double | `WEAPON_ATK_PCT[r]`; non-decreasing in rarity (`E048`). |
 | `weapon_passive_pct` | double | `WEAPON_PASSIVE_PCT[r]`; non-decreasing. |
 | `skill_dps_pct` | double | `SKILL_DPS_PCT[r]`; non-decreasing. |
-| `companion_dps_pct` | double | `COMPANION_DPS_PCT[r]`; non-decreasing. |
+| `companion_dps_pct` | double | `COMPANION_DPS_PCT[r]`; non-decreasing (C 20 / R 40 / E 80 / L 160 / M 320, 00 decision 111). |
+| `companion_atk_mult` | double | `COMPANION_ATK_MULT[r]`, a companion's auto-attack multiplier by rarity (C 1.0 / R 1.1 / E 1.25 / L 1.5 / M 2.0, 00 decision 111); `> 0` (E043). |
 | `rune_stat_pct` | double | P1 default; present, non-decreasing. |
 | `limit_break_cost` | long | `LIMIT_BREAK_COST[r]`: Rock Candy for limit-break rank `k` is `limit_break_cost * k` (04 section 5.2); `>= 1`, non-decreasing (`E048`) (issue #37). |
 | `dupe_overflow_rock_candy` | long | `DUPE_OVERFLOW_ROCK_CANDY[r]`: Rock Candy granted per copy past the last `dupe_levels` threshold (04 section 5.3); `>= 0`, non-decreasing (issue #37). |
@@ -437,7 +439,7 @@ Per slot (00 decision 109): each of the `PARTY_SLOTS` slots has its own `AwakenR
 |---|---|---|
 | `rank` | int | Key. Exactly `1..N` (`E060`). |
 | `stage_gate` | int | `AWAKEN_STAGES[rank]`; strictly increasing (`E032`). |
-| `rock_candy_cost` | long | `AWAKEN_COST_ROCK_CANDY[rank]`; strictly increasing. |
+| `rock_candy_cost` | long | `AWAKEN_COST_ROCK_CANDY[rank]`; strictly increasing (20, 60, 160, 400, 1000 per slot, 00 decision 111). |
 | `mult` | double | `AWAKEN_MULT`; `> 1`. Every MVP row carries `1.5`. |
 | `rune_slots_after` | int | Total rune slots unlocked once the highest slot rank reaches this rank (P1: ranks 4 and 5); non-decreasing (`E048`); `<= RUNE_SLOTS`. |
 | `tier` | enum(Tier) | |
@@ -641,13 +643,13 @@ Derived at build: `TotalAmount = base_amount + floor(base_amount * bonus_pct)`. 
 | `text_key` | key | |
 | `expect_event` | string? | Sim event name (00 section 5.1 event vocabulary, e.g. `FishMerged`, `EnemyKilled`) the overlay waits for, or a `\|`-separated list of them (`BossCleared\|BossFailed`), where an occurrence of any listed event counts; every name must be in the vocabulary (`E021` against the exporter's `SIM_EVENT_NAMES`); empty = tap to continue (issues #46, #246). |
 | `expect_count` | int? | How many `expect_event` occurrences (of any listed event, summed) complete the step; required with `expect_event`, empty otherwise (`E054`); `>= 1`. |
-| `grants` | grantlist? | `tut_welcome` carries `DIAMOND:1500` (`TUTORIAL_DIAMONDS`), the starter weapon `WEAPON:weapon_c_01:1` (`TUTORIAL_WEAPON_ID`, equipped in slot 0) and the starter party: `PARTY_SLOTS` `COMPANION:<id>:1` grants (`TUTORIAL_COMPANION_IDS`), equipped in slots 0-4 in grant order (00 decision 109; issue #46). Rule `E066`. |
+| `grants` | grantlist? | `tut_welcome` carries `DIAMOND:1500` (`TUTORIAL_DIAMONDS`), the five starter weapons `WEAPON:weapon_c_01:1` .. `WEAPON:weapon_c_05:1` (`TUTORIAL_WEAPON_IDS`, equipped in slots 0-4 in grant order, 00 decision 111) and the starter party: `PARTY_SLOTS` `COMPANION:<id>:1` grants (`TUTORIAL_COMPANION_IDS`), equipped in slots 0-4 in grant order (00 decision 109; issue #46). Rule `E066`. |
 | `skippable` | bool | |
 | `tier` | enum(Tier) | |
 
 Rule `E062`: exactly one step has `trigger = PROFILE_CREATED` and it is `order = 1`. That step is `tier = M0` even though the tutorial overlay is MVP: M0 applies its grant at profile creation (06 section 1.2), so an M0 build must not filter it out.
 
-Rule `E066` (the starter party, 00 decision 109): the `PROFILE_CREATED` step's `grants` hold exactly `PARTY_SLOTS` `COMPANION` item grants with amount 1 and pairwise distinct ids, each resolving to a `companions` row (`E022`) with `rarity = COMMON` and `tier = M0`; and exactly one `WEAPON` item grant, resolving to a `weapons` row with `tier = M0`. Example cell: `DIAMOND:1500;WEAPON:weapon_c_01:1;COMPANION:comp_c_01:1;COMPANION:comp_c_02:1;COMPANION:comp_c_03:1;COMPANION:comp_c_04:1;COMPANION:comp_c_05:1` (the five ids are 04's pick; the shipped `content_src/tutorial_steps.csv` does not carry them yet, issue #309).
+Rule `E066` (the starter party, 00 decision 109): the `PROFILE_CREATED` step's `grants` hold exactly `PARTY_SLOTS` `COMPANION` item grants with amount 1 and pairwise distinct ids, each resolving to a `companions` row (`E022`) with `rarity = COMMON` and `tier = M0`; and exactly `PARTY_SLOTS` `WEAPON` item grants with amount 1 and distinct ids, each a `weapons` row with `rarity = COMMON` and `tier = M0` (00 decision 111). A content set with no `companions` table (a loader fixture) has no party and skips the rule. Shipped cell: `DIAMOND:1500;WEAPON:weapon_c_01:1;WEAPON:weapon_c_02:1;WEAPON:weapon_c_03:1;WEAPON:weapon_c_04:1;WEAPON:weapon_c_05:1;COMPANION:comp_c_01:1;COMPANION:comp_c_02:1;COMPANION:comp_c_03:1;COMPANION:comp_c_04:1;COMPANION:comp_c_05:1`.
 
 ### 5.30 `localization`
 
@@ -919,7 +921,7 @@ CONTENT <code> <location>: <message>
 | `E063` | feature_unlocks vs research | `{table}[{id}] unlocks at {value}, before feature '{feature}' ({threshold})` / `feature 'SHOP' must be ALWAYS` |
 | `E064` | quests_daily | `missing or unreachable daily bonus rows ({detail})` |
 | `E065` | achievements | `{goal} target {target} must be below the pool size {pool} (pillar 4)` |
-| `E066` | tutorial_steps vs companions, weapons | `starter grant needs {PARTY_SLOTS} distinct COMMON M0 COMPANION grants and one M0 WEAPON grant; {detail}` |
+| `E066` | tutorial_steps vs companions, weapons | `the starter party must be exactly {PARTY_SLOTS} distinct COMPANION grants of amount 1, got {ids}`; `the starter weapons must be exactly {PARTY_SLOTS} distinct WEAPON grants of amount 1, got {ids}`; `starter companion|weapon '{id}' must be COMMON and tier M0, is {rarity} {tier}` |
 
 ### 8.5 Versioning and manifest (`E09x`, `E9xx`)
 
@@ -1419,7 +1421,7 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 | `REF_NEW_BOSSES` | 4 | S (named here; 06 section 2 reference day, issues #55, #244) | 5.1, 5.21 | `E039` |
 | `CLOCK_BACKWARDS_TOLERANCE_S` | 5 | S (01 section 3.2; issue #246) | 4, 5.1 | none; a re-anchor behind the virtual clock by at most this emits no `ClockWentBackwards` |
 | `awakening_targets.max_days_after_gate` | 2 per rank | S (03, 06; issue #43) | 5.35 | `power_curve_model.py`, bot sweep |
-| `E066` starter-party rule | `PARTY_SLOTS` distinct `COMMON` `M0` companions + one `M0` weapon in `tut_welcome` | - (00 decision 109) | 5.29 | none |
+| `E066` starter-party rule | `PARTY_SLOTS` distinct `COMMON` `M0` companions and `PARTY_SLOTS` distinct `COMMON` `M0` weapons in `tut_welcome` | - (00 decisions 109, 111) | 5.29 | none |
 | `content_version` format | `YYYY.MM.DD[.N]` | - | 6.3 | matches 02 and 08 examples (`2026.11.03`) |
 | Table set | 34 tables (adds `feature_unlocks`, `awakening_targets`, generated `plausibility_stage_bound`; `hero_levels` renamed `party_levels`, 00 decision 109) + `localization.<locale>` + `meta` | - | 5 | - |
 | Enums added for content | `Element`, `PackageLimit`, `InboxKind`, `TutorialTrigger`, `FeatureCondition`, `ConstantType`, `Tier` as data | - | 3.3 | - |
