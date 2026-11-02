@@ -299,6 +299,8 @@ scr.item_detail.kind_rune,Rune,,,,18,false,07 M0 screens
 scr.item_detail.kind_skill,Skill,,,,18,false,07 M0 screens
 scr.item_detail.kind_weapon,Weapon,,,,18,false,07 M0 screens
 scr.item_detail.level,Level {0}   {1} / {2} copies,,,,60,false,07 M0 screens
+scr.item_detail.limit_break,Limit break ({0} Rock Candy),,,,28,false,07 MVP limit breaks (04 section 5.2)
+scr.item_detail.limit_breaks,Limit breaks {0} / {1},,,,28,false,07 MVP limit breaks (04 section 5.2)
 scr.item_detail.new,NEW,,,,18,false,07 M0 screens
 scr.item_detail.next,Next level: {0},,,,60,false,07 M0 screens
 scr.item_detail.passive,Collection passive {0},,,,60,false,07 M0 screens

@@ -142,6 +142,10 @@ namespace HeroCat.Client.Core
         public const string DetailCompare = "scr.item_detail.compare";         // "Equipped weapon: {0}"
         public const string DetailCompareButton = "scr.item_detail.compare_button";
         public const string DetailNewRibbon = "scr.item_detail.new";
+        public const string DetailLimitBreak = "scr.item_detail.limit_break";   // "Limit break ({0} Rock Candy)"
+        public const string DetailLimitBreaks = "scr.item_detail.limit_breaks"; // "Limit breaks {0} / {1}"
+        public const string RejectLimitBreakCapped = "reject.limit_break_capped";
+        public const string RejectNotEnoughRockCandy = "reject.not_enough_rock_candy";
 
         // SCR_SUMMON / SCR_SUMMON_RESULT
         public const string SummonTitle = "scr.summon.title";
