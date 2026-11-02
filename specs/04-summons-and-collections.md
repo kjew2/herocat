@@ -374,19 +374,12 @@ Companion layer (03 section 7; issue #39 inclusive formula, now per pool, 00 dec
 ownFactor(i)   = 1 + mpSufficiency_i * damagePct(c_i) / 100      # damagePct = dps_pct * LevelMult for DAMAGE, else 0; multiplies SlotDps_i only
 partyBuff      = 1 + sum over occupied j of mpSufficiency_j * buffAtkPct(c_j) / 100   # buffAtkPct = dps_pct * LevelMult for BUFF_ATK, else 0; multiplies PartyDps
 
-regen          = MpRegenPerTick * TICK_HZ                         # MP per second, the same for every pool (Research raises all equally, 03 section 6)
-restore(j)     = mp_restored(c_j) * LevelMult(c_j) / cooldownSeconds(c_j)   # MP per second an MP_REGEN companion puts into EACH pool at full uptime
-demand_i       = mp_cost(c_i) / cooldownSeconds(c_i)              # c_i's own cost from its own pool; every ability type has one
-# pass 1, MP_REGEN companions: their own pool gets regen plus every MP_REGEN's restore, its own included
-mpSufficiency_m = min(1, (regen + sum over MP_REGEN j of restore(j)) / demand_m)       for each MP_REGEN m
-# pass 2, everyone else: MP_REGEN restores scaled by their realised uptime
-mpSufficiency_i = min(1, (regen + sum over MP_REGEN j of mpSufficiency_j * restore(j)) / demand_i)
-mpSufficiency_i = 1 when demand_i == 0
+mpSufficiency_i                                                   # 03 section 7.1 owns the expression; summarised here
 ```
 
-Pass 1 assumes every `MP_REGEN` casts at full rate; it is exact whenever each `MP_REGEN` pool is self-sufficient, which holds at the defaults (`regen` 2 MP/s against a demand of 1 MP/s). The old shared-pool formula and `companionMult` are gone; the layer's party-level value is section 11's `LayerMult`.
+`mpSufficiency_i` is 03 section 7.1's per-pool value: every pool regenerates `MpRegenPerTick * TICK_HZ` MP per second and receives every equipped `MP_REGEN` companion's restore (`mp_restored * LevelMult` per cast, its own pool included), counted at that restorer's uptime (1 when its restore covers its own cost, else what its own regen sustains); `mpSufficiency_i = min(1, (regen + restorePerSec) / demand_i)` with `demand_i = mp_cost(c_i) / cooldownSeconds(c_i)`, 1 for an empty slot. This replaces an earlier two-pass draft of this section; the code and `tools/power_curve_model.py` use 03's form. The old shared-pool formula and `companionMult` are gone; the layer's party-level value is section 11's `LayerMult`.
 
-MP pool and regen come from Research (03 section 6), one pool per slot, each `MpPoolMax` with `MpRegenPerTick`. Each companion drains only its own pool, so a full pool at `MP_POOL0 = 100` is ten casts of burst for that companion at the default cost; the pool's size is burst, the regen is uptime. At the defaults one pool's regen (2 MP/s) covers one companion's demand (1 MP/s), so MP does not bind and `MP_REGEN` companions and the Research MP nodes add nothing until the constants are retuned (open question 10, #249).
+MP pool and regen come from Research (03 section 6), one pool per slot, each `MpPoolMax` with `MpRegenPerTick`. Each companion drains only its own pool, so a full pool at `MP_POOL0 = 100` is ten casts of burst for that companion at the default cost; the pool's size is burst, the regen is uptime. At the defaults (`MP_REGEN0 = 0.5` per pool, 00 decision 110) one pool's regen covers half of one companion's demand (1 MP/s), so a default companion runs at half uptime until Research's MP nodes or an `MP_REGEN` companion lift it. An `MP_REGEN` companion still auto-attacks, so even a net-draining Common one can raise rated DPS when the other pools are short; `AutoEquipBestCompanions` keeps it only when it does.
 
 ### 8.3 Starter party
 
