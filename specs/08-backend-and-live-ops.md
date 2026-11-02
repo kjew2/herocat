@@ -272,9 +272,10 @@ Handle(player, req):
   tx:
     pity = select ... from banner_pity for update (insert default if absent)
     cost  = payment == DIAMOND ? PULL_COST[banner] * count : count tickets
+    tickets = sum(ticket_ledger) for the banner's ticket (credited at PUT /save step 5a and inbox claim; issue #49)
+    if payment == DIAMOND and tickets >= count: 409 PAYMENT_MISMATCH {expected: "TICKET"}   // 06 rule: tickets first; client out of date; checked before funds (issue #199)
     if payment == DIAMOND: balance = sum(diamond_ledger) ; if balance < cost: 402 INSUFFICIENT_FUNDS {need, have}
-    else: tickets = sum(ticket_ledger) for the banner's ticket (credited at PUT /save step 5a and inbox claim; issue #49); if tickets < count: 402 INSUFFICIENT_FUNDS
-    if payment == DIAMOND and tickets >= count: 409 PAYMENT_MISMATCH {expected: "TICKET"}   // 06 rule: tickets first; client out of date
+    else: if tickets < count: 402 INSUFFICIENT_FUNDS
     st  = BannerState { Pity = pity.pity, TotalPulls = pity.total_pulls, Exp = pity.exp }      // cumulative exp; level derived
     col = CollectionState from the player's item ledger (granted_items + summon_log aggregates)
     results = count == 10 ? Pull10(content.Banner(banner), st, col, csprng)                                  // 04 section 3.2; banner level and
@@ -289,11 +290,22 @@ Handle(player, req):
 
 As built (issue #194), the idempotency middleware runs before the handler, so the lookup precedes the lock; the outcome is the same (one id in flight is `409`, a final one replays, and a second request id waits for the lock). The lock records `redis_lock_wait_seconds` (tags `lock`, `outcome` = `acquired` / `timeout` / `unavailable`) and fails open when Redis is unreachable (section 9.1). Latency target p99 under 150 ms. The response is the `SummonResultPayload` of 01 section 2.5, with per-pull `copiesAfter` and `overflowRockCandy` (issue #13); the client applies it with `ApplySummonResult`, the only summon mutator in both modes, replacing `DIAMOND` with `balances.DIAMOND` (server wins). Replacing is safe because the client uploads its save before the pull whenever it holds unsynced client-earned diamonds or tickets (issue #49).
 
+As built (issue #199): the handler is `Features/Summon` (`SummonService`, `SummonEngine`) and runs 04's `PullAlgorithm` from `HeroCat.Sim` unchanged. Request checks come first (`banner` an exact `Banner` name, `count` 1 or 10, `payment` `DIAMOND` or `TICKET`, `clientContentVersion` present; else `400 VALIDATION` with `details.field`), then the kill switch (`503 SUMMON_DISABLED`, which the idempotency middleware never stores, so the same request id rolls once the switch is lifted), then the lock. The content set is the one whose manifest version equals `clientContentVersion` exactly; the server holds the sets listed in `HeroCat:Content:Directories` (default: the `content/` set shipped in the image, loaded with Runtime's `ContentLoader` source compiled into the server, 01 section 1.2), and a version it does not hold is `409 CONTENT_TOO_OLD` (`details.minContentVersion` = the newest held) when older than the newest held set, else `400 VALIDATION` (`details.reason = UNKNOWN_CONTENT_VERSION`). A banner is closed when content disables it or has no `banner_levels` rows, or when `config.banners[]` lists windows for it and none contains `serverTime`; a banner the schedule does not list, or missing from `summonEnabled`, is open. The transaction first locks the player's `accounts` row (`for no key update`) so two pulls never read one balance even when the Redis lock fails open. `PAYMENT_MISMATCH` is checked before the funds check, so a player with enough tickets but too few diamonds gets `409`, not `402`; `INSUFFICIENT_FUNDS` carries `details: { need, have, currency }`. The collection the pull reads is one copy per `summon_log` row of the banner, plus `granted_items` of the banner's pool, plus content's profile-created item grants (the starter weapon every account holds), capped at the copy cap. Uniforms are the top 53 bits of a CSPRNG word times 2^-53. On the wire `rarity` is the one-letter code `C`/`R`/`E`/`L`/`M` (as in `summon_log`), `balances` holds `DIAMOND` and the banner's ticket after the charge, `debits` is the one charge (`DIAMOND` or the ticket currency, negative), and the top-level `rateTableHash` is the table of the batch's last pull (every pull's own is in `summon_log`). The charge is one `diamond_ledger` (`-cost`) or `ticket_ledger` (`-count`) row with reason `SUMMON`, `ref_type = summon`, `ref_id` and `request_id` = the request id. `summon_pulls_total{banner,rarity}` counts committed pulls.
+
 Errors: `INSUFFICIENT_FUNDS` 402, `PAYMENT_MISMATCH` 409, `BANNER_CLOSED` 409, `CONTENT_TOO_OLD` 409, `IDEMPOTENCY_IN_FLIGHT` 409, `SUMMON_DISABLED` 503 (kill switch).
 
 ### 4.4 Audit log
 
-One `summon_log` row per pull, never per batch, so a regulator or support agent can reproduce any pull: given `rate_table_hash` (which identifies the exact published table), `pity_before`, `guarantee` (whether slot 10 ran with `forceEplus`) and the pull's three uniforms, 04's `Pull` yields the logged rarity and item. The row records `guarantee` so forced 10-pull slots are visible. Retention 7 years (02 section 13). `GET /summon/history?banner=WEAPON&limit=100` -- `jwt` -- 10/min -> the player's own rows (item, rarity, pity, time; not the uniforms).
+One `summon_log` row per pull, never per batch, so a regulator or support agent can reproduce any pull: given `rate_table_hash` (which identifies the exact published table), `pity_before`, `guarantee` (whether slot 10 ran with `forceEplus`) and the pull's three uniforms, 04's `Pull` yields the logged rarity and item. The row records `guarantee` so forced 10-pull slots are visible. Retention 7 years (02 section 13).
+
+`rate_table_hash` (issue #199) is SHA-256 over a canonical UTF-8 text of everything a pull at one banner level depends on, so the hash alone selects the table to replay a row with: the lines `herocat.rate_table.v1`, `banner=<BANNER>`, `level=<n>`, `rates=C:<c>,R:<r>,E:<e>,L:<l>,M:<m>`, `pity=softStart:<n>,softStep:<x>,hard:<n>,mShareOfLplus:<x>`, `guarantee=batch:<n>,min:<RARITY>` and `pool.<C|R|E|L|M>=<itemId,...>` in pool order, each ending in a newline, numbers in invariant round-trip form. `summon_log` stores the 32 bytes; the wire (`rateTableHash` here and in section 4.5) is lowercase hex. `RateTableHash` in `Features/Summon` is the one implementation.
+
+**`GET /summon/history?banner=WEAPON&limit=100`** -- `jwt` -- 10/min. The player's own rows, newest first (item, rarity, pity, time; not the uniforms). `banner` is optional; `limit` defaults to 100, at most 500 (as built, issue #199).
+
+```json
+// 200
+{ "pulls": [ { "requestId": "c1f0…", "banner": "WEAPON", "batchIndex": 9, "itemId": "wpn_017", "rarity": "R", "pityBefore": 32, "pityAfter": 33, "bannerLevel": 4, "guarantee": false, "payment": "DIAMOND", "createdAt": 1793670900 }, "..." ] }
+```
 
 ### 4.5 Published rates
 

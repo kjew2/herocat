@@ -1,3 +1,4 @@
+#nullable disable   // also compiled into HeroCat.Server (nullable enabled), which links this file (issue #199)
 using System;
 using System.Collections.Generic;
 using System.Globalization;
