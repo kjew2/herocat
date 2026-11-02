@@ -13,7 +13,7 @@ namespace HeroCat.Runtime.Session
     /// <summary>
     /// The feature specs' analytics rows from the sim's events on the session's <see cref="EventBus"/> (02 section 14; the
     /// owner sections define the fields): 06 section 13's quest, offline, rollover and shop events and 03 section 11's
-    /// <c>awakened</c> (issue #177), 04 section 13's <c>item_equipped</c> (issue #163) and 05 section 13's fish events
+    /// <c>awakened</c> (issue #177), 04 section 13's <c>item_equipped</c> and <c>limit_break</c> (issue #163) and 05 section 13's fish events
     /// (issue #168), and 03 section 11's combat rows (issue #274, FeatureAnalytics.Combat.cs). <c>currency_changed</c> is
     /// <see cref="CurrencyAnalytics"/>'. Rows that group one command's events (the
     /// <c>quest_claimed</c> bulk flag, <c>fish_release</c>, <c>fish_merge</c>, <c>fish_discard</c>) read
@@ -81,6 +81,7 @@ namespace HeroCat.Runtime.Session
 
             // 04 section 13 (issue #163). summon and item_acquired come from SummonFlow, which knows the request.
             _subs.Add(bus.Subscribe<ItemEquipped>(e => Track(new AnalyticsEvents.ItemEquipped(e.Banner, e.Slot, e.ItemId, e.PreviousItemId, e.Auto))));
+            _subs.Add(bus.Subscribe<ItemLimitBroken>(OnLimitBroken));
 
             // 05 section 13 (issue #168). fish_release, fish_merge and fish_discard group one command's events (OnCommandApplied).
             _subs.Add(bus.Subscribe<FishDiscovered>(e =>
@@ -203,6 +204,13 @@ namespace HeroCat.Runtime.Session
             int i = e.Rank - 1;
             long cost = i >= 0 && i < _db.Awakening.Count ? _db.Awakening[i].RockCandyCost : 0;
             Track(new AnalyticsEvents.Awakened(e.Rank, cost, _rockCandyAfterAwaken));
+        }
+
+        /// <summary>04 section 13's <c>limit_break</c>: the kind and rarity come from content (ids are table-prefixed, 09).</summary>
+        void OnLimitBroken(ItemLimitBroken e)
+        {
+            if (!HeroCat.Sim.Summons.CollectionRules.TryKindOf(_db, e.ItemId, out var kind)) return;   // the sim accepted it, so never
+            Track(new AnalyticsEvents.LimitBreak(kind, e.ItemId, HeroCat.Sim.Summons.CollectionRules.RarityOf(_db, kind, e.ItemId), e.Rank, e.Cost));
         }
 
         void Track(AnalyticsEvent e)

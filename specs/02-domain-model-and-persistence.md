@@ -1359,11 +1359,11 @@ As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
 3. An upload outcome is accepted (the events leave the queue), retry (offline, timeout, 5xx, 429, or the uploader threw: the flush stops and the next flush retries the same batch) or rejected (a non-retryable 4xx: the batch is dropped so it cannot block the queue). The remote uploader (Firebase for every event, the backend's `POST /analytics/events` of 08 section 3.5 for the economy ones; issue #209) waits on `ApiClient` (issue #143); a sink with no uploader keeps the events on disk. The backend answers `200` with per-event refusals (accepted), or `400` for a malformed batch (rejected).
 4. A Local build without a backend uses `NullAnalytics` and writes no queue file (01 section 1.2); bots and tests use `MemoryAnalytics` (no envelope, no files).
 
-### 14.3 Events owned here (session, save health, cloud, clock, client performance)
+### 14.3 Events owned here (session, save health, cloud, clock, client performance, content updates)
 
 | Event | Properties | Emitted by | Notes |
 |---|---|---|---|
-| `session_start` | `offlineElapsedSec`, `offlineCredited`, `coldBoot` (bool), `bootMs` | Runtime at `SCR_MAIN` shown | |
+| `session_start` | `offlineElapsedSec`, `offlineCredited`, `coldBoot` (bool), `bootMs` | Runtime at `SCR_MAIN` shown, and when a session reopens after a resume or an in-app gap | Every `session_end` has its start (issue #298). Cold boot: `BootFlow` at the handoff, `bootMs` the boot's total. Warm (`coldBoot = false`): `SessionRunner` when the session opens after the catch-up of `OnResume` or of an in-app gap (a resume while the session is still open sends nothing), `bootMs` the runner's catch-up milliseconds. The offline fields are the `Offline.Pending` record after that catch-up (the sum when a reward was already pending), 0 when none. |
 | `session_end` | `durationSec`, `stageStart`, `stageEnd`, `kills`, `ticks`, `trigger` (pause/quit/gap) | Runtime on pause/quit | `SessionRunner` (issue #274): a session opens after the catch-up of boot, resume or an in-app gap and ends once, before the analytics flush of `OnPause`/`OnQuit` (a quit right after a pause sends nothing) or at the last frame before an in-app gap. `durationSec` is monotonic foreground time; the stages are `Combat.Stage`; `kills` and `ticks` are the `Stats.Kills` and runner ticks since the open. |
 | `cloud_save_uploaded` | `saveSeq`, `sizeBytes`, `trigger`, `latencyMs`, `flags[]` | Runtime | |
 | `cloud_conflict` / `cloud_autoresolved` | 9.4 | Runtime | |
@@ -1374,6 +1374,7 @@ As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
 | `boot_ms` | `totalMs`, `contentMs`, `configMs`, `authMs`, `saveMs`, `catchUpMs`, `handoffMs` | Runtime, once per cold boot | 10 section 5's cold-boot metric with the 01 section 8.1 step breakdown (issue #261). |
 | `resume_ms` | `ms` | Runtime, once per warm resume | 10 section 5; emitted with issue #218. |
 | `perf_tick` | `p50Ms`, `p95Ms`, `maxMs`, `ticks` | Runtime, sampled once per session (not per tick) | 10 section 5's tick cost; emitted with issue #218. |
+| `content_update_failed` | `version` (the offered `content_version`), `code` (`E900`-`E903` or a 09 build rule), `location` (file or row) | Runtime, once per downloaded bundle ruled out (09 section 10.3 step 5) | `ContentUpdater.Failed` with the bundle's first error, raised on the thread pool after the staged copy is discarded; `BootFlow` posts it to the runner's `MainThreadDispatcher` and tracks it there (issue #298). A failed version is not re-downloaded in the session, so it is reported once. 10's client-health alarm reads it. |
 
 ### 14.4 Event index
 
@@ -1384,7 +1385,7 @@ As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
 | `fish_release`, `fish_merge`, `fish_discovered`, `fish_discard`, `fish_board_snapshot` | 05 section 13 |
 | `currency_changed`, `quest_completed`, `quest_claimed`, `achievement_unlocked`, `dungeon_run`, `offline_catchup`, `offline_claimed`, `day_rollover`, `daily_gift_claimed`, `exchange`, `shop_view`, `iap_initiated`, `iap_completed`, `iap_failed`, `iap_status`, `inbox_claimed` | 06 section 13 |
 | `plausibility_flag` | 08 section 7.4 |
-| `session_start`, `session_end`, `cloud_save_uploaded`, `cloud_conflict`, `cloud_autoresolved`, `save_*`, `migration_applied`, `clock_anomaly`, `player_deleted`, `profile_created`, `boot_ms`, `resume_ms`, `perf_tick` | 14.3 |
+| `session_start`, `session_end`, `cloud_save_uploaded`, `cloud_conflict`, `cloud_autoresolved`, `save_*`, `migration_applied`, `clock_anomaly`, `player_deleted`, `profile_created`, `boot_ms`, `resume_ms`, `perf_tick`, `content_update_failed` | 14.3 |
 
 07 defines no events of its own; screen-driven events (`shop_view`) are owned by the feature spec of the screen. A new event is added to its owner's section and to this index in the same change.
 

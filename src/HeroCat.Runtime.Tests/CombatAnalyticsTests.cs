@@ -217,5 +217,40 @@ namespace HeroCat.Runtime.Tests
             var next = s.Analytics.Events.Last(e => e.Name == "session_end");
             Assert.That((next.Props["trigger"], next.Props["durationSec"]), Is.EqualTo(("pause", 3L)));
         }
+
+        static List<string> SessionRows(TestSession s) =>
+            s.Analytics.Events.Where(e => e.Name == "session_start" || e.Name == "session_end").Select(e => e.Name).ToList();
+
+        [Test]
+        public void AResumeAndAGap_EachSendAWarmSessionStart_SoStartsPairWithEnds()   // 02 section 14.3, issue #298 item 2
+        {
+            var s = TestSession.Open();
+            Assert.That(s.Analytics.Events.Single(e => e.Name == "session_start").Props["coldBoot"], Is.True, "BootFlow's cold start");
+            s.Play(5);
+            s.Runner.OnPause();
+            s.Clock.Advance(3 * 3600);
+            s.Runner.OnResume();
+            var warm = s.Analytics.Events.Last(e => e.Name == "session_start");
+            var p = s.Sim.State.Offline.Pending;
+            Assert.That(p, Is.Not.Null);
+            Assert.That(warm.Props.Keys, Is.EquivalentTo(new[] { "offlineElapsedSec", "offlineCredited", "coldBoot", "bootMs" }));
+            Assert.That(warm.Props["offlineElapsedSec"], Is.EqualTo(p.ElapsedSec));
+            Assert.That(warm.Props["offlineCredited"], Is.EqualTo(p.CreditedSec));
+            Assert.That(warm.Props["coldBoot"], Is.False);
+            Assert.That((double)warm.Props["bootMs"], Is.GreaterThanOrEqualTo(0));
+
+            s.Runner.OnResume();   // a resume without a pause: the session is still open, so no second start
+            s.Runner.Issue(new HeroCat.Sim.Commands.ClaimOfflineReward());
+            s.Play(3);
+            s.Frame(RuntimeConfig.IN_APP_GAP_SEC + 10);   // an in-app gap ends one session and opens the next
+            var gapStart = s.Analytics.Events.Last(e => e.Name == "session_start");
+            Assert.That(gapStart.Props["coldBoot"], Is.False);
+            s.Play(2);
+            s.Runner.OnQuit();
+            Assert.That(SessionRows(s), Is.EqualTo(new[]
+            {
+                "session_start", "session_end", "session_start", "session_end", "session_start", "session_end",
+            }), "each session_end has its own start, in order");
+        }
     }
 }

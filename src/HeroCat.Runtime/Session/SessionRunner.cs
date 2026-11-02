@@ -204,7 +204,7 @@ namespace HeroCat.Runtime.Session
         public void Start()
         {
             _started = true;
-            SyncAndCatchUp();
+            SyncAndCatchUp(coldBoot: true);
         }
 
         /// <summary>One rendered frame (01 section 3.1). Returns the ticks run.</summary>
@@ -228,7 +228,7 @@ namespace HeroCat.Runtime.Session
             {
                 _accTicks = 0;
                 EndSession(AnalyticsEvents.SessionEnd.GAP, prevMono);   // the session ended at the last frame before the freeze
-                SyncAndCatchUp();
+                SyncAndCatchUp(coldBoot: false);   // reopens the session with a warm session_start
                 return 0;
             }
 
@@ -304,7 +304,7 @@ namespace HeroCat.Runtime.Session
             IsPaused = false;
             _accTicks = 0;
             _summons?.OnResume();
-            SyncAndCatchUp();
+            SyncAndCatchUp(coldBoot: false);
             Config?.OnResume();   // 01 section 8.12 step 1: config is re-fetched on every resume
         }
 
@@ -413,8 +413,12 @@ namespace HeroCat.Runtime.Session
             _svc.Analytics?.Track("clock_anomaly", new Dictionary<string, object> { ["kind"] = "backwards", ["seconds"] = seconds });
         }
 
-        /// <summary>02 section 14.3: a session opens at boot, resume and gap recovery (after the catch-up), once.</summary>
-        void OpenSession(long mono)
+        /// <summary>
+        /// 02 section 14.3: a session opens at boot, resume and gap recovery (after the catch-up), once. A warm open (resume,
+        /// gap) sends <c>session_start</c> with <c>coldBoot = false</c> so it pairs with the previous session_end (issue #298);
+        /// the cold one is BootFlow's, sent at SCR_MAIN with the boot timings.
+        /// </summary>
+        void OpenSession(long mono, bool coldBoot, double catchUpMs)
         {
             if (_sessionOpen) return;
             _sessionOpen = true;
@@ -422,6 +426,9 @@ namespace HeroCat.Runtime.Session
             _sessionStage = _sim.State.Combat.Stage;
             _sessionKills = _sim.State.Stats.Kills;
             _sessionTicks = TotalTicks;
+            if (coldBoot) return;
+            var pending = _sim.State.Offline.Pending;   // as at boot: the pending record after this catch-up (summed)
+            _svc.Analytics?.Track(new AnalyticsEvents.SessionStart(pending?.ElapsedSec ?? 0, pending?.CreditedSec ?? 0, ColdBoot: false, catchUpMs));
         }
 
         /// <summary>
@@ -437,8 +444,9 @@ namespace HeroCat.Runtime.Session
                                                                  TotalTicks - _sessionTicks, trigger));
         }
 
-        void SyncAndCatchUp()
+        void SyncAndCatchUp(bool coldBoot)
         {
+            long t0 = _mono.Ticks;
             long now = _svc.Clock.NowServerSeconds;
             // 02 section 11.3: a resume behind the catch-up anchor credits nothing (the sim never moves the anchor back).
             long behind = _sim.State.Time.LastTickServerTime - now;
@@ -449,7 +457,7 @@ namespace HeroCat.Runtime.Session
             SaveNow(SaveTrigger.Resume);
             _lastMono = _mono.Ticks;
             _lastClockSyncMono = _lastMono;
-            OpenSession(_lastMono);
+            OpenSession(_lastMono, coldBoot, (_lastMono - t0) * 1000.0 / _mono.Frequency);
             // 01 section 8.2 step 1: the catch-up above used the extrapolated time; the sync is fired, not awaited (issue
             // #149). Its result lands through IClockResync.Resynced on a later frame, where OnClockSynced credits a jump
             // over CLOCK_JUMP_WARN_SEC as the second catch-up window (step 2). It never throws.
