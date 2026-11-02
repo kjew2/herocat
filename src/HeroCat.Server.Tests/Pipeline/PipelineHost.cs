@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
+using HeroCat.Server.Infrastructure.Idempotency;
 using HeroCat.Server.Pipeline;
+using HeroCat.Server.Tests.Idempotency;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -24,6 +26,10 @@ sealed class PipelineHost : IDisposable
     public readonly FakeAdmins Admins = new();
     public readonly InMemoryRateLimitStore Limits = new();
     public IRateLimitStore? LimitStoreOverride;
+    public readonly InMemoryIdempotencyStore Idempotency = new(TimeSpan.FromHours(24));
+    public IIdempotencyStore? IdempotencyOverride;
+    public readonly RecordingFlags Flags = new();
+    public readonly IdempotencyProbe Probe = new();
 
     readonly WebApplicationFactory<Program> _factory;
 
@@ -38,6 +44,9 @@ sealed class PipelineHost : IDisposable
             s.AddSingleton<IAccountStatusSource>(Bans);
             s.AddSingleton<IAdminAuthenticator>(Admins);
             s.AddSingleton<IRateLimitStore>(_ => LimitStoreOverride ?? Limits);
+            s.AddSingleton<IIdempotencyStore>(_ => IdempotencyOverride ?? Idempotency);
+            s.AddSingleton<IPlausibilityFlagSink>(Flags);
+            s.AddSingleton(Probe);
             s.AddControllers().ConfigureApplicationPartManager(m =>
             {
                 foreach (var part in m.ApplicationParts.OfType<AssemblyPart>().ToList()) m.ApplicationParts.Remove(part);
@@ -67,7 +76,11 @@ sealed class PipelineHost : IDisposable
         if (deviceId != null) r.Headers.Add(ApiHeaders.DeviceId, deviceId);
         token ??= FakeTokens.For(player ?? Player, DeviceId);
         if (token.Length > 0) r.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
-        if (method == HttpMethod.Post || method == HttpMethod.Put) r.Content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
+        if (method == HttpMethod.Post || method == HttpMethod.Put)
+        {
+            r.Content = new StringContent("{}", System.Text.Encoding.UTF8, "application/json");
+            r.Headers.Add(ApiHeaders.RequestId, Guid.NewGuid().ToString("N")); // a fresh id per mutating request, as the client makes
+        }
         return r;
     }
 }
@@ -101,6 +114,16 @@ sealed class FakeTokens : IAccessTokenValidator
     }
 }
 
+sealed class RecordingFlags : IPlausibilityFlagSink
+{
+    public readonly List<PlausibilityFlag> Raised = new();
+    public Task RaiseAsync(PlausibilityFlag flag, CancellationToken ct)
+    {
+        lock (Raised) Raised.Add(flag);
+        return Task.CompletedTask;
+    }
+}
+
 sealed class FakeBans : IAccountStatusSource
 {
     public readonly HashSet<Guid> Banned = new();
@@ -125,19 +148,19 @@ public sealed class FakeRoutesController : ControllerBase
     [HttpGet("v1/config"), Auth(AuthPolicy.None), RateLimit(30)]
     public object Config() => new { player = HttpContext.PlayerId() };
 
-    [HttpPost("v1/summon/pull"), Auth(AuthPolicy.JwtDevice), RateLimit(20)]
+    [HttpPost("v1/summon/pull"), Auth(AuthPolicy.JwtDevice), RateLimit(20), Idempotent]
     public object Pull() => new { ok = true };
 
-    [HttpPost("v1/dungeon/seed"), Auth(AuthPolicy.Jwt), RateLimit(20), RateLimit(60, RateLimitAttribute.Day)]
+    [HttpPost("v1/dungeon/seed"), Auth(AuthPolicy.Jwt), RateLimit(20), RateLimit(60, RateLimitAttribute.Day), Idempotent]
     public object Seed() => new { ok = true };
 
     [HttpGet("v1/save/meta"), Auth(AuthPolicy.Jwt), RateLimit(60)]
     public object SaveMeta() => new { player = HttpContext.PlayerId() };
 
-    [HttpPut("v1/save"), Auth(AuthPolicy.JwtDevice), RateLimit(6), RateLimit(400, RateLimitAttribute.Day)]
+    [HttpPut("v1/save"), Auth(AuthPolicy.JwtDevice), RateLimit(6), RateLimit(400, RateLimitAttribute.Day), Idempotent]
     public object PutSave() => new { ok = true };
 
-    [HttpPost("v1/auth/guest"), Auth(AuthPolicy.None), RateLimit(5), RateLimit(20, RateLimitAttribute.Day)]
+    [HttpPost("v1/auth/guest"), Auth(AuthPolicy.None), RateLimit(5), RateLimit(20, RateLimitAttribute.Day), Idempotent(IdempotencyKeyKind.Device)]
     [ProducesResponseType(typeof(GuestResponse), StatusCodes.Status201Created)]
     public IActionResult Guest(GuestRequest request) =>
         StatusCode(StatusCodes.Status201Created, new GuestResponse(Guid.NewGuid(), "a", "r", 1, new { }, 1));

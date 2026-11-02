@@ -44,6 +44,10 @@ public sealed class OpenApiContractTests
         Assert.That(e.Count, Is.GreaterThanOrEqualTo(25));
         var guest = e.Single(x => x.Id == "POST /auth/guest");
         Assert.That(guest.Auth, Is.EqualTo("none"));
+        Assert.That(guest.Idempotent, Is.True);
+        Assert.That(e.Single(x => x.Id == "POST /auth/refresh").Idempotent, Is.False, "\"not idempotent\"");
+        Assert.That(e.Single(x => x.Id == "GET /time").Idempotent, Is.False);
+        Assert.That(e.Single(x => x.Id == "POST /iap/validate").Idempotent, Is.True);
         Assert.That(guest.Limits, Is.EquivalentTo(new[] { new RateLimitRule(5, 60), new RateLimitRule(20, 86400) }));
         Assert.That(guest.BodyKeys["request"], Is.EquivalentTo(new[] { "deviceId", "deviceKey", "model", "os", "clientVersion", "region" }));
         Assert.That(guest.BodyKeys["201"], Does.Contain("accessToken").And.Contain("serverTime"));
@@ -93,13 +97,14 @@ public sealed class OpenApiContractTests
 
         var drifted = spec.Select(e => e.Id switch
         {
-            "POST /auth/guest" => e with { Auth = "jwt", Limits = new[] { new RateLimitRule(5, 60) },
+            "POST /auth/guest" => e with { Auth = "jwt", Limits = new[] { new RateLimitRule(5, 60) }, Idempotent = false,
                                            BodyKeys = new Dictionary<string, HashSet<string>> { ["request"] = new() { "deviceId", "extra" } } },
             _ => e,
         }).Where(e => e.Id != "GET /time").ToList();
         var problems = SpecContract.Compare(doc, drifted, SpecRoutes);
         Assert.That(problems, Has.Some.StartsWith("POST /auth/guest: auth none"));
         Assert.That(problems, Has.Some.StartsWith("POST /auth/guest: rate limits"));
+        Assert.That(problems, Has.Some.StartsWith("POST /auth/guest: idempotent true"));
         Assert.That(problems, Has.Some.StartsWith("POST /auth/guest request: properties"));
         Assert.That(problems, Has.Some.EqualTo("GET /time: not an endpoint in specs/08"));
     }
