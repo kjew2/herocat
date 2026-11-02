@@ -23,10 +23,11 @@ namespace HeroCat.Remote.Services
     /// The remote half of the composition root (01 section 1.2), supplied to GameServices.Build through
     /// ServicesOptions.Remote because HeroCat.Runtime cannot reference this assembly. Builds the process's one
     /// <see cref="ApiClient"/>, Runtime's ServerClock over <c>GET /time</c> (which also observes every response's
-    /// X-Server-Time), the local-first cloud save and the ConfigClient (<see cref="RemoteConfigService"/>, #144); the other
-    /// seams keep their local implementations until their clients land: SummonClient #145, DungeonSeedClient #146, ReceiptClient #147
-    /// (the inbox is RemoteInboxService, #176; the AuthClient is GameServices.Account and the ApiClient credentials, #148),
-    /// cloud-save metadata #152.
+    /// X-Server-Time), the local-first cloud save, the ConfigClient (<see cref="RemoteConfigService"/>, #144) and the
+    /// analytics sink over <see cref="RemoteAnalyticsUploader"/> (#297); the other seams keep their local implementations
+    /// until their clients land: SummonClient #145, DungeonSeedClient #146, ReceiptClient #147 (the inbox is
+    /// RemoteInboxService, #176; the AuthClient is GameServices.Account and the ApiClient credentials, #148), cloud-save
+    /// metadata #152.
     /// </summary>
     public static class RemoteGameServices
     {
@@ -64,11 +65,14 @@ namespace HeroCat.Remote.Services
             var clock = new ServerClock(new RemoteTimeApi(client), o.Clock);   // device clock until the first observation
             api.ServerTime = clock;                                             // every X-Server-Time (01 section 5.1)
             if (syncNow) clock.SyncAsync().GetAwaiter().GetResult();          // false offline; SessionRunner syncs again at boot
+            // The debug clock wrapper is applied here, not in Build, so the analytics envelope reads the same clock.
+            IClock effective = o.WrapClock != null ? o.WrapClock(clock) : clock;
+            var analytics = o.Analytics ?? Analytics(o, effective, installId, api, client);
             var slots = new CloudSaveStore(o.Slots ?? new FileSaveStore(Path.Combine(o.DataDir, "saves")), client);
             var set = GameServices.Build(BackendMode.Local, new ServicesOptions
             {
-                DataDir = o.DataDir, Content = o.Content, State = o.State, Analytics = o.Analytics, Network = o.Network,
-                Clock = clock, Slots = slots, InstallId = installId, DeviceKey = deviceKey, WrapClock = o.WrapClock,
+                DataDir = o.DataDir, Content = o.Content, State = o.State, Analytics = analytics, Network = o.Network,
+                Clock = effective, Slots = slots, InstallId = installId, DeviceKey = deviceKey,
                 DebugReceiptCatalog = o.DebugReceiptCatalog,
             });
             // The ConfigClient (issue #144): GET /config, cached under {dataDir}/config for CONFIG_CACHE_MAX_AGE_S.
@@ -80,6 +84,22 @@ namespace HeroCat.Remote.Services
             // The server inbox (issue #176). A debug receipt catalog grants into the local inbox, so that build keeps it.
             set = set with { Account = auth };   // boot step 3 and logout (issue #148)
             return o.DebugReceiptCatalog != null ? set : set with { Inbox = new RemoteInboxService(client) };
+        }
+
+        /// <summary>
+        /// 02 section 14's sink for a Remote build (issue #297): the envelope over <paramref name="clock"/> and the live state,
+        /// the persisted queue under {DataDir}/analytics (in memory without a DataDir) and the backend uploader. Null (no
+        /// analytics) without <see cref="ServicesOptions.AnalyticsSalt"/>: the hash would not join the server's.
+        /// </summary>
+        static IAnalytics Analytics(ServicesOptions o, IClock clock, Guid installId, ApiClientOptions api, ApiClient client)
+        {
+            if (string.IsNullOrEmpty(o.AnalyticsSalt)) return null;
+            long daySeconds = o.Content?.Constants?.DaySeconds > 0 ? o.Content.Constants.DaySeconds : 86400;
+            var envelope = new AnalyticsEnvelope(clock, o.State, o.AnalyticsSalt, daySeconds,
+                                                 o.SessionId != Guid.Empty ? o.SessionId : Guid.NewGuid(), installId,
+                                                 api.ClientVersion, o.Content?.Version);
+            var queue = o.DataDir != null ? AnalyticsSink.FileQueue(o.DataDir) : AnalyticsSink.MemoryQueue();
+            return new AnalyticsSink(envelope, queue, new RemoteAnalyticsUploader(client));
         }
     }
 

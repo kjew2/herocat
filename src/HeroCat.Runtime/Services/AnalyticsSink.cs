@@ -54,8 +54,8 @@ namespace HeroCat.Runtime.Services
     /// <summary>
     /// The remote side of the sink (02 section 14.2): Firebase for every event and the backend events route for the
     /// economy ones (<see cref="AnalyticsNames.IsEconomy"/>; <c>POST /analytics/events</c>, 08 section 3.5, issue #209). Called on
-    /// the thread pool. TODO(#143): the ApiClient-based uploader (HeroCat.Remote); until then only
-    /// <see cref="MemoryAnalyticsUploader"/> exists.
+    /// the thread pool. The backend leg is <c>HeroCat.Remote.Services.RemoteAnalyticsUploader</c> (issue #297); tests use
+    /// <see cref="MemoryAnalyticsUploader"/>.
     /// </summary>
     public interface IAnalyticsUploader
     {
@@ -95,14 +95,24 @@ namespace HeroCat.Runtime.Services
     }
 
     /// <summary>
+    /// The interval upload of 02 section 14.2 (every ANALYTICS_UPLOAD_SEC of foreground time, issue #297): uploads what is
+    /// already queued without raising <see cref="IAnalyticsFlushHook.Flushing"/>, so the aggregation windows of 06 section 13
+    /// close only on their own clock, pause and quit. <see cref="AnalyticsSink"/> implements it.
+    /// </summary>
+    public interface IAnalyticsUpload
+    {
+        void Upload();
+    }
+
+    /// <summary>
     /// The analytics sink of 02 section 14 (issue #155): adds the 14.1 envelope and an <c>eventId</c> to every event,
     /// serialises it to one JSON line in the bounded, persisted <see cref="AnalyticsQueue"/>, and on <see cref="Flush"/>
-    /// uploads it in batches of at most ANALYTICS_BATCH_MAX. Track runs on the main thread; the upload runs on the thread
-    /// pool (01 threading table). A retryable failure stops the flush and the batch is retried on the next one; events
+    /// uploads it in batches of at most ANALYTICS_BATCH_MAX (<see cref="Upload"/>, the interval, skips the flush hook). Track
+    /// runs on the main thread; the upload runs on the thread pool (01 threading table). A retryable failure stops the flush and the batch is retried on the next one; events
     /// survive a kill on disk. Never throws, never calls back into the sim. A Local build without a backend uses
     /// <see cref="NullAnalytics"/> instead (01 section 1.2).
     /// </summary>
-    public sealed class AnalyticsSink : IAnalytics, IAnalyticsFlushHook
+    public sealed class AnalyticsSink : IAnalytics, IAnalyticsFlushHook, IAnalyticsUpload
     {
         public const string NAME = "name";
         public const string EVENT_ID = "eventId";
@@ -188,6 +198,12 @@ namespace HeroCat.Runtime.Services
         public void Flush()
         {
             RaiseFlushing();
+            Upload();
+        }
+
+        /// <summary>The interval upload: a background upload of what is queued, without the flush hook.</summary>
+        public void Upload()
+        {
             lock (_flushLock)
             {
                 if (_running)

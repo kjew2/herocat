@@ -327,6 +327,49 @@ namespace HeroCat.Runtime.Tests
             }
         }
 
+        sealed class CountingAnalytics : IAnalytics, IAnalyticsUpload
+        {
+            public int Flushes, Uploads;
+            public void Track(string name, IReadOnlyDictionary<string, object> props = null) { }
+            public void Flush() => Flushes++;
+            public void Upload() => Uploads++;
+        }
+
+        [Test]
+        public void TheAnalyticsQueue_UploadsEveryAnalyticsUploadSec_OfForegroundTime_WithoutAFlush()
+        {
+            var a = new CountingAnalytics();
+            var s = TestSession.Open(sink: a);
+            Assert.That(RuntimeConfig.ANALYTICS_UPLOAD_SEC, Is.EqualTo(60));
+            s.Play(59);
+            Assert.That(a.Uploads, Is.Zero);
+            s.Play(2);
+            Assert.That((a.Uploads, a.Flushes), Is.EqualTo((1, 0)), "the interval uploads; only pause and quit raise the flush hook");
+            s.Play(60);
+            Assert.That(a.Uploads, Is.EqualTo(2));
+
+            s.Runner.OnPause();
+            Assert.That(a.Flushes, Is.EqualTo(1));
+            s.Mono.Advance(3600);   // background time does not count
+            s.Clock.Advance(3600);
+            s.Runner.OnResume();
+            s.Play(59);
+            Assert.That(a.Uploads, Is.EqualTo(2));
+            s.Play(2);
+            Assert.That(a.Uploads, Is.EqualTo(3));
+            s.Runner.OnQuit();
+            Assert.That(a.Flushes, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void AZeroAnalyticsUploadSec_DisablesTheIntervalUpload()
+        {
+            var a = new CountingAnalytics();
+            var s = TestSession.Open(sink: a, configure: o => o.AnalyticsUploadSec = 0);
+            s.Play(600);
+            Assert.That(a.Uploads, Is.Zero);
+        }
+
         /// <summary>Grows the save to about <paramref name="bytes"/> with achievement progress rows (realistic map entries).</summary>
         static void Pad(GameState s, int bytes)
         {

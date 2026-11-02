@@ -62,6 +62,12 @@ namespace HeroCat.Runtime.Session
         public double AutosaveIntervalSec { get; set; } = RuntimeConfig.AUTOSAVE_INTERVAL_SEC;
         public double WallClockSyncSec { get; set; } = RuntimeConfig.WALL_CLOCK_SYNC_SEC;
 
+        /// <summary>
+        /// ANALYTICS_UPLOAD_SEC (02 section 14.2): foreground seconds between interval uploads of the analytics queue, for a
+        /// sink that implements IAnalyticsUpload. Zero or negative disables it (pause and quit still flush).
+        /// </summary>
+        public double AnalyticsUploadSec { get; set; } = RuntimeConfig.ANALYTICS_UPLOAD_SEC;
+
         /// <summary>TICK_BUDGET_MS; zero or negative disables the budget (01 AC 4 runs with it disabled).</summary>
         public double TickBudgetMs { get; set; } = RuntimeConfig.TICK_BUDGET_MS;
 
@@ -87,7 +93,7 @@ namespace HeroCat.Runtime.Session
         Queue<Command> _pending = new Queue<Command>();
         Queue<Command> _running = new Queue<Command>();
         double _accTicks;
-        long _lastMono, _lastSaveMono, _lastClockSyncMono;
+        long _lastMono, _lastSaveMono, _lastClockSyncMono, _lastUploadMono;
         bool _dirty, _started, _clockAnomalyReported;
         SummonFlow _summons;
         readonly IClockResync _resync;
@@ -111,7 +117,7 @@ namespace HeroCat.Runtime.Session
             _tickHz = sim.Db.Constants.TickHz;
             if (log != null) sim.CommandLog = log;
             long now = _mono.Ticks;
-            _lastMono = _lastSaveMono = _lastClockSyncMono = now;
+            _lastMono = _lastSaveMono = _lastClockSyncMono = _lastUploadMono = now;
             // 01 section 8.2 step 2: a clock sync may land on any thread; OnFrame handles it on the main thread.
             _resync = services.Clock as IClockResync;
             if (_resync != null) _resync.Resynced += PostClockSync;
@@ -270,6 +276,11 @@ namespace HeroCat.Runtime.Session
             _bus.Publish(_sim.DrainEvents());
 
             if (_dirty && (mono - _lastSaveMono) / (double)_mono.Frequency >= _opt.AutosaveIntervalSec) SaveNow(SaveTrigger.Periodic);
+            if (_opt.AnalyticsUploadSec > 0 && (mono - _lastUploadMono) / (double)_mono.Frequency >= _opt.AnalyticsUploadSec)
+            {
+                _lastUploadMono = mono;
+                (_svc.Analytics as IAnalyticsUpload)?.Upload();   // background; the aggregation windows stay open (06 section 13)
+            }
             return n;
         }
 
@@ -296,6 +307,7 @@ namespace HeroCat.Runtime.Session
             SaveNow(SaveTrigger.Pause);
             EndSession(AnalyticsEvents.SessionEnd.PAUSE, _mono.Ticks);
             _svc.Analytics?.Flush();
+            _lastUploadMono = _mono.Ticks;
         }
 
         /// <summary>App back in the foreground (01 section 8.2): re-anchor, catch-up compute, save.</summary>
@@ -303,6 +315,7 @@ namespace HeroCat.Runtime.Session
         {
             IsPaused = false;
             _accTicks = 0;
+            _lastUploadMono = _mono.Ticks;   // the interval counts foreground time; the pause just flushed
             _summons?.OnResume();
             SyncAndCatchUp(coldBoot: false);
             Config?.OnResume();   // 01 section 8.12 step 1: config is re-fetched on every resume
