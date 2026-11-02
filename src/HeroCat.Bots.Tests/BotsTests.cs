@@ -253,17 +253,16 @@ namespace HeroCat.Bots.Tests
             var ctx = BotRunner.CreateContext(Content.Mvp, 7);
             ctx.Runner.Start();
             ctx.State.Progress.HighestCleared = 49;
-            ctx.State.Wallet.RockCandy = 100;
+            ctx.State.Wallet.RockCandy = 20;
             Assert.That(GreedyF2PBot.NextAwakenWithin(ctx, GreedyF2PBot.AwakenSaveWindowStages), Is.True, "gate 50 is 1 stage away");
             Assert.That(GreedyF2PBot.TryAwaken(ctx), Is.False, "gate not reached");
             ctx.State.Progress.HighestCleared = 50;
             Assert.That(GreedyF2PBot.TryAwaken(ctx), Is.True);
             Assert.That(ctx.State.Party.Slots[0].AwakenRank, Is.EqualTo(1));
             Assert.That(ctx.State.Wallet.RockCandy, Is.EqualTo(0));
-            Assert.That(GreedyF2PBot.NextAwakenWithin(ctx, GreedyF2PBot.AwakenSaveWindowStages), Is.True,
-                        "the other four slots' rank-1 gate (50) is still within the window (per slot, 00 decision 109)");
-            foreach (var x in ctx.State.Party.Slots) x.AwakenRank = 1;
-            Assert.That(GreedyF2PBot.NextAwakenWithin(ctx, GreedyF2PBot.AwakenSaveWindowStages), Is.False, "gate 150 is 100 stages away");
+            Assert.That(GreedyF2PBot.StrongestAwakenSlot(ctx), Is.EqualTo(0), "the awakened slot is now the strongest");
+            Assert.That(GreedyF2PBot.NextAwakenWithin(ctx, GreedyF2PBot.AwakenSaveWindowStages), Is.False,
+                        "the strongest slot's next gate (150) is 100 stages away; the other slots' rank 1 reserves nothing (00 decision 111)");
             Assert.That(GreedyF2PBot.NextAwakenWithin(ctx, 100), Is.True);
             Assert.That(GreedyF2PBot.TryAwaken(ctx), Is.False, "no candy");
         }

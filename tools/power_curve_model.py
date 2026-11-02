@@ -180,6 +180,8 @@ class Params:
             c[f"LIMIT_BREAK_COST[{r}]"] = self.rarity[r]["limit_break_cost"]
             c[f"WEAPON_PASSIVE_PCT[{r}]"] = self.rarity[r]["weapon_passive_pct"]
             c[f"COMPANION_DPS_PCT[{r}]"] = self.rarity[r]["companion_dps_pct"]
+            # COMPANION_ATK_MULT[r] (00 decision 111): a rarities column; 1.0 when an older content set lacks it.
+            c[f"COMPANION_ATK_MULT[{r}]"] = self.rarity[r].get("companion_atk_mult", 1.0)
         self.awakening = sorted((r for r in db.table("awakening") if tier_ok(r)), key=lambda r: r["rank"])
         for r in self.awakening:
             c[f"AWAKEN_STAGES[{r['rank']}]"] = r["stage_gate"]
@@ -284,7 +286,7 @@ class Params:
 
     def _load_starter_party(self):
         """The tutorial's starter party (04 section 8.3): the COMPANION grants of tut_welcome in slots 0-4, in grant
-        order, and the WEAPON grant in slot 0. Content without the companion grants gets the first PARTY_SLOTS Common
+        order, and the WEAPON grants in slots 0-4 (TUTORIAL_WEAPON_IDS, 00 decision 111). Content without the companion grants gets the first PARTY_SLOTS Common
         companions by id (flagged)."""
         n = int(self.c["PARTY_SLOTS"])
         comps = [i for k, i, _ in self.tutorial_items if k == "COMPANION" and i in self.companions]
@@ -295,7 +297,7 @@ class Params:
                                   "tut_welcome COMPANION grants, 04 section 8.3)")
         weapons = [i for k, i, _ in self.tutorial_items if k == "WEAPON" and i in self.weapons]
         self.starter_companions = comps[:n]
-        self.starter_weapon = weapons[0] if weapons else None
+        self.starter_weapons = weapons[:n]
 
     def _load_quests(self, db, tier_ok):
         """06 section 5 quest rows (content) and the section 5.4 ladders (content, else the spec rows, TODO(#171))."""
@@ -388,12 +390,12 @@ class Bot:
             if kind in self.state:
                 self.state[kind].copies[iid] = self.state[kind].copies.get(iid, 0) + n
         # The party (02 Party.Slots): progression belongs to the slot (00 decision 109). Starters in slots 0-4 in grant
-        # order, the starter weapon in slot 0, no skills (04 section 8.3).
+        # order, the starter weapons in slots 0-4 (00 decision 111), no skills (04 section 8.3).
         self.slots = [{"comp": None, "weapon": None, "skill": None, "rank": 0} for _ in range(int(c["PARTY_SLOTS"]))]
         for i, cid in enumerate(p.starter_companions[:len(self.slots)]):
             self.slots[i]["comp"] = cid
-        if p.starter_weapon and self.slots:
-            self.slots[0]["weapon"] = p.starter_weapon
+        for i, wid in enumerate(p.starter_weapons[:len(self.slots)]):
+            self.slots[i]["weapon"] = wid
         self._mc = {}
         self._pf = None
         self.board = fish_model.Board(p.fish)
@@ -538,7 +540,7 @@ class Bot:
         passive = self.weapon_passive(probe)
         occ = [i for i, s in enumerate(slots) if s["comp"] is not None]
         suff = self.mp_sufficiency([slots[i]["comp"] for i in occ], probe)
-        ev = {"slots": occ, "suff": suff, "passive": passive, "eq": [], "wf": [], "skf": [], "own": [], "aw": [],
+        ev = {"slots": occ, "suff": suff, "passive": passive, "eq": [], "wf": [], "skf": [], "own": [], "aw": [], "am": [],
               "hit": [], "unit": [], "slot_dps": [], "buff_pct": 0.0}
         for k, i in enumerate(occ):
             s = slots[i]
@@ -548,13 +550,15 @@ class Bot:
             sk = rows_s[s["skill"]]["dps_pct"] * self._m("SKILL", s["skill"], probe) if s["skill"] else 0.0
             wf = 1.0 + (eq + passive) / 100.0
             aw = self.awaken_mult(s["rank"])
-            hit = pw * wf * aw
+            am = c[f"COMPANION_ATK_MULT[{row['rarity']}]"]   # the companion's rarity attack multiplier (00 decision 111)
+            hit = pw * am * wf * aw
             unit = hit * cs
             skf = 1.0 + sk / 100.0
             dmg = row["dps_pct"] * cm if row["ability_type"] == "DAMAGE" else 0.0
             if row["ability_type"] == "BUFF_ATK":
                 ev["buff_pct"] += suff[k] * row["dps_pct"] * cm
             own = 1.0 + suff[k] * dmg / 100.0
+            ev["am"].append(am)
             for key, v in (("eq", eq), ("wf", wf), ("skf", skf), ("own", own), ("aw", aw), ("hit", hit), ("unit", unit),
                            ("slot_dps", unit * skf * own)):
                 ev[key].append(v)
@@ -573,7 +577,7 @@ class Bot:
         w = [x / total for x in ev["slot_dps"]] if total > 0 else []
         fold = lambda key: math.exp(sum(wi * math.log(f) for wi, f in zip(w, ev[key])))
         L = {"Training": pf["Training"], "PartyLevel": pf["PartyLevel"], "Weapons": fold("wf"), "Skills": fold("skf"),
-             "Companions": fold("own") * ev["party_buff"],
+             "Companions": fold("own") * fold("am") * ev["party_buff"],
              "Fish": (1 + pf["board_pct"] / 100.0) * (ev["rated"] / ev["auto"] if ev["auto"] > 0 else 1.0),
              "Research": pf["Research"], "Runes": pf["Runes"], "Awaken": fold("aw"), "Crit": pf["Crit"],
              "Speed": pf["Speed"]}
@@ -859,6 +863,18 @@ class Bot:
                 return self.c[f"AWAKEN_STAGES[{r['rank']}]"], self.c[f"AWAKEN_COST_ROCK_CANDY[{r['rank']}]"]
         return None, None
 
+    def strongest_awaken_slot(self):
+        """00 decision 111: the occupied slot with the largest SlotDps_i that still has a next rank, gate and cost aside,
+        ties to the lowest slot index; the slot the bot awakens next, so the only one Rock Candy is reserved for."""
+        self.layers()
+        ev = self._ev
+        best, best_v = None, -1.0
+        for k, i in enumerate(ev["slots"]):
+            gate, _ = self.next_gate(self.slots[i]["rank"])
+            if gate is not None and ev["slot_dps"][k] > best_v:
+                best, best_v = i, ev["slot_dps"][k]
+        return best
+
     def best_awaken_slot(self):
         """03 section 8.3 item 3 (proposal): among the occupied slots whose next gate and cost are met, the one with
         the largest SlotDps_i (a rank multiplies SlotDps_i by AWAKEN_MULT), ties to the lowest slot index."""
@@ -888,9 +904,10 @@ class Bot:
             self.reequip()
         if self.p.m0:
             return
-        for i, s in enumerate(self.slots):   # limit breaks only while every occupied slot's next gate is > 50 away
-            gate, _ = self.next_gate(s["rank"])
-            if s["comp"] is not None and gate is not None and gate - self.highest <= LIMIT_BREAK_GATE_STAGES:
+        strongest = self.strongest_awaken_slot()   # Rock Candy is reserved for that slot's next rank only (00 decision 111)
+        if strongest is not None:
+            gate, _ = self.next_gate(self.slots[strongest]["rank"])
+            if gate - self.highest <= LIMIT_BREAK_GATE_STAGES:
                 return
         cheapest = min(self.c[f"LIMIT_BREAK_COST[{r}]"] for r in RARITIES)
         while self.candy >= cheapest:

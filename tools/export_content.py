@@ -172,7 +172,8 @@ SCHEMA = {
     "rarities": T("RarityRowDto", [c("id", "enum(Rarity)"), c("code", "string"), c("color", "color"),
                                    c("shape_icon", "asset"), c("weapon_atk_pct", "double"),
                                    c("weapon_passive_pct", "double"), c("skill_dps_pct", "double"),
-                                   c("companion_dps_pct", "double"), c("rune_stat_pct", "double"),
+                                   c("companion_dps_pct", "double"), c("companion_atk_mult", "double"),
+                                   c("rune_stat_pct", "double"),
                                    c("limit_break_cost", "long"), c("dupe_overflow_rock_candy", "long"),
                                    c("override_tolerance", "double"), NAME], "id"),
     "weapons": T("WeaponRowDto", [c("id", "id"), c("rarity", "enum(Rarity)"), c("atk_pct", "double"),
@@ -766,6 +767,7 @@ def rule_e043_table_ranges(ctx):
     rng(ctx, "training_curves", "cost_g", gt1, "> 1")
     rng(ctx, "enemies", "weight", pos, "> 0")
     rng(ctx, "rarities", "limit_break_cost", ge1, ">= 1")
+    rng(ctx, "rarities", "companion_atk_mult", pos, "> 0")
     rng(ctx, "rarities", "dupe_overflow_rock_candy", ge0, ">= 0")
     rng(ctx, "skills", "cooldown_ticks", lambda v: 30 <= v <= 300, "in [30, 300]")
     rng(ctx, "skills", "buff_pct", pos, "> 0")
@@ -1118,9 +1120,9 @@ def rule_e062_profile_created_step(ctx):
 
 @rule
 def rule_e066_starter_party(ctx):
-    """09 section 5.29 (00 decision 109): the PROFILE_CREATED step grants the starter party, PARTY_SLOTS distinct M0
-    Common companions with amount 1 in slot order, and exactly one M0 weapon. A content set with no companions table
-    (a loader fixture) has no party to check."""
+    """09 section 5.29 (00 decisions 109, 111): the PROFILE_CREATED step grants the starter party, PARTY_SLOTS distinct
+    M0 Common companions and PARTY_SLOTS distinct M0 Common weapons, each with amount 1, in slot order. A content set
+    with no companions table (a loader fixture) has no party to check."""
     if not ctx.has("tutorial_steps"):
         return
     pc = [r for r in ctx.rows("tutorial_steps") if r["trigger"] == "PROFILE_CREATED"]
@@ -1140,10 +1142,17 @@ def rule_e066_starter_party(ctx):
         x = rows.get(cid)
         if x is not None and (x["rarity"] != "COMMON" or x["tier"] != "M0"):
             ctx.err("E066", loc, f"starter companion '{cid}' must be COMMON and tier M0, is {x['rarity']} {x['tier']}")
+    if not ctx.has("companions"):
+        return
+    wids = [g["id"] for g in weapons]
+    if n is not None and (len(weapons) != n or len(set(wids)) != len(wids) or any(g["amount"] != 1 for g in weapons)):
+        ctx.err("E066", loc, f"the starter weapons must be exactly {n} distinct WEAPON grants of amount 1, got "
+                f"{', '.join(wids) or 'none'}")
     wrows = {x["id"]: x for x in ctx.rows("weapons")}
-    if len(weapons) != 1 or (weapons[0]["id"] in wrows and wrows[weapons[0]["id"]]["tier"] != "M0"):
-        ctx.err("E066", loc, "the welcome step must grant exactly one M0 WEAPON")
-
+    for wid in wids:
+        x = wrows.get(wid)
+        if x is not None and (x["rarity"] != "COMMON" or x["tier"] != "M0"):
+            ctx.err("E066", loc, f"starter weapon '{wid}' must be COMMON and tier M0, is {x['rarity']} {x['tier']}")
 
 @rule
 def rule_e063_feature_gates(ctx):

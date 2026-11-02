@@ -335,7 +335,8 @@ namespace HeroCat.Sim.Power
                 p.OwnFactorArr[i] = 1.0 + p.MpSufficiencyArr[i] * p.DamagePctArr[i] / Units.Percent;
                 buffSum += p.MpSufficiencyArr[i] * p.BuffAtkPctArr[i];
 
-                double hit = partyWide * p.WeaponFactorArr[i] * p.AwakeningArr[i];
+                p.CompanionAtkMultArr[i] = db.Rarities[c.Rarity].CompanionAtkMult;   // COMPANION_ATK_MULT[rarity], not level (00 decision 111)
+                double hit = partyWide * p.CompanionAtkMultArr[i] * p.WeaponFactorArr[i] * p.AwakeningArr[i];
                 p.SlotHitArr[i] = hit;
                 p.SlotUnitArr[i] = hit * p.Crit * p.Speed;
                 p.CompanionUnitArr[i] = p.SlotUnitArr[i] * p.SkillFactorArr[i];

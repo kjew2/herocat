@@ -241,8 +241,9 @@ namespace HeroCat.Runtime.Tests
             var t = TestSession.Open();
             var acquired = t.Analytics.Events.Where(x => x.Name == "item_acquired").ToList();
             Assert.That(acquired.Count(x => (string)x.Props["banner"] == "COMPANION"), Is.EqualTo(5), "the five starter companions (04 section 8.3)");
-            var e = acquired.Single(x => (string)x.Props["banner"] == "WEAPON");
+            Assert.That(acquired.Count(x => (string)x.Props["banner"] == "WEAPON"), Is.EqualTo(5), "the five starter weapons (00 decision 111)");
             var id = TestContent.Db.TutorialWeaponId;
+            var e = acquired.First(x => (string)x.Props["banner"] == "WEAPON" && (string)x.Props["itemId"] == id);
             Assert.That((e.Props["banner"], e.Props["itemId"], e.Props["isNew"], e.Props["levelBefore"], e.Props["acquireReason"], e.Props["requestId"]),
                         Is.EqualTo(("WEAPON", id, true, 0, "TUTORIAL", (object)null)));
             Assert.That(e.Props["copiesAfter"], Is.EqualTo(t.Sim.State.Weapons.Items[id].Copies));

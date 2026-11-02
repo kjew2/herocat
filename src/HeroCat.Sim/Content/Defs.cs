@@ -72,11 +72,12 @@ namespace HeroCat.Sim.Content
     public sealed class RarityDef
     {
         internal RarityDef(Rarity id, string code, string color, string shapeIcon, double weaponAtkPct,
-                           double weaponPassivePct, double skillDpsPct, double companionDpsPct, double runeStatPct,
+                           double weaponPassivePct, double skillDpsPct, double companionDpsPct, double companionAtkMult, double runeStatPct,
                            long limitBreakCost, long dupeOverflowRockCandy, double overrideTolerance, string nameKey)
         {
             Id = id; Code = code; Color = color; ShapeIcon = shapeIcon; WeaponAtkPct = weaponAtkPct;
             WeaponPassivePct = weaponPassivePct; SkillDpsPct = skillDpsPct; CompanionDpsPct = companionDpsPct;
+            CompanionAtkMult = companionAtkMult;
             RuneStatPct = runeStatPct; LimitBreakCost = limitBreakCost; DupeOverflowRockCandy = dupeOverflowRockCandy;
             OverrideTolerance = overrideTolerance; NameKey = nameKey;
         }
@@ -89,6 +90,9 @@ namespace HeroCat.Sim.Content
         public double WeaponPassivePct { get; }
         public double SkillDpsPct { get; }
         public double CompanionDpsPct { get; }
+
+        /// <summary>COMPANION_ATK_MULT[r]: a companion's auto-attack multiplier by rarity, not level (00 decision 111).</summary>
+        public double CompanionAtkMult { get; }
         public double RuneStatPct { get; }
         public long LimitBreakCost { get; }
         public long DupeOverflowRockCandy { get; }

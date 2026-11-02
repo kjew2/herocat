@@ -138,37 +138,49 @@ namespace HeroCat.Bots.Policies
         }
 
         /// <summary>
-        /// The slot whose next Awakening adds the most ln(DPS) per Rock Candy among those that can awaken now (03 section 8.3
-        /// step 3, 00 decision 109), lowest slot index on a tie; -1 when none can. Evaluated on a probe copy, so it allocates.
+        /// The slot to awaken now (03 section 8.3 step 3, 00 decision 111): among the occupied slots whose next gate and cost
+        /// both pass, the one with the largest SlotDps_i (a rank multiplies it by AWAKEN_MULT), lowest slot index on a tie;
+        /// -1 when none can. The same rule as tools/power_curve_model.py's best_awaken_slot.
         /// </summary>
         public static int BestAwakenSlot(BotContext ctx)
         {
-            var db = ctx.Content;
-            double baseLn = Math.Log(ctx.Query.RatedDps), best = 0;
-            int bestSlot = -1;
-            for (int i = 0; i < ctx.State.Party.Slots.Length; i++)
+            var p = ctx.Query.Power;
+            int best = -1;
+            for (int i = 0; i < p.SlotCount; i++)
             {
-                if (!ctx.Query.CanAwaken(i)) continue;
-                var probe = StateCopy.DeepClone(ctx.State);
-                probe.Party.Slots[i].AwakenRank += 1;
-                double gain = (Math.Log(PowerFormula.Compute(db, probe).RatedDps) - baseLn) / ctx.Query.NextAwakenCost(i);
-                if (bestSlot < 0 || gain > best) { best = gain; bestSlot = i; }
+                if (!p.Occupied(i) || !ctx.Query.CanAwaken(i)) continue;
+                if (best < 0 || p.SlotDps(i) > p.SlotDps(best)) best = i;
             }
-            return bestSlot;
+            return best;
         }
 
         /// <summary>
-        /// 03 section 8.3's <c>NextAwakenWithin(sim, 50)</c>: the next rank's gate is at most <paramref name="stages"/> above
-        /// Progress.HighestCleared, so Rock Candy is saved for it instead of limit breaks. False at the last rank.
+        /// The strongest slot (00 decision 111): the occupied slot with the largest SlotDps_i that still has a next rank,
+        /// gate and cost aside, lowest index on a tie; -1 when none. It is the slot the bot awakens next, so it is the only
+        /// one Rock Candy is reserved for.
+        /// </summary>
+        public static int StrongestAwakenSlot(BotContext ctx)
+        {
+            var p = ctx.Query.Power;
+            int best = -1;
+            for (int i = 0; i < p.SlotCount; i++)
+            {
+                if (!p.Occupied(i) || !ctx.Query.NextAwakenStageGate(i).HasValue) continue;
+                if (best < 0 || p.SlotDps(i) > p.SlotDps(best)) best = i;
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// 03 section 8.3's <c>NextAwakenWithin(sim, 50)</c>, decision 111's reading: the strongest slot's next gate is at
+        /// most <paramref name="stages"/> above Progress.HighestCleared, so Rock Candy is saved for that rank instead of limit
+        /// breaks; the other slots' ranks reserve nothing. False when no occupied slot has a next rank.
         /// </summary>
         public static bool NextAwakenWithin(BotContext ctx, int stages)
         {
-            for (int i = 0; i < ctx.State.Party.Slots.Length; i++)
-            {
-                int? gate = ctx.Query.NextAwakenStageGate(i);
-                if (gate.HasValue && gate.Value - ctx.State.Progress.HighestCleared <= stages) return true;
-            }
-            return false;
+            int slot = StrongestAwakenSlot(ctx);
+            int? gate = slot >= 0 ? ctx.Query.NextAwakenStageGate(slot) : null;
+            return gate.HasValue && gate.Value - ctx.State.Progress.HighestCleared <= stages;
         }
 
         // ============================================================================================ step 4: Fish Coins -> Research

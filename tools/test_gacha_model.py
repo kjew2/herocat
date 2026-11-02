@@ -120,7 +120,9 @@ class CadenceCheckTests(unittest.TestCase):
             self.assertEqual(c[0], "FAIL", f"{c[1]}: {c[2]}")
 
     def test_companion_check_trips_without_companion_damage(self):
-        p, cad = cadence({f"COMPANION_DPS_PCT[{r}]": "0" for r in gm.RARITIES})
+        over = {f"COMPANION_DPS_PCT[{r}]": "0" for r in gm.RARITIES}
+        over.update({f"COMPANION_ATK_MULT[{r}]": "1" for r in gm.RARITIES})   # the rarity attack multiplier is in the layer too (00 decision 111)
+        p, cad = cadence(over)
         (c,) = find(gm.cadence_checks(p, cad, dict(gm.SHIFTS)), COMPANION)
         self.assertEqual(c[0], "FAIL")
         self.assertTrue(math.isclose(cad.companion_share, 0.0, abs_tol=1e-12))

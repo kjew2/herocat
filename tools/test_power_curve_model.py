@@ -92,14 +92,14 @@ class PartyModelTests(unittest.TestCase):
     def comp(self, kind, rarity="COMMON"):
         return sorted(i for i, r in self.p.companions.items() if r["ability_type"] == kind and r["rarity"] == rarity)
 
-    def test_starter_party_fills_five_slots_with_the_weapon_in_slot_0(self):
+    def test_starter_party_fills_five_slots_each_with_a_weapon(self):
         b = self.bot()
         self.assertEqual(len(b.slots), 5)
         self.assertEqual([s["comp"] for s in b.slots], self.p.starter_companions)
         self.assertEqual(len(set(self.p.starter_companions)), 5)
         self.assertTrue(all(self.p.companions[c]["rarity"] == "COMMON" for c in self.p.starter_companions))
-        self.assertEqual(b.slots[0]["weapon"], self.p.starter_weapon)
-        self.assertTrue(all(s["weapon"] is None for s in b.slots[1:]))
+        self.assertEqual([s["weapon"] for s in b.slots], self.p.starter_weapons)   # 00 decision 111
+        self.assertEqual(len(set(self.p.starter_weapons)), 5)
         self.assertTrue(all(s["skill"] is None and s["rank"] == 0 for s in b.slots))
 
     def test_rated_dps_is_the_sum_of_the_slots(self):

@@ -27,6 +27,7 @@ namespace HeroCat.Sim.Power
             BuffAtkPctArr = new double[slots];
             MpSufficiencyArr = new double[slots];
             AwakeningArr = new double[slots];
+            CompanionAtkMultArr = new double[slots];
             WeaponFactorArr = new double[slots];
             SkillFactorArr = new double[slots];
             OwnFactorArr = new double[slots];
@@ -89,7 +90,7 @@ namespace HeroCat.Sim.Power
 
         // ------------------------------------------------------------------ per slot (03 7.1-7.2)
         internal bool[] OccupiedArr;
-        internal double[] EquippedWeaponPctArr, SkillDpsPctArr, DamagePctArr, BuffAtkPctArr, MpSufficiencyArr, AwakeningArr;
+        internal double[] EquippedWeaponPctArr, SkillDpsPctArr, DamagePctArr, BuffAtkPctArr, MpSufficiencyArr, AwakeningArr, CompanionAtkMultArr;
         internal double[] WeaponFactorArr, SkillFactorArr, OwnFactorArr, SlotHitArr, SlotUnitArr, CompanionUnitArr, SlotDpsArr;
 
         static double At(double[] a, int i, double none = 0.0) => a != null && i >= 0 && i < a.Length ? a[i] : none;
@@ -111,6 +112,9 @@ namespace HeroCat.Sim.Power
 
         /// <summary>mpSufficiency_i of the slot's own pool, a fraction (1 for an empty slot).</summary>
         public double MpSufficiency(int slot) => At(MpSufficiencyArr, slot, 1.0);
+
+        /// <summary>COMPANION_ATK_MULT of the slot's companion's rarity (00 decision 111); 1 for an empty slot.</summary>
+        public double CompanionAtkMult(int slot) => At(CompanionAtkMultArr, slot, 1.0);
 
         /// <summary>AWAKEN_MULT ^ rank of the slot.</summary>
         public double Awakening(int slot) => At(AwakeningArr, slot, 1.0);

@@ -7,7 +7,7 @@ namespace HeroCat.Runtime.Power
     /// The layer factors of 03 section 7.4 (proposal, 03 section 12 question 11; 00 decision 109): the party's damage is a
     /// sum over slots, so a per-slot layer's factor is the DPS-weighted geometric mean of its slot factors,
     /// <c>exp(sum_i w_i ln f_i)</c> with <c>w_i = SlotDps_i / sum_j SlotDps_j</c>; party-wide layers are their scalar; the
-    /// party BUFF_ATK term joins Companions and missiles join Fish; Base is <c>BASE_ATK * exp(H(w))</c>, the party-size term.
+    /// party BUFF_ATK term and each companion's rarity attack multiplier join Companions and missiles join Fish; Base is <c>BASE_ATK * exp(H(w))</c>, the party-size term.
     /// The logs add up to <c>ln RatedDps</c> exactly. Takes logs, so it lives outside the sim (00 contract 1): reporting only,
     /// never fed back into it.
     /// </summary>
@@ -36,7 +36,7 @@ namespace HeroCat.Runtime.Power
                 if (!(w > 0)) continue;
                 lnW += w * Math.Log(p.WeaponFactor(i));
                 lnS += w * Math.Log(p.SkillFactor(i));
-                lnO += w * Math.Log(p.OwnFactor(i));
+                lnO += w * Math.Log(p.OwnFactor(i) * p.CompanionAtkMult(i));   // the companion's own attack (00 decision 111) is its layer too
                 lnA += w * Math.Log(p.Awakening(i));
                 entropy -= w * Math.Log(w);
             }

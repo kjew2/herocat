@@ -239,7 +239,7 @@ namespace HeroCat.Sim.Tests
             Assert.That(p.MpSufficiency(0), Is.EqualTo(0.5), "a fraction: 0.5 MP/s per pool against 1 MP/s (00 decision 110)");
             Assert.That(p.Training, Is.EqualTo(1.2).Within(1e-12));
             Assert.That(p.Speed, Is.EqualTo(1.3).Within(1e-12));
-            Assert.That(p.OwnFactor(0), Is.EqualTo(1 + 0.5 * 16 / 100.0).Within(1e-12), "the slot's own DAMAGE ability");
+            Assert.That(p.OwnFactor(0), Is.EqualTo(1 + 0.5 * 20 / 100.0).Within(1e-12), "the slot's own DAMAGE ability (COMPANION_DPS_PCT[C] = 20, 00 decision 111)");
             Assert.That(p.PartyBuff, Is.EqualTo(1.0), "no BUFF_ATK companion");
             Assert.That(p.Research, Is.EqualTo(1.0), "MVP");
             Assert.That(p.Runes, Is.EqualTo(1.0), "P1");
@@ -247,7 +247,8 @@ namespace HeroCat.Sim.Tests
             Assert.That((p.Occupied(0), p.Occupied(1), p.SlotHit(1), p.SlotDps(1)), Is.EqualTo((true, false, 0.0, 0.0)), "an empty slot");
 
             Assert.That(K.BaseAtk, Is.EqualTo(2.0), "one companion's auto-attack (00 decision 109)");
-            Assert.That(p.SlotHit(0), Is.EqualTo(K.BaseAtk * p.Training * p.Party * p.WeaponFactor(0) * (1 + board / 100)).Within(1e-12).Percent);
+            Assert.That(p.CompanionAtkMult(0), Is.EqualTo(1.0), "a Common's rarity attack multiplier");
+            Assert.That(p.SlotHit(0), Is.EqualTo(K.BaseAtk * p.Training * p.Party * p.CompanionAtkMult(0) * p.WeaponFactor(0) * (1 + board / 100)).Within(1e-12).Percent);
             Assert.That(p.PartyHit, Is.EqualTo(p.SlotHit(0)));
             Assert.That(p.SlotUnit(0), Is.EqualTo(p.SlotHit(0) * p.Crit * p.Speed));
             Assert.That(p.CompanionUnit(0), Is.EqualTo(p.SlotUnit(0) * p.SkillFactor(0)));
@@ -279,7 +280,9 @@ namespace HeroCat.Sim.Tests
             Assert.That(p.PartyBuff, Is.EqualTo(1 + buff / 100).Within(1e-12));
             Assert.That(p.RatedDps, Is.EqualTo(sum * p.PartyBuff).Within(1e-12).Percent);
             Assert.That(p.SlotHit(2), Is.EqualTo(p.SlotHit(3) * 1.5).Within(1e-12).Percent, "Awakening multiplies its slot only");
-            Assert.That(p.SlotHit(0), Is.GreaterThan(p.SlotHit(1)), "slot 0 holds the starter weapon, slots 1-4 are unarmed");
+            Assert.That(p.SlotHit(0), Is.EqualTo(p.SlotHit(1)), "five equal starters, each with a Common starter weapon (00 decision 111)");
+            Assert.That(p.CompanionAtkMult(4), Is.EqualTo(1.25), "comp_e_06 is Epic: COMPANION_ATK_MULT[E] (00 decision 111)");
+            Assert.That(p.SlotHit(4), Is.EqualTo(p.SlotHit(1) * 1.25).Within(1e-12).Percent);
         }
 
         [Test]
@@ -288,6 +291,7 @@ namespace HeroCat.Sim.Tests
             var sim = Combat.NewSim();
             var s = sim.State;
             s.Weapons.Items.Clear();
+            foreach (var x in s.Party.Slots) x.Weapon = null;
             Combat.Own(s.Weapons, "weapon_l_01", 6);   // level 3
             for (int i = 1; i <= 10; i++) Combat.Own(s.Weapons, $"weapon_c_{i:00}", 3);   // level 2
             for (int i = 1; i <= 4; i++) Combat.Own(s.Weapons, $"weapon_r_{i:00}", 1);    // level 1

@@ -1,5 +1,5 @@
 # herocat fish board vectors v1 (05 AC5; regenerate: dotnet run -c Release --project src/HeroCat.Bots -- fish-vectors --update)
-# content 2026.11.02.7 b58003eb95e5f1255c2446176448d0f304766c820bb182bf8108b6aa08f580d6, seed 7, script seed 00000000f15b0a4d
+# content 2026.11.02.8 8de61436aff500af808e18894f2b0f31041221f5e4aef977e439311149ca1413, seed 7, script seed 00000000f15b0a4d
 # step | command | result | cells | tank refillTick | fish_spawn counter | fishCoin
 1 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767603611} | ok | 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 | 10 0 | 0 | 0
 2 | {"tick":0,"type":"DiscardFish","cell":12} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 | 10 0 | 0 | 0
@@ -101,7 +101,7 @@
 98 | {"tick":0,"type":"MergeAll"} | ok | 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,0,0,3,2 | 0 0 | 41 | 355.8
 99 | {"tick":0,"type":"ReleaseFish"} | TankEmpty:TANK_EMPTY | 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,0,0,3,2 | 0 0 | 41 | 355.8
 100 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767603920} | ok | 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,0,0,3,2 | 0 50 | 41 | 355.8
-hash 100 de54cc2e2d38e1580aa8bdc5459b604f415e946640a30496f729f738960cc798
+hash 100 6d8b80b397dd6f08034dcb4d7b775b189158694ea8d73269ca7c9f09e9ff4ab4
 101 | {"tick":0,"type":"MergeFish","source":2,"target":3} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,0,0,3,2 | 0 50 | 41 | 355.8
 102 | {"tick":0,"type":"ReleaseFish"} | TankEmpty:TANK_EMPTY | 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,0,0,3,2 | 0 50 | 41 | 355.8
 103 | {"tick":0,"type":"ReleaseMax"} | ok | 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,0,0,3,2 | 0 50 | 41 | 355.8
@@ -202,7 +202,7 @@ hash 100 de54cc2e2d38e1580aa8bdc5459b604f415e946640a30496f729f738960cc798
 198 | {"tick":0,"type":"DiscardFish","cell":12} | ok | 0,5,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 | 10 0 | 70 | 403.79999999999984
 199 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767604405} | ok | 0,5,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 | 10 0 | 70 | 403.79999999999984
 200 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767604454} | ok | 0,5,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 | 10 0 | 70 | 403.79999999999984
-hash 200 c7648485ffe41bd010128942c9b27a83ae50e483a6c8fdf4a37f6a831bca417a
+hash 200 9d7715028470cf040204a648f9f971f1059a544baa04752ee60fd0959ac73c98
 201 | {"tick":0,"type":"MergeAll"} | ok | 0,5,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 | 10 0 | 70 | 403.79999999999984
 202 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767604508} | ok | 0,5,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 | 10 0 | 70 | 403.79999999999984
 203 | {"tick":0,"type":"DiscardFish","cell":11} | InvalidTarget:EMPTY_CELL | 0,5,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 | 10 0 | 70 | 403.79999999999984
@@ -303,7 +303,7 @@ hash 200 c7648485ffe41bd010128942c9b27a83ae50e483a6c8fdf4a37f6a831bca417a
 298 | {"tick":0,"type":"DiscardFish","cell":3} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,4,0,0,0,7 | 7 10 | 133 | 1421.1999999999994
 299 | {"tick":0,"type":"MergeFish","source":15,"target":1} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,4,0,0,0,7 | 7 10 | 133 | 1421.1999999999994
 300 | {"tick":0,"type":"MoveFish","source":9,"target":15} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,4,0,0,0,7 | 7 10 | 133 | 1421.1999999999994
-hash 300 73cc3dd0151d98441e37269d81e46eb282f19448ea04ee24e19e7fe25b28273b
+hash 300 454556b4f4c5062a3138475e65e5a0a5e1a69ce8af36652bcc5cd15f58f4d743
 301 | {"tick":0,"type":"DiscardFish","cell":18} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,4,0,0,0,7 | 7 10 | 133 | 1421.1999999999994
 302 | {"tick":0,"type":"MergeFish","source":16,"target":15} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,4,0,0,0,7 | 7 10 | 133 | 1421.1999999999994
 303 | {"tick":0,"type":"MergeFish","source":9,"target":15} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,4,0,0,0,7 | 7 10 | 133 | 1421.1999999999994
@@ -404,7 +404,7 @@ hash 300 73cc3dd0151d98441e37269d81e46eb282f19448ea04ee24e19e7fe25b28273b
 398 | {"tick":0,"type":"MergeAll"} | ok | 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6,4 | 5 0 | 176 | 1534.4000000000005
 399 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767605387} | ok | 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6,4 | 9 50 | 176 | 1534.4000000000005
 400 | {"tick":0,"type":"ReleaseFish"} | ok | 1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6,4 | 8 50 | 177 | 1534.4000000000005
-hash 400 67fe2f361a90d93b9b06a3119309b8700c7fc0c52aec48bf18fabbc9135ae2dd
+hash 400 23af967bc817f04e6aa6611e9a24c0ce3098227ab32518ec006773cf136ec73e
 401 | {"tick":0,"type":"MergeAll"} | ok | 1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6,4 | 8 50 | 177 | 1534.4000000000005
 402 | {"tick":0,"type":"MergeFish","source":0,"target":8} | InvalidTarget:EMPTY_CELL | 1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6,4 | 8 50 | 177 | 1534.4000000000005
 403 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767605391} | ok | 1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6,4 | 9 30 | 177 | 1534.4000000000005
@@ -505,7 +505,7 @@ hash 400 67fe2f361a90d93b9b06a3119309b8700c7fc0c52aec48bf18fabbc9135ae2dd
 498 | {"tick":0,"type":"ReleaseFish"} | ok | 0,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,1,2 | 6 30 | 248 | 1715.0000000000025
 499 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767606188} | ok | 0,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,1,2 | 10 0 | 248 | 1715.0000000000025
 500 | {"tick":0,"type":"MergeFish","source":1,"target":11} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,1,2 | 10 0 | 248 | 1715.0000000000025
-hash 500 aae6fcfff261096994b83b997d44ffe5961a950df41c3a0f31916efd60706f37
+hash 500 62ac10bae92f748d98288c2ef09c6e2005b8a5bb2ad373907abcaea7a465f4a8
 501 | {"tick":0,"type":"MergeAll"} | ok | 0,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,1,2 | 10 0 | 248 | 1715.0000000000025
 502 | {"tick":0,"type":"MergeFish","source":14,"target":19} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,1,2 | 10 0 | 248 | 1715.0000000000025
 503 | {"tick":0,"type":"MergeFish","source":6,"target":10} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,1,2 | 10 0 | 248 | 1715.0000000000025
@@ -606,7 +606,7 @@ hash 500 aae6fcfff261096994b83b997d44ffe5961a950df41c3a0f31916efd60706f37
 598 | {"tick":0,"type":"MoveFish","source":10,"target":6} | InvalidTarget:EMPTY_CELL | 0,0,0,3,0,0,0,0,0,0,0,0,0,0,0,0,4,0,5,6 | 10 0 | 301 | 1764.200000000004
 599 | {"tick":0,"type":"ReleaseMax"} | ok | 1,0,1,3,0,1,1,1,0,1,0,1,1,0,1,1,4,0,5,6 | 0 0 | 311 | 1764.200000000004
 600 | {"tick":0,"type":"ReleaseFish"} | TankEmpty:TANK_EMPTY | 1,0,1,3,0,1,1,1,0,1,0,1,1,0,1,1,4,0,5,6 | 0 0 | 311 | 1764.200000000004
-hash 600 49288c2ec3267d5845e59a644e6b19924c2d61be12b31c000a77ea6f06b3f278
+hash 600 e5b818bf6a36139920d1b0e2a7327ebd09fa1e053e8ca2e9b407afce963d0847
 601 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767606739} | ok | 1,0,1,3,0,1,1,1,0,1,0,1,1,0,1,1,4,0,5,6 | 3 20 | 311 | 1764.200000000004
 602 | {"tick":0,"type":"ReleaseMax"} | ok | 1,0,1,3,0,1,1,1,1,1,0,1,1,1,1,1,4,1,5,6 | 0 20 | 314 | 1764.200000000004
 603 | {"tick":0,"type":"DiscardFish","cell":11} | ok | 1,0,1,3,0,1,1,1,1,1,0,0,1,1,1,1,4,1,5,6 | 0 20 | 314 | 1765.200000000004
@@ -707,7 +707,7 @@ hash 600 49288c2ec3267d5845e59a644e6b19924c2d61be12b31c000a77ea6f06b3f278
 698 | {"tick":0,"type":"MergeFish","source":14,"target":15} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6,7 | 9 0 | 373 | 1890.200000000006
 699 | {"tick":0,"type":"ReleaseFish"} | ok | 0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,6,7 | 8 0 | 374 | 1890.200000000006
 700 | {"tick":0,"type":"DiscardFish","cell":0} | InvalidTarget:EMPTY_CELL | 0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,6,7 | 8 0 | 374 | 1890.200000000006
-hash 700 5a04b9bb73606683a6620473dbd8535de11e6892baecddaa7ca171eb74ba3f30
+hash 700 2698eba820402bd2eeae548744ffab90a61593e6185668b33d92ad36738aa2a4
 701 | {"tick":0,"type":"ReleaseMax"} | ok | 1,1,0,0,1,1,0,1,0,0,1,1,0,1,0,0,1,0,6,7 | 0 0 | 382 | 1890.200000000006
 702 | {"tick":0,"type":"MergeFish","source":11,"target":12} | InvalidTarget:EMPTY_CELL | 1,1,0,0,1,1,0,1,0,0,1,1,0,1,0,0,1,0,6,7 | 0 0 | 382 | 1890.200000000006
 703 | {"tick":0,"type":"ReleaseFish"} | TankEmpty:TANK_EMPTY | 1,1,0,0,1,1,0,1,0,0,1,1,0,1,0,0,1,0,6,7 | 0 0 | 382 | 1890.200000000006
@@ -808,7 +808,7 @@ hash 700 5a04b9bb73606683a6620473dbd8535de11e6892baecddaa7ca171eb74ba3f30
 798 | {"tick":0,"type":"ReleaseFish"} | TankEmpty:TANK_EMPTY | 1,2,0,1,0,0,1,0,1,1,1,0,0,6,3,0,5,0,1,7 | 0 0 | 446 | 1986.2000000000078
 799 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767607877} | ok | 1,2,0,1,0,0,1,0,1,1,1,0,0,6,3,0,5,0,1,7 | 5 20 | 446 | 1986.2000000000078
 800 | {"tick":0,"type":"MergeAll"} | ok | 0,0,0,0,0,0,0,0,0,0,4,0,0,6,3,0,5,0,1,7 | 5 20 | 446 | 1990.6000000000079
-hash 800 1d5578710521f757b820538332e0c6241b2525888b94c6850f3bfee636d6b6d3
+hash 800 18a1f01b036c86af1a16650104ee60f63606f33ac87d8f007007dae9875bba13
 801 | {"tick":0,"type":"DiscardFish","cell":2} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,0,0,0,0,4,0,0,6,3,0,5,0,1,7 | 5 20 | 446 | 1990.6000000000079
 802 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767607900} | ok | 0,0,0,0,0,0,0,0,0,0,4,0,0,6,3,0,5,0,1,7 | 9 10 | 446 | 1990.6000000000079
 803 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767607912} | ok | 0,0,0,0,0,0,0,0,0,0,4,0,0,6,3,0,5,0,1,7 | 10 0 | 446 | 1990.6000000000079
@@ -909,7 +909,7 @@ hash 800 1d5578710521f757b820538332e0c6241b2525888b94c6850f3bfee636d6b6d3
 898 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767608666} | ok | 1,0,1,0,0,0,1,1,0,1,1,8,1,0,1,4,0,6,3,2 | 10 0 | 503 | 3335.0000000000114
 899 | {"tick":0,"type":"MergeAll"} | ok | 0,0,0,0,0,0,0,0,0,0,0,8,0,0,0,5,0,6,3,2 | 10 0 | 503 | 3343.000000000012
 900 | {"tick":0,"type":"ReleaseFish"} | ok | 0,1,0,0,0,0,0,0,0,0,0,8,0,0,0,5,0,6,3,2 | 9 0 | 504 | 3343.000000000012
-hash 900 3fcacfaa13b20300b8025840c184b1b22d23582e9b448f680301919a830022f2
+hash 900 0b701425394ea9a7bfa842bacc4038cb232473a5120867d1226d1b56b65129c2
 901 | {"tick":0,"type":"DiscardFish","cell":16} | InvalidTarget:EMPTY_CELL | 0,1,0,0,0,0,0,0,0,0,0,8,0,0,0,5,0,6,3,2 | 9 0 | 504 | 3343.000000000012
 902 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767608714} | ok | 0,1,0,0,0,0,0,0,0,0,0,8,0,0,0,5,0,6,3,2 | 10 0 | 504 | 3343.000000000012
 903 | {"tick":0,"type":"MergeAll"} | ok | 0,1,0,0,0,0,0,0,0,0,0,8,0,0,0,5,0,6,3,2 | 10 0 | 504 | 3343.000000000012
@@ -1010,7 +1010,7 @@ hash 900 3fcacfaa13b20300b8025840c184b1b22d23582e9b448f680301919a830022f2
 998 | {"tick":0,"type":"MoveFish","source":12,"target":3} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,0,0,0,1,0,8,0,0,0,5,4,3,6,1 | 9 0 | 577 | 3490.200000000017
 999 | {"tick":0,"type":"ReleaseFish"} | ok | 0,0,0,0,0,0,0,0,0,1,1,8,0,0,0,5,4,3,6,1 | 8 0 | 578 | 3490.200000000017
 1000 | {"tick":0,"type":"MoveFish","source":18,"target":3} | ok | 0,0,0,6,0,0,0,0,0,1,1,8,0,0,0,5,4,3,0,1 | 8 0 | 578 | 3490.200000000017
-hash 1000 b695395f89075137f35ddda6c5c623838545c28079572fda5a341737cb417c4e
+hash 1000 334f8d1712e7bdf58493ada4170c8dba42d3d82d05e314e2fd8653f805ec3b31
 1001 | {"tick":0,"type":"MergeFish","source":10,"target":19} | ok | 0,0,0,6,0,0,0,0,0,1,0,8,0,0,0,5,4,3,0,2 | 8 0 | 578 | 3490.600000000017
 1002 | {"tick":0,"type":"MergeFish","source":17,"target":1} | InvalidTarget:EMPTY_CELL | 0,0,0,6,0,0,0,0,0,1,0,8,0,0,0,5,4,3,0,2 | 8 0 | 578 | 3490.600000000017
 1003 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767609307} | ok | 0,0,0,6,0,0,0,0,0,1,0,8,0,0,0,5,4,3,0,2 | 10 0 | 578 | 3490.600000000017
@@ -1111,7 +1111,7 @@ hash 1000 b695395f89075137f35ddda6c5c623838545c28079572fda5a341737cb417c4e
 1098 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767609692} | ok | 1,1,0,2,0,0,2,0,0,1,0,0,0,0,0,0,0,5,4,0 | 6 40 | 614 | 3731.0000000000196
 1099 | {"tick":0,"type":"MergeFish","source":1,"target":9} | ok | 1,0,0,2,0,0,2,0,0,2,0,0,0,0,0,0,0,5,4,0 | 6 40 | 614 | 3731.4000000000196
 1100 | {"tick":0,"type":"MergeFish","source":9,"target":6} | ok | 1,0,0,2,0,0,3,0,0,0,0,0,0,0,0,0,0,5,4,0 | 6 40 | 614 | 3732.20000000002
-hash 1100 f17b368f6507ee57d5f33be8e54cea83ae330ebc3f01045ffaf2ebf931d0992f
+hash 1100 3d60668acee4b95905c908286bb3021f24c3ec8e0885bcdee26c656c2d684fa8
 1101 | {"tick":0,"type":"MergeFish","source":7,"target":6} | InvalidTarget:EMPTY_CELL | 1,0,0,2,0,0,3,0,0,0,0,0,0,0,0,0,0,5,4,0 | 6 40 | 614 | 3732.20000000002
 1102 | {"tick":0,"type":"MoveFish","source":12,"target":16} | InvalidTarget:EMPTY_CELL | 1,0,0,2,0,0,3,0,0,0,0,0,0,0,0,0,0,5,4,0 | 6 40 | 614 | 3732.20000000002
 1103 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767609697} | ok | 1,0,0,2,0,0,3,0,0,0,0,0,0,0,0,0,0,5,4,0 | 7 30 | 614 | 3732.20000000002
@@ -1212,7 +1212,7 @@ hash 1100 f17b368f6507ee57d5f33be8e54cea83ae330ebc3f01045ffaf2ebf931d0992f
 1198 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767610284} | ok | 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,7 | 10 0 | 656 | 3799.400000000023
 1199 | {"tick":0,"type":"MergeFish","source":16,"target":6} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,7 | 10 0 | 656 | 3799.400000000023
 1200 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767610333} | ok | 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,7 | 10 0 | 656 | 3799.400000000023
-hash 1200 2aa64268ccefcbf1802b8c9790b37f750016d37dc566aa0cdaf3a6053ccea812
+hash 1200 4018bac3bc3c7613d548a8039d59e589abd08c3b2d0d92ab87e812a0482cdb49
 1201 | {"tick":0,"type":"ReleaseFish"} | ok | 0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,0,7 | 9 0 | 657 | 3799.400000000023
 1202 | {"tick":0,"type":"MergeAll"} | ok | 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,7 | 9 0 | 657 | 3799.800000000023
 1203 | {"tick":0,"type":"MergeAll"} | ok | 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,0,0,7 | 9 0 | 657 | 3799.800000000023
@@ -1313,7 +1313,7 @@ hash 1200 2aa64268ccefcbf1802b8c9790b37f750016d37dc566aa0cdaf3a6053ccea812
 1298 | {"tick":0,"type":"DiscardFish","cell":1} | ok | 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,5,2 | 10 0 | 708 | 3943.6000000000263
 1299 | {"tick":0,"type":"ReleaseMax"} | ok | 0,1,0,1,0,1,1,0,1,1,0,0,0,0,1,1,1,1,5,2 | 0 0 | 718 | 3943.6000000000263
 1300 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767611167} | ok | 0,1,0,1,0,1,1,0,1,1,0,0,0,0,1,1,1,1,5,2 | 4 20 | 718 | 3943.6000000000263
-hash 1300 6f5ab0fe477b69653343cd75ca8afeac32325351829c7a7e8f7a8e33fc3eb8c6
+hash 1300 d2c07aaef7e61c4c99759056e276adcb720fe40aab2a027227037523d815f6ca
 1301 | {"tick":0,"type":"ReleaseMax"} | ok | 0,1,1,1,1,1,1,1,1,1,0,1,0,0,1,1,1,1,5,2 | 0 20 | 722 | 3943.6000000000263
 1302 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767611210} | ok | 0,1,1,1,1,1,1,1,1,1,0,1,0,0,1,1,1,1,5,2 | 7 30 | 722 | 3943.6000000000263
 1303 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767611226} | ok | 0,1,1,1,1,1,1,1,1,1,0,1,0,0,1,1,1,1,5,2 | 10 0 | 722 | 3943.6000000000263
@@ -1414,7 +1414,7 @@ hash 1300 6f5ab0fe477b69653343cd75ca8afeac32325351829c7a7e8f7a8e33fc3eb8c6
 1398 | {"tick":0,"type":"MergeFish","source":0,"target":13} | ok | 0,1,1,2,1,1,1,1,0,1,1,1,0,2,1,4,1,1,1,2 | 0 30 | 775 | 4044.00000000003
 1399 | {"tick":0,"type":"MoveFish","source":2,"target":19} | InvalidTarget:CELL_OCCUPIED | 0,1,1,2,1,1,1,1,0,1,1,1,0,2,1,4,1,1,1,2 | 0 30 | 775 | 4044.00000000003
 1400 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767611768} | ok | 0,1,1,2,1,1,1,1,0,1,1,1,0,2,1,4,1,1,1,2 | 4 50 | 775 | 4044.00000000003
-hash 1400 1fb2083f88faf9b7b60fcc27f4170c4e4665aeb728adbeff7dcc5a8a45c808a9
+hash 1400 275ec57c593c96d0de839edbc76aad0b789a3fe555a5889cc78adb3e9588de74
 1401 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767611806} | ok | 0,1,1,2,1,1,1,1,0,1,1,1,0,2,1,4,1,1,1,2 | 10 0 | 775 | 4044.00000000003
 1402 | {"tick":0,"type":"ReleaseMax"} | ok | 1,1,1,2,1,1,1,1,1,1,1,1,1,2,1,4,1,1,1,2 | 7 0 | 778 | 4044.00000000003
 1403 | {"tick":0,"type":"MoveFish","source":2,"target":16} | InvalidTarget:CELL_OCCUPIED | 1,1,1,2,1,1,1,1,1,1,1,1,1,2,1,4,1,1,1,2 | 7 0 | 778 | 4044.00000000003
@@ -1515,7 +1515,7 @@ hash 1400 1fb2083f88faf9b7b60fcc27f4170c4e4665aeb728adbeff7dcc5a8a45c808a9
 1498 | {"tick":0,"type":"ReleaseFish"} | TankEmpty:TANK_EMPTY | 0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,1,6 | 0 50 | 833 | 4161.200000000032
 1499 | {"tick":0,"type":"ReleaseMax"} | ok | 0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,1,6 | 0 50 | 833 | 4161.200000000032
 1500 | {"tick":0,"type":"MoveFish","source":0,"target":17} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,1,6 | 0 50 | 833 | 4161.200000000032
-hash 1500 56dad8a684a377efb9d99959c6cf6ddf7584cf287ecf6fc2b0cbbde8671e5549
+hash 1500 566d558faee80b335d95e4dd5d5102a83b340092e43b3f419860a3e7b5e3e6c2
 1501 | {"tick":0,"type":"MergeFish","source":18,"target":15} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,1,6 | 0 50 | 833 | 4161.200000000032
 1502 | {"tick":0,"type":"DiscardFish","cell":8} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,1,6 | 0 50 | 833 | 4161.200000000032
 1503 | {"tick":0,"type":"DiscardFish","cell":14} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,1,6 | 0 50 | 833 | 4161.200000000032
@@ -1616,7 +1616,7 @@ hash 1500 56dad8a684a377efb9d99959c6cf6ddf7584cf287ecf6fc2b0cbbde8671e5549
 1598 | {"tick":0,"type":"ReleaseFish"} | ok | 1,0,1,1,0,0,1,1,2,0,0,1,1,0,1,0,5,0,1,7 | 6 30 | 897 | 4230.800000000026
 1599 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767612980} | ok | 1,0,1,1,0,0,1,1,2,0,0,1,1,0,1,0,5,0,1,7 | 8 40 | 897 | 4230.800000000026
 1600 | {"tick":0,"type":"ReleaseFish"} | ok | 1,0,1,1,0,0,1,1,2,1,0,1,1,0,1,0,5,0,1,7 | 7 40 | 898 | 4230.800000000026
-hash 1600 e82cfde7adf0f49d4f5c88706c7c81894cf4dc029689a61a22c67c26cb9a143a
+hash 1600 3cf6fd6a92d869082be367159b7a9c408bdb3cc828b2fa625158daf83a4181f9
 1601 | {"tick":0,"type":"MergeFish","source":0,"target":11} | ok | 0,0,1,1,0,0,1,1,2,1,0,2,1,0,1,0,5,0,1,7 | 7 40 | 898 | 4231.200000000025
 1602 | {"tick":0,"type":"DiscardFish","cell":5} | InvalidTarget:EMPTY_CELL | 0,0,1,1,0,0,1,1,2,1,0,2,1,0,1,0,5,0,1,7 | 7 40 | 898 | 4231.200000000025
 1603 | {"tick":0,"type":"MergeFish","source":4,"target":4} | BadArgument:BAD_CELL | 0,0,1,1,0,0,1,1,2,1,0,2,1,0,1,0,5,0,1,7 | 7 40 | 898 | 4231.200000000025
@@ -1717,7 +1717,7 @@ hash 1600 e82cfde7adf0f49d4f5c88706c7c81894cf4dc029689a61a22c67c26cb9a143a
 1698 | {"tick":0,"type":"MergeAll"} | ok | 0,0,0,0,0,0,3,0,0,0,0,0,0,4,2,0,6,5,0,0 | 5 0 | 943 | 4347.40000000002
 1699 | {"tick":0,"type":"MergeFish","source":15,"target":13} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,3,0,0,0,0,0,0,4,2,0,6,5,0,0 | 5 0 | 943 | 4347.40000000002
 1700 | {"tick":0,"type":"MoveFish","source":1,"target":6} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,3,0,0,0,0,0,0,4,2,0,6,5,0,0 | 5 0 | 943 | 4347.40000000002
-hash 1700 6648cbf654a08996f6cb4364b82cabbbf298484e494339638c3916e8f7e64252
+hash 1700 d4bd819231ac60bc7092e71282a39e6eb0778031f2017b670c644eaedc5b552e
 1701 | {"tick":0,"type":"MergeFish","source":15,"target":1} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,3,0,0,0,0,0,0,4,2,0,6,5,0,0 | 5 0 | 943 | 4347.40000000002
 1702 | {"tick":0,"type":"ReleaseFish"} | ok | 0,0,1,0,0,0,3,0,0,0,0,0,0,4,2,0,6,5,0,0 | 4 0 | 944 | 4347.40000000002
 1703 | {"tick":0,"type":"ReleaseFish"} | ok | 0,0,1,0,0,0,3,0,0,0,0,0,0,4,2,0,6,5,1,0 | 3 0 | 945 | 4347.40000000002
@@ -1818,7 +1818,7 @@ hash 1700 6648cbf654a08996f6cb4364b82cabbbf298484e494339638c3916e8f7e64252
 1798 | {"tick":0,"type":"MergeAll"} | ok | 0,0,0,0,0,0,0,0,1,0,3,0,0,0,0,0,0,7,0,4 | 9 0 | 990 | 4443.000000000015
 1799 | {"tick":0,"type":"ReleaseFish"} | ok | 0,0,0,0,0,0,0,0,1,0,3,0,1,0,0,0,0,7,0,4 | 8 0 | 991 | 4443.000000000015
 1800 | {"tick":0,"type":"ReleaseMax"} | ok | 1,0,1,0,0,1,1,0,1,0,3,1,1,1,1,0,1,7,0,4 | 0 0 | 999 | 4443.000000000015
-hash 1800 25b17ccd4ee3dc0af2adae8053e80e675ce952c255a2537f3b2259891fd7b8c5
+hash 1800 f3e7782cd276cf8985db196c865315a6803828ce6d592fde952be037f2038a36
 1801 | {"tick":0,"type":"DiscardFish","cell":16} | ok | 1,0,1,0,0,1,1,0,1,0,3,1,1,1,1,0,0,7,0,4 | 0 0 | 999 | 4444.000000000015
 1802 | {"tick":0,"type":"DiscardFish","cell":6} | ok | 1,0,1,0,0,1,0,0,1,0,3,1,1,1,1,0,0,7,0,4 | 0 0 | 999 | 4445.000000000015
 1803 | {"tick":0,"type":"ReleaseMax"} | ok | 1,0,1,0,0,1,0,0,1,0,3,1,1,1,1,0,0,7,0,4 | 0 0 | 999 | 4445.000000000015
@@ -1919,7 +1919,7 @@ hash 1800 25b17ccd4ee3dc0af2adae8053e80e675ce952c255a2537f3b2259891fd7b8c5
 1898 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767614540} | ok | 1,0,0,1,0,0,1,0,5,0,0,1,0,4,0,0,2,7,2,6 | 6 30 | 1049 | 4495.400000000009
 1899 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767614551} | ok | 1,0,0,1,0,0,1,0,5,0,0,1,0,4,0,0,2,7,2,6 | 8 20 | 1049 | 4495.400000000009
 1900 | {"tick":0,"type":"ReleaseFish"} | ok | 1,0,0,1,0,1,1,0,5,0,0,1,0,4,0,0,2,7,2,6 | 7 20 | 1050 | 4495.400000000009
-hash 1900 a3c005662b2f5ab24bf935e7b968bf8a3a7d98f517925072da24cb96d3d97354
+hash 1900 602b738df06a353523574afe0e5e786d7d0aa4d657c37c2f50e300be73776f65
 1901 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767614590} | ok | 1,0,0,1,0,1,1,0,5,0,0,1,0,4,0,0,2,7,2,6 | 10 0 | 1050 | 4495.400000000009
 1902 | {"tick":0,"type":"MergeFish","source":6,"target":0} | ok | 2,0,0,1,0,1,0,0,5,0,0,1,0,4,0,0,2,7,2,6 | 10 0 | 1050 | 4495.800000000008
 1903 | {"tick":0,"type":"ReleaseFish"} | ok | 2,0,0,1,0,1,0,0,5,1,0,1,0,4,0,0,2,7,2,6 | 9 0 | 1051 | 4495.800000000008
@@ -2020,4 +2020,4 @@ hash 1900 a3c005662b2f5ab24bf935e7b968bf8a3a7d98f517925072da24cb96d3d97354
 1998 | {"tick":0,"type":"DiscardFish","cell":0} | ok | 0,1,2,1,0,0,0,1,1,1,1,0,0,0,0,6,0,2,1,8 | 0 40 | 1098 | 4587.000000000004
 1999 | {"tick":0,"type":"ReleaseMax"} | ok | 0,1,2,1,0,0,0,1,1,1,1,0,0,0,0,6,0,2,1,8 | 0 40 | 1098 | 4587.000000000004
 2000 | {"tick":0,"type":"DiscardFish","cell":13} | InvalidTarget:EMPTY_CELL | 0,1,2,1,0,0,0,1,1,1,1,0,0,0,0,6,0,2,1,8 | 0 40 | 1098 | 4587.000000000004
-hash 2000 0d784e4708ab433af07315a3aaecdee8e4525f2d875107f14a00271c5f14f32a
+hash 2000 830941b615b216216de6f4f02874971eecfa8108fe5bfd271dcde4b3bad77ccb

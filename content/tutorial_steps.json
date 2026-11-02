@@ -22,6 +22,26 @@
           "amount": 1
         },
         {
+          "kind": "WEAPON",
+          "id": "weapon_c_02",
+          "amount": 1
+        },
+        {
+          "kind": "WEAPON",
+          "id": "weapon_c_03",
+          "amount": 1
+        },
+        {
+          "kind": "WEAPON",
+          "id": "weapon_c_04",
+          "amount": 1
+        },
+        {
+          "kind": "WEAPON",
+          "id": "weapon_c_05",
+          "amount": 1
+        },
+        {
           "kind": "COMPANION",
           "id": "comp_c_01",
           "amount": 1

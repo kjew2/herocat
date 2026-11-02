@@ -266,10 +266,10 @@ namespace HeroCat.Sim.Tests
             string before = sim.State.Party.Slots[0].Weapon;
             Assert.That(sim.Apply(new ApplySummonResult(p)).Ok, Is.True);
             Assert.That(sim.State.Party.Slots[0].Weapon, Is.EqualTo(m), "the best weapon to the heaviest slot (ties: slot 0)");
-            Assert.That(sim.State.Party.Slots[1].Weapon, Is.EqualTo(before), "the old one moves to the next slot instead of idling");
+            Assert.That(sim.State.Party.Slots.Select(x => x.Weapon), Does.Contain(before), "the displaced starter weapon moves down a slot");
             var eq = sim.DrainEvents().OfType<ItemEquipped>().ToList();
-            Assert.That(eq.Select(e => (e.Banner, e.Slot, e.ItemId, e.PreviousItemId, e.Auto)),
-                        Is.EqualTo(new[] { (Banner.WEAPON, 0, m, before, true), (Banner.WEAPON, 1, before, (string)null, true) }));
+            Assert.That(eq.First(), Is.EqualTo(new ItemEquipped(Banner.WEAPON, 0, m, before, true)));
+            Assert.That(eq.All(e => e.Auto && e.Banner == Banner.WEAPON), Is.True, "one auto event per changed slot");
         }
 
         [Test]

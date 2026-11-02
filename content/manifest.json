@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "2026.11.02.7",
+  "content_version": "2026.11.02.8",
   "min_client_version": "0.2.0",
   "source_revision": "2026-11-01 m0 skeleton, spec 00 seed values (agent)",
   "hot_apply": false,
@@ -13,7 +13,7 @@
     "awakening": {
       "file": "awakening.json",
       "rows": 5,
-      "sha256": "4394d8ad64e16cf437a13574aee3cf11022a4a71522a6baadee5d4a4dd1d39db"
+      "sha256": "1cac3f6f85d4df46385fc430b00d57532543db5cfa324dca7792fb06f5d6581a"
     },
     "awakening_targets": {
       "file": "awakening_targets.json",
@@ -38,7 +38,7 @@
     "companions": {
       "file": "companions.json",
       "rows": 50,
-      "sha256": "4a4762cbaa38f1abbcaef675a83f8903d8d4208af56741fc3b1ba312db7eedef"
+      "sha256": "d400534fd6ff0afb8df1145aa6677e58ccbb334e21d199e62255563a41c36c7b"
     },
     "constants": {
       "file": "constants.json",
@@ -98,7 +98,7 @@
     "rarities": {
       "file": "rarities.json",
       "rows": 5,
-      "sha256": "7da59786cbad1e1ef75456d4650edfb888dac3da043f38a8609dbbe314dcf329"
+      "sha256": "9a3b1b7ee39078d5ecca794d33ed35ae69f5d6e0444ea83d6a923a84bd720cb4"
     },
     "research": {
       "file": "research.json",
@@ -138,7 +138,7 @@
     "tutorial_steps": {
       "file": "tutorial_steps.json",
       "rows": 12,
-      "sha256": "dd99e9a675c6384cf49bf25afc9ac119cdae9b84207ea066eff9c23fc36a884b"
+      "sha256": "b7f0ef9b02f1cd3b1096fbe7e6479a9b68a0bc11debe498f8cefbf5173eda256"
     },
     "weapons": {
       "file": "weapons.json",
@@ -153,7 +153,7 @@
       "sha256": "a1576267c923bb46be168e84d013411a70a8c55a4a1ea9fb64783f425af21858"
     }
   },
-  "content_hash": "b58003eb95e5f1255c2446176448d0f304766c820bb182bf8108b6aa08f580d6",
+  "content_hash": "8de61436aff500af808e18894f2b0f31041221f5e4aef977e439311149ca1413",
   "s_constants": [
     "BASE_HP",
     "BOSS_ROCK_CANDY_P",
@@ -181,5 +181,5 @@
     "TAP_ZAP_DMG_PCT",
     "TAP_ZAP_MAX_PER_SEC"
   ],
-  "notes": "M0 skeleton: values are spec 00 section 6 seeds; S values pending tools/power_curve_model.py and fish_model.py. Party model (00 decisions 109, 110): BASE_ATK per companion, PARTY_SLOTS, MP_REGEN0 0.5 per slot pool"
+  "notes": "M0 skeleton: values are spec 00 section 6 seeds; S values pending tools/power_curve_model.py and fish_model.py. Party model (00 decisions 109, 110): BASE_ATK per companion, PARTY_SLOTS, MP_REGEN0 0.5 per slot pool; decision 111: COMPANION_ATK_MULT, COMPANION_DPS_PCT +25%, Awakening costs /5, five starter weapons"
 }

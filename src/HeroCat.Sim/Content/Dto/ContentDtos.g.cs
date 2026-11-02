@@ -162,6 +162,7 @@ namespace HeroCat.Sim.Content.Dto
         public double WeaponPassivePct;
         public double SkillDpsPct;
         public double CompanionDpsPct;
+        public double CompanionAtkMult;
         public double RuneStatPct;
         public long LimitBreakCost;
         public long DupeOverflowRockCandy;

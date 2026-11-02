@@ -1,5 +1,5 @@
 id,order,trigger,trigger_value,screen,highlight,text_key,expect_event,expect_count,grants,skippable,tier
-tut_welcome,1,PROFILE_CREATED,,SCR_MAIN,combat_viewport,tut.1.tap,TapZapped,3,DIAMOND:1500;WEAPON:weapon_c_01:1;COMPANION:comp_c_01:1;COMPANION:comp_c_02:1;COMPANION:comp_c_03:1;COMPANION:comp_c_04:1;COMPANION:comp_c_05:1,false,M0
+tut_welcome,1,PROFILE_CREATED,,SCR_MAIN,combat_viewport,tut.1.tap,TapZapped,3,DIAMOND:1500;WEAPON:weapon_c_01:1;WEAPON:weapon_c_02:1;WEAPON:weapon_c_03:1;WEAPON:weapon_c_04:1;WEAPON:weapon_c_05:1;COMPANION:comp_c_01:1;COMPANION:comp_c_02:1;COMPANION:comp_c_03:1;COMPANION:comp_c_04:1;COMPANION:comp_c_05:1,false,M0
 tut_gold,2,PREVIOUS_DONE,,SCR_MAIN,gold_chip,tut.2.gold,EnemyKilled,3,,false,MVP
 tut_hero_tab,3,PREVIOUS_DONE,,SCR_MAIN,tab_party,tut.3.party,,,,true,MVP
 tut_train,4,PREVIOUS_DONE,,SCR_PARTY,train_atk,tut.4.train,StatTrained,1,,true,MVP

@@ -151,7 +151,7 @@ namespace HeroCat.Sim.Content
                 {
                     var id = Enum<Rarity>(r.Id, $"rarities[{r.Id}].id");
                     rarities[id] = new RarityDef(id, r.Code, r.Color, r.ShapeIcon, r.WeaponAtkPct, r.WeaponPassivePct, r.SkillDpsPct,
-                                                 r.CompanionDpsPct, r.RuneStatPct, r.LimitBreakCost, r.DupeOverflowRockCandy,
+                                                 r.CompanionDpsPct, r.CompanionAtkMult, r.RuneStatPct, r.LimitBreakCost, r.DupeOverflowRockCandy,
                                                  r.OverrideTolerance, r.NameKey);
                 }
                 foreach (Rarity rr in System.Enum.GetValues(typeof(Rarity)))
@@ -251,25 +251,33 @@ namespace HeroCat.Sim.Content
                     {
                         db.ProfileCreatedGrants = grants;
                         var starters = new List<string>();
-                        int weaponGrants = 0;
+                        var starterWeapons = new List<string>();
+                        bool compAmounts = true, weaponAmounts = true;
                         foreach (var g in grants)
                         {
-                            if (g.ItemKind == "WEAPON") { weaponGrants++; if (db.TutorialWeaponId == null) db.TutorialWeaponId = g.ItemId; }
-                            if (g.ItemKind == "COMPANION") starters.Add(g.ItemId);
+                            if (g.ItemKind == "WEAPON") { starterWeapons.Add(g.ItemId); weaponAmounts &= g.Amount == 1; }
+                            if (g.ItemKind == "COMPANION") { starters.Add(g.ItemId); compAmounts &= g.Amount == 1; }
                         }
                         db.TutorialCompanionIds = starters.AsReadOnly();
-                        // E066 (09 section 5.29, 00 decision 109): PARTY_SLOTS distinct M0 Common companions of amount 1
-                        // and exactly one M0 weapon. Ids missing from this tier's pool are already E022; no companions table, no party.
-                        string gloc = $"tutorial_steps[{r.Id}].grants";
-                        bool amountsOk = true;
-                        foreach (var g in grants) if (g.ItemKind == "COMPANION" && g.Amount != 1) amountsOk = false;
-                        if (d.Companions != null && starters.Count != k.PartySlots || new HashSet<string>(starters, StringComparer.Ordinal).Count != starters.Count || !amountsOk)
-                            Err("E066", gloc, $"the starter party must be exactly {k.PartySlots} distinct COMPANION grants of amount 1, got {(starters.Count == 0 ? "none" : string.Join(", ", starters))}");
-                        foreach (var id in starters)
-                            if (companions.TryGetValue(id, out var cd) && (cd.Rarity != Rarity.COMMON || cd.Tier != Tier.M0))
-                                Err("E066", gloc, $"starter companion '{id}' must be COMMON and tier M0, is {cd.Rarity} {cd.Tier}");
-                        if (weaponGrants != 1 || (db.TutorialWeaponId != null && weapons.TryGetValue(db.TutorialWeaponId, out var wd) && wd.Tier != Tier.M0))
-                            Err("E066", gloc, "the welcome step must grant exactly one M0 WEAPON");
+                        db.TutorialWeaponIds = starterWeapons.AsReadOnly();
+                        db.TutorialWeaponId = starterWeapons.Count > 0 ? starterWeapons[0] : null;
+                        // E066 (09 section 5.29, 00 decisions 109, 111): PARTY_SLOTS distinct M0 Common companions and PARTY_SLOTS
+                        // distinct M0 Common weapons, each of amount 1. Ids missing from this tier's pool are already E022; no
+                        // companions table, no party.
+                        if (d.Companions != null)
+                        {
+                            string gloc = $"tutorial_steps[{r.Id}].grants";
+                            if (starters.Count != k.PartySlots || new HashSet<string>(starters, StringComparer.Ordinal).Count != starters.Count || !compAmounts)
+                                Err("E066", gloc, $"the starter party must be exactly {k.PartySlots} distinct COMPANION grants of amount 1, got {(starters.Count == 0 ? "none" : string.Join(", ", starters))}");
+                            foreach (var id in starters)
+                                if (companions.TryGetValue(id, out var cd) && (cd.Rarity != Rarity.COMMON || cd.Tier != Tier.M0))
+                                    Err("E066", gloc, $"starter companion '{id}' must be COMMON and tier M0, is {cd.Rarity} {cd.Tier}");
+                            if (starterWeapons.Count != k.PartySlots || new HashSet<string>(starterWeapons, StringComparer.Ordinal).Count != starterWeapons.Count || !weaponAmounts)
+                                Err("E066", gloc, $"the starter weapons must be exactly {k.PartySlots} distinct WEAPON grants of amount 1, got {(starterWeapons.Count == 0 ? "none" : string.Join(", ", starterWeapons))}");
+                            foreach (var id in starterWeapons)
+                                if (weapons.TryGetValue(id, out var wd) && (wd.Rarity != Rarity.COMMON || wd.Tier != Tier.M0))
+                                    Err("E066", gloc, $"starter weapon '{id}' must be COMMON and tier M0, is {wd.Rarity} {wd.Tier}");
+                        }
                     }
                 }
                 db.TutorialSteps = steps.AsReadOnly();

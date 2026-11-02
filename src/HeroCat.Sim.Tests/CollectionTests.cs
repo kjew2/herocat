@@ -35,13 +35,13 @@ namespace HeroCat.Sim.Tests
         // ------------------------------------------------------------------------------------------------ weapons (6.3)
 
         [Test]
-        public void NewProfile_OwnsTheTutorialWeapon_InSlotZero()   // #93, 00 decision 109
+        public void NewProfile_OwnsTheFiveStarterWeapons_InSlotsZeroToFour()   // #93, 00 decisions 109, 111
         {
             var s = TestContent.NewState();
-            Assert.That(Db.TutorialWeaponId, Is.Not.Null);
-            Assert.That(s.Party.Slots[0].Weapon, Is.EqualTo(Db.TutorialWeaponId));
-            Assert.That(s.Party.Slots.Skip(1).Select(x => x.Weapon), Is.All.Null, "slots 1-4 attack unarmed");
-            Assert.That(CollectionRules.Owns(s.Weapons, Db.TutorialWeaponId), Is.True);
+            Assert.That(Db.TutorialWeaponIds, Is.EqualTo(new[] { "weapon_c_01", "weapon_c_02", "weapon_c_03", "weapon_c_04", "weapon_c_05" }));
+            Assert.That(Db.TutorialWeaponId, Is.EqualTo(Db.TutorialWeaponIds[0]));
+            Assert.That(s.Party.Slots.Select(x => x.Weapon), Is.EqualTo(Db.TutorialWeaponIds), "no unarmed slot");
+            foreach (var id in Db.TutorialWeaponIds) Assert.That(CollectionRules.Owns(s.Weapons, id), Is.True);
         }
 
         [Test]
@@ -77,13 +77,15 @@ namespace HeroCat.Sim.Tests
             var sim = Sim();
             var rares = Db.Pool(Banner.WEAPON, Rarity.RARE);
             Assume.That(rares.Count, Is.GreaterThanOrEqualTo(2));
+            sim.State.Weapons.Items.Clear();             // three weapons for four occupied slots
+            foreach (var x in sim.State.Party.Slots) x.Weapon = null;
+            Own(sim.State.Weapons, Db.TutorialWeaponId, copies: 1);
             Own(sim.State.Weapons, rares[1], copies: 1);
             Own(sim.State.Weapons, rares[0], copies: 1);
             sim.State.Party.Slots[4].Companion = null;   // an empty slot gets no weapon
             string sk = Db.Pool(Banner.SKILL, Rarity.EPIC)[0];
             Own(sim.State.Skills, sk);
             sim.State.Party.Slots[3].Skill = sk;         // a heavier slot (its skill factor) takes the best weapon
-            sim.State.Party.Slots[0].Weapon = null;      // and the tutorial weapon goes back into the ranking
             sim.Query.MarkDirty();
             Assert.That(sim.Apply(new AutoEquipBestWeapons()).Ok, Is.True);
             var w = sim.State.Party.Slots.Select(x => x.Weapon).ToArray();
@@ -235,8 +237,8 @@ namespace HeroCat.Sim.Tests
             var vm = SummonQuery.Collection(sim, Banner.WEAPON, IsNew);
             int owned = sim.State.Weapons.Items.Count(kv => kv.Value.Copies > 0 && pool.Contains(kv.Key));
             Assert.That(vm.PoolCount, Is.EqualTo(pool.Count).And.EqualTo(vm.Items.Count));
-            Assert.That(vm.OwnedCount, Is.EqualTo(owned).And.EqualTo(2));
-            Assert.That(vm.NewCount, Is.EqualTo(2));
+            Assert.That(vm.OwnedCount, Is.EqualTo(owned).And.EqualTo(6), "five starter weapons plus one (00 decision 111)");
+            Assert.That(vm.NewCount, Is.EqualTo(6));
             foreach (var id in pool) seen.Add(id);
             Assert.That(SummonQuery.Collection(sim, Banner.WEAPON, IsNew).NewCount, Is.Zero);
 

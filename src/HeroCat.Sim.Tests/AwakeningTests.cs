@@ -18,7 +18,7 @@ namespace HeroCat.Sim.Tests
 
         // 03 section 5.3 / 00 section 6.5, typed in from the spec so a content edit cannot move the test with it.
         static readonly int[] Gates = { 50, 150, 300, 500, 800 };
-        static readonly long[] Costs = { 100, 300, 800, 2000, 5000 };
+        static readonly long[] Costs = { 20, 60, 160, 400, 1000 };   // a fifth of the hero model's (00 decision 111)
         static readonly int[] RuneSlotsAfter = { 0, 0, 0, 3, 6 };
 
         static Simulation Sim(int highestCleared = 0, long rockCandy = 0, ContentDb db = null)
@@ -52,7 +52,7 @@ namespace HeroCat.Sim.Tests
         }
 
         [Test]
-        public void AC12_StageGate_ThenRockCandy_ThenChargesExactly100_AndMultipliesOnlyThatSlot()
+        public void AC12_StageGate_ThenRockCandy_ThenChargesExactly20_AndMultipliesOnlyThatSlot()
         {
             var sim = Sim(highestCleared: 49, rockCandy: 1000);
             Assert.That(sim.Query.NextAwakenStageGate(2), Is.EqualTo(50));
@@ -62,12 +62,12 @@ namespace HeroCat.Sim.Tests
             AssertRejectIsPure(sim, RejectCode.Locked, CombatRejectReasons.AWAKEN_STAGE_NOT_REACHED);
 
             sim.State.Progress.HighestCleared = 50;
-            sim.State.Wallet.RockCandy = 99;
+            sim.State.Wallet.RockCandy = 19;
             AssertRejectIsPure(sim, RejectCode.CannotAfford, CombatRejectReasons.NOT_ENOUGH_ROCK_CANDY);
             Assert.That(CombatRejectReasons.NOT_ENOUGH_ROCK_CANDY, Is.EqualTo(CollectionRejectReasons.NotEnough(Currency.ROCK_CANDY)),
                         "one localization key for both Rock Candy sinks");
 
-            sim.State.Wallet.RockCandy = 100;
+            sim.State.Wallet.RockCandy = 20;
             Assert.That(sim.Query.CanAwaken(2), Is.True);
             Assert.That(sim.Query.ResearchUnlocked, Is.False);
             var before = sim.Query.Power;
@@ -79,7 +79,7 @@ namespace HeroCat.Sim.Tests
             var ev = sim.DrainEvents();
             Assert.That(ev.Select(e => e.GetType()), Is.EqualTo(new[] { typeof(CurrencyChanged), typeof(Awakened), typeof(QuestCompleted) }));
             Assert.That(((QuestCompleted)ev[2]).QuestId, Is.EqualTo("ach_awakening_01"), "the Awakening ladder (06 section 5.4, issue #171)");
-            Assert.That(ev[0], Is.EqualTo(new CurrencyChanged(Currency.ROCK_CANDY, -100, 0, CurrencyReason.AWAKENING)));
+            Assert.That(ev[0], Is.EqualTo(new CurrencyChanged(Currency.ROCK_CANDY, -20, 0, CurrencyReason.AWAKENING)));
             Assert.That(ev[1], Is.EqualTo(new Awakened(2, 1)));
             Assert.That(sim.Query.ResearchUnlocked, Is.True, "Research opens when any slot reaches rank 1 (00 decisions 11, 109)");
             Assert.That(sim.Query.AwakenMult(2), Is.EqualTo(1.5));
@@ -143,7 +143,7 @@ namespace HeroCat.Sim.Tests
         [Test]
         public void TheGateReadsHighestCleared_NotTheFoughtStage()   // 03 section 5.3: farming a side stage never lowers it
         {
-            var sim = Sim(highestCleared: 60, rockCandy: 100);
+            var sim = Sim(highestCleared: 60, rockCandy: 20);
             sim.State.Combat.Stage = 61;
             Assert.That(sim.Apply(new SelectStage(10)).Ok, Is.True);
             Assert.That(sim.Apply(new Awaken(4)).Ok, Is.True);
@@ -184,7 +184,7 @@ namespace HeroCat.Sim.Tests
         {
             var genesis = TestContent.NewState();
             genesis.Progress.HighestCleared = 900;
-            genesis.Wallet.RockCandy = 3000;
+            genesis.Wallet.RockCandy = 600;
             var sim = new Simulation(StateCopy.DeepClone(genesis), Mvp);
             var log = new ListCommandLog();
             sim.CommandLog = log;
@@ -198,7 +198,7 @@ namespace HeroCat.Sim.Tests
                 if (rng.Next(3) == 0) sim.Apply(new TrainStatMax(Stat.ATK));
             }
             sim.Advance(23);
-            Assert.That(ok, Is.InRange(3, 6), "3000 candy over two slots: ranks of 100, 300 and 800 each, never a 2,000 rank 4");
+            Assert.That(ok, Is.InRange(3, 6), "600 candy over two slots: ranks of 20, 60 and 160 each, never a 400 rank 4");
             Assert.That(rejected, Is.GreaterThan(0));
 
             var lines = log.Records.Select(CommandCodec.Encode).ToArray();

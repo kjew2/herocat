@@ -3,7 +3,12 @@
     [
       "tutorial_steps",
       "DIAMOND:1500;WEAPON:weapon_c_01:1",
-      "DIAMOND:1500"
+      "DIAMOND:1500;COMPANION:comp_c_01:1"
+    ],
+    [
+      "banners",
+      "COMPANION,true,MVP,300,TICKET_SUMMON_COMPANION,18,14,10,6,2,",
+      "COMPANION,true,MVP,300,TICKET_SUMMON_COMPANION,1,1,1,1,1,"
     ]
   ],
   "csharp": true

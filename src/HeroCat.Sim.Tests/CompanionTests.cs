@@ -122,13 +122,13 @@ namespace HeroCat.Sim.Tests
         [Test]
         public void Content_DerivedMagnitudes_04Section8_1()
         {
-            Assert.That(Mvp.Companions[E_DMG1].Magnitude, Is.EqualTo(64.0 * 100 / 10), "DAMAGE: dps_pct * cooldown / ATTACK_INTERVAL_TICKS");
+            Assert.That(Mvp.Companions[E_DMG1].Magnitude, Is.EqualTo(80.0 * 100 / 10), "DAMAGE: dps_pct * cooldown / ATTACK_INTERVAL_TICKS");
             var ba = Mvp.Companions[E_BUFF_ATK];
-            Assert.That(ba.Magnitude, Is.EqualTo(64.0 * 100 / ba.DurationTicks.Value), "BUFF_ATK: dps_pct * cooldown / duration");
+            Assert.That(ba.Magnitude, Is.EqualTo(80.0 * 100 / ba.DurationTicks.Value), "BUFF_ATK: dps_pct * cooldown / duration");
             var bg = Mvp.Companions[E_BUFF_GOLD];
-            Assert.That(bg.Magnitude, Is.EqualTo(2 * 64.0 * 100 / bg.DurationTicks.Value), "BUFF_GOLD: 2 * dps_pct * cooldown / duration");
-            Assert.That(Mvp.Companions[E_MP].Magnitude, Is.EqualTo(16.0), "MP_REGEN: E restores 16 (dps_pct / 4)");
-            Assert.That(Mvp.Companions[C_MP].Magnitude, Is.EqualTo(4.0));
+            Assert.That(bg.Magnitude, Is.EqualTo(2 * 80.0 * 100 / bg.DurationTicks.Value), "BUFF_GOLD: 2 * dps_pct * cooldown / duration");
+            Assert.That(Mvp.Companions[E_MP].Magnitude, Is.EqualTo(20.0), "MP_REGEN: E restores 20 (dps_pct / 4; COMPANION_DPS_PCT[E] = 80, 00 decision 111)");
+            Assert.That(Mvp.Companions[C_MP].Magnitude, Is.EqualTo(5.0));
         }
 
         [Test]
@@ -164,14 +164,15 @@ namespace HeroCat.Sim.Tests
         // ============================================================================================ equip (04 8.2)
 
         [Test]
-        public void StarterParty_FiveCommonsInSlotsZeroToFour_AndTheWeaponInSlotZero()   // 00 decision 109, 02 section 3.5
+        public void StarterParty_FiveCommonsInSlotsZeroToFour_EachWithAStarterWeapon()   // 00 decisions 109, 111, 02 section 3.5
         {
             var sim = Sim();
             var slots = sim.State.Party.Slots;
             Assert.That(slots.Select(x => x.Companion), Is.EqualTo(Mvp.TutorialCompanionIds));
             Assert.That(Mvp.TutorialCompanionIds, Has.Count.EqualTo(Mvp.Constants.PartySlots));
             Assert.That(Mvp.TutorialCompanionIds.Select(id => Mvp.Companions[id].Rarity), Is.All.EqualTo(Rarity.COMMON));
-            Assert.That(slots.Select(x => x.Weapon), Is.EqualTo(new[] { Mvp.TutorialWeaponId, null, null, null, null }));
+            Assert.That(slots.Select(x => x.Weapon), Is.EqualTo(Mvp.TutorialWeaponIds));
+            Assert.That(Mvp.TutorialWeaponIds.Select(id => Mvp.Weapons[id].Rarity), Is.All.EqualTo(Rarity.COMMON));
             Assert.That(sim.Query.Power.OccupiedCount, Is.EqualTo(5));
         }
 
@@ -248,7 +249,7 @@ namespace HeroCat.Sim.Tests
             Own(sim, E_DMG1, E_DMG2, E_DMG3, E_DMG4, "comp_e_05", E_MP, E_BUFF_GOLD);
             sim.Apply(new AutoEquipBestCompanions());
             var picked = sim.State.Party.Slots.Select(x => x.Companion).ToArray();
-            Assert.That(picked, Does.Contain(E_MP), "an Epic MP_REGEN restores 16 to every pool: four fed companions beat five starved ones");
+            Assert.That(picked, Does.Contain(E_MP), "an Epic MP_REGEN restores 20 to every pool: four fed companions beat five starved ones");
             for (int i = 0; i < 5; i++) Assert.That(sim.Query.MpSufficiency(i), Is.EqualTo(1.0));
         }
 
@@ -258,7 +259,7 @@ namespace HeroCat.Sim.Tests
             var sim = Sim();
             Slot(sim);
             sim.State.Companions.Items.Clear();
-            Own(sim, E_DMG1, E_DMG2, E_DMG3, E_DMG4, "comp_e_05", C_MP);   // a level-1 Common restores 4 MP for 10
+            Own(sim, E_DMG1, E_DMG2, E_DMG3, E_DMG4, "comp_e_05", C_MP);   // a level-1 Common restores 5 MP for 10
             sim.Apply(new AutoEquipBestCompanions());
             Assert.That(sim.State.Party.Slots.Select(x => x.Companion), Does.Contain(C_MP),
                         "even a net-draining Common lifts four starved pools, and it still auto-attacks (00 decision 109)");
@@ -279,31 +280,31 @@ namespace HeroCat.Sim.Tests
             var p = sim.Query.Power;
             for (int i = 0; i < 4; i++) Assert.That(p.MpSufficiency(i), Is.EqualTo(0.5), "0.5 MP/s per pool against 1 MP/s (00 decision 110)");
             Assert.That(p.MpSufficiency(4), Is.EqualTo(1.0), "an empty slot reads 1");
-            Assert.That(p.DamagePct(0), Is.EqualTo(64.0));
-            Assert.That(p.OwnFactor(0), Is.EqualTo(1 + 0.5 * 0.64).Within(1e-12));
+            Assert.That(p.DamagePct(0), Is.EqualTo(80.0));
+            Assert.That(p.OwnFactor(0), Is.EqualTo(1 + 0.5 * 0.80).Within(1e-12));
 
             Slot(sim, E_MP, E_DMG1, E_DMG2, E_DMG3);
             p = sim.Query.Power;
             Assert.That(p.DamagePct(0), Is.EqualTo(0.0), "MP_REGEN deals no damage");
             for (int i = 0; i < 4; i++)
-                Assert.That(p.MpSufficiency(i), Is.EqualTo(1.0), "16 MP per 10 s into every pool, its own included, covers 1 MP/s");
+                Assert.That(p.MpSufficiency(i), Is.EqualTo(1.0), "20 MP per 10 s into every pool, its own included, covers 1 MP/s");
 
             Slot(sim, C_MP, E_DMG1);
             p = sim.Query.Power;
-            double uptime = 0.5 / ((10 - 4) / 10.0), restore = uptime * 4 / 10.0;
+            double uptime = 0.5 / ((10 - 5) / 10.0), restore = uptime * 5 / 10.0;
             Assert.That(p.MpSufficiency(1), Is.EqualTo(0.5 + restore).Within(1e-12), "a net-draining restorer at what its own regen sustains");
             Assert.That(p.MpSufficiency(0), Is.EqualTo(0.5 + restore).Within(1e-12), "its own pool reads the same expression");
 
             Slot(sim, E_BUFF_GOLD, E_BUFF_ATK, E_DMG1);
             p = sim.Query.Power;
-            Assert.That((p.DamagePct(0), p.BuffAtkPct(1), p.DamagePct(2)), Is.EqualTo((0.0, 64.0, 64.0)), "BUFF_GOLD counts 0; BUFF_ATK is the party term");
+            Assert.That((p.DamagePct(0), p.BuffAtkPct(1), p.DamagePct(2)), Is.EqualTo((0.0, 80.0, 80.0)), "BUFF_GOLD counts 0; BUFF_ATK is the party term");
             Assert.That(p.MpSufficiency(0), Is.EqualTo(0.5), "but BUFF_GOLD draws MP like any other ability");
-            Assert.That(p.PartyBuff, Is.EqualTo(1 + 0.5 * 0.64).Within(1e-12));
+            Assert.That(p.PartyBuff, Is.EqualTo(1 + 0.5 * 0.80).Within(1e-12));
 
             Slot(sim, E_DMG1);
             sim.State.Companions.Items[E_DMG1].Copies = 3;   // level 2
             sim.Query.MarkDirty();
-            Assert.That(sim.Query.Power.DamagePct(0), Is.EqualTo(64.0 * Mvp.LevelMult(2)).Within(1e-12));
+            Assert.That(sim.Query.Power.DamagePct(0), Is.EqualTo(80.0 * Mvp.LevelMult(2)).Within(1e-12));
         }
 
         [Test]
@@ -400,7 +401,7 @@ namespace HeroCat.Sim.Tests
             var ev = sim.DrainEvents();
             Assert.That(ev.OfType<CompanionAbilityUsed>().Single().Slot, Is.EqualTo(2));
             double hits = ev.OfType<HitLanded>().Sum(h => h.Damage);
-            Assert.That(hp - f.EnemyHp - hits, Is.EqualTo(sim.Query.CompanionUnit(2) * 640.0 * Mvp.LevelMult(3) / 100).Within(1e-3));
+            Assert.That(hp - f.EnemyHp - hits, Is.EqualTo(sim.Query.CompanionUnit(2) * 800.0 * Mvp.LevelMult(3) / 100).Within(1e-3));
         }
 
         [Test]
@@ -478,9 +479,9 @@ namespace HeroCat.Sim.Tests
             var mp = sim.State.Combat.Mp;
             mp[0] = 20; mp[1] = 3; mp[2] = 0; mp[3] = 0; mp[4] = sim.Query.MpPoolMax;
             sim.Advance(1);
-            Assert.That(mp[0], Is.EqualTo(20 + 0.05 - 10 + 16).Within(1e-12), "its own pool: cost, then the restore");
-            Assert.That(mp[1], Is.EqualTo(3 + 0.05 + 16).Within(1e-12), "every other pool gets the restore");
-            Assert.That(mp[2], Is.EqualTo(0.05 + 16).Within(1e-12), "an empty slot's pool too");
+            Assert.That(mp[0], Is.EqualTo(20 + 0.05 - 10 + 20).Within(1e-12), "its own pool: cost, then the restore");
+            Assert.That(mp[1], Is.EqualTo(3 + 0.05 + 20).Within(1e-12), "every other pool gets the restore");
+            Assert.That(mp[2], Is.EqualTo(0.05 + 20).Within(1e-12), "an empty slot's pool too");
             Assert.That(mp[4], Is.EqualTo(sim.Query.MpPoolMax), "restores never pass MpPoolMax");
         }
 
@@ -519,7 +520,7 @@ namespace HeroCat.Sim.Tests
             var vm = SummonQuery.Collection(Mvp, sim.State, Banner.COMPANION);
             Assert.That((vm.PoolCount, vm.OwnedCount), Is.EqualTo((50, 6)), "the five starters plus one");
             var item = vm.Items.Single(i => i.Id == E_DMG2);
-            Assert.That((item.Equipped, item.Slot, item.ValueNow, item.Rarity), Is.EqualTo((true, (int?)1, 64.0, Rarity.EPIC)));
+            Assert.That((item.Equipped, item.Slot, item.ValueNow, item.Rarity), Is.EqualTo((true, (int?)1, 80.0, Rarity.EPIC)));
         }
     }
 }

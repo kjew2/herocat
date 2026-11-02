@@ -181,24 +181,24 @@ namespace HeroCat.Sim.Summons
         /// <summary>
         /// The weapon per party slot AutoEquipBestWeapons would set (04 section 6.3): the top-ranked owned weapons go to the
         /// occupied slots, best to the slot with the highest weight (the slot's coefficient on its weapon factor,
-        /// <c>Awakening * skillFactor * ownFactor</c>; party-wide factors are common to every slot); empty slots and the
+        /// <c>companionAtkMult * Awakening * skillFactor * ownFactor</c>; party-wide factors are common to every slot); empty slots and the
         /// lowest-weight slots past the owned count are unarmed. Sized PARTY_SLOTS.
         /// </summary>
         public static string[] BestWeapons(ContentDb db, GameState s)
         {
             var p = PowerFormula.Compute(db, s);
-            var order = SlotsByWeight(p, i => p.Awakening(i) * p.SkillFactor(i) * p.OwnFactor(i));
+            var order = SlotsByWeight(p, i => p.CompanionAtkMult(i) * p.Awakening(i) * p.SkillFactor(i) * p.OwnFactor(i));
             return Assign(db.Constants.PartySlots, order, RankOwned(db, s, Banner.WEAPON));
         }
 
         /// <summary>
         /// The skill per party slot AutoEquipBestSkills would set (04 section 7.2), as <see cref="BestWeapons"/> with the
-        /// weight <c>Awakening * weaponFactor * ownFactor</c>. Sized PARTY_SLOTS; empty slots get none.
+        /// weight <c>companionAtkMult * Awakening * weaponFactor * ownFactor</c>. Sized PARTY_SLOTS; empty slots get none.
         /// </summary>
         public static string[] BestSkills(ContentDb db, GameState s)
         {
             var p = PowerFormula.Compute(db, s);
-            var order = SlotsByWeight(p, i => p.Awakening(i) * p.WeaponFactor(i) * p.OwnFactor(i));
+            var order = SlotsByWeight(p, i => p.CompanionAtkMult(i) * p.Awakening(i) * p.WeaponFactor(i) * p.OwnFactor(i));
             return Assign(db.Constants.PartySlots, order, RankOwned(db, s, Banner.SKILL));
         }
 

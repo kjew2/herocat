@@ -132,8 +132,8 @@ namespace HeroCat.Runtime.Tests
         public void Awakened_CarriesTheRanksCost_AndTheRockCandyBalanceAfterTheDebit()   // 03 section 11
         {
             var h = new Harness();
-            h.Publish(new CurrencyChanged(Currency.ROCK_CANDY, -100, 25, CurrencyReason.AWAKENING), new Awakened(2, 1));
-            AssertProps(h.Single("awakened"), new Dictionary<string, object> { ["rank"] = 1, ["rockCandyCost"] = 100L, ["rockCandyAfter"] = 25.0 });
+            h.Publish(new CurrencyChanged(Currency.ROCK_CANDY, -20, 25, CurrencyReason.AWAKENING), new Awakened(2, 1));
+            AssertProps(h.Single("awakened"), new Dictionary<string, object> { ["slot"] = 2, ["rank"] = 1, ["rockCandyCost"] = 20L, ["rockCandyAfter"] = 25.0 });
         }
 
         [Test]
@@ -159,7 +159,7 @@ namespace HeroCat.Runtime.Tests
                 new AnalyticsEvents.AchievementUnlocked("a", 1), new AnalyticsEvents.OfflineCatchup(1, 1, true, 1, 1, 1, 1),
                 new AnalyticsEvents.OfflineClaimed(1, 1, true, 1, 1, 1, false), new AnalyticsEvents.DayRollover(1, 0, 0),
                 new AnalyticsEvents.DailyGiftClaimed(), new AnalyticsEvents.Exchange("o", 1, 50), new AnalyticsEvents.ShopView("DIAMONDS"),
-                new AnalyticsEvents.Awakened(1, 100, 0),
+                new AnalyticsEvents.Awakened(0, 1, 20, 0),
                 new AnalyticsEvents.Summon("r", Banner.WEAPON, 1, "DIAMOND", 100, 0, 0, 1, 1, 1,
                                            new[] { new AnalyticsEvents.SummonResultRow("w", Rarity.COMMON, true, 0, 1, 0, false) }, 0, false, "LOCAL", 1),
                 new AnalyticsEvents.ItemAcquired(Banner.WEAPON, "w", Rarity.COMMON, true, 1, 0, 1, "SUMMON", "r"),

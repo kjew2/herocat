@@ -6,8 +6,8 @@ namespace HeroCat.Sim.Economy
 {
     /// <summary>
     /// The profile-created grant (09 tutorial_steps <c>tut_welcome</c>, issue #46): TUTORIAL_DIAMONDS with reason TUTORIAL
-    /// plus the starter party (TUTORIAL_COMPANION_IDS in slots 0-4) and the starter weapon TUTORIAL_WEAPON_ID in slot 0
-    /// (00 decision 109). Runtime's ProfileFactory applies it to the fresh state
+    /// plus the starter party (TUTORIAL_COMPANION_IDS in slots 0-4) and the five starter weapons TUTORIAL_WEAPON_IDS in slots
+    /// 0-4 (00 decisions 109, 111). Runtime's ProfileFactory applies it to the fresh state
     /// before any Simulation exists; it goes through the same <see cref="Ledger.Apply"/> path.
     /// </summary>
     public static class ProfileGrants
@@ -35,7 +35,9 @@ namespace HeroCat.Sim.Economy
             var starters = db.TutorialCompanionIds;
             for (int i = 0; i < starters.Count && i < slots.Length; i++)
                 if (slots[i].Companion == null) slots[i].Companion = starters[i];
-            if (db.TutorialWeaponId != null && slots.Length > 0 && slots[0].Weapon == null) slots[0].Weapon = db.TutorialWeaponId;
+            var weapons = db.TutorialWeaponIds;   // TUTORIAL_WEAPON_IDS into slots 0.. (00 decision 111)
+            for (int i = 0; i < weapons.Count && i < slots.Length; i++)
+                if (slots[i].Weapon == null) slots[i].Weapon = weapons[i];
             s.Tutorial.TutorialDiamondsGranted = true;
             return true;
         }

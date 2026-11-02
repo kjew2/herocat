@@ -1,7 +1,7 @@
 {
   "SchemaVersion": 1,
-  "ContentVersion": "2026.11.02.7",
-  "ContentHash": "b58003eb95e5f1255c2446176448d0f304766c820bb182bf8108b6aa08f580d6",
+  "ContentVersion": "2026.11.02.8",
+  "ContentHash": "8de61436aff500af808e18894f2b0f31041221f5e4aef977e439311149ca1413",
   "PlayerId": "00000007-0000-4000-8000-000000000001",
   "DeviceId": "b07b07b0-0000-4000-8000-000000000001",
   "RngRoot": "00000007-0000-4000-8000-000000000001",
@@ -18,8 +18,8 @@
     "LoginDayKey": 20460
   },
   "Party": {
-    "Level": 132,
-    "Exp": 1981659.5333610717,
+    "Level": 133,
+    "Exp": 211463.64067302176,
     "Slots": [
       {
         "Companion": "comp_c_01",
@@ -58,15 +58,15 @@
       148,
       0,
       0,
-      136,
+      137,
       132,
       100,
-      127,
-      130
+      128,
+      131
     ]
   },
   "Wallet": {
-    "Gold": 179857.57242234985,
+    "Gold": 30786.116817207134,
     "Diamond": 880,
     "FishCoin": 14305.599999999424,
     "RockCandy": 11,
@@ -91,7 +91,22 @@
         "FirstAcquiredServerTime": 1767603600
       },
       "weapon_c_02": {
-        "Copies": 2,
+        "Copies": 3,
+        "LimitBreaks": 0,
+        "FirstAcquiredServerTime": 1767603600
+      },
+      "weapon_c_03": {
+        "Copies": 1,
+        "LimitBreaks": 0,
+        "FirstAcquiredServerTime": 1767603600
+      },
+      "weapon_c_04": {
+        "Copies": 1,
+        "LimitBreaks": 0,
+        "FirstAcquiredServerTime": 1767603600
+      },
+      "weapon_c_05": {
+        "Copies": 1,
         "LimitBreaks": 0,
         "FirstAcquiredServerTime": 1767603600
       },
@@ -249,11 +264,11 @@
     "BossFailsOnStage": 1,
     "Selected": null,
     "Mp": [
-      6.5636385215839255E-12,
-      6.830092047493963E-12,
-      7.071676577652397E-12,
-      7.350564601438236E-12,
-      7.65432162097568E-12
+      6.5849548036567285E-12,
+      10.000000000006892,
+      10.000000000007198,
+      10.000000000007589,
+      10.000000000007926
     ],
     "SkillCooldowns": [
       0,
@@ -264,10 +279,10 @@
     ],
     "CompanionCooldowns": [
       100,
-      100,
-      100,
-      100,
-      100
+      0,
+      0,
+      0,
+      0
     ],
     "MissileQueue": [
       0.075,
@@ -347,7 +362,7 @@
     },
     "crit": {
       "Seed": "10e431400760b15e",
-      "Counter": 101058
+      "Counter": 101752
     },
     "dungeon": {
       "Seed": "0ff384dc670a7e71",
@@ -377,19 +392,19 @@
   "Stats": {
     "Kills": 3937,
     "BossKills": 23,
-    "BossFails": 9,
-    "PartyHits": 101058,
+    "BossFails": 7,
+    "PartyHits": 101752,
     "Taps": 0,
     "Pulls": 10,
     "Merges": 2433,
     "FishReleased": 2440,
     "FishDiscards": 0,
     "DungeonClears": 0,
-    "TrainingLevelsBought": 773,
+    "TrainingLevelsBought": 776,
     "FirstWallStage": 130,
     "ActiveSeconds": 14400,
-    "GoldEarned": 37793703.856666595,
-    "GoldSpent": 37613846.28424445,
+    "GoldEarned": 38740127.07613188,
+    "GoldSpent": 38709340.959314145,
     "FishCoinEarned": 14305.599999999424,
     "DiamondsEarned": 1880,
     "DiamondsSpent": 1000,

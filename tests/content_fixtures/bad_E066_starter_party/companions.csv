@@ -1,0 +1,6 @@
+id,rarity,ability_type,dps_pct,mp_cost,cooldown_ticks,duration_ticks,tier,name_key,desc_key,icon,sprite,vfx
+comp_c_01,COMMON,DAMAGE,20.0,10,100,,M0,rarity.common.name,rarity.common.name,icon_comp_c_01,spr_comp_c_01,vfx_comp_c_01
+comp_r_01,RARE,DAMAGE,40.0,10,100,,M0,rarity.common.name,rarity.common.name,icon_comp_r_01,spr_comp_r_01,vfx_comp_r_01
+comp_e_01,EPIC,DAMAGE,80.0,10,100,,M0,rarity.common.name,rarity.common.name,icon_comp_e_01,spr_comp_e_01,vfx_comp_e_01
+comp_l_01,LEGENDARY,DAMAGE,160.0,10,100,,M0,rarity.common.name,rarity.common.name,icon_comp_l_01,spr_comp_l_01,vfx_comp_l_01
+comp_m_01,MYTHIC,DAMAGE,320.0,10,100,,M0,rarity.common.name,rarity.common.name,icon_comp_m_01,spr_comp_m_01,vfx_comp_m_01

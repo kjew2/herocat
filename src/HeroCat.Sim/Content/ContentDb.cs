@@ -60,7 +60,13 @@ namespace HeroCat.Sim.Content
         /// <summary>By Rank; tools and bots only.</summary>
         public IReadOnlyList<AwakeningTargetDef> AwakeningTargets { get; private set; }
 
-        /// <summary>TUTORIAL_WEAPON_ID: the item grant on the PROFILE_CREATED step (tut_welcome); null if absent.</summary>
+        /// <summary>
+        /// TUTORIAL_WEAPON_IDS: the PROFILE_CREATED step's WEAPON grants in grant order, which is slot order (00 decision
+        /// 111); empty if absent.
+        /// </summary>
+        public IReadOnlyList<string> TutorialWeaponIds { get; private set; } = System.Array.Empty<string>();
+
+        /// <summary>Slot 0's starter weapon, the first of <see cref="TutorialWeaponIds"/>; null if absent.</summary>
         public string TutorialWeaponId { get; private set; }
 
         /// <summary>

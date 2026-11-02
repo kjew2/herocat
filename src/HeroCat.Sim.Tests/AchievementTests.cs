@@ -245,7 +245,7 @@ namespace HeroCat.Sim.Tests
             var ev = sim.DrainEvents().OfType<QuestCompleted>().Select(e => e.QuestId).ToArray();
             Assert.That(ev, Is.EqualTo(new[]
             {
-                "ach_stage_02", "ach_stage_03", "ach_stage_04", "ach_hero_level_01", "ach_hero_level_02", "ach_companions_01",
+                "ach_stage_02", "ach_stage_03", "ach_stage_04", "ach_hero_level_01", "ach_hero_level_02", "ach_weapons_01", "ach_companions_01",
                 "ach_fish_level_01", "ach_fish_level_02", "ach_awakening_01", "ach_awakening_02",
                 "ach_merges_01", "ach_merges_02", "ach_merges_03", "ach_summons_01", "ach_summons_02", "ach_summons_03",
             }));

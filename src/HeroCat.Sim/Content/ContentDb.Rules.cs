@@ -152,7 +152,7 @@ namespace HeroCat.Sim.Content
                 Add(t, "rarities", d.Rarities, r => r.Id, (r, x) =>
                 {
                     x["id"] = r.Id; x["weapon_atk_pct"] = r.WeaponAtkPct; x["weapon_passive_pct"] = r.WeaponPassivePct;
-                    x["skill_dps_pct"] = r.SkillDpsPct; x["companion_dps_pct"] = r.CompanionDpsPct; x["rune_stat_pct"] = r.RuneStatPct;
+                    x["skill_dps_pct"] = r.SkillDpsPct; x["companion_dps_pct"] = r.CompanionDpsPct; x["companion_atk_mult"] = r.CompanionAtkMult; x["rune_stat_pct"] = r.RuneStatPct;
                     x["limit_break_cost"] = r.LimitBreakCost; x["dupe_overflow_rock_candy"] = r.DupeOverflowRockCandy;
                     x["override_tolerance"] = r.OverrideTolerance;
                 });
@@ -567,6 +567,7 @@ namespace HeroCat.Sim.Content
                 Rng("training_curves", "cost0", pos, "> 0");
                 Rng("training_curves", "cost_g", gt1, "> 1");
                 Rng("rarities", "limit_break_cost", ge1, ">= 1");
+                Rng("rarities", "companion_atk_mult", pos, "> 0");
                 Rng("rarities", "dupe_overflow_rock_candy", ge0, ">= 0");
                 Rng("skills", "cooldown_ticks", v => v >= SkillCooldownMin && v <= SkillCooldownMax, "in [30, 300]");
                 Rng("skills", "buff_pct", pos, "> 0");
