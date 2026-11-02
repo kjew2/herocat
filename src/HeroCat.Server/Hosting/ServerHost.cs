@@ -84,6 +84,7 @@ public static class ServerHost
         AddCore(builder.Services, builder.Configuration, ServerRole.Worker);
         builder.Services.AddHostedService<WorkerService>();
         builder.Services.AddHostedService<IdempotencyPurgeService>();
+        builder.Services.AddHostedService<InboxPurgeService>();
         return builder.Build();
     }
 
