@@ -20,7 +20,7 @@ namespace HeroCat.Remote.Services
     /// <item>Lines are sent byte for byte as queued, oldest first; a line that names an advertising id prop (08 section
     /// 10.1) is re-serialised without it, for every player.</item>
     /// <item>Lines that are not economy events, or do not parse, are not sent; the batch leaves the queue with the rest
-    /// (the Firebase leg, which gets every event, is not built: TODO(batch6-gap-1)). A batch with no economy event sends nothing.</item>
+    /// (the Firebase leg, which gets every event, is not built: TODO(#303)). A batch with no economy event sends nothing.</item>
     /// <item>Any 2xx is <see cref="UploadOutcome.Accepted"/>: the batch leaves the queue and the response's per-event
     /// <c>rejected</c> rows are final (a refused event can never succeed on a retry; they are only counted).</item>
     /// <item>Offline, timeout, 5xx, 408/425/429, 409 (<c>IDEMPOTENCY_IN_FLIGHT</c>), 401/403 (signed out, refresh refused,
