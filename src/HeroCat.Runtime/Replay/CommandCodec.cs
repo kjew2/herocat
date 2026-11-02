@@ -53,6 +53,10 @@ namespace HeroCat.Runtime.Replay
             // Quest claims (06 section 5.5; issue #170).
             (typeof(ClaimQuest), "ClaimQuest"),
             (typeof(ClaimAllQuests), "ClaimAllQuests"),
+            // Companions (04 section 8.2; issue #161).
+            (typeof(EquipCompanion), "EquipCompanion"),
+            (typeof(UnequipCompanion), "UnequipCompanion"),
+            (typeof(AutoEquipBestCompanions), "AutoEquipBestCompanions"),
             // Research (03 section 6; issue #158).
             (typeof(Research), "Research"),
             // Shop: daily gift and exchange (06 sections 8.3-8.4; issue #174).

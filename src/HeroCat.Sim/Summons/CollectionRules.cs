@@ -37,7 +37,7 @@ namespace HeroCat.Sim.Summons
 
         /// <summary>
         /// The rated value auto-equip ranks by (04 sections 6.3 and 7.2), in percentage points after LevelMult:
-        /// WEAPON_ATK_PCT * LevelMult for a weapon, dps_pct * LevelMult for a skill. 0 when unowned or unknown.
+        /// WEAPON_ATK_PCT * LevelMult for a weapon, dps_pct * LevelMult for a skill or companion. 0 when unowned or unknown.
         /// </summary>
         public static double RatedValue(ContentDb db, Banner b, CollectionState col, string id)
         {
@@ -45,12 +45,13 @@ namespace HeroCat.Sim.Summons
             return BaseValue(db, b, id) * LevelMult(db, item);
         }
 
-        /// <summary>The level-1 value of <paramref name="id"/>: WEAPON_ATK_PCT for a weapon, dps_pct for a skill; 0 otherwise.</summary>
+        /// <summary>The level-1 value of <paramref name="id"/>: WEAPON_ATK_PCT for a weapon, dps_pct for a skill or companion; 0 otherwise.</summary>
         public static double BaseValue(ContentDb db, Banner b, string id)
         {
             if (id == null) return 0.0;
             if (b == Banner.WEAPON && db.Weapons.TryGetValue(id, out var w)) return w.AtkPct;
             if (b == Banner.SKILL && db.Skills.TryGetValue(id, out var k)) return k.DpsPct;
+            if (b == Banner.COMPANION && db.Companions.TryGetValue(id, out var c)) return c.DpsPct;
             return 0.0;
         }
 
@@ -58,6 +59,7 @@ namespace HeroCat.Sim.Summons
         {
             if (b == Banner.WEAPON && db.Weapons.TryGetValue(id, out var w)) return w.Rarity;
             if (b == Banner.SKILL && db.Skills.TryGetValue(id, out var k)) return k.Rarity;
+            if (b == Banner.COMPANION && db.Companions.TryGetValue(id, out var c)) return c.Rarity;
             return Rarity.COMMON;
         }
 
@@ -69,16 +71,17 @@ namespace HeroCat.Sim.Summons
             {
                 case Banner.WEAPON: return db.Weapons.ContainsKey(id);
                 case Banner.SKILL: return db.Skills.ContainsKey(id);
-                default: return false;   // TODO(#161, #227): companion and rune rows
+                case Banner.COMPANION: return db.Companions.ContainsKey(id);
+                default: return false;   // TODO(#227): rune rows
             }
         }
 
-        /// <summary>The collectible kinds a limit break applies to, in lookup order (04 section 5.2). TODO(#161): COMPANION.</summary>
-        public static readonly Banner[] LimitBreakKinds = { Banner.WEAPON, Banner.SKILL };
+        /// <summary>The collectible kinds a limit break applies to, in lookup order (04 section 5.2).</summary>
+        public static readonly Banner[] LimitBreakKinds = { Banner.WEAPON, Banner.SKILL, Banner.COMPANION };
 
         /// <summary>
         /// The kind of content id <paramref name="id"/> among <see cref="LimitBreakKinds"/>; false for an unknown id. Ids are
-        /// table-prefixed (weapon_*, skill_*, 09), so at most one kind matches; the first in lookup order wins.
+        /// table-prefixed (weapon_*, skill_*, comp_*, 09), so at most one kind matches; the first in lookup order wins.
         /// </summary>
         public static bool TryKindOf(ContentDb db, string id, out Banner kind)
         {
@@ -147,6 +150,51 @@ namespace HeroCat.Sim.Summons
             for (int i = 0; i < r.Length && i < ranked.Count; i++) r[i] = ranked[i];
             return r;
         }
+
+        /// <summary>
+        /// The companion loadout AutoEquipBestCompanions would set (04 section 8.2), sized COMPANION_SLOTS, null past the open
+        /// slots (03 section 5.3). The pure-damage loadout is the best owned DAMAGE and BUFF_ATK companions in rank order,
+        /// best in slot 0 (BUFF_GOLD adds no DPS and is left to the player). When its mpSufficiency is below 1 and at least two slots are open, one slot is reserved for the best owned
+        /// MP_REGEN companion: it takes slot 0 (cast priority, so it is never starved of MP) and the worst damage pick drops
+        /// out. The reserve is kept only if it raises the rated companion layer (a Common or Rare MP_REGEN at level 1 restores
+        /// less MP than it costs). MP_REGEN companions never fill other slots: past the reserve they add nothing.
+        /// </summary>
+        public static string[] BestCompanions(ContentDb db, GameState s)
+        {
+            var r = new string[db.Constants.CompanionSlots];
+            int open = Math.Min(r.Length, AwakeningRules.CompanionSlots(db, s));
+            string bestRegen = null;
+            var damage = new List<string>();
+            foreach (var id in RankOwned(db, s, Banner.COMPANION))
+            {
+                var def = db.Companions[id];
+                if (def.CountsInLayer) damage.Add(id);
+                else if (def.AbilityType == AbilityType.MP_REGEN && bestRegen == null) bestRegen = id;
+            }
+            for (int i = 0; i < open && i < damage.Count; i++) r[i] = damage[i];
+            if (open < 2 || bestRegen == null || LoadoutMpSufficiency(db, s, r) >= 1.0) return r;
+
+            var reserved = new string[r.Length];
+            reserved[0] = bestRegen;
+            for (int i = 1; i < open && i - 1 < damage.Count; i++) reserved[i] = damage[i - 1];
+            // TODO(#276): a level-1 Common or Rare MP_REGEN drains MP, so the reserve is kept only when it helps.
+            return LoadoutCompanionMult(db, s, reserved) > LoadoutCompanionMult(db, s, r) ? reserved : r;
+        }
+
+        static double LoadoutMpSufficiency(ContentDb db, GameState s, string[] loadout) => PowerFormula.MpSufficiency(db, WithCompanions(s, loadout));
+
+        static double LoadoutCompanionMult(ContentDb db, GameState s, string[] loadout)
+        {
+            var probe = WithCompanions(s, loadout);
+            return 1.0 + PowerFormula.MpSufficiency(db, probe) * PowerFormula.CompanionDpsPct(db, probe) / Units.Percent;
+        }
+
+        /// <summary>A shallow probe of <paramref name="s"/> whose companion loadout is <paramref name="loadout"/>; nothing else is read.</summary>
+        static GameState WithCompanions(GameState s, string[] loadout) => new GameState
+        {
+            Companions = s.Companions, Hero = s.Hero, Research = s.Research,
+            Loadout = new LoadoutState { Companions = loadout },
+        };
 
         /// <summary>
         /// The "better skill available" badge (04 open question 4 default): an owned, unequipped skill outranks an

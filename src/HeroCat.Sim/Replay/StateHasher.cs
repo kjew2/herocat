@@ -21,8 +21,8 @@ namespace HeroCat.Sim.Replay
     /// </summary>
     public static class StateHasher
     {
-        public const int Version = 2;
-        static readonly byte[] Magic = Encoding.ASCII.GetBytes("HEROCAT-STATEHASH-v2");
+        public const int Version = 3;   // literal-ok: encoding version; 3 adds FightState.GoldBuffPct / GoldBuffTicksLeft (issue #156)
+        static readonly byte[] Magic = Encoding.ASCII.GetBytes("HEROCAT-STATEHASH-v3");
 
         /// <summary>Lowercase hex SHA-256 of the play-state encoding.</summary>
         public static string Hash(GameState s) => Sha256.Hex(Sha256.Compute(Encode(s, includeBookkeeping: false)));
@@ -97,7 +97,8 @@ namespace HeroCat.Sim.Replay
                 w.I32(fi.BossTicksLeft); w.I32(fi.AttackProgress);
                 w.I32(fi.ActiveDots.Count);
                 foreach (var d in fi.ActiveDots) { w.I32(d.TicksLeft); w.F64(d.DamagePerTick); }
-                w.F64(fi.AtkBuffPct); w.I32(fi.AtkBuffTicksLeft); w.I32(fi.PendingTaps); w.I32(fi.TapsThisSecond);
+                w.F64(fi.AtkBuffPct); w.I32(fi.AtkBuffTicksLeft); w.F64(fi.GoldBuffPct); w.I32(fi.GoldBuffTicksLeft);
+                w.I32(fi.PendingTaps); w.I32(fi.TapsThisSecond);
                 w.I64(fi.TapWindowTick);
             }
 

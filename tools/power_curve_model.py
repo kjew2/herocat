@@ -83,7 +83,8 @@ RESEARCH_FALLBACK = [   # 03 section 6 / 09 section 5.18. Only for content witho
     {"id": "res_offline_cap", "effect": "OFFLINE_CAP", "effect_per_level": 2.0, "effect_floor": None, "max_level": 6, "cost0": 500.0, "cost_g": 1.50, "unlock_awaken_rank": 1},
 ]
 # 04 section 8.1: ability mix 50% DAMAGE, 20% BUFF_ATK, 15% BUFF_GOLD, 15% MP_REGEN; mp_cost 10, cooldown 100 ticks.
-# Pool sizes come from banners[COMPANION].pool_size and dps_pct from rarities.companion_dps_pct. TODO(#161).
+# Used only for content without a companions table (it ships since issue #161): pool sizes from banners[COMPANION].pool_size,
+# dps_pct from rarities.companion_dps_pct.
 COMPANION_FALLBACK = {"mix": [("DAMAGE", 0.50), ("BUFF_ATK", 0.20), ("BUFF_GOLD", 0.15), ("MP_REGEN", 0.15)],
                       "mp_cost": 10, "cooldown_ticks": 100}
 # 06 sections 6.1-6.3 / 09 sections 5.24-5.25. TODO(#173): read dungeons and dungeon_floors once they ship.
@@ -223,7 +224,7 @@ class Params:
             rows = db.table("companions", None)
             if rows is None:
                 rows = self._companion_fallback(banners["COMPANION"])
-                self.fallbacks.append("companions: 04 section 8.1 pool mix and defaults (content has no companions table, TODO(#161))")
+                self.fallbacks.append("companions: 04 section 8.1 pool mix and defaults (content has no companions table)")
             self.companions = {r["id"]: r for r in rows if tier_ok(r)}
             pool = self.banner["COMPANION"].pool
             for r in RARITIES:

@@ -12,7 +12,7 @@ namespace HeroCat.Sim.Summons
         bool Owned, int Copies, int Level, int LimitBreaks, int EffectiveLevel,
         int CopiesToNextLevel,                    // 0 at level 10
         int NextLimitBreakCost,                   // Rock Candy; 0 when maxed or unowned
-        double ValueNow, double ValueNextLevel,   // weapons: equipped pct; skills: dps_pct; after LevelMult (0 / level-1 value when unowned)
+        double ValueNow, double ValueNextLevel,   // weapons: equipped pct; skills and companions: dps_pct; after LevelMult (0 / level-1 value when unowned)
         double PassiveNow,                        // weapons only: passive pct after LevelMult; 0 otherwise
         bool Equipped, int? Slot,
         bool IsNew);                              // from the client's NEW badge store (ClientPrefs), never sim state
@@ -21,7 +21,7 @@ namespace HeroCat.Sim.Summons
     public sealed record CollectionVm(
         Banner Banner, IReadOnlyList<CollectibleVm> Items,
         int OwnedCount, int PoolCount,
-        double LayerMult,                         // weaponMult / skillMult from the Power layer; 1 for kinds without a layer yet
+        double LayerMult,                         // weaponMult / skillMult / companionMult from the Power layer; 1 for runes (P1)
         double PassiveTotal,                      // weapons: weaponPassivePct (percentage points); 0 otherwise
         int NewCount,
         int BannerLevel, int PullsToNextLevel);
@@ -131,13 +131,14 @@ namespace HeroCat.Sim.Summons
                                     BannerLevel(db, s, b), PullsToNextLevel(db, s, b));
         }
 
-        /// <summary>The collection's power-formula layer (03 section 7.1): weaponMult, skillMult; 1 for companions and runes until #161/#227.</summary>
+        /// <summary>The collection's power-formula layer (03 section 7.1): weaponMult, skillMult, companionMult; 1 for runes until #227.</summary>
         public static double LayerMult(ContentDb db, GameState s, Banner b)
         {
             switch (b)
             {
                 case Banner.WEAPON: return 1.0 + (PowerFormula.EquippedWeaponPct(db, s) + PowerFormula.WeaponPassivePct(db, s)) / Units.Percent;
                 case Banner.SKILL: return 1.0 + PowerFormula.SkillDpsPct(db, s) / Units.Percent;
+                case Banner.COMPANION: return 1.0 + PowerFormula.MpSufficiency(db, s) * PowerFormula.CompanionDpsPct(db, s) / Units.Percent;
                 default: return 1.0;
             }
         }
@@ -170,6 +171,14 @@ namespace HeroCat.Sim.Summons
             {
                 nameKey = k.NameKey; icon = k.Icon; rarity = k.Rarity;
                 var slots = s.Loadout.Skills;
+                if (slots != null)
+                    for (int i = 0; i < slots.Length; i++)
+                        if (slots[i] == id) { equipped = true; slot = i; break; }
+            }
+            else if (b == Banner.COMPANION && db.Companions.TryGetValue(id, out var cp))
+            {
+                nameKey = cp.NameKey; icon = cp.Icon; rarity = cp.Rarity;
+                var slots = s.Loadout.Companions;
                 if (slots != null)
                     for (int i = 0; i < slots.Length; i++)
                         if (slots[i] == id) { equipped = true; slot = i; break; }

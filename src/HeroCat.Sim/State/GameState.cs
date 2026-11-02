@@ -240,6 +240,8 @@ namespace HeroCat.Sim.State
         public List<DotInstance> ActiveDots { get; init; } = new List<DotInstance>();   // max 6 (03 section 2.3)
         public double AtkBuffPct       { get; set; }          // strongest active BUFF, percentage points
         public int    AtkBuffTicksLeft { get; set; }
+        public double GoldBuffPct      { get; set; }          // strongest active BUFF_GOLD companion, percentage points (04 section 8.1)
+        public int    GoldBuffTicksLeft { get; set; }
         public int    PendingTaps      { get; set; }          // taps accepted since the last tick
         public int    TapsThisSecond   { get; set; }          // TAP_ZAP_MAX_PER_SEC guard
         public long   TapWindowTick    { get; set; }          // Time.Tick at which the current tap window opened

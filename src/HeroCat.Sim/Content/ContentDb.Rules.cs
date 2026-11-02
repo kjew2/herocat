@@ -648,7 +648,7 @@ namespace HeroCat.Sim.Content
                 foreach (var b in T("banners"))
                 {
                     if (!PoolTables.TryGetValue(b.S("id"), out var table)) continue;
-                    // A banner whose pool table is not authored yet is skipped (TODO(#161): companions), as in the exporter.
+                    // A banner whose pool table is not authored yet (runes, P1) is skipped, as in the exporter.
                     if (!(bool)b["enabled"] || !TierLe(b) || !Has(table)) continue;
                     for (int i = 0; i < rarities.Length; i++)
                     {

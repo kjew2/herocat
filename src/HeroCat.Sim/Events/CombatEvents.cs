@@ -36,6 +36,9 @@ namespace HeroCat.Sim.Events
     /// <summary>An equipped skill auto-cast (03 section 2.3).</summary>
     public sealed record SkillCast(int Slot, string SkillId) : Event;
 
+    /// <summary>An equipped companion's ability fired (03 section 2.4). Mp is the pool after the cast (and any MP_REGEN restore).</summary>
+    public sealed record CompanionAbilityUsed(int Slot, string CompanionId, double Mp) : Event;
+
     /// <summary>One queued fish missile applied (03 section 2.5). Fraction is the hit fraction 05 enqueued.</summary>
     public sealed record FishMissileHit(double Fraction, double Damage) : Event;
 

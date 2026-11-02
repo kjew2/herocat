@@ -187,7 +187,7 @@ namespace HeroCat.Sim
 
         /// <summary>
         /// 04 section 5.2. An unknown id is rejected like the equip commands (InvalidTarget, UNKNOWN_ITEM) before the
-        /// spec's three checks; companion ids are unknown until #161 (TODO(#161)). No level-10 requirement.
+        /// spec's three checks. Weapons, skills and companions (CollectionRules.LimitBreakKinds). No level-10 requirement.
         /// </summary>
         internal ApplyResult HandleLimitBreak(LimitBreak c)
         {
@@ -282,6 +282,75 @@ namespace HeroCat.Sim
             StartSlotCooldown(slot, id);
             SummonsMarkDpsDirty();
             Emit(new ItemEquipped(Banner.SKILL, slot, id, prev, false));
+        }
+
+        // ================================================================================================ companions (04 8.2)
+
+        internal ApplyResult HandleEquipCompanion(EquipCompanion c)
+        {
+            var slots = CompanionSlots();
+            if (c.Slot < 0 || c.Slot >= slots.Length) return ApplyResult.Reject(RejectCode.BadArgument, CollectionRejectReasons.BAD_SLOT);
+            if (c.Slot >= AwakeningRules.CompanionSlots(Db, State))
+                return ApplyResult.Reject(RejectCode.Locked, CollectionRejectReasons.COMPANION_SLOT_LOCKED);
+            if (c.CompanionId == null || !Db.Companions.ContainsKey(c.CompanionId))
+                return ApplyResult.Reject(RejectCode.InvalidTarget, CollectionRejectReasons.UNKNOWN_ITEM);
+            if (!CollectionRules.Owns(State.Companions, c.CompanionId))
+                return ApplyResult.Reject(RejectCode.NotOwned, CollectionRejectReasons.ITEM_NOT_OWNED);
+            if (slots[c.Slot] == c.CompanionId) return ApplyResult.Reject(RejectCode.InvalidTarget, CollectionRejectReasons.ALREADY_EQUIPPED);
+            for (int i = 0; i < slots.Length; i++)
+                if (i != c.Slot && slots[i] == c.CompanionId)
+                    return ApplyResult.Reject(RejectCode.InvalidTarget, CollectionRejectReasons.COMPANION_IN_OTHER_SLOT);
+            SetCompanion(slots, c.Slot, c.CompanionId, auto: false);
+            return ApplyResult.Accepted;
+        }
+
+        /// <summary>Any slot in range may be emptied, a locked one included (a loaded save may hold one).</summary>
+        internal ApplyResult HandleUnequipCompanion(UnequipCompanion c)
+        {
+            var slots = CompanionSlots();
+            if (c.Slot < 0 || c.Slot >= slots.Length) return ApplyResult.Reject(RejectCode.BadArgument, CollectionRejectReasons.BAD_SLOT);
+            if (slots[c.Slot] == null) return ApplyResult.Reject(RejectCode.InvalidTarget, CollectionRejectReasons.SLOT_EMPTY);
+            SetCompanion(slots, c.Slot, null, auto: false);
+            return ApplyResult.Accepted;
+        }
+
+        internal ApplyResult HandleAutoEquipBestCompanions(AutoEquipBestCompanions c)
+        {
+            var slots = CompanionSlots();
+            var best = CollectionRules.BestCompanions(Db, State);
+            for (int i = 0; i < slots.Length; i++)
+            {
+                string id = i < best.Length ? best[i] : null;
+                if (slots[i] != id) SetCompanion(slots, i, id, auto: false);
+            }
+            return ApplyResult.Accepted;
+        }
+
+        /// <summary>Loadout.Companions sized COMPANION_SLOTS, as <see cref="SkillSlots"/>: a resized copy only SetCompanion stores.</summary>
+        string[] CompanionSlots()
+        {
+            int n = Db.Constants.CompanionSlots;
+            var s = State.Loadout.Companions;
+            if (s != null && s.Length == n) return s;
+            var r = new string[n];
+            if (s != null) Array.Copy(s, r, Math.Min(s.Length, n));
+            return r;
+        }
+
+        /// <summary>
+        /// As skills (<see cref="StartSlotCooldown"/>): a companion put into a slot starts on its full cooldown, an emptied
+        /// slot has none, so re-slotting never skips a cooldown.
+        /// </summary>
+        void SetCompanion(string[] slots, int slot, string id, bool auto)
+        {
+            string prev = slots[slot];
+            slots[slot] = id;
+            State.Loadout.Companions = slots;
+            var cds = State.Combat.CompanionCooldowns;
+            if (cds != null && slot < cds.Length)
+                cds[slot] = id != null && Db.Companions.TryGetValue(id, out var def) ? def.CooldownTicks : 0;
+            SummonsMarkDpsDirty();
+            Emit(new ItemEquipped(Banner.COMPANION, slot, id, prev, auto));
         }
     }
 }
