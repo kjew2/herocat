@@ -20,7 +20,7 @@ namespace HeroCat.Client.Core
         /// <summary>The screens this build implements (M0, 07 tiers). Others route to a locked toast.</summary>
         public static readonly IReadOnlyList<string> M0 = new[]
         {
-            Boot, Main, Hero, Weapons, Skills, Summon, SummonResult, OfflineReward, ItemDetail, Confirm, Error,
+            Boot, Main, Hero, Weapons, Skills, Companions, Summon, SummonResult, OfflineReward, ItemDetail, Confirm, Error,
         };
 
         public static bool IsM0(string id)

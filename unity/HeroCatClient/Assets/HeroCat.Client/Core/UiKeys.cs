@@ -104,6 +104,13 @@ namespace HeroCat.Client.Core
         public const string SkillStats = "scr.skills.stats";                   // "DPS {0} · CD {1} · {2}"
         public const string SkillsAutoEquip = "scr.skills.auto_equip";
         public const string SkillsSlots = "scr.skills.slots";
+        public const string CompanionsTitle = "scr.companions.title";
+        public const string CompanionsSlots = "scr.companions.slots";
+        public const string CompanionsStats = "scr.companions.stats";         // "{0} · DPS {1} · every {2}"
+        public const string CompanionsMp = "scr.companions.mp";               // "MP {0} / {1} · regen {2}/s"
+        public const string CompanionsBudget = "scr.companions.budget";       // "Equipped cost {0} MP/s"
+        public const string CompanionsSlotAwaken = "scr.companions.slot_awaken"; // "Awakening {0}"
+        public const string CompanionsSlotLocked = "scr.companions.slot_locked";
         public const string SortRarity = "scr.collection.sort_rarity", SortLevel = "scr.collection.sort_level", SortNewest = "scr.collection.sort_newest",
                             SortOwned = "scr.collection.sort_owned";
         public const string FilterAll = "scr.collection.filter_all", FilterOwned = "scr.collection.filter_owned";
@@ -124,6 +131,8 @@ namespace HeroCat.Client.Core
         };
 
         public static string CastTypeKey(CastType t) => "scr.skills.cast_" + t.ToString().ToLowerInvariant();
+
+        public static string AbilityKey(AbilityType t) => "scr.companions.ability_" + t.ToString().ToLowerInvariant();
 
         /// <summary>09's rarity rows: <c>rarity.epic.name</c>.</summary>
         public static string RarityName(Rarity r) => TextFmt.RarityKey(r);

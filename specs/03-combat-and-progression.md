@@ -2,7 +2,7 @@
 
 This spec owns the per-tick combat loop in `HeroCat.Sim`, the stage and boss rules, the eight `Stat`s and their Training curves, Hero Level, Awakening, Research, and the power formula that ties every layer together. It also specifies `tools/power_curve_model.py`, the greedy F2P bot that validates every `S` constant below and produces the day-stage table in 00 section 6.6. Where this spec and `00-overview.md` disagree, 00 wins.
 
-Tiers covered: M0 (combat, stages, Tap Zap, fish missiles in the tick loop, Training, Hero Level), MVP (Awakening, Research, companions in the tick loop), P1 (Runes term, auto boss retry, Tower survival fights).
+Tiers covered: M0 (combat, stages, Tap Zap, fish missiles in the tick loop, Training, Hero Level, companions in the tick loop (00 decision 107)), MVP (Awakening, Research), P1 (Runes term, auto boss retry, Tower survival fights).
 
 Depends on: 00 (all constants and names), 02 (`GameState` fields this spec reads and writes), 04 (weapon/skill/companion data the tick loop consumes), 05 (fish missile queue and `FISH_BOARD_DPS_PCT`), 06 (Rock Candy and Fish Coin income the bot assumes).
 
@@ -100,7 +100,7 @@ AutoCastSkills():
 
 Casting requires a live enemy (`Phase == Fighting`). During `Spawning` cooldowns still tick down, so a skill that comes off cooldown between enemies fires on the first tick of the next fight. This is why skills feel like a burst at spawn and why the boss timer check is last in the tick.
 
-### 2.4 Companions and the MP pool (MVP)
+### 2.4 Companions and the MP pool (M0, 00 decision 107)
 
 Companions (04 section 8) have `abilityType` in `DAMAGE`, `BUFF_ATK`, `BUFF_GOLD`, `MP_REGEN`, an `mpCost`, a `cooldownTicks` and a magnitude. All four equipped companions draw from one pool:
 

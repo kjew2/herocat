@@ -75,7 +75,7 @@ namespace HeroCat.Sim.Tests
             foreach (Banner kind in CollectionRules.LimitBreakKinds)
                 foreach (Rarity r in Enum.GetValues(typeof(Rarity)))
                 {
-                    if (Db.Pool(kind, r).Count == 0) continue;   // companions are MVP: none in the M0 tier (CompanionTests covers them)
+                    if (Db.Pool(kind, r).Count == 0) continue;   // skip a rarity with no rows
                     var sim = Sim(rockCandy: 100_000);
                     string id = Db.Pool(kind, r)[0];
                     Own(CollectionRules.For(sim.State, kind), id);

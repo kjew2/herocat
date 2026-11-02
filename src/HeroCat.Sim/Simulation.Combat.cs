@@ -191,7 +191,7 @@ namespace HeroCat.Sim
 
         /// <summary>
         /// 03 section 2.1 step 1: <c>Mp = min(MpPoolMax, Mp + MpRegenPerTick)</c>, both with their Research terms (cached in the
-        /// power breakdown). Only in a content tier with companions: the MP pool is MVP, and an M0 build keeps Mp at 0.
+        /// power breakdown). Only in a content tier with companions (M0 since 00 decision 107); a build without them keeps Mp at 0.
         /// </summary>
         void RegenMp(CombatState c)
         {

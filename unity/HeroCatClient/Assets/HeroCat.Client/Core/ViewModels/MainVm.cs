@@ -198,7 +198,18 @@ namespace HeroCat.Client.Core
                 st.Skills.Items.TryGetValue(id, out var owned);
                 Skills[i].Set(new SlotLook(id, def.Icon, def.Rarity, owned != null ? _c.Db.DupeLevel(owned.Copies) : 0, pct));
             }
-            for (int i = 0; i < Companions.Length; i++) Companions[i].Set(default);   // companions are MVP (#156)
+            var cslots = st.Loadout.Companions;
+            var ccds = st.Combat.CompanionCooldowns;
+            int open = HeroCat.Sim.Power.PowerFormula.OpenCompanionSlots(_c.Db, st);
+            for (int i = 0; i < Companions.Length; i++)
+            {
+                string id = cslots != null && i < cslots.Length && i < open ? cslots[i] : null;
+                if (id == null || !_c.Db.Companions.TryGetValue(id, out var cdef)) { Companions[i].Set(default); continue; }
+                int cd = ccds != null && i < ccds.Length ? ccds[i] : 0;
+                float pct = cdef.CooldownTicks > 0 ? (float)Math.Round(Math.Min(1.0, cd / (double)cdef.CooldownTicks) * 100) / 100f : 0f;
+                st.Companions.Items.TryGetValue(id, out var owned);
+                Companions[i].Set(new SlotLook(id, cdef.Icon, cdef.Rarity, owned != null ? _c.Db.DupeLevel(owned.Copies) : 0, pct));
+            }
             MpFill.Set(s.Mp, s.MpMax);
 
             // Boss button: "Boss: need ~2.3x" or "Boss: clearable" (green border).

@@ -21,7 +21,7 @@ graph TD
     MAIN -->|tab Hero| HERO[SCR_HERO · Full · M0]
     MAIN -->|tab Collection| WEAPONS[SCR_WEAPONS · Full · M0]
     WEAPONS <-->|chips| SKILLS[SCR_SKILLS · Full · M0]
-    SKILLS <-->|chips| COMP[SCR_COMPANIONS · Full · MVP]
+    SKILLS <-->|chips| COMP[SCR_COMPANIONS · Full · M0]
     COMP <-->|chips| RUNES[SCR_RUNES · Full · P1]
     MAIN -->|tab Summon| SUMMON[SCR_SUMMON · Full · M0]
     SUMMON --> RESULT[SCR_SUMMON_RESULT · Overlay · M0]
@@ -176,7 +176,7 @@ Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them
 +----------------------------------------------+
 | Stage 240  Ch.5  v        kills 9/10   WALL  |
 |                                              |
-|        (cat)                 (boss)          |
+|      (squire)                (boss)          |
 |        ~~~~                  ~~~~~~          |
 |                        HP |==========   | 1.2M|
 |                        T  |======       | 17s |
@@ -238,7 +238,7 @@ Purpose: all gold and Rock Candy sinks on the hero: Training per stat, Hero Leve
 ```
 +----------------------------------------------+
 | <  Hero                        DPS 3.72K     |
-| (cat)  Lv 32  |=========     | 4.2K / 9.8K   |
+| (sqr)  Lv 32  |=========     | 4.2K / 9.8K   |
 | Awakening I   rank II at stage 150 [ Awaken ]|  MVP
 | Loadout: [wpn] [s1][s2][s3][s4][s5][s6] [c1][c2][c3][c4] |
 | Training              [x1] [x10] [x100] [Max]|
@@ -322,7 +322,7 @@ Purpose: 40-skill collection, six auto-cast slots, slot order.
 
 Events: `ItemAcquired(kind=SKILL)`, `ItemEquipped(SKILL)`.
 
-### 4.7 `SCR_COMPANIONS` (Full, MVP)
+### 4.7 `SCR_COMPANIONS` (Full, M0; 00 decision 107)
 
 Purpose: 50-companion collection, four slots, the shared MP pool readout.
 
@@ -434,6 +434,8 @@ Purpose: the reveal. Driven entirely by the already-applied `SummonResultPayload
 
 Reveal rules are in section 6. The `SummonResultPayload` of an "again" request replaces the cards in place.
 
+Splash (00 decision 108): when a Legendary or Mythic companion flips face up, its splash illustration `art_splash_<id>` fills the overlay for 1.5 s (tap to dismiss early, skipped by `Skip`) before the card grid returns. The address is derived from the companion id, not a content column; a missing splash falls back to the card. `SCR_ITEM_DETAIL` shows the splash in place of the portrait for those companions.
+
 ### 4.12 `SCR_DUNGEONS` (Full, MVP)
 
 Purpose: the three daily dungeons and the Tower card (P1).
@@ -477,7 +479,7 @@ Purpose: the fixed fight. Replaces the combat viewport region; the HUD stays. Th
 ```
 +----------------------------------------------+
 | Fish Coin Dungeon · Floor 5                  |
-|        (cat)                 (floor boss)    |
+|      (squire)                (floor boss)    |
 |                        HP |======       | 40%|
 |                        T  |=====        | 14s|
 | DPS 3.72K   [skill row]  [companion row]     |
@@ -692,7 +694,7 @@ States: offline shows account actions disabled with "Needs connection". Dev buil
 | Element | `ProfileVm` field or command |
 |---|---|
 | Name | `DisplayName`; `[Edit]` opens a text field (2 to 12 chars, server-filtered, 08); `Profile.Rename(name)` |
-| Avatar | `AvatarId` from a fixed set of 12 cat portraits; `Profile.SetAvatar(id)` |
+| Avatar | `AvatarId` from a fixed set of 12 squire portraits; `Profile.SetAvatar(id)` |
 | Stats | `Progress.HighestCleared`, `Hero.Level`, `Hero.AwakenRank`, `Stats.Pulls`, `Stats.Merges`, `Collection counts x3`, `CreatedAt`, `PlayDays` |
 | Player id | `PlayerId` with copy button (support) |
 
@@ -885,7 +887,7 @@ Goal: by minute three the player has trained, merged, summoned and seen a boss, 
 |---|---|---|---|---|
 | 1 | combat viewport | `tut.1.tap` "Tap the monster!" | 3 x `TapZap` accepted | row `tut_welcome` (09, trigger `PROFILE_CREATED`): its `TUTORIAL_DIAMONDS` and `TUTORIAL_WEAPON_ID` grants are applied once at profile creation, guarded by `Tutorial.TutorialDiamondsGranted` (02) |
 | 2 | `SCR_MAIN` gold chip after first kills | `tut.2.gold` | `EnemyKilled` x3 | |
-| 3 | Hero tab | `tut.3.hero` "Make your cat stronger" | `SCR_HERO` pushed | |
+| 3 | Hero tab | `tut.3.hero` "Make your squire stronger" | `SCR_HERO` pushed | |
 | 4 | ATK `[+]` | `tut.4.train` | `StatTrained` | |
 | 5 | back chevron | `tut.5.back` | `SCR_MAIN` on top | |
 | 6 | Release button | `tut.6.release` "Release a fish" | `FishReleased` x2 | |
@@ -906,7 +908,7 @@ No artist in M0. Everything is a coloured `Image` with a TMP label, so the slice
 
 | Thing | Placeholder |
 |---|---|
-| Hero | 200 rp rounded square in `accent`, label "CAT", awakening rank as a coloured outline |
+| Hero | 200 rp rounded square in `accent`, label "SQUIRE", awakening rank as a coloured outline |
 | Enemy / boss | 180 / 260 rp square, hue = `(chapter * 23) mod 360` at 60% saturation, label "s37" / "BOSS 40" |
 | Weapon / skill / companion icons | 96 rp circle in rarity colour with the rarity glyph and a pool index (`W07`, `S12`, `C03`) |
 | Fish | 140 rp circle, hue stepping 30 degrees per level, level number centred |
@@ -921,23 +923,45 @@ Fish art is a fixed set of `UI_FISH_SPRITE_LEVELS` (12) sprites (issue #48). A l
 
 | Category | Count | Spec |
 |---|---|---|
-| Hero cat | 1 body, 5 awakening auras, 1 idle + 1 attack + 1 hurt animation (Unity 2D Animation rig, 12 fps keyframes) | 512 rp tall |
-| Weapon held sprites | 30 (one per weapon, drawn in the hero's paw) | 160 rp |
+| Hero squire | 1 body, 5 awakening auras; pixel frames (section 15.3): idle 4, attack 6, hurt 2 | 512 rp tall (64 px native) |
+| Weapon held sprites | 30 (one per weapon, pixel art held in the squire's hand, section 15.3) | 160 rp (20 px native) |
 | Weapon icons | 30 | 128 rp, atlas `weapons_icons` |
 | Skill icons | 40 | 128 rp, atlas `skills_icons` |
-| Companion portraits | 50 idle sprites + 50 icons | 256 rp / 128 rp |
-| Enemies | 8 chapter skins x 3 mob variants = 24 mobs, 8 bosses, each with idle + hurt + death (3 frames each) | mobs 320 rp, bosses 480 rp |
+| Companions | 50 portraits + 50 icons (illustrated), 50 battle chibis with pixel frames idle 4 + cast 6 (section 15.3). Addresses: icon = the row's `icon`, chibi = the row's `sprite` (`spr_comp_*`, the in-battle sprite as for weapons), portrait = `portrait_<id>` derived from the id like the splash (00 decision 108) | portrait 256 rp, icon 128 rp, chibi about 48 px native (the prototypes are 46-57 px; display scale set by the art bible, issue #287) |
+| Enemies | 8 chapter skins x 3 mob variants = 24 mobs, 8 bosses, each with idle + hurt + death (3 pixel frames each, section 15.3) | mobs 320 rp (40 px native), bosses 480 rp (60 px native) |
 | Backgrounds | 8 chapter backgrounds (static + 2 parallax layers) | 1080 x 900 rp |
 | Fish | 12 levels (`UI_FISH_SPRITE_LEVELS`) + tint/frame variants for levels above 12 + crown overlay + tank gauge art (issue #48) | 140 rp |
 | UI icons | 48 line icons (currencies 5, tabs 7, dungeons 3, ability types 4, quest kinds 3, misc 26) | 64 rp, atlas `ui_icons` |
 | UI frames | 9-slice panels x 4, buttons x 3 states x 2 styles, chips, badges, rarity frames x 5 | atlas `ui_frames` |
-| Avatars | 12 cat portraits | 256 rp |
+| Avatars | 12 squire portraits | 256 rp |
 | VFX | hit 3, crit 1, kill 2, missile 1 + trail, merge 1, discovery 1, level up 1, awaken 1, summon card flip 1, rarity flashes 3, coin burst 1, boss enter 1 = 17 systems | under 300 live particles total |
 | Summon cards | card back x 1, card frames x 5 rarities | 400 x 560 rp |
+| Companion splash | 8 illustrations, Legendary and Mythic companions only (00 decision 108), address `art_splash_<companion id>`, no baked-in text | 1080 x 1400 rp |
 | Shop art | 3 package illustrations, 6 diamond pile sizes | 400 rp |
 | Illustrations | empty states x 4 (inbox, quests claimed, collection filter, dungeons locked), error x 1, offline welcome x 1 | 480 rp |
 | Key art / logo | title screen art, app icon, store screenshots template | per store spec |
 | Audio | 28 SFX events (section 9), 8 music loops (one per chapter), 1 title loop | OGG, 44.1 kHz mono SFX |
+
+### 15.3 Art pipeline and content rules
+
+Two art styles, after the artist's prototypes in `art/reference/` (00 decisions 104-106, issues #284-#286):
+
+- **Pixel art** for everything that moves in the combat viewport: the squire, weapon held sprites, companion battle chibis and enemies. One sprite pixel is 8 rp, so a 512 rp hero is 64 px native. These are starting sizes; the art bible (issue #287) may revise them.
+- **Illustrated art** for everything else: portraits, icons, summon cards, splash art, backgrounds, key art and UI.
+
+Pixel sprites are animated frame by frame. There is no skeletal rig, because rotating parts breaks the pixel grid. Frame counts are in section 15.2. Rendering rules:
+
+| Rule | Value |
+|---|---|
+| Texture filtering | Point (no filtering) on pixel sprites; no mipmaps |
+| Compression | None on pixel atlases (compression artefacts show at 8x); illustrated atlases keep the platform default |
+| Scaling | Integer multiples only: a pixel-perfect camera snaps the sprite scale to whole device pixels, so a sprite pixel is never split |
+| Movement | Pixel sprites snap to the sprite-pixel grid; tweened UI and VFX may move freely |
+| Frame rate | 12 fps for pixel animations |
+
+**AI-assisted frames are allowed.** An AI tool may draft frames or variants, but the artist cleans every frame: the locked palette, the pixel grid, and no drift between frames. Keep the layered source files under `art/source/` as the record of human authorship. Purely AI-generated output can't be registered for copyright in the US. Use only tools whose terms allow commercial use.
+
+**Content rating: mature** (00 decision 105). Character art may be suggestive. The target is the App Store 17+ rating and the IARC questionnaire's mature answers (10 section 7 item 6). Store metadata is the exception: App Store guideline 2.3.8 and Google Play's metadata policy require the icon, screenshots, preview video and listing art to suit all audiences whatever the app's rating, so the store set uses covered variants only (10 section 7 item 11). The age gate and minors are 08 section 10.1's concern (issue #302).
 
 ## 16. Unity implementation notes
 

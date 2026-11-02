@@ -15,6 +15,9 @@ namespace HeroCat.Client.Screens
     /// </summary>
     public sealed class MainScreen : ScreenView
     {
+        /// <summary>Reference pixels per chibi sprite pixel; the art bible (issue #287) owns the final value (07 section 15.3).</summary>
+        const float ChibiRpPerPixel = 4f;
+
         RectTransform _hud, _combat, _action, _board, _tabs;
         RectTransform _goldChip, _diamondChip, _fishChip, _stageLabel, _enemy, _hero, _mergeAllBtn, _grid;
         Image _enemyImg, _heroOutline, _bossTimerFill;
@@ -145,7 +148,7 @@ namespace HeroCat.Client.Screens
             _heroOutline = _hero.GetComponent<Image>();
             var heroLabel = UiKit.Text("Label", _hero, UiKit.Title, 0x121212, TextAlignmentOptions.Center, bold: true);
             UiKit.Fill(heroLabel.rectTransform);
-            heroLabel.text = "CAT";   // placeholder art label (07 section 15.1), not player copy
+            heroLabel.text = "SQUIRE";   // placeholder art label (07 section 15.1), not player copy
             var outline = _hero.gameObject.AddComponent<Outline>();
             outline.effectDistance = new Vector2(6, 6);
             c.AwakenRank.Bind(new ActionSink<int>(r =>
@@ -225,6 +228,37 @@ namespace HeroCat.Client.Screens
                 rt.anchorMin = rt.anchorMax = rt.pivot = new Vector2(0, 0);
                 rt.anchoredPosition = new Vector2(16 + i * 100, 12);
                 rt.sizeDelta = new Vector2(88, 88);
+                var ccd = UiKit.Panel("Cooldown", rt, Palette.Scrim, 0.55f);
+                var ccdRt = ccd.rectTransform;
+                ccdRt.anchorMin = Vector2.zero;
+                ccdRt.anchorMax = new Vector2(1, 0);
+                ccdRt.offsetMin = ccdRt.offsetMax = Vector2.zero;
+                Image art = null;
+                string shown = null;
+                // The companion's pixel chibi beside the squire (07 section 15.3): native size x ChibiRpPerPixel, an
+                // integer multiple, point-filtered by ArtImportSettings. Hidden while the slot is empty or has no art.
+                var chibiRt = UiKit.Rect("Chibi" + i, _combat);
+                chibiRt.anchorMin = chibiRt.anchorMax = new Vector2(0.06f + 0.085f * i, 0.30f + (i % 2) * 0.06f);
+                chibiRt.pivot = new Vector2(0.5f, 0f);
+                var chibi = chibiRt.gameObject.AddComponent<Image>();
+                chibi.raycastTarget = false;
+                chibi.gameObject.SetActive(false);
+                c.Companions[i].Bind(new ActionSink<SlotLook>(s =>
+                {
+                    img.color = s.IsEmpty ? UiKit.C(Palette.PanelRaised) : UiKit.Rarity(s.Rarity);
+                    if (s.ItemId != shown)
+                    {
+                        shown = s.ItemId;
+                        if (art != null) Destroy(art.gameObject);
+                        art = s.IsEmpty ? null : SpriteLibrary.Overlay("Art", rt, SpriteLibrary.Get(s.IconId), 4);
+                        ccd.transform.SetAsLastSibling();
+                        var sprite = !s.IsEmpty && Vm.Context.Db.Companions.TryGetValue(s.ItemId, out var def) ? SpriteLibrary.Get(def.Sprite) : null;
+                        chibi.sprite = sprite;
+                        chibi.gameObject.SetActive(sprite != null);
+                        if (sprite != null) chibiRt.sizeDelta = new Vector2(sprite.rect.width * ChibiRpPerPixel, sprite.rect.height * ChibiRpPerPixel);
+                    }
+                    ccdRt.anchorMax = new Vector2(1, s.Cooldown01);
+                }));
             }
             var mp = UiKit.Bar("Mp", _combat, Palette.Diamond, out var mpFill);
             mp.anchorMin = mp.anchorMax = mp.pivot = new Vector2(0, 0);

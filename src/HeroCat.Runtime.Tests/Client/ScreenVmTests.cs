@@ -161,6 +161,57 @@ namespace HeroCat.Runtime.Tests
         }
 
         [Test]
+        public void Companions_SlotTapEquipsAndUnequips_LockedSlotsShowAReason()   // 07 section 4.7; 00 decision 107
+        {
+            string lucy = "comp_l_01";
+            var f = ClientFixture.Open(s => s.Companions.Items[lucy] = new OwnedItem { Copies = 1 });
+            var c = f.Vm.Companions;
+            f.Vm.Router.Replace(ScreenIds.Companions);
+            f.Vm.Refresh();
+            Assert.That(c.Tiles.Count, Is.EqualTo(50));
+            Assert.That(c.SlotLocked[0].Value, Is.False, "slot 1 is open from the start (04 section 8.2)");
+            Assert.That(c.SlotLocked[1].Value, Is.True, "slots 2-4 wait for Awakening");
+            Assert.That(c.SlotLockText[1].Key, Is.EqualTo(UiKeys.CompanionsSlotLocked), "no Awakening rows in an M0 build");
+            Assert.That(c.MpLine.Key, Is.EqualTo(UiKeys.CompanionsMp));
+            c.OnTile(lucy);
+            Assert.That(c.SelectedStats.Key, Is.EqualTo(UiKeys.CompanionsStats));
+            c.OnSlot(0);
+            var e = f.LoggedOf<EquipCompanion>().Single();
+            Assert.That((e.Slot, e.CompanionId), Is.EqualTo((0, lucy)));
+            f.Frame();
+            f.Vm.Refresh();
+            Assert.That(c.Slots[0].Value.ItemId, Is.EqualTo(lucy));
+            Assert.That(c.BudgetLine.Key, Is.EqualTo(UiKeys.CompanionsBudget));
+            c.ClearSelection();
+            c.OnSlot(0);
+            Assert.That(f.LoggedOf<UnequipCompanion>().Single().Slot, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void CompanionChip_OpensTheCompanionsScreen()
+        {
+            var f = ClientFixture.Open();
+            f.Vm.Main.OnTab(MainTab.Collection);
+            f.Vm.Weapons.OnChip(Banner.COMPANION);
+            Assert.That(f.Vm.Router.TopFull.Id, Is.EqualTo(ScreenIds.Companions));
+        }
+
+        [Test]
+        public void ItemDetail_UsesTheSplashForALegendaryCompanion_AndThePortraitOtherwise()   // 00 decision 108
+        {
+            var f = ClientFixture.Open(s => { s.Companions.Items["comp_l_01"] = new OwnedItem { Copies = 1 }; s.Companions.Items["comp_c_01"] = new OwnedItem { Copies = 1 }; });
+            f.Vm.ItemDetail.Open(Banner.COMPANION, "comp_l_01");
+            f.Vm.Refresh();
+            f.Vm.ItemDetail.Refresh(f.S.Sim);
+            Assert.That(f.Vm.ItemDetail.ArtAddress, Is.EqualTo("art_splash_comp_l_01"));
+            Assert.That(f.Vm.ItemDetail.FallbackArtAddress, Is.EqualTo("portrait_comp_l_01"));
+            Assert.That(f.Vm.ItemDetail.StatLine.Key, Is.EqualTo(UiKeys.CompanionsStats));
+            f.Vm.ItemDetail.Open(Banner.COMPANION, "comp_c_01");
+            f.Vm.ItemDetail.Refresh(f.S.Sim);
+            Assert.That(f.Vm.ItemDetail.ArtAddress, Is.EqualTo("portrait_comp_c_01"));
+        }
+
+        [Test]
         public void Chips_ReplaceTheTopFullScreen()
         {
             var f = ClientFixture.Open();

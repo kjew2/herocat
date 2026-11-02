@@ -15,8 +15,15 @@ namespace HeroCat.Client.Screens
         readonly List<Image> _cards = new List<Image>();
         readonly List<TextMeshProUGUI> _cardText = new List<TextMeshProUGUI>();
         readonly List<CardState> _shown = new List<CardState>();
+        readonly List<Image> _cardArt = new List<Image>();
         RectTransform _grid;
         int _cardsVersion = -1;
+
+        // Splash (07 section 4.11, 00 decision 108): an L+ companion flipping on its own fills the overlay for SplashSec.
+        const double SplashSec = 1.5;
+        Image _splash;
+        GameObject _splashRoot;
+        double _splashUntil;
 
         protected override void Build()
         {
@@ -51,6 +58,30 @@ namespace HeroCat.Client.Screens
             var close = UiKit.Button("Close", Root, r.OnClose, Palette.PanelRaised, UiKit.Body);
             UiKit.Place(close.GetComponent<RectTransform>(), 680, 1200, 320, 136);
             UiKit.LabelOf(close).text = Vm.Localizer.Text(UiKeys.Close);
+
+            var splashBg = UiKit.Panel("Splash", Root, Palette.Background, 0.96f, raycast: true);
+            UiKit.Fill(splashBg.rectTransform);
+            splashBg.gameObject.AddComponent<Button>().onClick.AddListener(HideSplash);
+            var splashRt = UiKit.Rect("Art", splashBg.transform);
+            UiKit.Fill(splashRt);
+            _splash = splashRt.gameObject.AddComponent<Image>();
+            _splash.preserveAspect = true;
+            _splash.raycastTarget = false;
+            _splashRoot = splashBg.gameObject;
+            _splashRoot.SetActive(false);
+        }
+
+        void HideSplash()
+        {
+            if (_splashRoot != null) _splashRoot.SetActive(false);
+        }
+
+        void ShowSplash(Sprite s, double now)
+        {
+            _splash.sprite = s;
+            _splashRoot.SetActive(true);
+            _splashRoot.transform.SetAsLastSibling();
+            _splashUntil = now + SplashSec;
         }
 
         public override void Tick(double now)
@@ -61,19 +92,30 @@ namespace HeroCat.Client.Screens
                 _cardsVersion = r.CardsVersion;
                 Rebuild();
             }
+            int flipped = 0;
+            Sprite splash = null;
             for (int i = 0; i < _cards.Count && i < r.Cards.Count; i++)
             {
                 var c = r.Cards[i];
                 if (_shown[i] == c.State) continue;
                 _shown[i] = c.State;
                 Draw(i, c);
+                if (c.State == CardState.FaceUp)
+                {
+                    flipped++;
+                    splash = SpriteLibrary.Get(ArtAddresses.SplashFor(r.Banner, c.ItemId, c.Rarity)) ?? splash;
+                }
             }
+            if (flipped == 1 && splash != null) ShowSplash(splash, now);   // several at once = Skip: no splash
+            if (_splashRoot != null && _splashRoot.activeSelf && now >= _splashUntil) HideSplash();
         }
 
         void Rebuild()
         {
             foreach (var c in _cards) Destroy(c.gameObject);
             _cards.Clear();
+            _cardArt.Clear();
+            HideSplash();
             _cardText.Clear();
             _shown.Clear();
             var cards = Vm.SummonResult.Cards;
@@ -87,6 +129,7 @@ namespace HeroCat.Client.Screens
                 else UiKit.Place(rt, i % 5 * 200, i / 5 * 380, 184, 360);   // 2 x 5 grid
                 _cards.Add(b.GetComponent<Image>());
                 _cardText.Add(UiKit.LabelOf(b));
+                _cardArt.Add(null);
                 _shown.Add((CardState)(-1));
             }
         }
@@ -95,6 +138,7 @@ namespace HeroCat.Client.Screens
         {
             var img = _cards[i];
             var t = _cardText[i];
+            if (_cardArt[i] != null) { Destroy(_cardArt[i].gameObject); _cardArt[i] = null; }
             switch (c.State)
             {
                 case CardState.FaceDown:
@@ -116,6 +160,18 @@ namespace HeroCat.Client.Screens
                                 : c.ChipKey == UiKeys.CardLevelUp ? Vm.Localizer.Format(UiKeys.CardLevelUp, c.LevelBefore.ToString(), c.LevelAfter.ToString())
                                 : Vm.Localizer.Format(UiKeys.CardCopy, TextFmt.IntText(c.CopiesAfter), TextFmt.IntText(c.CopiesForNext));
                     t.text = Palette.ShapeGlyph(c.Rarity) + "\n" + Vm.Localizer.Text(c.NameKey) + "\n" + chip;
+                    // Icon art above the text when the build has it (issue #291).
+                    var art = SpriteLibrary.Get(c.IconId);
+                    if (art != null)
+                    {
+                        _cardArt[i] = SpriteLibrary.Overlay("Art", img.rectTransform, art, 12);
+                        var ar = _cardArt[i].rectTransform;
+                        ar.anchorMin = new Vector2(0, 0.45f);
+                        ar.anchorMax = Vector2.one;
+                        ar.offsetMin = new Vector2(12, 0);
+                        ar.offsetMax = new Vector2(-12, -12);
+                        t.alignment = TextAlignmentOptions.Bottom;
+                    }
                     break;
             }
         }

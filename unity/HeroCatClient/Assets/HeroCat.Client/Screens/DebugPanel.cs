@@ -6,7 +6,8 @@ using UnityEngine;
 namespace HeroCat.Client.Screens
 {
     /// <summary>
-    /// Dev-build cheats (07 sections 4.20 and 17.3 rule 7): time skip, clock offset, time scale, save, reset profile, FPS.
+    /// Dev-build cheats (07 sections 4.20 and 17.3 rule 7): time skip, clock offset, time scale, save, reset profile, FPS,
+    /// and diamond / companion-ticket grants for testing summons and art (issue #291).
     /// Compiled only under UNITY_EDITOR, DEVELOPMENT_BUILD or HEROCAT_CHEATS, so a Release build has no cheat UI. Labels are
     /// developer text, not player copy (the SCR_SETTINGS Debug section is MVP). Unity-only: not compiled in cloud sessions.
     /// </summary>
@@ -40,13 +41,16 @@ namespace HeroCat.Client.Screens
             UiKit.LabelOf(toggle).text = "dbg";
             _panel = UiKit.Panel("Panel", transform, Palette.PanelRaised, 0.97f, raycast: true).rectTransform;
             UiKit.Place(_panel, 40, 260, 1000, 940);
-            string[] labels = { "Run 10 min", "Run 1 h", "Run 8 h", "Clock +2 min", "Clock +1 h", "Clock +8 h", "Clock +1 day", "x1", "x5", "x20", "Save now", "Reset profile" };
+            string[] labels = { "Run 10 min", "Run 1 h", "Run 8 h", "Clock +2 min", "Clock +1 h", "Clock +8 h", "Clock +1 day", "x1", "x5", "x20", "Save now", "Reset profile",
+                                "+10K diamonds", "+100K diamonds", "+50 comp tickets" };
             UnityEngine.Events.UnityAction[] actions =
             {
                 () => vm.DebugRunHours(1.0 / 6), () => vm.DebugRunHours(1), () => vm.DebugRunHours(8),
                 () => vm.DebugClockSkip(2.0 / 60), () => vm.DebugClockSkip(1), () => vm.DebugClockSkip(8), () => vm.DebugClockSkip(24),
                 () => vm.DebugSetTimeScale(1), () => vm.DebugSetTimeScale(5), () => vm.DebugSetTimeScale(20),
                 vm.DebugRequestSave, vm.DebugResetProfile,
+                () => vm.DebugGrant(HeroCat.Sim.Content.Currency.DIAMOND, 10_000), () => vm.DebugGrant(HeroCat.Sim.Content.Currency.DIAMOND, 100_000),
+                () => vm.DebugGrant(HeroCat.Sim.Content.Currency.TICKET_SUMMON_COMPANION, 50),
             };
             for (int i = 0; i < labels.Length; i++)
             {
@@ -55,7 +59,7 @@ namespace HeroCat.Client.Screens
                 UiKit.LabelOf(b).text = labels[i];
             }
             _info = UiKit.Text("Info", _panel, UiKit.Micro, Palette.Muted);
-            UiKit.Place(_info.rectTransform, 24, 584, 952, 330);
+            UiKit.Place(_info.rectTransform, 24, 720, 952, 200);
             _panel.gameObject.SetActive(false);
         }
 

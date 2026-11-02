@@ -1,6 +1,6 @@
 # Whisker Hero (working title) - design specs
 
-Mobile idle RPG in the *Cat Hero: Idle RPG* mould. A cat hero auto-fights through stages on the top half of a portrait screen while the player merges fish on the bottom half; kills, fish, dungeons and summons feed a dozen parallel upgrade systems, and the game is deciding where to spend next. Deterministic pure-C# simulation shared by the Unity client, the ASP.NET Core server and a headless bot harness; every number is content data tuned from a spreadsheet and verified by bots before a human sees it.
+Mobile idle RPG in the *Cat Hero: Idle RPG* mould. A squire hero auto-fights through stages on the top half of a portrait screen while the player merges fish on the bottom half; kills, fish, dungeons and summons feed a dozen parallel upgrade systems, and the game is deciding where to spend next. Deterministic pure-C# simulation shared by the Unity client, the ASP.NET Core server and a headless bot harness; every number is content data tuned from a spreadsheet and verified by bots before a human sees it.
 
 Start with `specs/00-overview.md`. It fixes the tech stack, the authority split, the canonical names, every constant with its inherited/seed tag, the power formula, the cross-spec contracts and the decisions log. Where another spec disagrees with it, 00 wins.
 

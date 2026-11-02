@@ -28,9 +28,13 @@ namespace HeroCat.Client.Core
         /// <summary>Weapons: equipped ATK % now / at the next level, and the passive %. Skills: dps % now / next.</summary>
         public double ValueNow, ValueNext, PassiveNow, PassiveNext;
 
-        /// <summary>Skills only.</summary>
+        /// <summary>Skills and companions: the cooldown. Skills: the cast type.</summary>
         public CastType CastType;
         public int CooldownTicks;
+
+        /// <summary>Companions only (07 section 4.7).</summary>
+        public AbilityType AbilityType;
+        public int MpCost;
 
         public long FirstAcquired;
 
@@ -227,6 +231,7 @@ namespace HeroCat.Client.Core
         {
             if (b == Banner.WEAPON) C.Router?.Replace(ScreenIds.Weapons);
             else if (b == Banner.SKILL) C.Router?.Replace(ScreenIds.Skills);
+            else if (b == Banner.COMPANION && C.Db.Companions.Count > 0) C.Router?.Replace(ScreenIds.Companions);
             else C.LockedToast("COMPANIONS");
         }
 
@@ -394,6 +399,134 @@ namespace HeroCat.Client.Core
     }
 
     /// <summary>
+    /// SCR_COMPANIONS (07 section 4.7; issues #181, #291): the MP line, four slots (slots past the Awakening-open count
+    /// show locked with the rank that opens them), the MP budget, Auto-equip and the 50-tile grid. A slot tap with a
+    /// selection sends <c>EquipCompanion(slot, id)</c>; without one, <c>UnequipCompanion(slot)</c>.
+    /// </summary>
+    public sealed class CompanionsVm : CollectionScreenVm
+    {
+        public const string AnchorAuto = "companions.auto";
+
+        public CompanionsVm(VmContext c) : base(c, Banner.COMPANION)
+        {
+            Slots = new Bindable<SlotLook>[c.K.CompanionSlots];
+            SlotLocked = new Flag[Slots.Length];
+            SlotLockText = new TextKeyLabel[Slots.Length];
+            for (int i = 0; i < Slots.Length; i++)
+            {
+                Slots[i] = new Bindable<SlotLook>();
+                SlotLocked[i] = new Flag();
+                SlotLockText[i] = c.Label();
+            }
+            MpLine = c.Label();
+            BudgetLine = c.Label();
+            AutoEquip = c.Button();
+            AutoEquip.Label.Set(UiKeys.SkillsAutoEquip);
+        }
+
+        public readonly Bindable<SlotLook>[] Slots;
+        public readonly Flag[] SlotLocked;
+
+        /// <summary>"Awakening 2" on a locked slot; "Locked" when no Awakening row opens it in this build.</summary>
+        public readonly TextKeyLabel[] SlotLockText;
+
+        /// <summary>"MP 40 / 100 · regen 2/s".</summary>
+        public readonly TextKeyLabel MpLine;
+
+        /// <summary>"Equipped cost 1.0 MP/s"; <see cref="OverBudget"/> when it exceeds regen (07 section 4.7).</summary>
+        public readonly TextKeyLabel BudgetLine;
+        public readonly Flag OverBudget = new Flag();
+        public readonly ButtonState AutoEquip;
+
+        public static string SlotAnchor(int slot) => "companions.slot." + slot;
+
+        protected override void FillValues(TileVm t, double multNow, double multNext)
+        {
+            if (!C.Db.Companions.TryGetValue(t.Id, out var d)) return;
+            t.ValueNow = d.DpsPct * multNow;
+            t.ValueNext = d.DpsPct * multNext;
+            t.AbilityType = d.AbilityType;
+            t.MpCost = d.MpCost;
+            t.CooldownTicks = d.CooldownTicks;
+        }
+
+        protected override void RefreshExtra(Simulation sim)
+        {
+            var db = C.Db;
+            var st = sim.State;
+            int open = PowerFormula.OpenCompanionSlots(db, st);
+            var slots = st.Loadout.Companions;
+            double demand = 0.0;
+            for (int i = 0; i < Slots.Length; i++)
+            {
+                bool locked = i >= open;
+                SlotLocked[i].Set(locked);
+                if (locked)
+                {
+                    int rank = RankOpening(i);
+                    if (rank > 0) SlotLockText[i].Set(UiKeys.CompanionsSlotAwaken, rank);
+                    else SlotLockText[i].Set(UiKeys.CompanionsSlotLocked);
+                }
+                else SlotLockText[i].Set(null);
+                string id = slots != null && i < slots.Length ? slots[i] : null;
+                if (id != null && db.Companions.TryGetValue(id, out var d))
+                {
+                    st.Companions.Items.TryGetValue(id, out var owned);
+                    Slots[i].Set(new SlotLook(id, d.Icon, d.Rarity, owned != null ? db.DupeLevel(owned.Copies) : 0, 0));
+                    if (!locked && d.CooldownTicks > 0) demand += d.MpCost * (double)C.K.TickHz / d.CooldownTicks;
+                }
+                else Slots[i].Set(default);
+            }
+            double regen = ResearchRules.MpRegenPerSecond(db, st);
+            MpLine.Set(UiKeys.CompanionsMp, LabelArg.Num(st.Combat.Mp, NumberStyle.Short),
+                       LabelArg.Num(ResearchRules.MpPoolMax(db, st), NumberStyle.Short), LabelArg.Num(regen, NumberStyle.Ratio));
+            BudgetLine.Set(UiKeys.CompanionsBudget, LabelArg.Num(demand, NumberStyle.Ratio));
+            OverBudget.Set(demand > regen);
+            AutoEquip.Visible.Set(true);
+            AutoEquip.Enabled.Set(true);
+        }
+
+        /// <summary>The lowest Awakening rank whose row opens slot <paramref name="slot"/> (0-based), or 0 when none does.</summary>
+        int RankOpening(int slot)
+        {
+            int best = 0;
+            foreach (var a in C.Db.Awakening)
+                if (a.CompanionSlotsAfter > slot && (best == 0 || a.Rank < best)) best = a.Rank;
+            return best;
+        }
+
+        protected override void RefreshSelectedStats(TileVm t) =>
+            SelectedStats.Set(UiKeys.CompanionsStats, UiKeys.AbilityKey(t.AbilityType), LabelArg.Num(t.ValueNow, NumberStyle.PctPoints),
+                              LabelArg.Num(t.CooldownTicks / (double)C.K.TickHz, NumberStyle.Seconds));
+
+        public void OnSlot(int slot)
+        {
+            if (slot < 0 || slot >= Slots.Length) return;
+            if (Selected != null && Selected.Owned)
+            {
+                C.Commands?.Send(new EquipCompanion(slot, Selected.Id), SlotAnchor(slot));
+                return;
+            }
+            if (!Slots[slot].Value.IsEmpty) C.Commands?.Send(new UnequipCompanion(slot), SlotAnchor(slot));
+        }
+
+        public void OnAutoEquip() => C.Commands?.Send(new AutoEquipBestCompanions(), AnchorAuto);
+
+        /// <summary>The first open empty slot, else slot 0: the default target of the selected panel's Equip.</summary>
+        public int DefaultSlot()
+        {
+            for (int i = 0; i < Slots.Length; i++) if (!SlotLocked[i].Value && Slots[i].Value.IsEmpty) return i;
+            return 0;
+        }
+
+        public void OnEquip()
+        {
+            if (Selected == null) return;
+            C.Commands?.Send(new EquipCompanion(DefaultSlot(), Selected.Id), SlotAnchor(DefaultSlot()));
+        }
+    }
+
+    /// <summary>
     /// SCR_ITEM_DETAIL (07 section 4.19; issue #116): any collectible's card: level and copies to next (DUPE_LVL_CUM),
     /// kind-specific stats with the next-level preview, source banner and base rate, Equip with a slot picker for skills,
     /// weapon Compare, the NEW ribbon and the "Not owned" state; Limit break (04 sections 5.2 and 11; issue #255).
@@ -447,6 +580,12 @@ namespace HeroCat.Client.Core
         public readonly Flag SlotPickerVisible = new Flag();
 
         public bool Compare { get; private set; }
+
+        /// <summary>The card art (07 section 4.19): splash for an L+ companion (00 decision 108), else the portrait, else the icon.</summary>
+        public string ArtAddress { get; private set; }
+
+        /// <summary>Tried when <see cref="ArtAddress"/> has no file (a missing splash falls back to the portrait).</summary>
+        public string FallbackArtAddress { get; private set; }
 
         /// <summary>Set by Open and Compare; the GameViewModel refreshes the open modal while it is set.</summary>
         public bool Dirty { get; internal set; }
@@ -523,6 +662,17 @@ namespace HeroCat.Client.Core
                 PassiveLine.Set(null);
                 CompareVisible.Set(false);
             }
+            else if (Banner == Banner.COMPANION && db.Companions.TryGetValue(ItemId, out var cd))
+            {
+                StatLine.Set(UiKeys.CompanionsStats, UiKeys.AbilityKey(cd.AbilityType), LabelArg.Num(cd.DpsPct * multNow, NumberStyle.PctPoints),
+                             LabelArg.Num(cd.CooldownTicks / (double)_c.K.TickHz, NumberStyle.Seconds));
+                NextLine.Set(Item.AtMaxLevel ? UiKeys.DetailAtMax : UiKeys.DetailNext, LabelArg.Num(cd.DpsPct * multNext, NumberStyle.PctPoints));
+                PassiveLine.Set(cd.DescKey);
+                CompareVisible.Set(false);
+            }
+            ArtAddress = ArtAddresses.SplashFor(Banner, ItemId, it.Rarity)
+                         ?? (Banner == Banner.COMPANION ? ArtAddresses.PortraitFor(ItemId) : it.Icon);
+            FallbackArtAddress = Banner == Banner.COMPANION ? ArtAddresses.PortraitFor(ItemId) : null;
             var rates = SummonQuery.RateTable(db, Banner, 1);
             double rate = rates != null && rates.Rates.TryGetValue(it.Rarity, out var r) ? r : 0;
             SourceLine.Set(UiKeys.DetailSource, db.Banners.TryGetValue(Banner, out var bd) ? bd.NameKey : "", TextFmt.RarityCode(it.Rarity),
@@ -534,7 +684,7 @@ namespace HeroCat.Client.Core
             Equip.Reason.Set(can ? null : it.Owned ? UiKeys.CollEquipped : UiKeys.CollNotOwned);
             SlotPickerVisible.Set(it.Owned && Banner == Banner.SKILL);
 
-            // Limit break (04 sections 5.2 and 11). TODO(#161): companions, once their content and detail stats land.
+            // Limit break (04 sections 5.2 and 11), companions included.
             long cost = it.NextLimitBreakCost;
             if (it.Owned) LimitBreakLine.Set(UiKeys.DetailLimitBreaks, it.LimitBreaks, _c.K.LimitBreakRanks);
             else LimitBreakLine.Set(null);
@@ -565,6 +715,20 @@ namespace HeroCat.Client.Core
                 if (slot < 0) slot = FirstEmptySkillSlot();
                 _c.Commands?.Send(new EquipSkill(slot, ItemId), AnchorEquip);
             }
+            else if (Banner == Banner.COMPANION)
+            {
+                if (slot < 0) slot = FirstEmptyCompanionSlot();
+                _c.Commands?.Send(new EquipCompanion(slot, ItemId), AnchorEquip);
+            }
+        }
+
+        int FirstEmptyCompanionSlot()
+        {
+            if (_sim == null) return 0;
+            var slots = _sim.State.Loadout.Companions;
+            int open = PowerFormula.OpenCompanionSlots(_c.Db, _sim.State);
+            for (int i = 0; slots != null && i < slots.Length && i < open; i++) if (slots[i] == null) return i;
+            return 0;
         }
 
         int FirstEmptySkillSlot()

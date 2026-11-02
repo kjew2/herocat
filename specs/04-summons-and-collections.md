@@ -2,7 +2,7 @@
 
 This spec owns the four `Banner`s, the exact pull algorithm and its pity rules, banner levels, the dupe economy including limit breaks, and the three collectible kinds the banners feed: `Weapon`, `Skill`, `Companion` (and the P1 `Rune` outline). It fixes the data each collectible carries, how the tick loop in 03 consumes it, what the collection screens need from the model, the `ISummonService` seam between the M0 local roll and the MVP server roll, the analytics events, and how `tools/gacha_model.py` is extended for banner levels. The server-side implementation of the same algorithm (audit log, idempotency, published rate endpoint) is 08's.
 
-Tiers covered: M0 (`WEAPON` and `SKILL` banners with a local roll, dupes to level 10, weapon passive, 6 skill slots, and the banner-level mechanic, since the one pull algorithm evaluates banner level per pull, 00 decision 56), MVP (`COMPANION` banner, banner levels as a tuned feature (00 section 2.1, decision 70), limit breaks, server roll, analytics), P1 (`RUNE` banner, manual skill cast, rate-up and event banners).
+Tiers covered: M0 (`WEAPON`, `SKILL` and `COMPANION` (00 decision 107) banners with a local roll, dupes to level 10, weapon passive, 6 skill slots, and the banner-level mechanic, since the one pull algorithm evaluates banner level per pull, 00 decision 56), MVP (banner levels as a tuned feature (00 section 2.1, decision 70), limit breaks, server roll, analytics), P1 (`RUNE` banner, manual skill cast, rate-up and event banners).
 
 Depends on: 00 (section 6.3 constants, section 5 names), 02 (`GameState` collection fields), 03 (tick loop, `MarkDpsDirty`, Rock Candy), 06 (diamond and ticket income, Rock Candy income), 08 (server summon endpoint).
 
@@ -20,7 +20,7 @@ Depends on: 00 (section 6.3 constants, section 5 names), 02 (`GameState` collect
 |---|---|---|---|---|---|---|
 | `WEAPON` | M0 | 100 `DIAMOND` | `TICKET_SUMMON_WEAPON` | 30 | 1 equipped + passive from all owned | level raises equipped pct and passive pct |
 | `SKILL` | M0 | 200 `DIAMOND` | `TICKET_SUMMON_SKILL` | 40 | `SKILL_SLOTS = 6` | level raises `dpsPct` |
-| `COMPANION` | MVP | 300 `DIAMOND` | `TICKET_SUMMON_COMPANION` | 50 | `COMPANION_SLOTS = 4` (slots 2-4 unlock with Awakening, 03 section 5.3) | level raises ability magnitude |
+| `COMPANION` | M0 (00 decision 107) | 300 `DIAMOND` | `TICKET_SUMMON_COMPANION` | 50 | `COMPANION_SLOTS = 4` (slots 2-4 unlock with Awakening, 03 section 5.3) | level raises ability magnitude |
 | `RUNE` | P1 | 300 `DIAMOND` | `TICKET_SUMMON_RUNE` | 36 | `RUNE_SLOTS = 6` | level raises stat value |
 
 A 10-pull costs exactly `10 * PULL_COST` or 10 tickets of the banner; there is no diamond discount (00 section 6.2). Mixed payment is not allowed: a pull is paid with one ticket or with diamonds; a 10-pull with ten tickets or with diamonds. Tickets are spent before diamonds when the player presses the diamond button and has tickets (the button label shows which will be used, 07). The pull command is one request whether it is 1 or 10 pulls:
@@ -312,7 +312,7 @@ Skill layer: `skillMult = 1 + sum over equipped of dps_pct * LevelMult / 100`. W
 
 Manual cast (P1): `CastSkill(slot)` fires a ready skill immediately, bypassing the one-cast-per-tick limit for that tick; cooldown rules unchanged. M0 and MVP have no manual cast; the tap target during a boss is Tap Zap.
 
-## 8. Companions (MVP)
+## 8. Companions (M0, 00 decision 107)
 
 ### 8.1 Pool and data
 
@@ -341,6 +341,8 @@ These are level-1 magnitudes (`CompanionDef.Magnitude`, derived at build); the t
 Rule (issue #243): companion damage scales with the skill layer, because `CompanionUnit = SkillUnit * (1 + skillDpsPct)` (03 section 7.1); this keeps the rated formula multiplicative and exact. It may be revisited when `power_curve_model.py` reports layer shares.
 
 Mix: 50% `DAMAGE`, 20% `BUFF_ATK`, 15% `BUFF_GOLD`, 15% `MP_REGEN`. `MP_REGEN` companions are what lets a player raise the uptime of the other companions before Research catches up; the bot values them through `mpSufficiency`.
+
+Role tags (issue #289) are presentation only: a class name shown on the card, derived from `ability_type` and never read by the sim. Warrior, Death Knight, Caster and Mage tags go on `DAMAGE`; Paladin and Tank on `BUFF_ATK`; Merchant and Bard on `BUFF_GOLD`; Cleric and Sage on `MP_REGEN`. If a role ever needs a game effect, that is a new decision, not a tag. The art pilot placed the artist's three prototypes (issue #291; concepts in `art/concepts/companions.md`): Lucy, Arcane Caster, `comp_l_01` (L, `DAMAGE`); Valeria, Paladin, `comp_l_04` (L, `BUFF_ATK`); Seraphine, Death Knight, `comp_m_01` (M, `DAMAGE`); and, after the pilot, Yuki, Shadow Mage, `comp_l_02` (L, `DAMAGE`).
 
 ### 8.2 Slots and MP
 

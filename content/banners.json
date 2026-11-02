@@ -54,7 +54,7 @@
     {
       "id": "COMPANION",
       "enabled": true,
-      "tier": "MVP",
+      "tier": "M0",
       "pull_cost_diamonds": 300,
       "ticket_currency": "TICKET_SUMMON_COMPANION",
       "pool_size": {

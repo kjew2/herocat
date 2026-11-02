@@ -8,7 +8,7 @@ Sibling project: `idle-rng-game` (a separate repo) is an earlier, narrower proto
 
 ## 1. Product pitch and design pillars
 
-A cat hero auto-fights its way through the Owner's Dreamland on the top half of a portrait phone screen. The bottom half is a fish-merge board the player works with their thumb. Everything the player earns feeds a dozen parallel upgrade systems, and the whole game is deciding where to spend next.
+A squire hero auto-fights their way through the Dreamland on the top half of a portrait phone screen. The bottom half is a fish-merge board the player works with their thumb. Everything the player earns feeds a dozen parallel upgrade systems, and the whole game is deciding where to spend next.
 
 Pillars, in priority order. When two pillars conflict, the higher one wins.
 
@@ -41,7 +41,7 @@ Each row maps a reference-game feature to our system name, its tier, and the spe
 | Class / awakening milestones | **Awakening** | MVP | 03 |
 | Weapon summon, weapon equip + passive collection bonus | **Weapons**, **Summon** | M0 | 04 |
 | Skill summon, 6 auto-cast skill slots | **Skills**, **Summon** | M0 | 04 |
-| Companion summon, companion slots, shared MP pool | **Companions**, **Summon** | MVP | 04 |
+| Companion summon, companion slots, shared MP pool | **Companions**, **Summon** | M0 (decision 107) | 04 |
 | Rune summon and rune slots | **Runes** | P1 | 04 |
 | Summon level (banner EXP raises rates) | **Banner Level** | MVP | 04 |
 | Release fish, merge fish, Magic Tank refill | **Fish Board**, **Magic Tank** | M0 | 05 |
@@ -62,7 +62,7 @@ Each row maps a reference-game feature to our system name, its tier, and the spe
 | Raid bosses (co-op) | **Raid** | P2 | 08 |
 | Rankings | **Leaderboards** | P1 | 08 |
 | Limited events, rate-up banners, season pass | **Events** | P1 | 06, 08 |
-| Costumes, famous-cat collabs | **Costumes** | P2 | 04 |
+| Costumes, collabs | **Costumes** | P2 | 04 |
 | Redeem codes | **Coupons** | P1 | 08 |
 
 ## 3. Tech stack decision
@@ -134,7 +134,7 @@ Use these exact names in code, tables, specs and analytics. Singular for types, 
 |---|---|
 | `Profile` | The account-level record: `playerId`, display name, created time, linked platforms. Not part of sim state. Client-only flags (NEW badges, coach marks, sort/filter/step prefs, toggles) are neither `Profile` nor `GameState`: they live in Runtime's `ClientPrefs`, a local JSON store next to the save that is not cloud-synced (issue #47). |
 | `GameState` | Save root. Everything the sim reads and writes, including transient fight state; the save drops only what 02 section 3.3 lists. Field names and shapes are 02's (issue #7). Holds the immutable `RngRoot` (Guid) that every RNG seed derives from (issue #9), and the `ContentVersion` and `ContentHash` it was last reconciled against (issue #56). |
-| `Hero` | The player's single cat: level, EXP, awakening rank. The equipped weapon, skills, companions and runes live in `LoadoutState` (`Loadout.Weapon`, `Loadout.Skills`, ...), 02 section 3.1 (issue #7). |
+| `Hero` | The player's single squire (decision 104): level, EXP, awakening rank. The equipped weapon, skills, companions and runes live in `LoadoutState` (`Loadout.Weapon`, `Loadout.Skills`, ...), 02 section 3.1 (issue #7). |
 | `Stat` | One of `ATK`, `HP`, `DEF`, `CRIT_RATE`, `CRIT_DMG`, `ATK_SPD`, `GOLD_GAIN`, `EXP_GAIN`. `Training` levels are per stat. |
 | `Stage` | Integer `s >= 1`. The player farms exactly one stage at a time. `Combat.Stage` is the frontier; `SelectStage(s)` farms a side stage `s <= HighestCleared` (any stage whose kills or boss were completed), paying that stage's gold and EXP without advancing anything, while the frontier's kills and `Walled` state are kept; `SelectStage(null)` returns to the frontier. First-clear diamonds key off `HighestFirstClearBoss` (02, 03; issue #35). Chapter = `floor((s-1)/CHAPTER_WIDTH)+1`, cosmetic only. |
 | `Boss` | Enemy at stage `s` where `s % BOSS_EVERY == 0`. Has a time limit. |
@@ -186,7 +186,7 @@ The full inventory, layouts and states live in `07-screens-and-ux.md`. These IDs
 | `SCR_HERO` | Full. Training, hero level, awakening, equipped loadout | M0 |
 | `SCR_WEAPONS` | Full. Collection grid, equip, level, passive bonus total | M0 |
 | `SCR_SKILLS` | Full. Collection grid, 6 slots, auto-cast order | M0 |
-| `SCR_COMPANIONS` | Full. Collection grid, slots, MP pool | MVP |
+| `SCR_COMPANIONS` | Full. Collection grid, slots, MP pool | M0 (decision 107) |
 | `SCR_RUNES` | Full | P1 |
 | `SCR_RESEARCH` | Full. Fish Coin sinks | MVP |
 | `SCR_SUMMON` | Full. Tabs per banner, 1x/10x, rates, pity, banner level | M0 |
@@ -421,7 +421,7 @@ Fixtures/Summon/            summon vectors (Python-generated) and the C# stream-
 
 | Milestone | Contents | Exit criterion |
 |---|---|---|
-| **M0 vertical slice** | Sim: combat, stages, training, hero level, weapon + skill summon (local), fish board, offline catch-up, local save. Client: `SCR_MAIN`, `SCR_HERO`, `SCR_WEAPONS`, `SCR_SKILLS`, `SCR_SUMMON`, `SCR_OFFLINE_REWARD`, `SCR_ITEM_DETAIL` with placeholder art. Bots print the day table. | Two weeks of simulated play within tolerance; one real person plays 20 minutes on device without being told what to do. |
+| **M0 vertical slice** | Sim: combat, stages, training, hero level, weapon + skill + companion summon (local), companion abilities and the MP pool, fish board, offline catch-up, local save. Client: `SCR_MAIN`, `SCR_HERO`, `SCR_WEAPONS`, `SCR_SKILLS`, `SCR_COMPANIONS`, `SCR_SUMMON`, `SCR_OFFLINE_REWARD`, `SCR_ITEM_DETAIL` with placeholder art. Bots print the day table. | Two weeks of simulated play within tolerance; one real person plays 20 minutes on device without being told what to do. |
 | **MVP** | Everything tagged MVP in section 2.1. Backend: auth, cloud save, server summons, IAP, inbox, config. Analytics. Tutorial. Localization: EN ships (`ship_locales = en` in shipped meta); `ja` is fully translated in the pipeline and CI fixtures use `en,ja` so the second-locale path is tested (issue #57). | Closed beta of 50 players, D7 retention measured, no save-loss reports. |
 | **Soft launch** | Store compliance checklist (10) complete, staged rollout in two small markets. | D1 >= 40%, D7 >= 15%, crash-free sessions >= 99.5%, no P0 economy exploit. |
 | **P1** | Runes, Research expansion, Tower, Guild, Rewarded Ads, Events, Leaderboards, Coupons, Auto Merge. | Scheduled by soft-launch data. |
@@ -544,3 +544,8 @@ Known stale spots left for the next pass rather than patched blind: the Fish Coi
 101. **`CLOCK_BACKWARDS_TOLERANCE_S = 5` (S)**, a content constant: `ClockWentBackwards` and `clock_anomaly{backwards}` fire only when server time is behind the virtual clock (or behind `LastTickServerTime` at resume) by more than it; less is resync jitter (01 section 3.2, 06 section 4.2). Issue #246 item 5.
 102. **Error, reject and notice localization keys are lowercase**: `err.<code_lower>.title` / `.body`, `reject.<reason_lower>` (a reasonless reject uses the snake-cased `RejectCode`), `notice.<code_lower>.title` / `.body`; wire codes and reasons stay UPPER_SNAKE and the client lowercases them when it builds the key, so 09's lowercase key pattern holds. This replaces decision 62's `err.<CODE>` spelling; English rows exist for every code and reason the client can show (01 section 7, AC 14). Issue #248 item 1.
 103. **No readable save copy is a new profile, not a fatal error**: 02 section 8.3 wins; the copies are quarantined, a new profile starts, analytics gets `save_corrupt_all{supportId}` and `SCR_MAIN` shows a one-time notice with the support id; 01's Fatal `SAVE_CORRUPT_ALL` class and table row are removed. Issue #248 item 2.
+104. **The hero is a generic squire, not a cat.** The player's single `Hero` is a human squire; the artist's heroines (`art/reference/`) are companions on the existing `COMPANION` banner (04 section 8), and weapons stay weapons. Avatars are squire portraits and the default display name is `Squire#` + 4 (02). No sim change: the hero is stats. The product title "Whisker Hero" and the genre reference above predate this and are unchanged until the owner renames the product. Issue #284.
+105. **Content rating is mature.** Character art may be suggestive; the target is App Store 17+ and IARC Mature 17+ / PEGI 16-18 (10 section 7 item 6). Store metadata (icon, screenshots, preview, feature graphic) uses covered variants only, because both stores require all-audience listing art (07 section 15.3). Age-gate behaviour under a mature rating is open in issue #302. Issue #285.
+106. **Battle sprites are pixel art, animated frame by frame, AI-assisted with an artist cleanup pass**; this replaces the 2D Animation skeletal rig. One sprite pixel is 8 rp; point filtering, no compression, integer scaling through a pixel-perfect camera. Portraits, icons, cards, backgrounds and UI stay illustrated (07 section 15.3). Issue #286.
+107. **Companions are M0.** The `COMPANION` banner, all 50 `companions` rows, the `COMPANIONS` feature unlock and `SCR_COMPANIONS` move from MVP to M0, so the art pilot (issue #291) can be seen in the M0 build. Only slot 1 is open in M0 because slots 2-4 unlock with Awakening (MVP); MP regenerates at `MP_REGEN0` without Research. The companion achievements, quests and ticket sources stay MVP. Under the greedy F2P bot the M0 sweep is unchanged: the bot never finds a companion pull worth more ln(DPS) per diamond than a weapon or skill pull in 30 days, so the companion layer stays 0% at M0 and its floor exemption in `acceptance-targets.json` stays (issue #249 item 1). Issue #291.
+108. **Splash art for Legendary and Mythic companions only** (8 illustrations), shown on `SCR_SUMMON_RESULT` for an L+ companion and in `SCR_ITEM_DETAIL`; other companions use the portrait in the card frame (07 sections 4 and 15.2). Address `art_splash_<id>`. Issue #291.

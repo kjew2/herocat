@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using HeroCat.Runtime.Content;
+using HeroCat.Runtime.Profile;
 using HeroCat.Sim.Commands;
 using HeroCat.Sim.Content;
 using HeroCat.Sim.Events;
@@ -108,7 +110,7 @@ namespace HeroCat.Sim.Tests
                 Assert.That(all.Any(c => c.Rarity == r && c.AbilityType == AbilityType.MP_REGEN), $"W011: an MP_REGEN at {r}");
             foreach (var c in all)
                 Assert.That(c.DpsPct, Is.EqualTo(Mvp.Rarities[c.Rarity].CompanionDpsPct), c.Id);
-            Assert.That(all.Select(c => c.Tier), Is.All.EqualTo(Tier.MVP));
+            Assert.That(all.Select(c => c.Tier), Is.All.EqualTo(Tier.M0), "00 decision 107");
 
             Assert.That((Mvp.Companions[E_DMG1].AbilityType, Mvp.Companions[E_BUFF_ATK].AbilityType, Mvp.Companions[E_BUFF_GOLD].AbilityType,
                          Mvp.Companions[E_MP].AbilityType, Mvp.Companions[C_DMG].AbilityType, Mvp.Companions[C_MP].AbilityType),
@@ -130,18 +132,28 @@ namespace HeroCat.Sim.Tests
         }
 
         [Test]
-        public void M0Build_HasNoCompanions_AndADisabledBanner()   // 09 criterion 13
+        public void M0Build_HasTheCompanionPool_AndAnEnabledBanner()   // 00 decision 107: companions are M0
         {
             var m0 = TestContent.Db;
+            Assert.That(m0.Companions, Has.Count.EqualTo(50));
+            Assert.That(m0.Banners[Banner.COMPANION].Enabled, Is.True);
+            Assert.That(SummonQuery.PoolIds(m0, Banner.COMPANION), Has.Count.EqualTo(50));
+            Assert.That(m0.IsUnlocked("COMPANIONS", TestContent.NewState()), Is.True);
+        }
+
+        [Test]
+        public void TierFilter_DropsCompanionsTaggedAboveTheBuildTier()   // 09 criterion 13
+        {
+            var dtos = ContentLoader.LoadDtos(new FileContentSource(TestContent.Dir));
+            foreach (var c in dtos.Companions) c.Tier = "MVP";
+            foreach (var bn in dtos.Banners) if (bn.Id == "COMPANION") bn.Tier = "MVP";
+            var m0 = ContentDb.Build(dtos, Tier.M0);
             Assert.That(m0.Companions, Is.Empty);
             Assert.That(m0.Banners[Banner.COMPANION].Enabled, Is.False);
             Assert.That(SummonQuery.PoolIds(m0, Banner.COMPANION), Is.Empty);
-            Assert.That(PowerFormula.CompanionDpsPct(m0, TestContent.NewState()), Is.EqualTo(0.0));
-            Assert.That(PowerFormula.MpSufficiency(m0, TestContent.NewState()), Is.EqualTo(1.0));
-
-            var sim = TestContent.NewSim();
-            sim.Advance(1000);
-            Assert.That(sim.State.Combat.Mp, Is.EqualTo(0.0), "no MP pool in a tier without companions");
+            var state = ProfileFactory.Create(m0, Guid.Empty, TestContent.T0, new Guid("de71ce00-0000-4000-8000-000000000001"), TestContent.Root);
+            Assert.That(PowerFormula.CompanionDpsPct(m0, state), Is.EqualTo(0.0));
+            Assert.That(PowerFormula.MpSufficiency(m0, state), Is.EqualTo(1.0));
         }
 
         [Test]
