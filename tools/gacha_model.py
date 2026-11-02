@@ -116,7 +116,7 @@ class Banner:
         if not self.levels:
             raise SystemExit(f"banner {banner_id} has no banner_levels rows")
         self.base_lplus = self.levels[0]["rates"]["LEGENDARY"] + self.levels[0]["rates"]["MYTHIC"]
-        items = {"WEAPON": "weapons", "SKILL": "skills"}.get(banner_id)
+        items = {"WEAPON": "weapons", "SKILL": "skills", "COMPANION": "companions"}.get(banner_id)
         self.pool = {r: [] for r in RARITIES}
         if items:
             for it in load_table(content_dir, items):
