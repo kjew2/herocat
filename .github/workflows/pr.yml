@@ -82,7 +82,7 @@ jobs:
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
-      redis: # for the Redis-backed groups (#219); nothing reads it yet
+      redis: # the redis-pipeline step (HEROCAT_TEST_REDIS below)
         image: redis:7
         ports: ["6379:6379"]
         options: >-
@@ -90,6 +90,7 @@ jobs:
     env:
       # CI-only throwaway credentials for the service container above, not a secret.
       HEROCAT_TEST_POSTGRES: Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=postgres
+      HEROCAT_TEST_REDIS: localhost:6379
     steps:
       - uses: actions/checkout@v4
 
