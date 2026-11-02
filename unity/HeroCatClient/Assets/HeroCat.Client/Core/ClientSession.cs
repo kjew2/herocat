@@ -16,6 +16,9 @@ namespace HeroCat.Client.Core
         public ILocalizer Localizer { get; set; }
         public IClientPrefs Prefs { get; set; }
         public string BuildHash { get; set; }
+
+        /// <summary>This platform's <c>storeUrls</c> key (<see cref="StoreLink.Ios"/> / <see cref="StoreLink.Android"/>).</summary>
+        public string Platform { get; set; }
     }
 
     /// <summary>
@@ -28,10 +31,13 @@ namespace HeroCat.Client.Core
     /// </summary>
     public sealed class ClientSession
     {
+        readonly string _platform;
+
         ClientSession(BootResult boot, OffsetClock clock, BootVm bootVm, IMonoClock mono, ClientOptions options)
         {
             Boot = boot;
             Clock = clock;
+            _platform = options?.Platform;
             BootVm = bootVm;
             if (boot.Outcome != BootOutcome.Ready)
             {
@@ -46,6 +52,8 @@ namespace HeroCat.Client.Core
                 Prefs = options?.Prefs,
                 Now = () => mono.Ticks / (double)mono.Frequency,
                 SaveDescription = "runtime save (" + (boot.IsNewProfile ? "new profile, " : "") + boot.LoadStatus + ")",
+                ContentUpdates = boot.ContentUpdates,
+                Platform = options?.Platform,
             });
         }
 
@@ -57,6 +65,9 @@ namespace HeroCat.Client.Core
 
         /// <summary>The blocking SCR_ERROR for a failed boot (code, Retry, Update or Contact support); null when ready.</summary>
         public ErrorVm BootError { get; }
+
+        /// <summary>The boot-time CLIENT_TOO_OLD block's store page (config's <c>storeUrls</c>); null when config names none.</summary>
+        public string BootStoreUrl => StoreLink.For(Boot.Config, _platform);
 
         public bool IsReady => Boot.Outcome == BootOutcome.Ready;
         public OffsetClock Clock { get; }

@@ -2721,6 +2721,30 @@
     {
       "key": "reject.invalid_dungeon",
       "text": "Unknown dungeon"
+    },
+    {
+      "key": "scr.common.feature_disabled",
+      "text": "Temporarily unavailable. Try again later."
+    },
+    {
+      "key": "scr.main.maint_active",
+      "text": "Maintenance: back in {0}"
+    },
+    {
+      "key": "scr.main.maint_active_open",
+      "text": "Maintenance in progress"
+    },
+    {
+      "key": "scr.main.maint_scheduled",
+      "text": "Maintenance starts in {0}"
+    },
+    {
+      "key": "scr.settings.update_ready",
+      "text": "Update ready, restarts on next launch"
+    },
+    {
+      "key": "scr.settings.update_app",
+      "text": "Update the app for new content"
     }
   ]
 }

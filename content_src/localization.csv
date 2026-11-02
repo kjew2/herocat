@@ -679,3 +679,9 @@ reject.dungeon_floor_not_unlocked,Clear the previous floor first,,,,48,false,
 reject.boss_attempt_in_progress,Finish the boss fight first,,,,48,false,
 reject.nothing_to_sweep,Clear a floor first to sweep,,,,48,false,
 reject.invalid_dungeon,Unknown dungeon,,,,48,false,
+scr.common.feature_disabled,Temporarily unavailable. Try again later.,,,,48,false,07 live ops (01 section 8.12; issue #299)
+scr.main.maint_active,Maintenance: back in {0},,,,48,false,07 live ops (01 section 8.12; issue #299)
+scr.main.maint_active_open,Maintenance in progress,,,,48,false,07 live ops (01 section 8.12; issue #299)
+scr.main.maint_scheduled,Maintenance starts in {0},,,,48,false,07 live ops (01 section 8.12; issue #299)
+scr.settings.update_ready,"Update ready, restarts on next launch",,,,48,false,07 live ops (01 section 8.12; issue #299)
+scr.settings.update_app,Update the app for new content,,,,48,false,07 live ops (01 section 8.12; issue #299)

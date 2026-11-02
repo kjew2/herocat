@@ -1,4 +1,5 @@
 using System;
+using HeroCat.Runtime.Content;
 using HeroCat.Runtime.Services;
 using HeroCat.Sim.Commands;
 using HeroCat.Sim.Content;
@@ -50,6 +51,25 @@ namespace HeroCat.Client.Core
 
         /// <summary>The kill switches now (everything on without a source).</summary>
         public KillSwitches Switches => Flags?.Invoke() ?? KillSwitches.AllOn;
+
+        /// <summary>
+        /// The hot-applied shop and inbox tables (00 contract 3, 01 section 8.12 step 2; issue #299): null until a hot bundle
+        /// was swapped in this session. The Shop and Inbox view-models read their rows from here when set, from
+        /// <see cref="Db"/> otherwise. TODO(#299): ShopVm and InboxVm do not exist yet (#184); they subscribe to
+        /// <see cref="HotContentApplied"/> and re-read their rows when they land.
+        /// </summary>
+        public HotContentSet HotContent { get; private set; }
+
+        /// <summary>Raised on the main thread after a hot apply, with the swapped tables.</summary>
+        public event Action<HotContentSet> HotContentApplied;
+
+        /// <summary>The GameViewModel calls this from <c>ContentUpdater.HotApplied</c>.</summary>
+        public void PublishHotContent(HotContentSet set)
+        {
+            if (set == null) return;
+            HotContent = set;
+            HotContentApplied?.Invoke(set);
+        }
 
         public Constants K => Db.Constants;
 
