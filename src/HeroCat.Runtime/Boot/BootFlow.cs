@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Threading;
+using HeroCat.Runtime.Account;
 using HeroCat.Runtime.Content;
 using HeroCat.Runtime.Errors;
 using HeroCat.Runtime.Profile;
@@ -31,7 +33,9 @@ namespace HeroCat.Runtime.Boot
         /// <summary>This build's version for config's minClientVersion gate (null skips the gate).</summary>
         public string ClientVersion { get; set; }
 
-        /// <summary>Server playerId when known (MVP auth), else Guid.Empty for a local guest.</summary>
+        /// <summary>
+        /// The playerId when GameServices.Account knows none (tests, bots); the account's own id wins. Guid.Empty: a local guest.
+        /// </summary>
         public Guid PlayerId { get; set; }
 
         /// <summary>New profiles only: tests and bots pin RngRoot; null is a fresh random root (02 section 3.4).</summary>
@@ -44,9 +48,6 @@ namespace HeroCat.Runtime.Boot
 
         /// <summary>The command log the runner records into (saves/cmdlog.jsonl on device, in memory in bots).</summary>
         public ICommandLog CommandLog { get; set; }
-
-        /// <summary>Step 3 hook, MVP: guest or refresh auth. TODO(#148): AuthClient. Null in Local builds.</summary>
-        public Action<GameServices> Auth { get; set; }
 
         /// <summary>Wall-time source for the step timings logged to analytics (01 AC 15 is measured on device).</summary>
         public IMonoClock Mono { get; set; }
@@ -75,6 +76,18 @@ namespace HeroCat.Runtime.Boot
 
         /// <summary>The feature specs' other analytics rows from the bus (03, 04, 05, 06 section 13); null when analytics is NullAnalytics.</summary>
         public FeatureAnalytics FeatureAnalytics { get; internal set; }
+
+        /// <summary>
+        /// Step 3 (01 section 8.1): how the account signed in. SignInRequired does not stop the boot (the local save stays
+        /// playable); the client offers SCR_TITLE's sign-in. Null only when the boot stopped before step 3.
+        /// </summary>
+        public SignInResult SignIn { get; internal set; }
+
+        /// <summary>
+        /// The loaded save was a local guest's (<c>PlayerId = Guid.Empty</c>) and now belongs to the signed-in account: it is
+        /// that player's first upload (01 open question 7; the cloud client sends it with <c>If-Match: *</c>, 08 open question 9).
+        /// </summary>
+        public bool AdoptedLocalSave { get; internal set; }
 
         public LoadStatus LoadStatus { get; internal set; }
         public bool IsNewProfile { get; internal set; }
@@ -155,16 +168,20 @@ namespace HeroCat.Runtime.Boot
             }
             Done(BootStep.Config);
 
-            // 3. Auth (MVP). Offline continues with the cached account or a local guest.
+            // 3. Auth: refresh, or a guest for this device (MVP; Local answers at once). Offline continues with the cached
+            // account or a local guest; a refused session continues too and the client offers sign-in (section 6).
             progress?.Invoke(BootStep.Auth);
-            o.Auth?.Invoke(svc);
+            r.SignIn = SignIn(svc.Account);
+            Guid playerId = r.SignIn.PlayerId != Guid.Empty ? r.SignIn.PlayerId : o.PlayerId;
             Done(BootStep.Auth);
 
             // 4. Save load, or a new profile with the profile-created grant (TUTORIAL_DIAMONDS + TUTORIAL_WEAPON_ID, tutorial step 0).
             progress?.Invoke(BootStep.Save);
             long now = svc.Clock.NowServerSeconds;
+            try { svc.Archives?.Prune(now, RuntimeConfig.ARCHIVE_KEEP_DAYS); }   // logout archives (01 section 8.13)
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException) { }
             if (svc.Saves is LocalSaveStore local)   // a new profile is this boot's guest (or MVP account), seeded as asked
-                local.NewProfileFactory = (db, t) => ProfileFactory.Create(db, o.PlayerId, t, svc.InstallId, o.NewProfileRngRoot, analytics);
+                local.NewProfileFactory = (db, t) => ProfileFactory.Create(db, playerId, t, svc.InstallId, o.NewProfileRngRoot, analytics);
             // 02 section 8.3's recovery order; the store floors the clock at the loaded LastSavedServerTime (11.2 rule 4).
             var load = svc.Saves.LoadAsync(now, r.Content, CancellationToken.None).GetAwaiter().GetResult();
             r.LoadStatus = load.Status;
@@ -172,6 +189,11 @@ namespace HeroCat.Runtime.Boot
                 return Fail(r, BootOutcome.Fatal, ErrorClassifier.SAVE_TOO_NEW, o, now);   // nothing is written over a newer save
             // TODO(#152): LoadStatus.Conflict (cloud, MVP) opens the 02 section 9.4 conflict modal before SCR_MAIN.
             state = load.State;
+            if (state != null && !load.IsNewProfile && state.PlayerId == Guid.Empty && playerId != Guid.Empty)
+            {
+                state = StateCopy.DeepClone(state, playerId);   // the first auth adopts the local guest save (open question 7)
+                r.AdoptedLocalSave = true;
+            }
             if (load.IsNewProfile)
             {
                 // No save, or every copy bad (quarantined): a new profile (02 section 8.3 step 4). An unreadable save is not
@@ -220,6 +242,17 @@ namespace HeroCat.Runtime.Boot
             var pending = state.Offline.Pending;   // 02 section 14.3: the stage is the envelope's
             analytics.Track(new AnalyticsEvents.SessionStart(pending?.ElapsedSec ?? 0, pending?.CreditedSec ?? 0, ColdBoot: true, bootMs));
             return r;
+        }
+
+        static SignInResult SignIn(IAccountService account)
+        {
+            if (account == null) return SignInResult.LocalGuest;
+            try { return account.SignInAsync(CancellationToken.None).GetAwaiter().GetResult() ?? SignInResult.LocalGuest; }
+            catch (Exception e) when (!(e is OutOfMemoryException))
+            {
+                // AuthClient never throws for a failed call; anything else degrades like offline (section 6).
+                return new SignInResult(SignInStatus.Offline, account.PlayerId, Code: ErrorClassifier.SRV_UNEXPECTED);
+            }
         }
 
         static BootResult Fail(BootResult r, BootOutcome outcome, string code, BootOptions o, long now)
