@@ -57,7 +57,7 @@ namespace HeroCat.Runtime.Services
         // 08 section 7.4
         public const string PLAUSIBILITY_FLAG = "plausibility_flag";
 
-        // 02 section 14.3 (session, save health, cloud, clock)
+        // 02 section 14.3 (session, save health, cloud, clock, client performance)
         public const string SESSION_START = "session_start";
         public const string SESSION_END = "session_end";
         public const string CLOUD_SAVE_UPLOADED = "cloud_save_uploaded";
@@ -72,6 +72,10 @@ namespace HeroCat.Runtime.Services
         public const string MIGRATION_APPLIED = "migration_applied";
         public const string CLOCK_ANOMALY = "clock_anomaly";
         public const string PLAYER_DELETED = "player_deleted";
+        public const string PROFILE_CREATED = "profile_created";
+        public const string BOOT_MS = "boot_ms";
+        public const string RESUME_MS = "resume_ms";
+        public const string PERF_TICK = "perf_tick";
 
         /// <summary>Every name above, in index order.</summary>
         public static readonly IReadOnlyList<string> All = new[]
@@ -84,6 +88,7 @@ namespace HeroCat.Runtime.Services
             PLAUSIBILITY_FLAG,
             SESSION_START, SESSION_END, CLOUD_SAVE_UPLOADED, CLOUD_CONFLICT, CLOUD_AUTORESOLVED, SAVE_FALLBACK, SAVE_CORRUPT,
             SAVE_CORRUPT_ALL, SAVE_REPAIRED, SAVE_REJECT, SAVE_WRITE_FAILED, MIGRATION_APPLIED, CLOCK_ANOMALY, PLAYER_DELETED,
+            PROFILE_CREATED, BOOT_MS, RESUME_MS, PERF_TICK,
         };
 
         /// <summary>
@@ -153,7 +158,7 @@ namespace HeroCat.Runtime.Services
     /// The event types this layer owns (issue #155): 06 section 13's <c>currency_changed</c> and 02 section 14.3's session,
     /// save-health, cloud and clock events. Feature emitters (#163, #168, #177) add their owners' events next to these.
     /// </summary>
-    public static class AnalyticsEvents
+    public static partial class AnalyticsEvents
     {
         /// <summary>06 section 13. RefId: the item, quest, offer or banner id when the apply has one, else omitted.</summary>
         public sealed record CurrencyChanged(Currency Currency, double Delta, double BalanceAfter, CurrencyReason Reason,
@@ -192,6 +197,43 @@ namespace HeroCat.Runtime.Services
             {
                 ["durationSec"] = DurationSec, ["stageStart"] = StageStart, ["stageEnd"] = StageEnd, ["kills"] = Kills,
                 ["ticks"] = Ticks, ["trigger"] = Trigger,
+            };
+        }
+
+        /// <summary>02 section 14.3: boot created a new profile (the funnel step; the RngRoot seed is never sent, issue #261).</summary>
+        public sealed record ProfileCreated : AnalyticsEvent
+        {
+            public override string Name => AnalyticsNames.PROFILE_CREATED;
+            public override Dictionary<string, object> Props() => new Dictionary<string, object>();
+        }
+
+        /// <summary>02 section 14.3 / 10 section 5: one per cold boot, the total and each 01 section 8.1 step's milliseconds.</summary>
+        public sealed record BootMs(double TotalMs, double ContentMs, double ConfigMs, double AuthMs, double SaveMs, double CatchUpMs,
+                                    double HandoffMs) : AnalyticsEvent
+        {
+            public override string Name => AnalyticsNames.BOOT_MS;
+
+            public override Dictionary<string, object> Props() => new Dictionary<string, object>
+            {
+                ["totalMs"] = TotalMs, ["contentMs"] = ContentMs, ["configMs"] = ConfigMs, ["authMs"] = AuthMs, ["saveMs"] = SaveMs,
+                ["catchUpMs"] = CatchUpMs, ["handoffMs"] = HandoffMs,
+            };
+        }
+
+        /// <summary>02 section 14.3 / 10 section 5: warm resume to first frame. TODO(#218): emitted by the resume path.</summary>
+        public sealed record ResumeMs(double Ms) : AnalyticsEvent
+        {
+            public override string Name => AnalyticsNames.RESUME_MS;
+            public override Dictionary<string, object> Props() => new Dictionary<string, object> { ["ms"] = Ms };
+        }
+
+        /// <summary>02 section 14.3 / 10 section 5: tick cost sampled over a session, not per tick. TODO(#218): emitted by the runner.</summary>
+        public sealed record PerfTick(double P50Ms, double P95Ms, double MaxMs, long Ticks) : AnalyticsEvent
+        {
+            public override string Name => AnalyticsNames.PERF_TICK;
+            public override Dictionary<string, object> Props() => new Dictionary<string, object>
+            {
+                ["p50Ms"] = P50Ms, ["p95Ms"] = P95Ms, ["maxMs"] = MaxMs, ["ticks"] = Ticks,
             };
         }
 

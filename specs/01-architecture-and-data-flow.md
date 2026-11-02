@@ -336,6 +336,7 @@ public sealed class SessionRunner
     void Issue(Command c)                                              // the one path into the sim: log, then apply
     {
         log.Append(c); var r = sim.Apply(c); if (!r.Ok) bus.PublishReject(c, r);
+        else bus.PublishSystem(new CommandApplied(c, eventsOfThisCommand));   // runtime notice: analytics groups per-command rows (05/06 section 13)
     }
 
     void ResumeFromGap()

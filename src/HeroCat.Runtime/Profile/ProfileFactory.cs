@@ -9,6 +9,7 @@ using HeroCat.Sim.Events;
 using HeroCat.Sim.Fish;
 using HeroCat.Sim.Rng;
 using HeroCat.Sim.State;
+using HeroCat.Sim.Summons;
 
 namespace HeroCat.Runtime.Profile
 {
@@ -69,9 +70,29 @@ namespace HeroCat.Runtime.Profile
             var grant = new CollectingEmitter();
             ProfileGrants.ApplyWelcome(s, db, nowServerSeconds, grant);
             if (analytics != null)
+            {
                 foreach (var e in grant.Events)
                     if (e is CurrencyChanged c) analytics.Track(CurrencyChangedRow(c));
+                TrackItemGrants(s, db, analytics);
+            }
             return s;
+        }
+
+        /// <summary>
+        /// 04 section 13's <c>item_acquired</c> with acquireReason TUTORIAL for each item of the profile-created grant (the
+        /// starter weapon; ProfileGrants applies only weapons, TODO(#91)). The profile is new, so every item is new.
+        /// </summary>
+        static void TrackItemGrants(GameState s, ContentDb db, IAnalytics analytics)
+        {
+            foreach (var g in db.ProfileCreatedGrants)
+            {
+                if (g.Currency.HasValue || g.ItemKind != "WEAPON" || g.ItemId == null) continue;
+                if (!s.Weapons.Items.TryGetValue(g.ItemId, out var item) || item == null) continue;
+                var rarity = db.Weapons.TryGetValue(g.ItemId, out var w) ? w.Rarity : default;
+                analytics.Track(new AnalyticsEvents.ItemAcquired(Banner.WEAPON, g.ItemId, rarity, IsNew: true, item.Copies, LevelBefore: 0,
+                                                                 CollectionRules.EffectiveLevel(db, item), AnalyticsEvents.ItemAcquired.TUTORIAL,
+                                                                 RequestId: null));
+            }
         }
 
         /// <summary>06 section 13's <c>currency_changed</c> row for one CurrencyChanged (no refId for a grant).</summary>

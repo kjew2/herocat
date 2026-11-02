@@ -333,11 +333,11 @@ Measured on the four devices of section 1.5; the budget column is the low-end de
 | Metric | Budget | How measured | Where enforced |
 |---|---|---|---|
 | Frame time on `SCR_MAIN` with board full and six skills casting | <= 33.3 ms p95 (30 fps floor, 00 section 3) | Unity Profiler recorder in PlayMode test 1; device-farm trace | release candidate gate |
-| Sim tick cost | <= 0.5 ms per tick on the low-end device; <= 8 ms per frame for catch-up bursts (`TICK_BUDGET_MS`, 01) | `Stopwatch` around `SessionRunner.Tick` logged to analytics `perf_tick` | nightly dashboard |
+| Sim tick cost | <= 0.5 ms per tick on the low-end device; <= 8 ms per frame for catch-up bursts (`TICK_BUDGET_MS`, 01) | `Stopwatch` around `SessionRunner.Tick` logged to analytics `perf_tick` (02 section 14.3: p50/p95/max sampled per session) | nightly dashboard |
 | GC alloc per tick | 0 B steady state; <= 128 B per kill with the default event mask | `HeroCat.Sim.Tests` perf group (`GC.GetAllocatedBytesForCurrentThread`) | every PR |
 | Memory | <= 450 MB total on the 2 GB device at `SCR_MAIN`; <= 600 MB with `SCR_SUMMON_RESULT` 10x reveal | device-farm peak RSS | release candidate gate |
-| Cold boot to interactive `SCR_MAIN` | <= 4.0 s on mid device, <= 6.0 s low-end (content load <= 300 ms of it, 01) | `boot_ms` analytics event with phase breakdown | nightly dashboard, release gate |
-| Warm resume | <= 1.0 s to first frame | `resume_ms` event | nightly |
+| Cold boot to interactive `SCR_MAIN` | <= 4.0 s on mid device, <= 6.0 s low-end (content load <= 300 ms of it, 01) | `boot_ms` analytics event with phase breakdown (02 section 14.3) | nightly dashboard, release gate |
+| Warm resume | <= 1.0 s to first frame | `resume_ms` event (02 section 14.3) | nightly |
 | APK / AAB download size | <= 150 MB; IPA <= 200 MB (MVP asset list, 07) | `build-android.yml` artifact size step | every build |
 | Addressables remote download at first launch | 0 MB (everything MVP ships in the bundle; remote is for P1 content) | | |
 | Damage number labels | pool of `UI_DAMAGE_LABEL_POOL`, never instantiate at runtime | EditMode test over the prefab | PR |

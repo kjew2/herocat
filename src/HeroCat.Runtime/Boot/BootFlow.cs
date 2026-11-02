@@ -73,6 +73,9 @@ namespace HeroCat.Runtime.Boot
         /// <summary>06 section 13's <c>currency_changed</c> rows from the bus; null when analytics is NullAnalytics.</summary>
         public CurrencyAnalytics CurrencyAnalytics { get; internal set; }
 
+        /// <summary>The feature specs' other analytics rows from the bus (03, 04, 05, 06 section 13); null when analytics is NullAnalytics.</summary>
+        public FeatureAnalytics FeatureAnalytics { get; internal set; }
+
         public LoadStatus LoadStatus { get; internal set; }
         public bool IsNewProfile { get; internal set; }
 
@@ -174,7 +177,7 @@ namespace HeroCat.Runtime.Boot
                 // No save, or every copy bad (quarantined): a new profile (02 section 8.3 step 4). An unreadable save is not
                 // fatal: boot continues and shows a one-time notice with the support id (00 decision 103, issue #248).
                 r.IsNewProfile = true;
-                analytics.Track("profile_created", new Dictionary<string, object> { ["rngRoot"] = state.RngRoot.ToString() });   // TODO(#261): unindexed
+                analytics.Track(new AnalyticsEvents.ProfileCreated());   // 02 section 14.3: the funnel step, never the RngRoot seed (issue #261)
                 if (load.ReplacedUnreadableSave)
                 {
                     var sid = new SupportId(o.SessionId, now).Format();
@@ -185,8 +188,11 @@ namespace HeroCat.Runtime.Boot
             r.Sim = new Simulation(state, r.Content);
             r.Bus = new EventBus();
             r.Runner = new SessionRunner(r.Sim, svc, r.Bus, o.CommandLog, o.Runner ?? new SessionRunnerOptions());
-            if (!(analytics is NullAnalytics))   // before Start, so the first rollover's LOGIN row is counted
+            if (!(analytics is NullAnalytics))   // before Start, so the first rollover's LOGIN row (and day_rollover) is counted
+            {
                 r.CurrencyAnalytics = new CurrencyAnalytics(r.Bus, analytics, () => r.Sim.State, r.Content.Constants.TickHz);
+                r.FeatureAnalytics = new FeatureAnalytics(r.Bus, analytics, r.Content, () => r.Sim.State);
+            }
             Done(BootStep.Save);
 
             // 5. Rollover first, then the catch-up compute (stores Offline.Pending, stamps LastTickServerTime), save now.
@@ -203,11 +209,14 @@ namespace HeroCat.Runtime.Boot
             Done(BootStep.Handoff);
 
             double bootMs = 0;
+            var stepMs = new double[Enum.GetValues(typeof(BootStep)).Length];
             foreach (var t in r.Timings)
             {
                 bootMs += t.Ms;
-                analytics.Track("boot_step", new Dictionary<string, object> { ["step"] = t.Step.ToString(), ["ms"] = t.Ms });   // TODO(#261): not in the 02 section 14.4 index
+                stepMs[(int)t.Step] += t.Ms;
             }
+            analytics.Track(new AnalyticsEvents.BootMs(bootMs, stepMs[(int)BootStep.Content], stepMs[(int)BootStep.Config], stepMs[(int)BootStep.Auth],
+                                                      stepMs[(int)BootStep.Save], stepMs[(int)BootStep.CatchUp], stepMs[(int)BootStep.Handoff]));   // 10 section 5
             var pending = state.Offline.Pending;   // 02 section 14.3: the stage is the envelope's
             analytics.Track(new AnalyticsEvents.SessionStart(pending?.ElapsedSec ?? 0, pending?.CreditedSec ?? 0, ColdBoot: true, bootMs));
             return r;
