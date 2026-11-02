@@ -184,7 +184,7 @@ SCHEMA = {
     "companions": T("CompanionRowDto", [c("id", "id"), c("rarity", "enum(Rarity)"), c("ability_type", "enum(AbilityType)"),
                                         c("dps_pct", "double"), c("mp_cost", "int"), c("cooldown_ticks", "int"),
                                         c("duration_ticks", "int", True), TIER, NAME, DESC, c("icon", "asset"),
-                                        c("sprite", "asset"), c("vfx", "asset")], "id", required=False, todo=161),
+                                        c("sprite", "asset"), c("vfx", "asset")], "id", required=False),
     "runes": T("RuneRowDto", [c("id", "id"), c("rarity", "enum(Rarity)"), c("stat", "ref(stats)"),
                               c("stat_pct", "double"), c("slot_mask", "int"), TIER, NAME, DESC, c("icon", "asset")],
                "id", required=False),
@@ -876,7 +876,7 @@ def rule_e034_counts(ctx):
     for b in ctx.rows("banners"):
         table = POOL_TABLES[b["id"]]
         if not b["enabled"] or not tier_le(b) or not ctx.has(table):
-            continue   # TODO(#161): companions; a banner whose pool table is not authored yet is skipped
+            continue   # a banner whose pool table is not authored yet (runes, P1) is skipped
         rows = [r for r in ctx.rows(table) if tier_le(r)]
         for rarity, col in zip(ENUMS["Rarity"], POOL_COLS):
             n = sum(1 for r in rows if r["rarity"] == rarity)

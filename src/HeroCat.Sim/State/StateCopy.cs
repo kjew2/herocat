@@ -140,7 +140,8 @@ namespace HeroCat.Sim.State
                 {
                     Phase = f.Phase, SpawnTimer = f.SpawnTimer, EnemyHp = f.EnemyHp, EnemyMaxHp = f.EnemyMaxHp, EnemyIsBoss = f.EnemyIsBoss,
                     BossTicksLeft = f.BossTicksLeft, AttackProgress = f.AttackProgress, ActiveDots = new List<DotInstance>(f.ActiveDots),
-                    AtkBuffPct = f.AtkBuffPct, AtkBuffTicksLeft = f.AtkBuffTicksLeft, PendingTaps = f.PendingTaps,
+                    AtkBuffPct = f.AtkBuffPct, AtkBuffTicksLeft = f.AtkBuffTicksLeft, GoldBuffPct = f.GoldBuffPct,
+                    GoldBuffTicksLeft = f.GoldBuffTicksLeft, PendingTaps = f.PendingTaps,
                     TapsThisSecond = f.TapsThisSecond, TapWindowTick = f.TapWindowTick,
                 };
             }
