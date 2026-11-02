@@ -20,6 +20,7 @@ One ASP.NET Core 8 deployable (`HeroCat.Server`), organised as feature folders; 
 | IAP / Receipt | catalog, validate, restore, store webhooks, refunds | `purchases`, `inbox_items`, `diamond_ledger` | MVP | `DisabledReceiptValidator`; `FakeReceiptValidator` in debug builds |
 | Config / Content | remote config, kill switches, content manifest pointer, min versions, maintenance | `config_versions` | MVP | `LocalConfigService` (bundled content, all flags on) |
 | Dungeon seed | seed issue, result correlation | `dungeon_seeds` | MVP | `LocalDungeonSeedService : IDungeonSeedService` (one draw from `dungeon`; issue #25) |
+| Analytics | economy-events ingest, server-side economy events of ledger writes (section 3.5; issue #209) | `events` | MVP | `NullAnalytics` (no backend; 02 section 14.2) |
 | Mail / Admin | mail blasts, compensation, moderation actions, config publishing, support lookups | `mail_blasts`, `moderation_actions`, `config_versions` | MVP (internal) | n/a |
 | Guild | create/join/chat/boss | `guilds`, `guild_members`, `guild_chat` | P1 | n/a |
 | Leaderboard | weekly boards from save summaries | Redis ZSETs | P1 | n/a |
@@ -122,7 +123,7 @@ Errors: `PROVIDER_TOKEN_INVALID` (400), `PROVIDER_ALREADY_LINKED` (409; this pla
 
 **`POST /account/export`** -- `jwt` -- idempotent -- 1 per 7 days (`EXPORT_RATE_LIMITED` 429 with `retryAfterSec`). `{}` -> `{ "status": "queued", "estimatedMinutes": 10 }`; the link appears in `GET /account/export` -> `{ "status": "ready", "url": "https://…", "expiresAt": … }`.
 
-## 3. Save, Inbox, Dungeon seed, Config endpoints
+## 3. Save, Inbox, Dungeon seed, Config, Analytics endpoints
 
 ### 3.1 Save
 
@@ -210,6 +211,26 @@ Checks: `floor` in `[1, maxFloor(kind)]` (`VALIDATION`); the player's last uploa
 **`GET /config`** -- `none` (optionally `jwt`, which enables the rollout bucket) -- 30/min per IP. The rollout bucket is computed server-side only (issue #31): without a valid JWT the response carries the non-rollout default content, and the client re-fetches config once after auth at boot (01 section 8.1). Section 6 gives the body. Served with `Cache-Control: max-age=60`; the client caches for `CONFIG_CACHE_MAX_AGE_S` (01).
 
 Content bundles are **not** served by the API; `config.content.url` points to the CDN (`https://cdn.whiskerhero.example/content/{version}/manifest.json`), immutable per version, `Cache-Control: public, max-age=31536000`.
+
+### 3.5 Analytics events
+
+The backend half of 02 section 14 (00 section 3: economy events go to our own `events` table so they join `purchases` and `saves`; issue #209). The client's uploader sends only the economy events (02 section 14.1, `AnalyticsNames.Economy`); Firebase gets every event.
+
+**`POST /analytics/events`** -- `jwt` -- idempotent -- 60/min. Body: up to `ANALYTICS_BATCH_MAX` queued lines, oldest first, each exactly as 02 section 14.1 queues it (`{"name", "eventId", <envelope>, "props"}`); `X-Request-Id` is the batch id of 02 section 14.2.
+
+```json
+{ "events": [ { "name": "currency_changed", "eventId": "9f2c…", "ts": 1793670900, "sessionId": "…", "playerIdHash": "…", "deviceId": "…",
+    "clientVersion": "1.0.0", "contentVersion": "2026.11.03", "schemaVersion": 1, "debugTainted": false, "clockAuthoritative": true,
+    "dayIndex": 3, "stage": 41, "ageGate": 0, "props": { "currency": "DIAMOND", "delta": 50, "balanceAfter": 640, "reason": "QUEST" } } ] }
+// 200
+{ "accepted": 1, "duplicates": 0, "rejected": [ { "index": 3, "eventId": "…", "code": "EVENT_REASON_INVALID" } ], "serverTime": 1793670900 }
+```
+
+- **Batch.** A missing `events`, an empty list or more than `ANALYTICS_BATCH_MAX` events is `400 VALIDATION` (`details.field = events`), which the client's queue treats as rejected. Anything else is `200`, and the client drops the batch from its queue: a refused event can never succeed on a retry.
+- **Per event**, refused in `rejected` (`index` in the batch, `eventId` when readable, `code`) while the rest are stored: `EVENT_MALFORMED` (not an object; `eventId` not 32 hex; `ts` not an integer; `props` not an object or with a key that is not camelCase, names an envelope field or is `playerId`; an envelope field of the wrong type), `EVENT_NAME_INVALID` (not one of 02 section 14.1's economy events), `EVENT_REASON_INVALID` (a `props.reason` outside 00 contract 6's closed enum, or a `currency_changed` without one), `EVENT_TS_OUT_OF_RANGE` (`ts` older than `ANALYTICS_EVENT_MAX_AGE_DAYS`, more than `CLOCK_MAX_SKEW_ACCEPT_S` ahead of server time, or on a day with no `events` partition) and `EVENT_TOO_LARGE` (`props` over `ANALYTICS_PROPS_MAX_BYTES` as JSON).
+- **Stored once.** The pipeline replays a retried `X-Request-Id` (section 1.1), and each row is unique on `(event_id, ts)` (02 section 12, `0005`), so an event retried in another batch or after `IDEMPOTENCY_TTL_H` is counted in `duplicates`, not stored twice.
+- **Server-stamped fields.** `player_id_hash` is computed from the token's player with the environment's salt (`HeroCat:Analytics:PlayerIdSalt`, the client build's salt, so it equals the client's `playerIdHash`) and `age_gate` comes from the token's `age` claim (1 for under-age, else 0; section 10.1); the client's `playerIdHash` and `ageGate` are ignored. `env` is `HeroCat:Analytics:Env`, `source = 'client'`. Advertising-id props (`advertisingId`, `adId`, `idfa`, `idfv`, `gaid`, `aaid`) are dropped before storing for every player, so an `ageGate = 1` row never holds one. The other envelope fields are stored as sent.
+- **Server-side economy events.** A server ledger write (summon debit, inbox claim, refund, IAP grant) writes its own `currency_changed` row (06 section 13's fields, `source = 'server'`, no session or device) in the ledger write's transaction (`HeroCat.Server.Features.Analytics.ServerEconomyEvents`), and the IAP service writes `iap_status` the same way, so the warehouse does not rely on the client for money events. TODO(#199, #201, #202): those handlers call it when they land.
 
 ## 4. Summon service (server-authoritative, MVP)
 
@@ -552,7 +573,7 @@ flowchart LR
     Warehouse[(Analytics warehouse: Firebase export + events table)] --- RDS
 ```
 
-- One container image, two roles by command-line flag: `api` (no flag; stateless, horizontally scaled on CPU + request latency) and `--worker` (mail blasts, plausibility replays, purges, refund polls; one instance, leader lock in Redis; serves no HTTP). A third flag, `--migrate`, runs the migration runner below and exits. Both roles share Npgsql, Redis and the S3 client behind interfaces (`IDbConnectionFactory`, `IRedisConnection`, `IBlobStore`, the last with an in-memory implementation for tests and local runs and MinIO through the S3 client's service URL), so unit tests need no containers (issue #192).
+- One container image, two roles by command-line flag: `api` (no flag; stateless, horizontally scaled on CPU + request latency) and `--worker` (mail blasts, plausibility replays, purges, refund polls, the daily partition job of 02 section 12; one instance, leader lock in Redis; serves no HTTP). A third flag, `--migrate`, runs the migration runner below and exits. Both roles share Npgsql, Redis and the S3 client behind interfaces (`IDbConnectionFactory`, `IRedisConnection`, `IBlobStore`, the last with an in-memory implementation for tests and local runs and MinIO through the S3 client's service URL), so unit tests need no containers (issue #192).
 - `GET /health` (outside `/v1`, no auth) is the load balancer's liveness probe and the version 10 section 6.3 reads: `{ "status": "ok", "version": "2026.11.03", "role": "api", "sim": { "version", "saveSchemaVersion", "newStateHash" } }`, where `sim` comes from the referenced `HeroCat.Sim` (`newStateHash` is the `StateHash` of a new `GameState`, a fingerprint of the encoding the re-simulator shares with the client). It reads no database or Redis, so a dependency outage does not drain the target group; dependency readiness comes with 9.4's observability.
 - PostgreSQL via Npgsql with connection pooling (RDS Proxy at 100k DAU). Migrations are plain versioned SQL files (`server/db/migrations/NNNN_<name>.sql`, 02 section 12's DDL verbatim; no EF Core migrations, EF Core at most for queries) applied by a small runner (`HeroCat.Server --migrate`, from the same image; it records each file and its SHA-256 in `schema_migrations` under a Postgres advisory lock and refuses an applied file that changed or disappeared) in the deploy pipeline before the new image receives traffic and in CI against an empty PostgreSQL 16 (issue #33) (expand/contract pattern: never drop a column in the same release that stops writing it).
 - S3 buckets per environment: `herocat-saves-{env}` (versioning on, SSE-KMS, lifecycle: non-current versions expire after 7 days), `herocat-receipts-{env}` (object lock, 7 years), `herocat-content-{env}` (public read via CloudFront OAC only).
@@ -594,6 +615,7 @@ Metrics (Prometheus naming), by route where applicable:
 | `db_pool_in_use`, `db_query_duration_seconds{name}` | gauge, histogram |
 | `redis_lock_wait_seconds` | histogram |
 | `worker_job_duration_seconds{job}`, `worker_job_failures_total{job}` | histogram, counter |
+| `db_partition_horizon_days{table}` | gauge (days from now to the end of the table's last partition; the worker's partition job, 02 section 12, issue #262) |
 | `config_active_version`, `content_active_version_info` | gauge |
 
 ### 9.5 Alarm list
@@ -736,6 +758,7 @@ M0 has no server. Every service above is reached through an interface in `HeroCa
 23. Every error `code` named in this spec has a localization key (09 validator), and every endpoint has an OpenAPI entry generated from the controllers that matches the request/response JSON shown here (contract test).
 24. A Local-mode client build makes zero network calls during a 20-minute PlayMode session (network interceptor assertion), proving the M0 note.
 25. IAP: the first granted purchase of `diamonds_3` is doubled and a second is not, while the first purchase of another diamond pack is still doubled; a package is never doubled and creates one `inbox_items` row per scheduled portion at purchase, `GET /inbox` shows only the delivered portions plus the next one, and a refund expires every unclaimed portion (issues #50, #51).
+26. Analytics (section 3.5; issue #209): a batch retried with the same `X-Request-Id`, and the same events under another id, are stored once (`(event_id, ts)` unique); an event whose `reason` is outside 00 contract 6's enum is refused per event while the rest of the batch is stored; an under-age token's events are stored with `age_gate = 1` and no advertising-id prop; the worker's partition job creates the missing partitions up to `PARTITION_AHEAD_MONTHS` / `PARTITION_AHEAD_DAYS` ahead, a rerun creates none, and a horizon below one period is reported (issue #262). `HeroCat.Server.Tests` (`Analytics/`) runs these against Postgres.
 
 ## Constants introduced
 
@@ -761,6 +784,11 @@ Engineering/operational constants, code- or config-resident (`HeroCat.Server` `a
 | `SAVE_BLOB_MAX_BYTES` | 262144 | S (declared in 02) | 3.1 |
 | `SAVE_HISTORY_KEEP` | 10 | S (declared in 02) | 3.1 |
 | `CONFIG_REFRESH_S` | 30 | S (issue #204) | 6.2 |
+| `ANALYTICS_BATCH_MAX` | 100 | S (declared in 02) | 3.5 |
+| `ANALYTICS_EVENT_MAX_AGE_DAYS` | 30 | S (issue #209) | 3.5 |
+| `ANALYTICS_PROPS_MAX_BYTES` | 4096 | S (issue #209) | 3.5 |
+| `PARTITION_AHEAD_MONTHS` | 3 | S (declared in 02 section 12; issue #262) | 9.4 |
+| `PARTITION_AHEAD_DAYS` | 14 | S (declared in 02 section 12; issue #262) | 9.4 |
 | Rate limits | per endpoint, sections 2-5 | S | |
 | Alarm thresholds | 10 section 10 (issue #59) | S | |
 | Age of digital consent default | 13 | S | 10.1 |

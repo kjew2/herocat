@@ -22,9 +22,9 @@ sealed class SqlTable
 
 /// <summary>
 /// A small reader for the DDL subset the schema uses (specs/02 section 12 and server/db/migrations): create table,
-/// create [unique] index, create materialized view, create function, create trigger and alter table ... add column (one
-/// column per statement). Anything else that changes the schema (other alters, drop, ...) throws, so a new kind of
-/// statement extends this reader instead of being ignored.
+/// alter table ... add column, create [unique] index, create materialized view, create function and create trigger.
+/// Anything else that changes the schema (drop, other alters, ...) throws, so a new kind of statement extends this reader
+/// instead of being ignored.
 /// It exists so tests can hold the migration set to the spec, statically and against a live database.
 /// </summary>
 sealed class SqlSchemaModel
@@ -58,24 +58,24 @@ sealed class SqlSchemaModel
     }
 
     /// <summary>
-    /// Every ```sql block of specs/02 section 12, in order: the DDL (<see cref="SpecBlock"/>, 0001 verbatim) and then the
-    /// blocks that describe later migrations' schema changes (0004's columns), which together are the schema the
-    /// migration set must build.
+    /// Every ```sql block of specs/02 section 12, in order: the first is 0001_init.sql verbatim (<see cref="SpecBlock"/>);
+    /// each later one is a later migration file verbatim, its first line <c>-- NNNN_name.sql ...</c> naming the file.
     /// </summary>
-    public static string[] SpecTexts()
+    public static List<string> SpecBlocks()
     {
         string spec = File.ReadAllText(RepoPaths.Of("specs/02-domain-model-and-persistence.md"));
         int at = spec.IndexOf("## 12. Server-side relational schema", StringComparison.Ordinal);
-        int end = spec.IndexOf("\n## 13.", at, StringComparison.Ordinal);
+        int end = spec.IndexOf("## 13. ", at, StringComparison.Ordinal);
+        if (at < 0 || end < 0) throw new InvalidOperationException("specs/02 has no sections 12 and 13");
         var blocks = new List<string>();
         for (int b = spec.IndexOf("```sql\n", at, StringComparison.Ordinal); b >= 0 && b < end; b = spec.IndexOf("```sql\n", b, StringComparison.Ordinal))
         {
             b += "```sql\n".Length;
             int e = spec.IndexOf("```\n", b, StringComparison.Ordinal);
             blocks.Add(spec[b..e]);
-            b = e;
+            b = e + 4;
         }
-        return blocks.ToArray();
+        return blocks;
     }
 
     public static string[] MigrationTexts() =>
@@ -145,6 +145,17 @@ sealed class SqlSchemaModel
             var part = Regex.Match(low[(close + 1)..], @"^\s*partition by (\w+) \((\w+)\)");
             if (part.Success) t.PartitionBy = part.Groups[1].Value + "(" + part.Groups[2].Value + ")";
             Tables.Add(name, t);
+        }
+        else if ((x = Regex.Match(low, @"^alter table (\w+) (add column .*)$")).Success)
+        {
+            var t = Tables[x.Groups[1].Value];
+            var none = new HashSet<string>();
+            foreach (string add in SplitTopLevel(x.Groups[2].Value))
+            {
+                if (!add.StartsWith("add column ", StringComparison.Ordinal))
+                    throw new NotSupportedException("SqlSchemaModel reads only add column in an alter table; extend it: " + stmt);
+                AddEntry(t, add["add column ".Length..], none);
+            }
         }
         else if ((x = Regex.Match(low, @"^create (unique )?index (?:\w+ )?on (\w+) \(([^)]*)\)( where .*)?$")).Success)
         {

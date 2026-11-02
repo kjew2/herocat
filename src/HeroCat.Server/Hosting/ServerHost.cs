@@ -1,4 +1,5 @@
 using HeroCat.Server.Features.Admin;
+using HeroCat.Server.Features.Analytics;
 using HeroCat.Server.Features.Auth;
 using HeroCat.Server.Features.Config;
 using HeroCat.Server.Features.Dungeon;
@@ -68,7 +69,8 @@ public static class ServerHost
             .AddIapFeature()
             .AddConfigFeature()
             .AddDungeonFeature()
-            .AddAdminFeature();
+            .AddAdminFeature()
+            .AddAnalyticsFeature();
         builder.Services.AddRequestPipeline();
 
         var app = builder.Build();
@@ -85,6 +87,7 @@ public static class ServerHost
         builder.Services.AddHostedService<WorkerService>();
         builder.Services.AddHostedService<IdempotencyPurgeService>();
         builder.Services.AddHostedService<InboxPurgeService>();
+        builder.Services.AddHostedService<PartitionMaintenanceService>();
         return builder.Build();
     }
 
