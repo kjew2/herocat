@@ -114,7 +114,7 @@ namespace HeroCat.Sim.Tests
         {
             var fish = Simulation.RewardOf(Mvp.DungeonOf(Dungeon.FISH_COIN).Floor(f));
             var candy = Simulation.RewardOf(Mvp.DungeonOf(Dungeon.ROCK_CANDY).Floor(f));
-            Assert.That((fish.Currency, fish.Amount), Is.EqualTo((Currency.FISH_COIN, 50.0 * f)), "FISH_COIN_FLOOR(f) = 50 f");   // TODO(#165): the curve may change
+            Assert.That((fish.Currency, fish.Amount), Is.EqualTo((Currency.FISH_COIN, 50.0 * f)), "FISH_COIN_FLOOR(f) = 50 f");   // settled in #165
             Assert.That((candy.Currency, candy.Amount), Is.EqualTo((Currency.ROCK_CANDY, 10.0 * f)), "ROCK_CANDY_FLOOR(f) = 10 f");
         }
 

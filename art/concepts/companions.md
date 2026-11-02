@@ -1,13 +1,13 @@
 # Companion concepts
 
-Presentation only: names, roles and look briefs for the rows in `content_src/companions.csv`. Ids, rarities, ability types and numbers belong to `specs/04` section 8. Role tags map onto `ability_type` (`specs/04` section 8.1). The full roster of 50 is issue #289. The three below are the art pilot (issue #291), from the artist's prototypes in `art/reference/`.
+Presentation only: names, roles and look briefs for the rows in `content_src/companions.csv`. Ids, rarities, ability types and numbers belong to `specs/04` section 8. Role tags map onto `ability_type` (`specs/04` section 8.1). The full roster of 50 is issue #289. The three below are the art pilot (issue #291), from the artist's prototypes in `art/reference/companions/`.
 
 | Row | Rarity | Ability | Name | Role | Element | Reference |
 |---|---|---|---|---|---|---|
-| `comp_l_01` | Legendary | `DAMAGE` | Lucy | Arcane / Caster | LIGHT (arcane) | `art/reference/lucy.jpeg`, alt `lucy_special.jpeg` |
-| `comp_l_04` | Legendary | `BUFF_ATK` | Valeria | Tank / Paladin | LIGHT | `art/reference/valeria.jpeg` |
-| `comp_m_01` | Mythic | `DAMAGE` | Seraphine | Warrior / Death Knight | DARK | `art/reference/seraphine.jpeg` |
-| `comp_l_02` | Legendary | `DAMAGE` | Yuki | Mage / Shadow | DARK | `art/reference/yuki.jpg` |
+| `comp_l_01` | Legendary | `DAMAGE` | Lucy | Arcane / Caster | LIGHT (arcane) | `art/reference/companions/lucy.jpeg`, alt `lucy_special.jpeg` |
+| `comp_l_04` | Legendary | `BUFF_ATK` | Valeria | Tank / Paladin | LIGHT | `art/reference/companions/valeria.jpeg` |
+| `comp_m_01` | Mythic | `DAMAGE` | Seraphine | Warrior / Death Knight | DARK | `art/reference/companions/seraphine.jpeg` |
+| `comp_l_02` | Legendary | `DAMAGE` | Yuki | Mage / Shadow | DARK | `art/reference/companions/yuki.jpg`, splash `splash/yuki_splash.png` |
 
 ## Lucy
 - **Hook:** a stargazing witch who reads the sky like a map and redraws it when it disagrees with her.
@@ -34,6 +34,7 @@ Presentation only: names, roles and look briefs for the rows in `content_src/com
 - **Palette:** black, white and violet; silver chains and cross accents.
 - **Ability VFX (`vfx_comp_l_02`):** violet shadow butterflies swarm out of the parasol and burst on the enemy.
 - **Added after the pilot**, the same way: stand-ins cut by `tools/art/cut_pilot_assets.py`.
+- **Splash pilot:** the first dedicated vertical splash (`splash/yuki_splash.png`, 1024 x 1536). The splash stand-in is cut from it, not from the sheet; icon, portrait and chibi still come from the sheet, whose face crop has more pixels.
 
 ## Pilot asset status (issue #291)
 The images in Unity are **stand-ins cut from the reference sheets** by `tools/art/cut_pilot_assets.py`. They don't replace the artist's deliverables:
@@ -42,6 +43,12 @@ The images in Unity are **stand-ins cut from the reference sheets** by `tools/ar
 |---|---|---|
 | Portrait `portrait_comp_*` (256 rp) | crop of the splash art | clean portrait |
 | Icon `icon_comp_*` (128 rp) | face crop | icon drawn for 88-128 rp |
-| Splash `art_splash_*` (1080 x 1400 rp) | splash without the baked-in text | clean illustration |
+| Splash `art_splash_*` (1080 x 1920 rp, full screen) | 9:16 window of the splash without the baked-in text (Yuki: from her vertical splash; the others are upscaled about 2x from the sheets, so they look soft) | clean full-screen illustration |
 | Battle chibi `spr_comp_*` (about 48 px native) | the reference chibi sampled on its own pixel grid, background and pedestal removed, 1 frame | idle 4 + cast 6 pixel frames |
 | VFX `vfx_comp_*` | none (the generic ring placeholder) | particle system |
+
+### Splash pilot notes (Yuki)
+- **What arrived:** a 2:3 vertical splash (1024 x 1536) with the title, class and element chips baked into the top 265 px.
+- **What the game needs:** full-screen character art at 1080 x 1920 rp (9:16) with no baked-in text (`specs/07` section 15.2). The UI draws name, rarity and role. The reveal scales it to cover the screen, so taller phones trim the sides and wider screens trim the top and bottom. Keep the face and the key silhouette inside the centred 810 x 1440 rp safe zone.
+- **Stand-in cut:** x 204-916, y 270-1536 (everything below the chips), scaled up about 1.5x. The left hair ends and the outer half of the parasol canopy are lost.
+- **Ask the artist for:** 1080 x 1920 or larger, no text, with the character composed for 9:16 and inside the safe zone. Then nothing is cropped beyond the screen trim and nothing is upscaled.

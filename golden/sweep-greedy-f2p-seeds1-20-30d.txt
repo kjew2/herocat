@@ -1,5 +1,5 @@
 # herocat sweep v3
-# bot=greedy-f2p seeds=1-20 days=30 diamonds=content content=2026.11.02.9/111dd4df
+# bot=greedy-f2p seeds=1-20 days=30 diamonds=content content=2026.11.02.9/323fdcd3
 day stageP10 stageMed stageP90 partyLMed     dpsMed  diaEarn  pulls fishLvl  longWallH
   1      181      190      210       94   9.14e+03     1730     10      10       11.2
   2      240      240      260      133   6.65e+04     1880     10      10       13.9

@@ -356,7 +356,7 @@ Perf regressions are a release blocker when the release-candidate run breaks a b
 
 ### 6.1 Branch strategy
 
-Trunk-based. `main` is always releasable; every change is a PR with required checks (`pr.yml`, plus `content.yml` when content or sim changed, plus the Unity EditMode job when `unity/` changed). Release branches `release/1.2` are cut from `main` for a store submission and receive only cherry-picked fixes; the tag `client-v1.2.0+345` is created by `build-*.yml` on that branch. The server deploys from `main` continuously to stage and by tag `server-v2026.11.03` to prod. Content publishes from `main` by tag `content-2026.11.03`.
+Trunk-based. `main` is always releasable; every change is a PR with required checks (`pr.yml`, plus `content.yml` when content or sim changed, plus the Unity EditMode job when `unity/` changed). PRs opened by agents have GitHub auto-merge (merge commit) enabled when they are opened, so they merge into `main` as soon as the required checks pass, with no review step (agreed with the user, `CLAUDE.md`). Release branches `release/1.2` are cut from `main` for a store submission and receive only cherry-picked fixes; the tag `client-v1.2.0+345` is created by `build-*.yml` on that branch. The server deploys from `main` continuously to stage and by tag `server-v2026.11.03` to prod. Content publishes from `main` by tag `content-2026.11.03`.
 
 ### 6.2 Workflows
 

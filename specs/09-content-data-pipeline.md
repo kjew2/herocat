@@ -325,7 +325,7 @@ Example: `{"id": "EPIC", "code": "E", "color": "#9B59B6", "shape_icon": "icon_ra
 | `tier` | enum(Tier) | |
 | `name_key`, `desc_key` | key | |
 | `icon` | asset | |
-| `sprite` | asset | Held by the companion in the slot the weapon is equipped in. |
+| `sprite` | asset | Unused since 00 decision 113: companions are drawn with their own weapons and no held weapon sprite is drawn in battle. The column stays (optional, may be empty) so content keeps its schema; dropping it is a later content-schema change. |
 
 Example: `{"id": "weapon_e_02", "rarity": "EPIC", "atk_pct": 125.0, "passive_pct": 4.0, "element": "FIRE", "tier": "M0", "name_key": "weapon.e_02.name", "desc_key": "weapon.e_02.desc", "icon": "icon_weapon_e_02", "sprite": "spr_weapon_e_02"}`.
 

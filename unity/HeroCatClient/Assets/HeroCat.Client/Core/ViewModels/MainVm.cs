@@ -141,8 +141,8 @@ namespace HeroCat.Client.Core
         public readonly Flag BossTimerBad = new Flag();
 
         public readonly NumberLabel Dps = new NumberLabel();
-        /// <summary>Per party slot (slot 1 first): the skill (cooldown ring), the companion (ability cooldown), the held
-        /// weapon, the Awakening aura and the slot's own MP bar (03 section 2.4).</summary>
+        /// <summary>Per party slot (slot 1 first): the skill (cooldown ring), the companion (ability cooldown), the equipped
+        /// weapon (an id only; no held sprite is drawn, 00 decision 113), the Awakening aura and the slot's own MP bar (03 section 2.4).</summary>
         public readonly Bindable<SlotLook>[] Skills;
         public readonly Bindable<SlotLook>[] Companions;
         public readonly Bindable<string>[] WeaponIds;

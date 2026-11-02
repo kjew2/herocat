@@ -150,10 +150,10 @@
     "en": {
       "file": "localization.en.json",
       "rows": 689,
-      "sha256": "a1576267c923bb46be168e84d013411a70a8c55a4a1ea9fb64783f425af21858"
+      "sha256": "e6a3cb1acae4ae63a140a452f52a847ce3a71189933703b0a04cf0aec7ebe5cc"
     }
   },
-  "content_hash": "111dd4df9b112d0ec856903bf644519dd3ba240785794929690858805284067c",
+  "content_hash": "323fdcd36cd1b288b0a78bc3867760bdfefcd9ec89f737b0b307aac72af02a52",
   "s_constants": [
     "BASE_HP",
     "BOSS_ROCK_CANDY_P",
