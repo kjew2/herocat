@@ -5,7 +5,7 @@ namespace HeroCat.Server.Hosting;
 /// <summary>
 /// The <c>HeroCat</c> configuration section (appsettings.json, environment variables <c>HeroCat__...</c>). Secrets
 /// (database password, Redis auth token, signing keys) are not here: specs/08 section 9.3 reads them from Secrets
-/// Manager at container start.
+/// Manager at container start (<see cref="SecretsOptions"/> names the secrets; issue #272).
 /// </summary>
 public sealed class ServerOptions
 {
@@ -22,6 +22,7 @@ public sealed class ServerOptions
     public RedisOptions Redis { get; set; } = new();
     public BlobOptions Blobs { get; set; } = new();
     public KeysOptions Keys { get; set; } = new();
+    public SecretsOptions Secrets { get; set; } = new();
     public NetworkOptions Network { get; set; } = new();
     public AnalyticsOptions Analytics { get; set; } = new();
 }
@@ -157,8 +158,9 @@ public static class BlobProviders
 
 /// <summary>
 /// Key material (specs/08 section 9.3): the JWT signing keys, the support-code server key and the data key that encrypts
-/// device HMAC keys. Values are base64 (PEM for RSA) inline or a <c>...File</c> path, never committed. TODO(#272): load
-/// them from Secrets Manager / KMS instead of configuration.
+/// device HMAC keys. Values are base64 (PEM for RSA) inline or a <c>...File</c> path, never committed. In AWS the
+/// Secrets Manager configuration provider (<see cref="SecretsOptions"/>, issue #272) fills <see cref="SigningKeys"/>,
+/// <see cref="RecoveryKey"/> and <see cref="DataKeyWrapped"/> at start, and refreshes the signing keys on a timer.
 /// </summary>
 public sealed class KeysOptions
 {
@@ -174,10 +176,56 @@ public sealed class KeysOptions
     public string DataKeyFile { get; set; } = "";
 
     /// <summary>
+    /// The data key as a KMS envelope: base64 of the <c>CiphertextBlob</c> of
+    /// <c>kms generate-data-key-without-plaintext --key-spec AES_256</c> with the encryption context
+    /// <c>herocat:purpose=data-key</c>, <c>herocat:env={HeroCat:Env}</c>. Unwrapped once per process with KMS
+    /// <c>Decrypt</c>; set this or <see cref="DataKey"/>, not both.
+    /// </summary>
+    public string DataKeyWrapped { get; set; } = "";
+
+    /// <summary>Optional KMS key id or alias the wrapped data key must belong to (passed to <c>Decrypt</c> as <c>KeyId</c>).</summary>
+    public string DataKeyKmsKeyId { get; set; } = "";
+
+    /// <summary>
     /// Generate any missing key in memory at start-up (logged). For local runs and tests only: tokens do not survive a
     /// restart or validate on another instance. On in appsettings.Development.json; off elsewhere.
     /// </summary>
     public bool AllowEphemeral { get; set; }
+}
+
+public static class SecretProviders
+{
+    public const string None = "none";
+    public const string Aws = "aws";
+}
+
+/// <summary>
+/// Where the api reads <see cref="KeysOptions"/> from in AWS (specs/08 section 9.3, issue #272): named Secrets Manager
+/// secrets read into <c>HeroCat:Keys</c> by a configuration provider at start, the signing-key secret again every
+/// <see cref="RefreshSeconds"/>. Only secret ids are configured here, never values.
+/// </summary>
+public sealed class SecretsOptions
+{
+    /// <summary><c>none</c> (local, tests: keys come from configuration or are ephemeral) or <c>aws</c>.</summary>
+    public string Provider { get; set; } = SecretProviders.None;
+
+    /// <summary>Region of Secrets Manager and KMS.</summary>
+    public string Region { get; set; } = "us-east-1";
+
+    /// <summary>Empty for AWS; a LocalStack endpoint otherwise (used for Secrets Manager and KMS).</summary>
+    public string ServiceUrl { get; set; } = "";
+
+    /// <summary>Secret whose string is a JSON array <c>[{"kid": "...", "pem": "..."}]</c>, the signer first -> <c>HeroCat:Keys:SigningKeys</c>.</summary>
+    public string SigningKeysSecretId { get; set; } = "";
+
+    /// <summary>Secret whose string is the base64 support-code key -> <c>HeroCat:Keys:RecoveryKey</c>.</summary>
+    public string RecoveryKeySecretId { get; set; } = "";
+
+    /// <summary>Secret whose string is the base64 KMS-wrapped data key -> <c>HeroCat:Keys:DataKeyWrapped</c>.</summary>
+    public string DataKeySecretId { get; set; } = "";
+
+    /// <summary>How often the signing-key secret is re-read so a rotation reaches the key ring without a restart; 0 disables.</summary>
+    public int RefreshSeconds { get; set; } = 300;
 }
 
 public sealed class SigningKeyOptions
