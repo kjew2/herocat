@@ -8,13 +8,13 @@ Depends on: 00 (constants, names, authority split), 02 (`GameState` fields this 
 
 ## 1. Currencies: sources and sinks
 
-All balances live in `GameState.Wallet` (02's typed fields; `HERO_EXP` is `Hero.Exp`). Every mutation goes through `Wallet.Apply(CurrencyDelta, CurrencyReason)` with a reason from the closed enum in 00 section 8 item 6. There is no second path.
+All balances live in `GameState.Wallet` (02's typed fields; `PARTY_EXP` is `Party.Exp`). Every mutation goes through `Wallet.Apply(CurrencyDelta, CurrencyReason)` with a reason from the closed enum in 00 section 8 item 6. There is no second path.
 
 ```csharp
 // HeroCat.Sim
 public enum Currency : byte
 {
-    GOLD, DIAMOND, FISH_COIN, ROCK_CANDY, HERO_EXP,
+    GOLD, DIAMOND, FISH_COIN, ROCK_CANDY, PARTY_EXP,
     TICKET_FISH_COIN, TICKET_ROCK_CANDY, TICKET_EXP,
     TICKET_SUMMON_WEAPON, TICKET_SUMMON_SKILL, TICKET_SUMMON_COMPANION,
     GUILD_COIN,          // P1, always 0 before P1
@@ -32,7 +32,7 @@ public readonly record struct CurrencyDelta(Currency Currency, double Amount);
 
 // Storage is 02's typed Wallet (issue #7): double Gold, FishCoin; long Diamond, RockCandy, GuildCoin;
 // int[] DungeonTicket by Dungeon ordinal; int[] SummonTicket by Banner ordinal (WEAPON, SKILL, COMPANION, RUNE).
-// HERO_EXP is not a balance: it reads and writes Hero.Exp but still flows through Apply for the reason code (00 section 8 item 9).
+// PARTY_EXP is not a balance: it reads and writes Party.Exp but still flows through Apply for the reason code (00 section 8 item 9).
 public sealed partial class Wallet
 {
     public bool CanAfford(Currency c, double amount) => Get(c) >= amount;   // Get(c) reads the typed field
@@ -44,7 +44,7 @@ public sealed partial class Wallet
         if (!double.IsFinite(d.Amount) || (IsCounted(d.Currency) && d.Amount != Math.Floor(d.Amount))) return false;
         double next = Get(d.Currency) + d.Amount;
         if (next < 0) return false;
-        Set(d.Currency, next);                // HERO_EXP: Hero.Exp = next; then runs 03's CheckHeroLevel (03 section 5.2)
+        Set(d.Currency, next);                // PARTY_EXP: Party.Exp = next; then runs 03's CheckPartyLevel (03 section 5.2)
         sink.Emit(new CurrencyChanged(d.Currency, d.Amount, next, reason));
         return true;
     }
@@ -59,7 +59,7 @@ public sealed partial class Wallet
 | `DIAMOND` | M0 | Login (`LOGIN`), daily/weekly quests (`QUEST`), boss first clears (`FIRST_CLEAR`), achievements (`ACHIEVEMENT`), tutorial grant (`TUTORIAL`), IAP via Inbox (`IAP`), mail (`MAIL`) | Summons (`SUMMON`), ticket exchange (`SHOP_EXCHANGE`) | `DIAMONDS_PER_DAY_F2P` = 400 (section 2) |
 | `FISH_COIN` | M0 source, MVP sink | Fish discovery (`FISH_DISCOVERY`), repeat merges and discards (`FISH_MERGE`, 05), Fish Coin Dungeon (`DUNGEON`) | Research (`RESEARCH`) | board income (05) plus `2 x FISH_COIN_FLOOR(f)`; per-day totals from the tool, section 11 |
 | `ROCK_CANDY` | MVP | Rock Candy Dungeon (`DUNGEON`), boss kills by chance (`BOSS`, rate in 03), copies past `DUPE_LVL_CUM[10]` = 160 converted at pull time (`SUMMON`, 04 section 5.3) | Awakening (`AWAKENING`), limit breaks (`LIMIT_BREAK`, rules in 04) | 2 x `ROCK_CANDY_FLOOR(f)`, section 6; boss drops and overflow are small next to it |
-| `HERO_EXP` | M0 | Kills (`KILL`), Offline Catch-up (`OFFLINE`), EXP Dungeon (`DUNGEON`) | Hero Level, consumed automatically by 03 | never spent manually |
+| `PARTY_EXP` | M0 | Kills (`KILL`), Offline Catch-up (`OFFLINE`), EXP Dungeon (`DUNGEON`) | Party Level (one level for the whole party, 00 decision 109), consumed automatically by 03 | never spent manually |
 | `TICKET_FISH_COIN`, `TICKET_ROCK_CANDY`, `TICKET_EXP` | MVP | Daily reset to `DUNGEON_TICKETS_PER_DAY` (`DAILY_RESET`), exchange (`SHOP_EXCHANGE`), mail | Dungeon clear or sweep (`DUNGEON`) | 2 each, reset not stacked |
 | `TICKET_SUMMON_WEAPON` | MVP | Daily free gift (`DAILY_GIFT`), quests, weekly bonus, events, mail | One pull (`SUMMON`) | 1 per day from the gift |
 | `TICKET_SUMMON_SKILL`, `TICKET_SUMMON_COMPANION` | MVP | Weekly complete-all bonus, achievements, events, mail | One pull (`SUMMON`) | about 0.15 per day each |
@@ -77,7 +77,7 @@ Rules that hold for every row:
 
 ### 1.2 M0 subset
 
-M0 ships `GOLD`, `DIAMOND`, `FISH_COIN`, `HERO_EXP`; the tutorial grant (`TUTORIAL_DIAMONDS` plus the starter weapon `TUTORIAL_WEAPON_ID`, 09 `tut_welcome`, issue #46); Offline Catch-up; `LOGIN_DIAMONDS`; boss first-clear diamonds (`FIRST_CLEAR_DIAMONDS`, paid by 03's boss clear with `CurrencyReason.FIRST_CLEAR`). Quests, Dungeons, Shop, Inbox and Awakening are MVP. The M0 bot therefore earns diamonds only from login, first clears and the tutorial grant, which is why the M0 exit criterion in 00 section 11 is two weeks, not thirty days.
+M0 ships `GOLD`, `DIAMOND`, `FISH_COIN`, `PARTY_EXP`; the tutorial grant (`TUTORIAL_DIAMONDS`, the five distinct Common starter companions `TUTORIAL_COMPANION_IDS` equipped in party slots 0-4, and the starter weapon `TUTORIAL_WEAPON_ID` in slot 0; 09 `tut_welcome`, issue #46, 00 decision 109; summons upgrade the party rather than build it); Offline Catch-up; `LOGIN_DIAMONDS`; boss first-clear diamonds (`FIRST_CLEAR_DIAMONDS`, paid by 03's boss clear with `CurrencyReason.FIRST_CLEAR`). Quests, Dungeons, Shop, Inbox and Awakening are MVP. The M0 bot therefore earns diamonds only from login, first clears and the tutorial grant, which is why the M0 exit criterion in 00 section 11 is two weeks, not thirty days.
 
 ### 1.3 Reject reasons
 
@@ -103,7 +103,7 @@ Every economy command rejects through 01's `ApplyResult.Reject(RejectCode, reaso
 | `EXCHANGE_LIMIT_REACHED` | `Capped` | `ExchangeItem` with `qty` above the offer's remaining daily limit |
 | `NO_PENDING_OFFLINE_REWARD` | `NotAvailable` | `ClaimOfflineReward` |
 
-`Awaken` is 03's command; its reject reasons are 03's.
+`Awaken(slot)` is 03's command (Awakening is per party slot, 00 decision 109); its reject reasons are 03's.
 
 ## 2. Diamond budget (MVP)
 
@@ -153,7 +153,7 @@ Assumed session shape, matching 00 section 6.6 and what the bot in spec 10 plays
 |---|---|---|---|
 | Login | 0:00 | `SCR_OFFLINE_REWARD` shows the overnight gold and EXP (section 7); the Magic Tank is full (`TANK_CAP0` or Research cap). Login diamonds landed on the first tick. Red dots: Quests if anything is claimable, Shop (daily gift), Inbox if anything arrived. | `ClaimOfflineReward` |
 | First 5 minutes | 0:01 to 0:05 | Spend overnight gold: Training `Max` on ATK, then the cheapest of the other stats (bot policy in 03). Release the full tank (`ReleaseMax`), merge everything (`MergeAll`), which fires missiles and starts the merge mission. Claim the daily gift (1 `TICKET_SUMMON_WEAPON`), pull it. Claim claimable quests. | `TrainStat`, `ReleaseMax`, `MergeAll`, `ClaimDailyGift`, `Summon`, `ClaimAllQuests` |
-| Dungeons | 0:05 to 0:12 | Run or sweep the three dungeons, two tickets each. Each run is a fixed fight of at most `BOSS_TIME_TICKS`, so six runs take at most 3 minutes plus result screens. Rock Candy from the dungeon goes straight into Awakening if the next rank is affordable and unlocked. | `StartDungeon`, `SweepDungeon`, `Awaken` |
+| Dungeons | 0:05 to 0:12 | Run or sweep the three dungeons, two tickets each. Each run is a fixed fight of at most `BOSS_TIME_TICKS`, so six runs take at most 3 minutes plus result screens. Rock Candy from the dungeon goes straight into Awakening (some slot's next rank) if it is affordable and unlocked. | `StartDungeon`, `SweepDungeon`, `Awaken(slot)` |
 | Mid-session | 0:12 to 0:55 | Combat runs; the player merges fish as the tank refills (`TANK_REFILL_S0` 6 s per fish, 10 per minute), taps bosses (`TapZap`), spends gold every few minutes. When `DIAMOND >= 1000`, Weapon 10-pull. Research purchases when Fish Coins cover the next node. | `MergeFish`, `TapZap`, `TrainStat`, `Summon`, `Research` (03) |
 | Last minutes | 0:55 to 1:00 | Spend all gold (nothing carries value offline; offline gold is computed from stage, not banked gold). Claim all completed quests. Check that the daily progress bar is at 8 or more. Leave with the tank empty so refill time is not wasted. | `TrainStat`, `ClaimAllQuests`, `ReleaseMax` |
 | Between sessions | 1:00 to 12:00 | Offline Catch-up accrues at `OFFLINE_RATE` of the kill rate; the tank refills to capacity in `TANK_CAP * TANK_REFILL_S` seconds (60 s at Research 0) and then idles. | none |
@@ -245,7 +245,7 @@ public enum QuestStatus { IN_PROGRESS, COMPLETED, CLAIMED }   // 02
 public enum QuestGoal : byte
 {
     LOGIN, LOGIN_DAYS, KILL_ENEMIES, ATTEMPT_BOSS, CLEAR_STAGES, SUMMON, RELEASE_FISH, MERGE_FISH,
-    CLEAR_DUNGEON, TRAIN_LEVELS, DAILIES_COMPLETED, WEEKLIES_COMPLETED, REACH_STAGE, REACH_HERO_LEVEL, OWN_WEAPONS,
+    CLEAR_DUNGEON, TRAIN_LEVELS, DAILIES_COMPLETED, WEEKLIES_COMPLETED, REACH_STAGE, REACH_PARTY_LEVEL, OWN_WEAPONS,
     OWN_SKILLS, OWN_COMPANIONS, LIFETIME_MERGES, FISH_LEVEL, AWAKEN_RANK, LIFETIME_SUMMONS, WATCH_AD /* P1 */
 }
 
@@ -329,18 +329,18 @@ One-time, never reset, claimable in any order once completed. Each ladder is a s
 | Ladder | Goal | Rungs (target -> reward) | Total |
 |---|---|---|---|
 | Stage | `REACH_STAGE` | 10->20, 30->30, 50->50, 100->80, 150->100, 200->100, 300->150, 400->150, 500->200, 700->250, 1000->300 | 1,430 |
-| Hero Level | `REACH_HERO_LEVEL` | 10->20, 25->30, 50->50, 75->80, 100->100, 150->150, 200->200 | 630 |
+| Party Level | `REACH_PARTY_LEVEL` | 10->20, 25->30, 50->50, 75->80, 100->100, 150->150, 200->200 | 630 |
 | Weapons owned | `OWN_WEAPONS` (distinct) | 5->30, 10->50, 20->100, 25->200 | 380 |
 | Skills owned | `OWN_SKILLS` | 5->30, 10->50, 20->100, 30->150, 35->250 | 580 |
 | Companions owned | `OWN_COMPANIONS` | 5->30, 10->50, 20->100, 35->150, 45->300 | 630 |
 | Merges | `LIFETIME_MERGES` | 50->20, 200->30, 500->50, 1000->80, 3000->100, 10000->200 | 480 |
 | Fish level | `FISH_LEVEL` | 5->30, 8->50, 10->100, 12->150 (needs Research), 15->300 | 630 |
-| Awakening | `AWAKEN_RANK` | 1->50, 2->100, 3->150, 4->200, 5->300 | 800 |
+| Awakening (highest slot rank) | `AWAKEN_RANK` | 1->50, 2->100, 3->150, 4->200, 5->300 | 800 |
 | Summons | `LIFETIME_SUMMONS` | 10->20, 50->50, 100->80, 300->100, 500->150, 1000->300 | 700 |
 
-How each goal reads the state (issue #171): `REACH_STAGE` is `Progress.HighestCleared` (the stage cleared at the frontier, the value the `QUESTS` gate reads, so rung 10 completes with the gate); `REACH_HERO_LEVEL` is `Hero.Level`; `OWN_WEAPONS` / `OWN_SKILLS` / `OWN_COMPANIONS` count the distinct ids in that collection's `Items` (copies and levels do not count), raised after each pull result; `FISH_LEVEL` is `Fish.HighestLevel`; `AWAKEN_RANK` is `Hero.AwakenRank`; `LIFETIME_MERGES` and `LIFETIME_SUMMONS` add one per merge and per pull at the `MERGE_FISH` and `SUMMON` progress sites. Every rung a value crosses completes in the same call, so a jump from stage 9 to 30 completes rungs 10 and 30 together, each claimable on its own in any order. Achievement entries are never cleared by `EnsureDay`. When the sim is constructed (a load, or a new content build) it raises every ladder to the value the state holds, the sum ladders from the lifetime counters `Stats.Merges` and `Stats.Pulls`, so a rung added by content completes without waiting for the next change; the raise never lowers progress and never touches a claimed rung's state. Hero levels gained when an offline reward is claimed count (the claim applies `HERO_EXP`); `ComputeOfflineCatchup` itself advances no rung. `SCR_QUESTS` reads `Simulation.AchievementRows()` (each ladder's lowest unclaimed rung, fully claimed ladders dropped), `LowestUnclaimedRung(ladder)` and `ClaimedRungs(ladder)`.
+How each goal reads the state (issue #171): `REACH_STAGE` is `Progress.HighestCleared` (the stage cleared at the frontier, the value the `QUESTS` gate reads, so rung 10 completes with the gate); `REACH_PARTY_LEVEL` is `Party.Level`; `OWN_WEAPONS` / `OWN_SKILLS` / `OWN_COMPANIONS` count the distinct ids in that collection's `Items` (copies and levels do not count), raised after each pull result; `FISH_LEVEL` is `Fish.HighestLevel`; `AWAKEN_RANK` is the highest slot rank, `max over i of Party.Slots[i].AwakenRank` (00 decision 109: the conservative reading, the same one `feature_unlocks` uses, so a rung pays once one slot reaches rank `n`, never per slot and never for a sum of ranks, and the ladder's diamonds stay on the old single-rank schedule); `LIFETIME_MERGES` and `LIFETIME_SUMMONS` add one per merge and per pull at the `MERGE_FISH` and `SUMMON` progress sites. Every rung a value crosses completes in the same call, so a jump from stage 9 to 30 completes rungs 10 and 30 together, each claimable on its own in any order. Achievement entries are never cleared by `EnsureDay`. When the sim is constructed (a load, or a new content build) it raises every ladder to the value the state holds, the sum ladders from the lifetime counters `Stats.Merges` and `Stats.Pulls`, so a rung added by content completes without waiting for the next change; the raise never lowers progress and never touches a claimed rung's state. Party levels gained when an offline reward is claimed count (the claim applies `PARTY_EXP`); `ComputeOfflineCatchup` itself advances no rung. `SCR_QUESTS` reads `Simulation.AchievementRows()` (each ladder's lowest unclaimed rung, fully claimed ladders dropped), `LowestUnclaimedRung(ladder)` and `ClaimedRungs(ladder)`.
 
-Total ladder value 6,260 diamonds, of which the day-30 F2P bot has claimed 3,410 (model output of `tools/power_curve_model.py`, 20-seed medians for content 2026.11.01.2, issue #178): stage 589, hero level 293, Awakening rank 4 (rank 4's stage-500 gate falls before day 30, section 6.5), fish level 14 and 132 summons. The by-day column in section 2 is this total spread by when the bot crosses each rung. Progress for `OWN_*`, `REACH_*`, `FISH_LEVEL` and `AWAKEN_RANK` is a max, not a sum: `Quests.SetMax(goal, value)` is called when the underlying value changes.
+Total ladder value 6,260 diamonds, of which the day-30 F2P bot has claimed 3,410 (model output of `tools/power_curve_model.py`, 20-seed medians for content 2026.11.01.2, issue #178): stage 589, level 293, Awakening rank 4 (rank 4's stage-500 gate falls before day 30, section 6.5), fish level 14 and 132 summons. These are single-hero numbers, stale until the bots and `tools/power_curve_model.py` are rerun on the party model (00 decision 109; issue #309). The by-day column in section 2 is this total spread by when the bot crosses each rung. Progress for `OWN_*`, `REACH_*`, `FISH_LEVEL` and `AWAKEN_RANK` is a max, not a sum: `Quests.SetMax(goal, value)` is called when the underlying value changes.
 
 Collection rungs pay for a count, never for a complete set (pillar 4): every `OWN_*` rung's `target` is strictly less than the current pool size of that kind (00 section 6.3: 30 weapons, 40 skills, 50 companions), so the top rungs are 25, 35 and 45. 09 validates this on every content build, so a pool shrink or a rung edit cannot turn a rung into a set-completion reward (issue #44).
 
@@ -357,9 +357,9 @@ Both run `EnsureDay` first (section 4.2), then the `QUESTS` gate (`QUESTS_LOCKED
 
 ### 6.1 Shape
 
-Three dungeons, each a ladder of floors. Floor `f` is one fixed fight: a single boss enemy with `HP = HP0 * HP_G^(DUNGEON_FLOOR_STAGE_STEP * f) * BOSS_HP_MULT` and a time limit of `BOSS_TIME_TICKS`, fought with the player's current loadout, skills, companions and the passive Fish Board DPS (no fish missiles, no Tap Zap, no fish merging: the board is hidden during a run, 07). `DUNGEON_FLOOR_STAGE_STEP` = 20, so floor `f` is as hard as the stage-`20f` boss. A player at stage `s` can clear about floor `floor(s / 20)`.
+Three dungeons, each a ladder of floors. Floor `f` is one fixed fight: a single boss enemy with `HP = HP0 * HP_G^(DUNGEON_FLOOR_STAGE_STEP * f) * BOSS_HP_MULT` and a time limit of `BOSS_TIME_TICKS`, fought with the player's current party (every occupied slot's companion, weapon, skill and Awakening rank, each slot with its own MP pool) and the passive Fish Board DPS (no fish missiles, no Tap Zap, no fish merging: the board is hidden during a run, 07). `DUNGEON_FLOOR_STAGE_STEP` = 20, so floor `f` is as hard as the stage-`20f` boss. A player at stage `s` can clear about floor `floor(s / 20)`.
 
-The fight is a deterministic sim run ticked in the main loop (issue #42): `StartDungeon` switches `Combat.Mode = Dungeon` and stores `Combat.DungeonRun { Kind, Floor, Seed, GrantId, EnemyIndex, TicksLeft }` (02). Each tick then runs the normal hero, skill and companion code (03) against the floor's boss on a *temporary* `dungeon_run` RNG stream seeded with `seed`; the persistent `dungeon` stream is untouched in MVP. The boss fight is transient (`Combat.DungeonRun.Fight`, never saved, like `Combat.Fight`), and the frontier fight in `Combat.Fight` is frozen for the run: its enemy, HP, timers and buffs resume exactly where they were. Steps 3 (fish missiles) and 7 (Tap Zap) of 03 section 2.1 do not run, and `TapZap` and `AttemptBoss` are rejected `(NotAvailable, DUNGEON_RUN_IN_PROGRESS)` during a run (issue #172); the boss's kill pays no kill gold, EXP, loot or quest progress, only the floor reward. The run ends `Cleared` when the boss dies or `Failed(remainingHpPct)` when `TicksLeft` reaches 0, and `Combat.Mode` returns to `Stage` at the same stage and kill count. One boss per floor, so `EnemyIndex` is always 0 in MVP. `seed` comes from the `IDungeonSeedService` seam (00 contract 11, issue #25): in MVP `RemoteDungeonSeedService` gets it from the server per run request (08 `POST /dungeon/seed`, with a `grantId`); in M0 and bots `LocalDungeonSeedService` returns the next `dungeon` stream draw, `Derive(seed(dungeon), dungeon.Counter)`, peeked without advancing it (the sim's `Rng.LocalDungeonSeed.Peek`, 01 section 8.8 step 2), and `StartDungeon(..., localSeed: true)` consumes that one draw. Server validation is correlation only (issue #52): the save keeps a short `Dungeons.RecentRuns[{GrantId, Kind, Floor, Cleared}]` list (02) that the server matches against issued seeds, flagging clears without a seed (08 `DUNGEON_WITHOUT_SEED`); together with the soft-currency bounds (`GOLD_DELTA_BOUND`, `RESEARCH_WITHOUT_COINS`) that is the MVP check. Replaying runs from a power snapshot is a P1 follow-up if soft-launch data shows abuse.
+The fight is a deterministic sim run ticked in the main loop (issue #42): `StartDungeon` switches `Combat.Mode = Dungeon` and stores `Combat.DungeonRun { Kind, Floor, Seed, GrantId, EnemyIndex, TicksLeft }` (02). Each tick then runs the normal party code (03: per slot in order 0..4, attack, skill, ability) against the floor's boss on a *temporary* `dungeon_run` RNG stream seeded with `seed`; the persistent `dungeon` stream is untouched in MVP. The boss fight is transient (`Combat.DungeonRun.Fight`, never saved, like `Combat.Fight`), and the frontier fight in `Combat.Fight` is frozen for the run: its enemy, HP, timers and buffs resume exactly where they were. Steps 3 (fish missiles) and 7 (Tap Zap) of 03 section 2.1 do not run, and `TapZap` and `AttemptBoss` are rejected `(NotAvailable, DUNGEON_RUN_IN_PROGRESS)` during a run (issue #172); the boss's kill pays no kill gold, EXP, loot or quest progress, only the floor reward. The run ends `Cleared` when the boss dies or `Failed(remainingHpPct)` when `TicksLeft` reaches 0, and `Combat.Mode` returns to `Stage` at the same stage and kill count. One boss per floor, so `EnemyIndex` is always 0 in MVP. `seed` comes from the `IDungeonSeedService` seam (00 contract 11, issue #25): in MVP `RemoteDungeonSeedService` gets it from the server per run request (08 `POST /dungeon/seed`, with a `grantId`); in M0 and bots `LocalDungeonSeedService` returns the next `dungeon` stream draw, `Derive(seed(dungeon), dungeon.Counter)`, peeked without advancing it (the sim's `Rng.LocalDungeonSeed.Peek`, 01 section 8.8 step 2), and `StartDungeon(..., localSeed: true)` consumes that one draw. Server validation is correlation only (issue #52): the save keeps a short `Dungeons.RecentRuns[{GrantId, Kind, Floor, Cleared}]` list (02) that the server matches against issued seeds, flagging clears without a seed (08 `DUNGEON_WITHOUT_SEED`); together with the soft-currency bounds (`GOLD_DELTA_BOUND`, `RESEARCH_WITHOUT_COINS`) that is the MVP check. Replaying runs from a power snapshot is a P1 follow-up if soft-launch data shows abuse.
 
 The Fish Board is hidden and frozen during a run (issue #40): the fight uses only the board's passive DPS, the tank keeps refilling, and board commands are rejected while `Combat.Mode == Dungeon` (`Locked`, reason `BOARD_LOCKED`, 05). No player input changes the outcome, which is what makes `PreviewDungeon` exact under the same seed (issue #277 for a server seed).
 
@@ -442,7 +442,9 @@ Awakening rules (gates, multiplier) are 03's; this section checks that the Rock 
 | 4 | 500 | day 19 | 2,000 | 3,200 | 2,530 by day 11, then 2 x floor 23 = 460 a day: 3,450 by day 13 | before the gate | 0 |
 | 5 | 800 | beyond day 30 | 5,000 | 8,200 | | | |
 
-Reading: the intended feel is that every rank lands at most `max_days_after_gate` (2) days after its stage gate ("I can see it, I will have it tomorrow"). Under the current ladder and `ROCK_CANDY_FLOOR` that holds for ranks 1 and 4 but not for ranks 2 and 3, which arrive about 4 and 5 days after their gates; `tools/power_curve_model.py --check` reports the same miss (AC 18). The fix (more Rock Candy per floor, a different ladder rule, or limit-break repricing) is decision #249 items 3 and 5, not this table. Once rank 4 is bought Rock Candy accumulates, and 04's limit breaks are the sink for the surplus. `Awaken` command: validation, reject reasons and effect in 03; debits Rock Candy with `CurrencyReason.AWAKENING`; emits `Awakened(rank)`; progress `AWAKEN_RANK` ladder.
+Reading: the intended feel is that every rank lands at most `max_days_after_gate` (2) days after its stage gate ("I can see it, I will have it tomorrow"). Under the current ladder and `ROCK_CANDY_FLOOR` that holds for ranks 1 and 4 but not for ranks 2 and 3, which arrive about 4 and 5 days after their gates; `tools/power_curve_model.py --check` reports the same miss (AC 18). The fix (more Rock Candy per floor, a different ladder rule, or limit-break repricing) is decision #249 items 3 and 5, not this table. Once rank 4 is bought Rock Candy accumulates, and 04's limit breaks are the sink for the surplus. `Awaken(slot)` command: validation, reject reasons and effect in 03; debits Rock Candy with `CurrencyReason.AWAKENING`; emits `Awakened(slot, rank)`; progress `AWAKEN_RANK` ladder (highest slot rank, 5.4).
+
+Per-slot Awakening (00 decision 109): every party slot has its own rank, `AWAKEN_STAGES` gates and `AWAKEN_COST_ROCK_CANDY` ladder, so the table above prices one slot and awakening all five costs five times its cumulative column, while one slot rank is worth about a fifth of the old effect on party DPS. `awakening_targets` and AC 18 read rank `n` as the first slot to reach rank `n` (the conservative reading; a target per slot would need five times the Rock Candy). The days in the table are from the single-hero model and stale until the bots and `tools/power_curve_model.py` are rerun on the party model (issue #309); the Rock Candy budget for five slots is part of decision #249.
 
 ### 6.6 Tower (P1 outline)
 
@@ -479,7 +481,7 @@ public static CatchupResult? Compute(GameState s, ContentDb db, long serverNow)
     long credited = Math.Max(0, Math.Min(gap, capSec - (prev?.CreditedSec ?? 0)));   // the cap applies to the stacked sum
 
     int    stage    = s.Combat.Stage;                                    // the stage being farmed, walled or not
-    double killTime = Combat.KillTimeSeconds(s, db, stage, isBoss: false); // 03: hits-to-kill * attack interval + SPAWN_DELAY
+    double killTime = Combat.KillTimeSeconds(s, db, stage, isBoss: false); // 03: time to kill at the rated party DPS (Query.RatedDps over every occupied slot) + SPAWN_DELAY
     double killsPerSec = 1.0 / killTime;
     double gold = credited * db.OFFLINE_RATE * Economy.GoldPerKill(s, db, stage) * killsPerSec;   // GoldPerKill includes GOLD_GAIN training
     double exp  = credited * db.OFFLINE_RATE * Economy.ExpPerKill(s, db, stage)  * killsPerSec;   // includes EXP_GAIN training
@@ -500,7 +502,7 @@ public static ApplyResult ClaimOfflineReward(GameState s, ContentDb db)
     var r = s.Offline.Pending;
     if (r is null) return Reject(NotAvailable, "NO_PENDING_OFFLINE_REWARD");
     s.Wallet.Apply(new(Currency.GOLD, r.Gold), CurrencyReason.OFFLINE, s.Sink);
-    s.Wallet.Apply(new(Currency.HERO_EXP, r.Exp), CurrencyReason.OFFLINE, s.Sink);   // writes Hero.Exp; then runs 03's CheckHeroLevel (03 section 5.2)
+    s.Wallet.Apply(new(Currency.PARTY_EXP, r.Exp), CurrencyReason.OFFLINE, s.Sink);   // writes Party.Exp; then runs 03's CheckPartyLevel (03 section 5.2)
     s.Fish.TankCount = Math.Min(Query.TankCap(s, db), s.Fish.TankCount + r.TankFill);   // 05 section 7; TankRefillTick per 05 section 3
     s.Offline.Pending = null;
     s.Sink.Emit(new OfflineRewardClaimed(r));
@@ -508,13 +510,13 @@ public static ApplyResult ClaimOfflineReward(GameState s, ContentDb db)
 }
 ```
 
-What it does not do, by design: no stage progress, no kills counted, no drops, no Rock Candy, no quest progress, no RNG stream advanced, no boss attempts. Offline time is a rate multiplied by a duration and nothing else, so it is cheap to re-derive on the server (08's plausibility checks `OFFLINE_WINDOW_OVERLAP`, credited offline seconds bounded by the wall-clock gap plus the effective cap including the `RES_OFFLINE_CAP` extension, and `GOLD_DELTA_BOUND`).
+What it does not do, by design: no stage progress, no kills counted, no drops, no Rock Candy, no quest progress, no RNG stream advanced, no boss attempts, and no MP: the `PARTY_SLOTS` pools `Combat.Mp[slot]` are not refilled offline and resume at the values they had at the last tick (00 decision 109; the rated DPS in `KillTimeSeconds` already counts each slot's abilities at their steady-state `mpSufficiency`). Offline time is a rate multiplied by a duration and nothing else, so it is cheap to re-derive on the server (08's plausibility checks `OFFLINE_WINDOW_OVERLAP`, credited offline seconds bounded by the wall-clock gap plus the effective cap including the `RES_OFFLINE_CAP` extension, and `GOLD_DELTA_BOUND`).
 
 Pending-reward persistence: `Offline.Pending` is in the save. If the app dies between compute and claim, the next launch finds the pending reward and shows the modal again rather than recomputing from a moved `LastTickServerTime`. If a second gap occurs while a reward is pending (user backgrounds the app on the modal), the new gap is computed against the already-moved `LastTickServerTime` and added into the pending record (`Gold += ...`, `ElapsedSec += ...`, `TankFill += ...`; the cap applies to the summed `CreditedSec` and `Capped` is recomputed against the sum). `Stage` and `KillTimeSec` are the latest gap's and serve the display only (issue #21).
 
 ### 7.2 Worked numbers
 
-Fixture with stubbed per-kill values (AC 9; `OfflineCatchupTests`): `killTime` = 3.5 s (a 3-hit kill: `3 * ATTACK_INTERVAL_TICKS / TICK_HZ + SPAWN_DELAY_TICKS / TICK_HZ = 3.0 + 0.5`) and `GoldPerKill` = 161.5. The 161.5 is a stub that keeps the arithmetic readable; it is not a stage's value under 00's constants (it was `2 * 1.05^90` under the retired `GOLD_G` of 1.05, 00 decision 9).
+Fixture with stubbed per-kill values (AC 9; `OfflineCatchupTests`): `killTime` = 3.5 s (a kill in 3 attack intervals of the party: `3 * ATTACK_INTERVAL_TICKS / TICK_HZ + SPAWN_DELAY_TICKS / TICK_HZ = 3.0 + 0.5`) and `GoldPerKill` = 161.5. The 161.5 is a stub that keeps the arithmetic readable; it is not a stage's value under 00's constants (it was `2 * 1.05^90` under the retired `GOLD_G` of 1.05, 00 decision 9).
 
 | Gap | Credited | Gold | Note |
 |---|---|---|---|
@@ -640,9 +642,9 @@ As built (issue #176): Runtime's `InboxFlow` runs `ClaimInbox` / `ClaimAllInbox`
 
 ## 11. Sinks by day (greedy F2P bot)
 
-**Model output** of `tools/power_curve_model.py --check`: 20-seed medians of what the greedy F2P bot earns and spends on the day, each column its own median, for content 2026.11.01.2 with the fallback rows the tool names (Research, dungeons, companions, achievements; issue #178). The tool prints this table and the section 2 table on every `--check` run; rerun it after a content change rather than editing the numbers by hand. Gold is kills plus Offline Catch-up; diamonds are section 2's sources; the Fish Coin columns split the board's income (05: discovery, merges, discards) from the Fish Coin Dungeon's; the dungeon floor is the 6.2 ladder's best floor at the end of the day (the same in all three dungeons).
+**Model output** of `tools/power_curve_model.py --check`: 20-seed medians of what the greedy F2P bot earns and spends on the day, each column its own median, for content 2026.11.01.2 with the fallback rows the tool names (Research, dungeons, companions, achievements; issue #178). The tool prints this table and the section 2 table on every `--check` run; rerun it after a content change rather than editing the numbers by hand. The rows below are single-hero output, stale until the tool and the bots are rerun on the party model (00 decision 109; issue #309). Gold is kills plus Offline Catch-up; diamonds are section 2's sources; the Fish Coin columns split the board's income (05: discovery, merges, discards) from the Fish Coin Dungeon's; the dungeon floor is the 6.2 ladder's best floor at the end of the day (the same in all three dungeons).
 
-| Day | Stage | Gold earned | Gold spent (Training) | Diamonds earned | Diamonds spent | Fish Coins: board | Fish Coins: dungeon (floor) | Fish Coins spent (Research) | Rock Candy earned (dungeon / boss) | Rock Candy spent | Awakening rank |
+| Day | Stage | Gold earned | Gold spent (Training) | Diamonds earned | Diamonds spent | Fish Coins: board | Fish Coins: dungeon (floor) | Fish Coins spent (Research) | Rock Candy earned (dungeon / boss) | Rock Candy spent | Awakening rank (highest slot) |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 1 | 210 | 3.1e6 | 3.1e6 | 3,240 (with the 1,500 tutorial grant) | 1,500 | 12,093 | 150 (floor 2) | 0: Research opens at Awakening rank 1, bought day 2 | 41 (30 / 11) | 0 (rank 1 bought day 2) | 0 |
 | 7 | 430 | 4.6e10 | 4.6e10 | 560 | 500 | 5,031 | 1,350 (floor 14) | 7,017 | 271 (270 / 1) | 0: banking toward rank 3 (bought day 8) | 2 |
@@ -653,7 +655,7 @@ What the tool checks against this table (issue #178; report-only until decision 
 1. Gold is fully spent: Training gets at least 99% of the gold earned over 30 days, so Training alone sets the gold layer's share. Model: 99.85%, passes.
 2. Diamonds are spent within 2.5 days in steady state (section 2). Model: passes.
 3. The Fish Coin Dungeon's share of the day's Fish Coin income sits in the 6.3 band (25% to 50% on days 1, 7 and 30). Model: 1.2%, 21.2% and 21.6% (medians), under the band on all three days, because the board (05) earns far more than this spec's earlier estimate. The reward curve is issue #165 and the band and its days are decision #249 item 6 (Open question 4).
-4. The EXP Dungeon is 10% to 20% of the day's hero EXP (`EXP_DUNGEON_KILLS`, checked on days 7 and 30). Model: 0.02% and 0.5%. Two clears of `300 * ExpPerKill(20 f)` are small next to the day's kills and Offline Catch-up (about 23,000 kill-equivalents at the frontier), and on day 7 the ladder's floor 14 is the stage-280 boss against a frontier at 430. This is a balance call (the band or `EXP_DUNGEON_KILLS`), decision #266 item A.
+4. The EXP Dungeon is 10% to 20% of the day's party EXP (`EXP_DUNGEON_KILLS`, checked on days 7 and 30). Model: 0.02% and 0.5%. Two clears of `300 * ExpPerKill(20 f)` are small next to the day's kills and Offline Catch-up (about 23,000 kill-equivalents at the frontier), and on day 7 the ladder's floor 14 is the stage-280 boss against a frontier at 430. This is a balance call (the band or `EXP_DUNGEON_KILLS`), decision #266 item A.
 5. The best dungeon floor on day 30 is 25 to 29 (Open question 5). Model: median 29, 30 on 5 of 20 seeds.
 6. Rock Candy cadence (6.5, AC 18) and the boss-drop share are the Awakening checks 03 section 8.6 already runs; limit breaks take 75% of Rock Candy spend (decision #249 item 5).
 
@@ -667,7 +669,7 @@ What the tool checks against this table (issue #178; report-only until decision 
 6. Summon tickets never expire; dungeon tickets reset to a floor, never below what the player bought.
 7. No mission requires spending diamonds for the 8-of-11 bonus (5.2).
 8. A failed server mutation (claim, exchange, purchase) is retried with the same `requestId` and shows "Retrying..." rather than an error for the first 10 s (01 retry policy); the player never sees a debit without the matching grant.
-9. Awakening is confirmed with a cost dialog naming the exact Rock Candy balance after, because it is the single largest soft-currency spend in the game.
+9. Awakening is confirmed with a cost dialog naming the slot and the exact Rock Candy balance after, because it is the single largest soft-currency spend in the game.
 
 ## 13. Analytics events
 
@@ -692,7 +694,7 @@ This section owns these events' fields (issue #245); every event also carries 02
 
 `awakened` is 03 section 11's; `clock_anomaly` (with `kind = backwards` for `ClockWentBackwards`) is 02 section 14.3's.
 
-`currency_changed` as built (`HeroCat.Runtime.Session.CurrencyAnalytics`, attached by the boot flow to the session's `EventBus` whenever analytics is not `NullAnalytics`; issue #155): `KILL` and `BOSS` rows are summed per currency and reason, so one window yields at most one `KILL` and one `BOSS` row per currency. The window is `CURRENCY_AGG_SEC` of sim time (ticks), opened by the first `KILL`/`BOSS` apply; it closes when a later `CurrencyChanged` (or `EnemyKilledBatch`) arrives past its end and whenever the analytics sink flushes (pause, quit). `balanceAfter` of an aggregated row is the balance in the state when the row is emitted (`Hero.Exp` for `HERO_EXP`). Kills folded into `EnemyKilledBatch` (01 section 2.3) count through its `KillGold` and `KillExp`. Deltas are summed as `double`, so the rows' deltas equal the wallet delta up to floating-point summation order. `refId` is omitted until the emitter of the apply supplies one.
+`currency_changed` as built (`HeroCat.Runtime.Session.CurrencyAnalytics`, attached by the boot flow to the session's `EventBus` whenever analytics is not `NullAnalytics`; issue #155): `KILL` and `BOSS` rows are summed per currency and reason, so one window yields at most one `KILL` and one `BOSS` row per currency. The window is `CURRENCY_AGG_SEC` of sim time (ticks), opened by the first `KILL`/`BOSS` apply; it closes when a later `CurrencyChanged` (or `EnemyKilledBatch`) arrives past its end and whenever the analytics sink flushes (pause, quit). `balanceAfter` of an aggregated row is the balance in the state when the row is emitted (`Party.Exp` for `PARTY_EXP`). Kills folded into `EnemyKilledBatch` (01 section 2.3) count through its `KillGold` and `KillExp`. Deltas are summed as `double`, so the rows' deltas equal the wallet delta up to floating-point summation order. `refId` is omitted until the emitter of the apply supplies one.
 
 The other rows as built (`HeroCat.Runtime.Session.FeatureAnalytics`, attached next to `CurrencyAnalytics`; issue #177): each maps one sim event to one row, except `quest_claimed`, which reads the runner's `CommandApplied` notice (the events of one accepted command) so `bulk` is true exactly for the rows of a `ClaimAllQuests`. `quest_completed` is sent for daily and weekly missions (a reward-0 row such as `d_login` included) and `achievement_unlocked` instead of it for an achievement rung. `offline_catchup` carries the pending record after the gap (the sum when a reward was already pending), so its `stage` is named `pendingStage`: 02 section 14.1's sink drops an owner field that reuses an envelope name. `offline_claimed.x2` is false until the P1 rewarded-ad doubling exists. `day_rollover`'s `skippedDays` and `secondsSinceLastTick` come from `DayRolledOver` (section 4.2). Not emitted yet: `dungeon_run` and `inbox_claimed` (their sim systems are not built), `shop_view` (the typed `AnalyticsEvents.ShopView` waits for `SCR_SHOP`) and the `iap_*` events (08's purchase flow).
 
