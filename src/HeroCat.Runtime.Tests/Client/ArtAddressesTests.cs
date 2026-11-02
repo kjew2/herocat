@@ -38,6 +38,21 @@ namespace HeroCat.Runtime.Tests
         }
 
         [Test]
+        public void EverySplashIsFullScreen()   // 07 section 15.2: 1080 x 1920 rp, the reference resolution
+        {
+            string dir = System.IO.Path.Combine(TestContent.RepoRoot, "unity", "HeroCatClient", "Assets", "Resources", "Art", "Splash");
+            var files = System.IO.Directory.GetFiles(dir, "art_splash_*.png");
+            Assert.That(files, Is.Not.Empty);
+            foreach (var f in files)
+            {
+                var b = new byte[24];   // PNG signature (8), IHDR length and type (8), then width and height, big-endian
+                using (var fs = System.IO.File.OpenRead(f)) Assert.That(fs.Read(b, 0, 24), Is.EqualTo(24), f);
+                int w = b[16] << 24 | b[17] << 16 | b[18] << 8 | b[19], h = b[20] << 24 | b[21] << 16 | b[22] << 8 | b[23];
+                Assert.That((w, h), Is.EqualTo((1080, 1920)), System.IO.Path.GetFileName(f));
+            }
+        }
+
+        [Test]
         public void EveryPilotAssetIsCommitted()   // issue #291: the pilot companions (and Yuki, added after) resolve to files
         {
             string res = System.IO.Path.Combine(TestContent.RepoRoot, "unity", "HeroCatClient", "Assets", "Resources");

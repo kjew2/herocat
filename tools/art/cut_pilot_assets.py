@@ -7,7 +7,8 @@ unity/HeroCatClient/Assets/Resources/Art/<Kind>/:
 
   Portraits/portrait_<id>.png  256 x 256 rp crop of the splash art (illustrated)
   Icons/icon_<id>.png          128 x 128 face crop (illustrated)
-  Splash/art_splash_<id>.png   1080 x 1400 rp splash without the baked-in text (illustrated; L and M only, 00 decision 108)
+  Splash/art_splash_<id>.png   1080 x 1920 rp full-screen splash without the baked-in text (illustrated; L and M only,
+                               00 decision 108)
   Pixel/spr_<id>.png           battle chibi at its native pixel size (sampled on the art's own pixel grid), transparent,
                                32-colour palette, 1 frame
 
@@ -31,10 +32,11 @@ REF = os.path.join(ROOT, "art", "reference")
 COMPANION_REF = os.path.join(REF, "companions")
 WEAPON_REF = os.path.join(REF, "weapons")
 OUT = os.path.join(ROOT, "unity", "HeroCatClient", "Assets", "Resources", "Art")
+SPLASH = (1080, 1920)   # 07 section 15.2: full screen at the reference resolution
 
 
 # Per character, in source pixels:
-#   splash: (x0, y0, x1, y1) of the illustration without the title text
+#   splash: (x0, y0, x1, y1) 9:16 window of the illustration without the title text, centred on the character
 #   splash_src: optional dedicated splash reference (art/reference/companions/splash/); then `splash` is in its pixels
 #   face:   (cx, cy, r) square around the face for the icon
 #   bust:   (x0, y0, size) square for the portrait
@@ -43,14 +45,14 @@ OUT = os.path.join(ROOT, "unity", "HeroCatClient", "Assets", "Resources", "Art")
 #   wide_gold: also drop the pedestal's darker shading (only where the character has no gold near the feet)
 #   clear:  optional boxes (x0, y0, x1, y1) in the same crop coordinates to drop (background the fill cannot reach)
 PILOT = {
-    "comp_l_01": dict(src="lucy.jpeg",      splash=(600, 0, 1340, 960),  face=(1010, 345, 120), bust=(820, 150, 420),
+    "comp_l_01": dict(src="lucy.jpeg",      splash=(740, 0, 1280, 960),  face=(1010, 345, 120), bust=(820, 150, 420),
                       chibi=(20, 10, 360, 332, 285), grid=6.3),
-    "comp_l_04": dict(src="valeria.jpeg",   splash=(560, 0, 1342, 1014), face=(1005, 320, 120), bust=(790, 60, 430),
+    "comp_l_04": dict(src="valeria.jpeg",   splash=(720, 0, 1290, 1014), face=(1005, 320, 120), bust=(790, 60, 430),
                       chibi=(40, 30, 345, 352, 300), grid=5.6),
-    "comp_m_01": dict(src="seraphine.jpeg", splash=(580, 0, 1362, 1014), face=(1000, 345, 120), bust=(790, 90, 420),
+    "comp_m_01": dict(src="seraphine.jpeg", splash=(715, 0, 1285, 1014), face=(1000, 345, 120), bust=(790, 90, 420),
                       chibi=(20, 20, 375, 358, 300), grid=5.35),
     # The splash comes from the artist's vertical splash: everything below the title and the role chips (they end at y 265).
-    "comp_l_02": dict(src="yuki.jpg",       splash=(24, 270, 1001, 1536), face=(1005, 315, 120), bust=(790, 90, 430),
+    "comp_l_02": dict(src="yuki.jpg",       splash=(204, 270, 916, 1536), face=(1005, 315, 120), bust=(790, 90, 430),
                       splash_src="splash/yuki_splash.png",
                       chibi=(-20, 20, 355, 378, 335), grid=5.1, wide_gold=True, clear=[(295, 255, 380, 420)]),
 }
@@ -216,7 +218,7 @@ def main():
         src = Image.open(os.path.join(COMPANION_REF, c["src"])).convert("RGB")
         splash_src = Image.open(os.path.join(COMPANION_REF, c["splash_src"])).convert("RGB") if "splash_src" in c else src
         x0, y0, x1, y1 = c["splash"]
-        splash = splash_src.crop((x0, y0, x1, y1)).resize((1080, 1400), Image.LANCZOS)
+        splash = splash_src.crop((x0, y0, x1, y1)).resize(SPLASH, Image.LANCZOS)
         bx, by, bs = c["bust"]
         print(save(splash, "Splash", "art_splash_" + cid))
         print(save(src.crop((bx, by, bx + bs, by + bs)).resize((256, 256), Image.LANCZOS), "Portraits", "portrait_" + cid))
