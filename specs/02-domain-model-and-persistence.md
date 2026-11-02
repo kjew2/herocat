@@ -39,7 +39,7 @@ Engineering constants in `HeroCat.Runtime.SaveConfig` (code, not `ContentDb`; mi
 | `CONFLICT_PROGRESS_MARGIN` | 0.10 | S | Loser must have `progressScore` more than 10% above the winner to trigger the conflict modal. |
 | `CLOCK_RESYNC_SEC` | 900 | I | Foreground resync cadence when no API call has happened; any observation or sync attempt restarts it (11.1). |
 | `CLOCK_JUMP_WARN_SEC` | 300 | I | Resync delta above which `clock_anomaly` is emitted. |
-| `CLOCK_MAX_SKEW_ACCEPT_S` | 120 | S | Server rejects a save whose `lastSavedServerTime` is more than this ahead of server now. |
+| `CLOCK_MAX_SKEW_ACCEPT_S` | 120 | S | Server flags `CLOCK_AHEAD` on a save whose `lastSavedServerTime` is more than this ahead of server now (accepted, not rejected: 08 section 3.1 step 5). |
 | `HMAC_KEY_BYTES` | 32 | S | Device key length. |
 | `SAVE_BLOB_MAX_BYTES` | 262144 | S | 256 KiB; server rejects larger uploads (a legitimate save is 20-60 KB). |
 | `CMDLOG_UPLOAD_MAX_BYTES` | 1 MiB | S | Matches `CMDLOG_MAX_BYTES` (01). |
@@ -762,7 +762,7 @@ Recovery order, from best to worst outcome: (1) `slot0.sav`, (2) `slot0.prev.sav
 | `saves/slot0*.sav` | The save | Excluded from iCloud/Android auto-backup (`NSURLIsExcludedFromBackupKey`, `android:allowBackup` with exclusion rules). Cloud save is the backup; an OS-restored save on a new device would carry the old device's key and lineage and confuse conflict resolution. |
 | `install_id` | `DeviceId` GUID, created at first launch and reused; a missing or unreadable file means a new id (`InstallId.LoadOrCreate`) | Excluded. A restored install is a new device. |
 | `device_key` | 32 random bytes for HMAC (section 10) | Secure storage (Keychain / Android Keystore-wrapped), excluded from backup. |
-| `tokens.json` | JWTs | Secure storage. |
+| `tokens.json` | JWTs, the account's `playerId` and a pending guest `requestId` (`SecureTokenStore`, issue #148) | Secure storage. Until the platform stores land (#151), editor and desktop builds use `FileSecureStore` under `{dataDir}/secure/`, which is not secure. |
 | `profile.json` | `Profile` cache | Included; harmless. |
 | `client_prefs.json` | `ClientPrefs` (fields are 07's): new-item badges, `SeenCoachMarks`, sort/filter prefs, `TrainStep`, `Notify*`, `Locale`, `Sound`, `Music`, `Haptics`, `ReducedMotion`, `LargeText`, `TargetFps` (issue #47). Never cloud-synced, never in `GameState`; written atomically like the save (tmp + rename), and a missing or unreadable file means defaults | Included; harmless (losing it only resets NEW dots and coach marks). |
 | `config_cache.json` | last remote config | Included. |
@@ -866,7 +866,7 @@ The server runs these on every upload and attaches `flags[]` to the response. Th
 | Check name | What it tests |
 |---|---|
 | `HMAC_INVALID` | Envelope does not verify against the device's key. |
-| `SEQ_REGRESSION` | `saveSeq` not above the stored one for the same `deviceId`; flagged and the upload rejected `409 SAVE_STALE` (08 section 3.1; issue #34). |
+| `SEQ_REGRESSION` | `saveSeq` below the save of record of another device of the same player; accepted and flagged (`info`). A `saveSeq` not above the last one stored for the same `deviceId` is not flagged but rejected `409 SAVE_STALE` (08 section 3.1; issues #34, #198). |
 | `CLOCK_AHEAD` | `lastSavedServerTime > serverNow + CLOCK_MAX_SKEW_ACCEPT_S`. |
 | `STAGE_VS_TIME` | `HighestCleared` exceeds the bot-curve stage for `(now - CreatedServerTime)` by more than the 08 bound. |
 | `DPS_VS_STAGE` | DPS re-derived via `HeroCat.Sim` from the uploaded state cannot clear `HighestCleared`'s boss in `BOSS_TIME_TICKS`. |
@@ -963,7 +963,7 @@ As built (issues #78, #149): `ServerClock.cs` holds both clocks. `SystemClock` i
 
 All timestamps `timestamptz`, all ids `uuid` unless noted. Money is never stored as float: prices are `integer` minor units plus `char(3)` currency. Row-level comments give the owning API (08). This section owns every server table, including the server-only ones 08 reads and writes, so the GDPR delete job (13.2) can enumerate them from here (issue #53).
 
-**Migration tooling** (issue #33): the schema ships as plain versioned SQL files, `server/db/migrations/NNNN_<name>.sql` (`0001_init.sql` is the DDL below, verbatim; `0002_save_history_trim.sql` adds the 13.1 trim trigger and `0003_partitions.sql` the partitions, both described after the DDL; issue #154), applied in order by a small in-house runner (`HeroCat.Server --migrate` in the deploy pipeline's pre-deploy job and in CI; `HeroCat:Database:MigrateOnStartup` also runs it at api startup, off by default; issue #192) that records applied files in a `schema_migrations` table. No EF Core migrations; queries use Npgsql/Dapper, or EF Core for queries only, never to change the schema. A migration file is immutable once merged. CI applies the set to an empty PostgreSQL 16 container (`postgres:16`, as in 10) and runs AC 16; `check.sh` runs the same job behind a "Postgres available" guard and reports it as skipped, not passed, where no Postgres or Docker exists (cloud sessions).
+**Migration tooling** (issue #33): the schema ships as plain versioned SQL files, `server/db/migrations/NNNN_<name>.sql` (`0001_init.sql` is the DDL below, verbatim; `0002_save_history_trim.sql` adds the 13.1 trim trigger and `0003_partitions.sql` the partitions, both described after the DDL; issue #154; a later file that changes the DDL is reproduced verbatim after it, like `0004_save_metadata.sql` and `0005_analytics_events.sql`), applied in order by a small in-house runner (`HeroCat.Server --migrate` in the deploy pipeline's pre-deploy job and in CI; `HeroCat:Database:MigrateOnStartup` also runs it at api startup, off by default; issue #192) that records applied files in a `schema_migrations` table. No EF Core migrations; queries use Npgsql/Dapper, or EF Core for queries only, never to change the schema. A migration file is immutable once merged. CI applies the set to an empty PostgreSQL 16 container (`postgres:16`, as in 10) and runs AC 16; `check.sh` runs the same job behind a "Postgres available" guard and reports it as skipped, not passed, where no Postgres or Docker exists (cloud sessions).
 
 ```sql
 create table accounts (
@@ -1235,7 +1235,42 @@ create table guild_chat (id bigserial primary key, guild_id uuid references guil
 
 **Trim trigger** (`0002`): `save_history_trim`, after each insert into `save_history`, deletes the player's rows beyond the newest `SAVE_HISTORY_KEEP` (newest by `uploaded_at`, then `save_seq`).
 
-**Partitions** (`0003`; issue #154): `ensure_partitions(p_parent regclass, p_grain text, p_from timestamptz, p_until timestamptz) returns integer` creates every missing partition whose range touches `[p_from, p_until]`: UTC month ranges named `<parent>_pYYYYMM` for `p_grain = 'month'`, UTC day ranges named `<parent>_pYYYYMMDD` for `'day'`; it returns how many it created and a rerun is harmless. The migration creates the current month plus 3 months for `diamond_ledger` and `summon_log` and today plus 14 days for `events`; the worker's partition job keeps that horizon ahead of now (issue #262). There is no default partition: a row outside every partition fails its insert, so a missing partition is loud, and a new range partition never collides with rows parked in a default one.
+**Partitions** (`0003`; issue #154): `ensure_partitions(p_parent regclass, p_grain text, p_from timestamptz, p_until timestamptz) returns integer` creates every missing partition whose range touches `[p_from, p_until]`: UTC month ranges named `<parent>_pYYYYMM` for `p_grain = 'month'`, UTC day ranges named `<parent>_pYYYYMMDD` for `'day'`; it returns how many it created and a rerun is harmless. The migration creates the current month plus 3 months for `diamond_ledger` and `summon_log` and today plus 14 days for `events`; the worker's partition job keeps that horizon ahead of now (issue #262). There is no default partition: a row outside every partition fails its insert, so a missing partition is loud, and a new range partition never collides with rows parked in a default one. As built (issue #262): the worker's `partitions` job (`HeroCat.Server.Worker.PartitionMaintenanceService`) runs at worker start and then daily, calls `ensure_partitions` with the same horizons (`PARTITION_AHEAD_MONTHS = 3` for `diamond_ledger` and `summon_log`, `PARTITION_AHEAD_DAYS = 14` for `events`; 08 constants), and publishes each table's horizon, the days from now to the end of its last partition, as `db_partition_horizon_days{table}` (08 section 9.4), which 10 section 10's DB alarm watches. It never drops a partition (retention, 13.1, is a separate job).
+
+**Save metadata columns** (`0004`; issue #198): the cloud-save endpoints (08 section 3.1) return the header's `hmac` in the 9.1 metadata and each history entry's `summary`, which the DDL above did not keep, and a rollback (08 section 7.4) needs each history entry's flags to find the last unflagged one. Shown verbatim, as its file:
+
+```sql
+-- 0004_save_metadata.sql (specs/02 section 12 "Save metadata columns"; issue #198): what the cloud-save endpoints return
+-- that 0001 did not keep. saves.hmac is the upload header's hmac field (64 lowercase hex, or '-'), returned in the 9.1
+-- metadata; save_history keeps each upload's 9.1 summary for GET /save/history and its plausibility flags, so a rollback
+-- (08 section 7.4) can find the last entry without any.
+alter table saves add column hmac text not null default '-';
+alter table save_history add column summary jsonb not null default '{}';
+alter table save_history add column flags text[] not null default '{}';
+```
+
+**Analytics ingest** (`0005`; issue #209): the backend copy of the 14.1 envelope for `POST /analytics/events` (08 section 3.5) and for server-written economy events. Each later migration that changes this section's DDL is shown here verbatim, as its file:
+
+```sql
+-- 0005_analytics_events.sql (specs/02 section 12 "Analytics ingest"; issue #209): the envelope columns POST
+-- /analytics/events stores (specs/02 section 14.1, specs/08 section 3.5) and the per-event dedupe key. event_id is the
+-- client's eventId (a server-written row gets a random one); the unique index includes ts because a partitioned table's
+-- unique keys must hold the partition column, and a retried event repeats its ts. age_gate is the envelope's 0/1, stamped
+-- from the access token, never from the client. Every new column is nullable or has a default, so a row written without
+-- them (a server-side event) still inserts.
+alter table events
+  add column event_id            uuid not null default gen_random_uuid(),
+  add column source              text not null default 'client',
+  add column device_id           uuid,
+  add column client_version      text,
+  add column content_version     text,
+  add column schema_version      integer,
+  add column debug_tainted       boolean,
+  add column clock_authoritative boolean,
+  add column age_gate            smallint not null default 0,
+  add column received_at         timestamptz not null default now();
+create unique index on events (event_id, ts);
+```
 
 **Idempotency rows** (as built, issue #194; 08 section 1.1): `status_code = 0` marks a row `in_flight`; any other value is the final HTTP status of the stored response. `response` is a jsonb object `{ "v": 1, "requestSha256", "contentType", "headers", "bodyBase64" }`: `requestSha256` fingerprints method, route and body (a reused id with another fingerprint is refused), and the body is base64 so the replay is byte-identical (jsonb would re-order a JSON body's keys and drop its whitespace); the `in_flight` row holds only `v` and `requestSha256`. `/auth/guest` has no player yet, so its rows use `player_id` = the first 16 bytes of `SHA-256("herocat/idempotency/device/" + lowercase deviceId)` with the RFC 9562 version-8 and variant bits set, which cannot equal a server-made (version 4) `playerId`; the 13.2 delete leaves those rows to the purge. A row older than `IDEMPOTENCY_TTL_H` counts as absent before the hourly purge deletes it.
 
@@ -1311,7 +1346,7 @@ Added by the sink to every event: `ts` (server seconds), `sessionId` (GUID per p
 
 As built (`HeroCat.Runtime.Services.AnalyticsEnvelope`, issue #155): `playerIdHash` is lowercase hex `sha256(UTF8(salt + ":" + playerId))` with the playerId as a 36-character GUID, and `null` for an unlinked local guest (`PlayerId = Guid.Empty`; `deviceId` identifies it). `deviceId` is the install id (8.4), `schemaVersion` is `SAVE_SCHEMA_VERSION`, `contentVersion` the active `ContentDb.Version`. Every field is always present; `dayIndex` and `stage` are `null` for events tracked before the save loads (the save-health events of 8.3). Each queued event also carries `eventId` (32 hex, random), the server's per-event dedupe key. A queued line is `{"name", "eventId", <envelope fields>, "props": {<owner fields>}}`.
 
-Names snake_case; properties camelCase. The sink drops an event whose name is not snake_case and a property that is not camelCase, names an envelope field, or is a raw `playerId`; it never throws. `HeroCat.Runtime.Services.AnalyticsNames` holds every name in the 14.4 index (a test diffs it against the index) and `AnalyticsEvents` the typed events of 14.3 and of the owner sections (`currency_changed` and the rest of 06 section 13, 03's `awakened`, 04 and 05 section 13), so emitters cannot misspell a name or a field. Economy events (those that carry a currency, purchase, summon, dungeon or inbox payload) go to the backend `events` table (00 section 3) as well as Firebase so they can be joined with `purchases` and `saves`. The `events` table and its nightly `currency_daily` materialized view (06 source/sink dashboards) are defined in section 12 (issue #34).
+Names snake_case; properties camelCase. The sink drops an event whose name is not snake_case and a property that is not camelCase, names an envelope field, or is a raw `playerId`; it never throws. `HeroCat.Runtime.Services.AnalyticsNames` holds every name in the 14.4 index (a test diffs it against the index) and `AnalyticsEvents` the typed events of 14.3 and of the owner sections (`currency_changed` and the rest of 06 section 13, 03 section 11, 04 and 05 section 13), so emitters cannot misspell a name or a field. Economy events (those that carry a currency, purchase, summon, dungeon or inbox payload) go to the backend `events` table (00 section 3) as well as Firebase so they can be joined with `purchases` and `saves`. The `events` table and its nightly `currency_daily` materialized view (06 source/sink dashboards) are defined in section 12 (issue #34).
 
 ### 14.2 Offline queue
 
@@ -1321,7 +1356,7 @@ As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
 
 1. The file is one JSON event per line (14.1), appended per event. It may hold up to `2 * ANALYTICS_QUEUE_MAX` lines between compactions; it is rewritten (temp file, then rename) after each accepted batch and when an overflow finds it that long. A load keeps the newest `ANALYTICS_QUEUE_MAX` lines and skips a line that does not parse (a torn last line after a kill). A file error never throws: the events stay in memory.
 2. A flush first raises the sink's flush hook, so in-memory aggregates (06 section 13's `KILL`/`BOSS` window) reach the queue, then uploads on the thread pool, oldest first. Each batch's `X-Request-Id` is the first 32 hex of `sha256` of its events' `eventId`s, so a retry of the same events reuses it and a different set never does.
-3. An upload outcome is accepted (the events leave the queue), retry (offline, timeout, 5xx, 429, or the uploader threw: the flush stops and the next flush retries the same batch) or rejected (a non-retryable 4xx: the batch is dropped so it cannot block the queue). The remote uploader (Firebase for every event, the backend events route of issue #209 for the economy ones) waits on `ApiClient` (issue #143); a sink with no uploader keeps the events on disk.
+3. An upload outcome is accepted (the events leave the queue), retry (offline, timeout, 5xx, 429, or the uploader threw: the flush stops and the next flush retries the same batch) or rejected (a non-retryable 4xx: the batch is dropped so it cannot block the queue). The remote uploader (Firebase for every event, the backend's `POST /analytics/events` of 08 section 3.5 for the economy ones; issue #209) waits on `ApiClient` (issue #143); a sink with no uploader keeps the events on disk. The backend answers `200` with per-event refusals (accepted), or `400` for a malformed batch (rejected).
 4. A Local build without a backend uses `NullAnalytics` and writes no queue file (01 section 1.2); bots and tests use `MemoryAnalytics` (no envelope, no files).
 
 ### 14.3 Events owned here (session, save health, cloud, clock, client performance)
@@ -1329,7 +1364,7 @@ As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
 | Event | Properties | Emitted by | Notes |
 |---|---|---|---|
 | `session_start` | `offlineElapsedSec`, `offlineCredited`, `coldBoot` (bool), `bootMs` | Runtime at `SCR_MAIN` shown | |
-| `session_end` | `durationSec`, `stageStart`, `stageEnd`, `kills`, `ticks`, `trigger` (pause/quit/gap) | Runtime on pause/quit | |
+| `session_end` | `durationSec`, `stageStart`, `stageEnd`, `kills`, `ticks`, `trigger` (pause/quit/gap) | Runtime on pause/quit | `SessionRunner` (issue #274): a session opens after the catch-up of boot, resume or an in-app gap and ends once, before the analytics flush of `OnPause`/`OnQuit` (a quit right after a pause sends nothing) or at the last frame before an in-app gap. `durationSec` is monotonic foreground time; the stages are `Combat.Stage`; `kills` and `ticks` are the `Stats.Kills` and runner ticks since the open. |
 | `cloud_save_uploaded` | `saveSeq`, `sizeBytes`, `trigger`, `latencyMs`, `flags[]` | Runtime | |
 | `cloud_conflict` / `cloud_autoresolved` | 9.4 | Runtime | |
 | `save_fallback`, `save_corrupt{problems}`, `save_corrupt_all{supportId}`, `save_repaired{rule}`, `save_reject{file, reason}`, `save_write_failed{consecutive}`, `migration_applied{from, to}` | | Runtime | Save health. `save_corrupt_all` is a new profile replacing an unreadable save (8.3; issue #248). |

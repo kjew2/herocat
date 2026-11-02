@@ -75,6 +75,8 @@ public sealed class ClientGateMiddleware
         var rules = RateLimitGate.RulesOf(endpoint);
         if (rules.Count > 0)
         {
+            var remote = (await _gates.GetAsync(ctx.RequestAborted).ConfigureAwait(false)).Limits;
+            if (remote != null) rules = remote.Apply(RateLimitGate.RouteOf(ctx), rules);
             string key = RateLimitGate.KeyFor(ctx, policy);
             long now = _clock.GetUtcNow().ToUnixTimeMilliseconds();
             var decision = await FailOpen<RateLimitDecision>(async () => await _limits.AcquireAsync(key, rules, now, ctx.RequestAborted).ConfigureAwait(false), "rate limit")

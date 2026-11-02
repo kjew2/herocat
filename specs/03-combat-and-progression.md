@@ -11,7 +11,7 @@ Depends on: 00 (all constants and names), 02 (`GameState` fields this spec reads
 1. One `Tick()` function, one `GameState`. Everything observable is a pure function of `(ContentDb, GameState)` plus the applied commands and ticks (00 section 8 item 1 and 5).
 2. The hero never dies (section 4). Progress is monotone; the only "failure" is a boss timing out, which costs nothing but the timer.
 3. Every layer of the power formula is worth buying at every point in the first 30 days: no layer above 40% of log-power at day 30, none below 5% (00 section 7). Section 8 checks this with the bot and section 8.5 reports where the current constants miss.
-4. Fast enough for bots: `Advance(1_000_000)` under 2 s in Release (AC19, 10); the client tick allocates nothing when no event is masked in.
+4. Fast enough for bots: `Advance(1_000_000)` under 2 s in Release (AC19, 10); the client tick allocates nothing when no event is masked in. As built (issue #160): `Simulation.CombatEvents` (a `CombatEventMask`) says which per-tick combat events the loop emits, and the loop checks it before it allocates one. `Default` is `EnemySpawned | FishMissileHit | TapZapped` (one per spawn or player input); `HitLanded`, `SkillCast` and `CompanionAbilityUsed`, which the loop raises several times per kill on its own, are opt-in, and the client sets `All` for its damage numbers and cast VFX. `None` is the null sink of AC19. The mask changes no state (the hash, quests and the ledger never read events); kill, stage, boss and currency events are not maskable.
 
 ## 2. Tick loop
 
@@ -72,7 +72,7 @@ HeroHit():
   isCrit = u < CritRate
   if isCrit: dmg *= CritDmg
   Combat.EnemyHp -= dmg
-  publish HitLanded(dmg, isCrit, Combat.EnemyHp)            # opt-in event, see 01
+  publish HitLanded(dmg, isCrit, Combat.EnemyHp)            # opt-in event (CombatEventMask, section 1 goal 4)
 
 CritRate = min(TRAIN_CAP[CRIT_RATE] * TRAIN_PER_LVL[CRIT_RATE], TRAIN_PER_LVL[CRIT_RATE] * trainLvl[CRIT_RATE])   # 0 .. 0.75
 CritDmg  = CRIT_DMG_BASE + TRAIN_PER_LVL[CRIT_DMG] * trainLvl[CRIT_DMG]                                       # 1.5 at level 0
@@ -90,7 +90,7 @@ AutoCastSkills():
     s = Skill(Loadout.Skills[slot]); if s == null: continue
     if Combat.SkillCooldowns[slot] > 0: continue
     Cast(s); Combat.SkillCooldowns[slot] = s.CooldownTicks
-    publish SkillCast(slot, s.Id)
+    publish SkillCast(slot, s.Id)                           # opt-in event (CombatEventMask, section 1 goal 4)
     return                                                  # at most one cast per tick
 ```
 
@@ -112,7 +112,7 @@ CastCompanionAbilities():
     if Combat.Mp < c.MpCost: continue                       # MP-gated: the ability waits, cooldown does not restart
     Combat.Mp -= c.MpCost
     Apply(c); Combat.CompanionCooldowns[slot] = c.CooldownTicks
-    publish CompanionAbilityUsed(slot, c.Id, Combat.Mp)
+    publish CompanionAbilityUsed(slot, c.Id, Combat.Mp)     # opt-in event (CombatEventMask, section 1 goal 4)
     return                                                  # at most one cast per tick
 
 MpPoolMax     = MP_POOL0 + RES_MP_POOL_PER_LVL * research[res_mp_pool]
@@ -615,18 +615,26 @@ The summon streams are not combat's: they stay in the save in every mode and are
 
 ## 11. Analytics events
 
-This section owns these events' fields (issue #245); every event also carries 02 section 14.1's envelope, and 02 section 14.4 indexes them. The sim publishes the event named in the last column and the Runtime sink maps it.
+This section owns these events' fields (issue #245); every event also carries 02 section 14.1's envelope, and 02 section 14.4 indexes them. The sim publishes the event named in the last column and the Runtime sink maps it. The envelope's `stage` is the current frontier, so an event about another stage names it `clearedStage`, `bossStage` or `wallStage` (an owner field may not reuse an envelope name, 02 section 14.1; issue #274).
 
 | Event | Fields | When |
 |---|---|---|
-| `stage_cleared` | `stage`, `isBoss`, `firstClear`, `diamondsGranted`, `attempts` (boss stages only), `ticksOnStage`, `dps` | `StageCleared`; feeds the 00 section 6.6 day table |
-| `boss_failed` | `stage`, `bossHpLeftPct`, `attempt` | `BossFailed` (2.7); the first one on a stage is the wall hit (2.8) |
-| `wall_broken` | `stage`, `wallSec`, `activeSecDuringWall`, `attempts`, `layersChangedDuringWall[]` | `StageCleared` of a boss stage that was `Walled` |
+| `stage_cleared` | `clearedStage`, `isBoss`, `firstClear`, `diamondsGranted`, `attempts` (boss stages only), `ticksOnStage`, `dps` | `StageCleared`; feeds the 00 section 6.6 day table |
+| `boss_failed` | `bossStage`, `bossHpLeftPct`, `attempt` | `BossFailed` (2.7); the first one on a stage is the wall hit (2.8) |
+| `wall_broken` | `wallStage`, `wallSec`, `activeSecDuringWall`, `attempts`, `layersChangedDuringWall[]` | `StageCleared` of a boss stage that was `Walled` |
 | `training` | `stat`, `levelFrom`, `levelTo`, `goldCost` | `StatTrained`; one per command, not per level (01) |
 | `level_up` | `heroLevel` | `LevelUp` (5.2) |
 | `awakened` | `rank`, `rockCandyCost`, `rockCandyAfter` (the stage is the envelope's) | `Awakened` (5.3) |
 | `research_bought` | `researchId`, `level`, `fishCoinCost` | `ResearchLeveled` (6) |
 | `currency_changed` | 06 section 13, reasons `KILL`, `BOSS`, `FIRST_CLEAR`, `TRAINING`, `RESEARCH`, `AWAKENING` | per wallet delta |
+
+As built (`HeroCat.Runtime.Session.FeatureAnalytics`, issue #274): the sim's events carry no stage-entry tick, wall start or per-stage fight count, so the Runtime tracks them from the events and seeds them from the state when it attaches; nothing is saved and the sim is unchanged.
+
+- `attempts` counts the boss fights on the stage including the clearing one (`BossFailsOnStage + 1`); `attempt` is `BossFailed.Attempt`. `bossHpLeftPct` is the remaining fraction in percentage points (0-100).
+- `firstClear`: `clearedStage` is above the highest stage cleared so far; `diamondsGranted` is the `StageFirstCleared` payment for that stage, else 0.
+- `ticksOnStage` counts sim ticks from the previous frontier advance (tick 0 for a new profile); `dps` is `Query.RatedDps` when the row is sent.
+- A wall opens on the first `BossFailed` of a stage. `wallSec` is virtual server seconds (offline gaps included), `activeSecDuringWall` ticked seconds, and `layersChangedDuringWall` the `PowerLayer` names other than `Base` whose factor differs between the wall's opening and its break.
+- A stage or wall entered before this process attached (a cold boot mid-stage or mid-wall) has no known start: the row omits `ticksOnStage`, or `wallSec`, `activeSecDuringWall` and `layersChangedDuringWall`, rather than send a partial value.
 
 ## 12. Open questions
 
@@ -659,7 +667,7 @@ This section owns these events' fields (issue #245); every event also carries 02
 16. Bot: the median of 20 seeds from `tools/power_curve_model.py` lands within +/-20% of the section 8.4 table on days 1, 7 and 30; the C# bot (10) on the real sim lands within +/-15% of the Python model on the same days.
 17. Shares: on days 1, 7 and 30 no layer exceeds 40% of `ln(DPS / BASE_ATK)`; on days 7 and 30 every layer except `Base` and speed is at or above 5% (speed is permanently exempt, issue #36), except the tier's exemptions in `acceptance-targets.json`, which report `WARN` (M0: Research, Companions; issue #12).
 18. Walls: first wall between stage 60 and 200 in every seed; no wall opened in the first 14 days exceeds 240 active minutes; no wall opened on days 15-30 exceeds the late-wall bound `lateWallMaxActiveMinutes` in `acceptance-targets.json` (issue #36; the bound's value is set from the tool's output and pending).
-19. Perf: `Advance(1_000_000)` with `NullEventSink` from a stage-300 profile with six skills and four companions equipped completes in under 2 s in Release; `Advance(100_000)` with the default event mask allocates under 128 bytes per kill.
+19. Perf: `Advance(1_000_000)` with the null sink (`CombatEventMask.None`, kills coalesced, the buffer drained) from a stage-300 profile with six skills and four companions equipped completes in under 2 s in Release; with `CombatEventMask.None` a fighting tick of that profile allocates nothing; `Advance(100_000)` with the default event mask allocates under 128 bytes per kill. The profile is `PerfFixture` (`src/HeroCat.Bots/Measure/PerfFixture.cs`, MVP content, Awakening rank 3, every cast and ability type equipped), shared by the Perf tests and the `bench` verb (issue #160).
 20. Rated vs realised (issue #10): for a fixture with two `INSTANT` skills, one `DOT` skill, two `DAMAGE` companions at full MP, a static board (no merges, so no missiles), `ATK_SPD` 50 and `CRIT_RATE` 120 / `CRIT_DMG` 80 with hero-attack damage counted at its expected crit value, total damage dealt over a 100,000-tick fight against an unkillable enemy, divided by the fight's seconds, equals `Query.RatedDps` within 1%.
 21. Awakening cadence (issue #43): in the 20-seed sweep, every Awakening rank the bot's stage reaches within 30 days is bought no more than `awakening_targets.max_days_after_gate` days after the day its `AWAKEN_STAGES` gate is first reached; the tool and the bot read the same `awakening_targets` rows.
 22. Stage select (issue #35): at frontier stage 57 with `KillsInStage == 4`, `SelectStage(56)` succeeds and `SelectStage(58)` is rejected with `Locked`/`STAGE_NOT_CLEARED`; `SelectStage(0)`, a negative stage and `SelectStage(STAGE_CAP + 1)` are rejected with `BadArgument`/`STAGE_OUT_OF_RANGE`, and any `SelectStage` while `Combat.Mode == Dungeon` with `NotAvailable`/`DUNGEON_RUN_IN_PROGRESS` (issue #159); kills on stage 56 pay `Gold(56) * GoldMult` and `Exp(56) * ExpMult`, spawn no boss and leave `Combat.Stage`, `KillsInStage`, `Combat.Boss` and `Progress.HighestCleared` unchanged; `SelectStage(null)` resumes stage 57 at 4 kills; on a walled boss stage the `Walled` phase survives a select and return, and `AttemptBoss` while a side stage is selected clears `Combat.Selected` and spawns the frontier boss.

@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using HeroCat.Bots.Acceptance;
 using HeroCat.Bots.Golden;
+using HeroCat.Bots.Measure;
 using HeroCat.Bots.Policies;
 using HeroCat.Bots.Report;
 using HeroCat.Runtime.Content;
@@ -63,7 +64,7 @@ namespace HeroCat.Bots
             "  summon-stream --check | --update [--out path]\n" +
             "  fish-vectors --check | --update [--out path]\n" +
             "  fish-check   --model tools/out/fish_attentive.json [--seed 7] [--tolerance 0.05]   05 AC14 vs fish_model.py\n" +
-            "  bench        --ticks 1000000 --stage 300 --max-ms 2000\n" +
+            "  bench        --ticks 1000000 --stage 300 --max-ms 2000   (six skills + four companions; --tier defaults to MVP)\n" +
             "  stage-bound  --check | --update [--seeds 1-20] [--days 60]   TODO(#60): needs the whale bot\n" +
             "common: --content dir (default: the repo's content/), --tier M0|MVP (default M0: the systems the M0 sim has)\n" +
             "bots: " + "greedy-f2p (lazy-f2p, light-spender, whale: TODO(#214, #215))\n";
@@ -112,9 +113,9 @@ namespace HeroCat.Bots
         /// --tier M0|MVP (09 section 5.32). The default is M0: the M0 sim has no Awakening, Research, companions, quests or
         /// dungeons yet, so the bots exercise the M0 slice (TODO(#214): default MVP once those land).
         /// </summary>
-        public static ContentDb LoadContent(CliArgs a)
+        public static ContentDb LoadContent(CliArgs a, string defaultTier = "M0")
         {
-            var tier = (Tier)Enum.Parse(typeof(Tier), a.Str("tier", "M0"));
+            var tier = (Tier)Enum.Parse(typeof(Tier), a.Str("tier", defaultTier));
             var db = ContentLoader.LoadFromDirectory(ContentDir(a), tier);
             Console.Error.Write($"# content {db.Version} hash {db.ContentHash} tier {db.BuildTier} sim {typeof(Simulation).Assembly.GetName().Version}\n");
             return db;
@@ -359,27 +360,42 @@ namespace HeroCat.Bots
             return same ? 0 : 1;
         }
 
+        /// <summary>
+        /// 03 criterion 19 / 10 section 1.1: Advance(--ticks) on <see cref="PerfFixture"/>'s stage-300 profile with six skills
+        /// and four companions (MVP content unless --tier says otherwise), as the harness runs a sim: kills coalesced, the
+        /// default event mask, the buffer drained every 1,000 ticks.
+        /// </summary>
         static int Bench(CliArgs a)
         {
-            var db = LoadContent(a);
+            var db = LoadContent(a, "MVP");
             long ticks = a.Long("ticks", 1_000_000);
             long maxMs = a.Long("max-ms", 2000);   // 03 criterion 19, 10 section 1.1
-            int stage = a.Int("stage", 1);
-            var genesis = BotRunner.Genesis(db, 1);
-            genesis.Combat.Stage = stage;
-            if (stage > 1) genesis.Progress.HighestCleared = stage - 1;
-            var sim = new Simulation(genesis, db) { ForceCoalesce = true };
+            int stage = a.Int("stage", PerfFixture.Stage);
+            var sim = PerfFixture.Create(BotRunner.Genesis(db, 1), db, stage);
+            sim.ForceCoalesce = true;
             sim.Apply(new ApplyServerTime(HarnessConstants.Epoch.ToUnixTimeSeconds()));
+            sim.Advance(10_000);   // warm up the JIT, as the Perf group does
+            sim.DrainEvents();
+            long kills = sim.State.Stats.Kills;
+            var cpu0 = Process.GetCurrentProcess().TotalProcessorTime;   // reported beside wall time: a loaded runner shows up as wall >> CPU
             var sw = Stopwatch.StartNew();
-            for (long done = 0; done < ticks; done += 1000) sim.Advance((int)Math.Min(1000, ticks - done));
+            for (long done = 0; done < ticks; done += 1000)
+            {
+                sim.Advance((int)Math.Min(1000, ticks - done));
+                sim.DrainEvents();
+            }
             long ms = sw.ElapsedMilliseconds;
-            // TODO(#160): equip six skills and four companions (03 criterion 19).
+            long cpuMs = (long)(Process.GetCurrentProcess().TotalProcessorTime - cpu0).TotalMilliseconds;
+            kills = sim.State.Stats.Kills - kills;
+            string what = $"bench: {ticks} ticks in {ms} ms (process CPU {cpuMs} ms; {ticks * 1000.0 / Math.Max(1, ms):0} ticks/s), {kills} kills, stage {stage} -> {sim.State.Combat.Stage}, " +
+                          $"{PerfFixture.Skills.Length} skills + {PerfFixture.Companions.Length} companions";
+            if (kills == 0) { Console.Out.Write(what + " FAIL (the fixture must kill)\n"); return 1; }
 #if DEBUG
-            Console.Out.Write($"bench: {ticks} ticks in {ms} ms ({ticks * 1000.0 / Math.Max(1, ms):0} ticks/s); Debug build, no budget verdict\n");
+            Console.Out.Write(what + "; Debug build, no budget verdict\n");
             return 0;
 #else
             bool ok = ms <= maxMs;
-            Console.Out.Write($"bench: {ticks} ticks in {ms} ms ({ticks * 1000.0 / Math.Max(1, ms):0} ticks/s) {(ok ? "PASS" : "FAIL")} (max {maxMs} ms)\n");
+            Console.Out.Write($"{what} {(ok ? "PASS" : "FAIL")} (max {maxMs} ms)\n");
             return ok ? 0 : 1;
 #endif
         }

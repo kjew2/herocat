@@ -255,6 +255,7 @@ namespace HeroCat.Runtime.Tests
         {
             public FixedConfig(ClientConfig c) { Current = c; }
             public ClientConfig Current { get; }
+            public KillSwitches Flags => Current.Flags;
             public Task<ClientConfig> FetchAsync(CancellationToken ct = default) => Task.FromResult(Current);
         }
     }

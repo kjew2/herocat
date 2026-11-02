@@ -93,6 +93,10 @@ namespace HeroCat.Runtime.Session
         readonly IClockResync _resync;
         readonly object _syncLock = new object();
         readonly List<(long extrapolated, long synced)> _syncsLanded = new List<(long, long)>();
+        // 02 section 14.3's session_end: the foreground session opened at boot, resume or gap recovery.
+        bool _sessionOpen;
+        long _sessionMono, _sessionKills, _sessionTicks;
+        int _sessionStage;
 
         public SessionRunner(Simulation sim, GameServices services, EventBus bus, ICommandLog log = null, SessionRunnerOptions options = null)
         {
@@ -126,6 +130,12 @@ namespace HeroCat.Runtime.Session
         /// <summary>The inbox list / claim flow of 01 section 8.9 step 6 over this runner (issue #176).</summary>
         public HeroCat.Runtime.Inbox.InboxFlow Inbox => _inbox ??= new HeroCat.Runtime.Inbox.InboxFlow(this);
         HeroCat.Runtime.Inbox.InboxFlow _inbox;
+
+        /// <summary>
+        /// The config cadence of 01 section 8.12 (issue #144), set by BootFlow: updated every frame and told about resumes.
+        /// Null runs no refresh (tests that build a runner by hand).
+        /// </summary>
+        public HeroCat.Runtime.Services.ConfigRefresher Config { get; set; }
 
         /// <summary>
         /// A manual tick switch (debug and tests): false runs no ticks and accumulates no time; commands, clock syncs,
@@ -207,14 +217,17 @@ namespace HeroCat.Runtime.Session
             HandleLandedClockSyncs();
             // 02 section 11.1: CLOCK_RESYNC_SEC of foreground time without an observation fires a /time sync (issue #149).
             if (_resync != null && _resync.ResyncDue) _ = _resync.SyncAsync();
+            Config?.Update();   // CONFIG_REFRESH_S / MAINT_POLL_S re-fetch; a landed answer swaps the kill switches (8.12)
 
             long mono = _mono.Ticks;
+            long prevMono = _lastMono;
             double dt = (mono - _lastMono) / (double)_mono.Frequency;
             _lastMono = mono;
 
             if (dt > _opt.InAppGapSec)   // frozen without a pause callback (debugger, OS freeze): catch-up, not ticks
             {
                 _accTicks = 0;
+                EndSession(AnalyticsEvents.SessionEnd.GAP, prevMono);   // the session ended at the last frame before the freeze
                 SyncAndCatchUp();
                 return 0;
             }
@@ -281,6 +294,7 @@ namespace HeroCat.Runtime.Session
             IsPaused = true;
             _bus.Publish(_sim.DrainEvents());
             SaveNow(SaveTrigger.Pause);
+            EndSession(AnalyticsEvents.SessionEnd.PAUSE, _mono.Ticks);
             _svc.Analytics?.Flush();
         }
 
@@ -291,12 +305,14 @@ namespace HeroCat.Runtime.Session
             _accTicks = 0;
             _summons?.OnResume();
             SyncAndCatchUp();
+            Config?.OnResume();   // 01 section 8.12 step 1: config is re-fetched on every resume
         }
 
         public void OnQuit()
         {
             _bus.Publish(_sim.DrainEvents());
             SaveNow(SaveTrigger.Quit);
+            EndSession(AnalyticsEvents.SessionEnd.QUIT, _mono.Ticks);   // nothing after a pause: that already ended it
             _svc.Analytics?.Flush();
         }
 
@@ -397,6 +413,30 @@ namespace HeroCat.Runtime.Session
             _svc.Analytics?.Track("clock_anomaly", new Dictionary<string, object> { ["kind"] = "backwards", ["seconds"] = seconds });
         }
 
+        /// <summary>02 section 14.3: a session opens at boot, resume and gap recovery (after the catch-up), once.</summary>
+        void OpenSession(long mono)
+        {
+            if (_sessionOpen) return;
+            _sessionOpen = true;
+            _sessionMono = mono;
+            _sessionStage = _sim.State.Combat.Stage;
+            _sessionKills = _sim.State.Stats.Kills;
+            _sessionTicks = TotalTicks;
+        }
+
+        /// <summary>
+        /// 02 section 14.3's session_end, once per session: foreground seconds (monotonic), the frontier stage at open and
+        /// now, and the kills and ticks run since the open.
+        /// </summary>
+        void EndSession(string trigger, long mono)
+        {
+            if (!_sessionOpen) return;
+            _sessionOpen = false;
+            long sec = Math.Max(0, mono - _sessionMono) / _mono.Frequency;
+            _svc.Analytics?.Track(new AnalyticsEvents.SessionEnd(sec, _sessionStage, _sim.State.Combat.Stage, _sim.State.Stats.Kills - _sessionKills,
+                                                                 TotalTicks - _sessionTicks, trigger));
+        }
+
         void SyncAndCatchUp()
         {
             long now = _svc.Clock.NowServerSeconds;
@@ -409,6 +449,7 @@ namespace HeroCat.Runtime.Session
             SaveNow(SaveTrigger.Resume);
             _lastMono = _mono.Ticks;
             _lastClockSyncMono = _lastMono;
+            OpenSession(_lastMono);
             // 01 section 8.2 step 1: the catch-up above used the extrapolated time; the sync is fired, not awaited (issue
             // #149). Its result lands through IClockResync.Resynced on a later frame, where OnClockSynced credits a jump
             // over CLOCK_JUMP_WARN_SEC as the second catch-up window (step 2). It never throws.

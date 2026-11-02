@@ -14,13 +14,14 @@ namespace HeroCat.Runtime.Session
     /// The feature specs' analytics rows from the sim's events on the session's <see cref="EventBus"/> (02 section 14; the
     /// owner sections define the fields): 06 section 13's quest, offline, rollover and shop events and 03 section 11's
     /// <c>awakened</c> (issue #177), 04 section 13's <c>item_equipped</c> (issue #163) and 05 section 13's fish events
-    /// (issue #168). <c>currency_changed</c> is <see cref="CurrencyAnalytics"/>'. Rows that group one command's events (the
+    /// (issue #168), and 03 section 11's combat rows (issue #274, FeatureAnalytics.Combat.cs). <c>currency_changed</c> is
+    /// <see cref="CurrencyAnalytics"/>'. Rows that group one command's events (the
     /// <c>quest_claimed</c> bulk flag, <c>fish_release</c>, <c>fish_merge</c>, <c>fish_discard</c>) read
     /// <see cref="CommandApplied"/>; the rest map one sim event to one row; <c>fish_board_snapshot</c> goes out on the
     /// analytics flush of pause or quit. Attached by the boot flow whenever analytics is not <see cref="NullAnalytics"/>.
     /// Main thread, like the bus.
     /// </summary>
-    public sealed class FeatureAnalytics : IDisposable
+    public sealed partial class FeatureAnalytics : IDisposable
     {
         readonly IAnalytics _analytics;
         readonly ContentDb _db;
@@ -34,12 +35,17 @@ namespace HeroCat.Runtime.Session
         long _activeSecAtOpen, _releases, _merges, _discoveries;
         double _boardCoins;
 
-        public FeatureAnalytics(EventBus bus, IAnalytics analytics, ContentDb db, Func<GameState> state)
+        /// <param name="power">The current power breakdown (the boot flow passes the sim's cached <c>Query.Power</c>);
+        /// null computes it from the state.</param>
+        public FeatureAnalytics(EventBus bus, IAnalytics analytics, ContentDb db, Func<GameState> state,
+                                Func<HeroCat.Sim.Power.PowerBreakdown> power = null)
         {
             if (bus == null) throw new ArgumentNullException(nameof(bus));
             _analytics = analytics ?? throw new ArgumentNullException(nameof(analytics));
             _db = db ?? throw new ArgumentNullException(nameof(db));
             _state = state ?? throw new ArgumentNullException(nameof(state));
+            _power = power;
+            AttachCombat(bus);   // 03 section 11 (issue #274)
 
             _subs.Add(bus.SubscribeNotice<CommandApplied>(OnCommandApplied));
 

@@ -7,10 +7,10 @@ namespace HeroCat.Server.Pipeline;
 /// <summary>
 /// Declares one of an endpoint's rate limits (specs/08 endpoint lines, "5/min", "20/day", "1 per 7 days"): at most
 /// <see cref="Limit"/> accepted requests in any <see cref="WindowSeconds"/>-long sliding window, per player (per client
-/// IP on an <c>auth none</c> route). An endpoint may declare several; a request must fit all of them.
+/// IP on an <c>auth none</c> route). An endpoint may declare several; a request must fit all of them. The declared value
+/// is the default: the active config's <c>limits</c> overrides two of them by name (<see cref="RemoteLimits"/>, issue #265).
 /// </summary>
 [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class, AllowMultiple = true, Inherited = true)]
-// TODO(#265): whether config.limits (summonPerMinute, saveUploadsPerDay) overrides the declared values.
 public sealed class RateLimitAttribute : Attribute
 {
     public const int Minute = 60;
@@ -30,6 +30,35 @@ public sealed class RateLimitAttribute : Attribute
     public int WindowSeconds { get; }
 
     public RateLimitRule Rule => new(Limit, WindowSeconds);
+}
+
+/// <summary>
+/// The active config's <c>limits</c> (specs/08 section 6.1): <c>summonPerMinute</c> replaces the per-minute rule of
+/// <c>POST /summon/pull</c> and <c>saveUploadsPerDay</c> the per-day rule of <c>PUT /save</c>; null keeps the declared
+/// value (issue #265).
+/// </summary>
+public sealed record RemoteLimits(int? SummonPerMinute, int? SaveUploadsPerDay)
+{
+    /// <summary>The overridable rules: route key (<see cref="RateLimitRoutes.Of"/>), the window it replaces, and its value.</summary>
+    static readonly (string route, int window, Func<RemoteLimits, int?> value)[] Overrides =
+    {
+        ("post/summon/pull", RateLimitAttribute.Minute, l => l.SummonPerMinute),
+        ("put/save", RateLimitAttribute.Day, l => l.SaveUploadsPerDay),
+    };
+
+    /// <summary>The declared rules with this config's overrides applied (a non-positive value is ignored).</summary>
+    public IReadOnlyList<RateLimitRule> Apply(string route, IReadOnlyList<RateLimitRule> declared)
+    {
+        List<RateLimitRule>? result = null;
+        foreach (var (r, window, value) in Overrides)
+        {
+            if (!string.Equals(r, route, StringComparison.Ordinal) || value(this) is not int limit || limit < 1) continue;
+            result ??= declared.ToList();
+            for (int i = 0; i < result.Count; i++)
+                if (result[i].WindowSeconds == window) result[i] = new RateLimitRule(limit, window);
+        }
+        return result ?? declared;
+    }
 }
 
 public sealed record RateLimitRule(int Limit, int WindowSeconds)
@@ -162,13 +191,13 @@ public static class RateLimitGate
 
     /// <summary>
     /// The window's key: per player on an authenticated route, per client IP on an <c>auth none</c> route
-    /// (specs/08 section 1.1), even when a <c>none</c> route also carries a token.
+    /// (specs/08 section 1.1), even when a <c>none</c> route also carries a token. Behind the load balancer the client IP
+    /// is the trusted hop's <c>X-Forwarded-For</c> entry (<see cref="ForwardedNetwork"/>, issue #263).
     /// </summary>
     public static string KeyFor(HttpContext ctx, AuthPolicy policy)
     {
         string route = RouteOf(ctx);
         if (policy != AuthPolicy.None && ctx.PlayerId() is Guid player) return RedisKeys.RateLimit(route, player);
-        // TODO(#263): behind the load balancer this is the balancer's address until forwarded headers are trusted.
         return RedisKeys.RateLimitByIp(route, ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown");
     }
 

@@ -1,4 +1,5 @@
 using System;
+using HeroCat.Runtime.Services;
 using HeroCat.Sim.Commands;
 using HeroCat.Sim.Content;
 
@@ -40,6 +41,15 @@ namespace HeroCat.Client.Core
 
         /// <summary>Monotonic seconds (the runner's mono clock), for toasts, throttles and animations.</summary>
         public Func<double> Now { get; }
+
+        /// <summary>
+        /// The kill switches in force (IConfigService.Flags; 01 section 8.12 step 1), read on every refresh so a switch
+        /// applies within one config refresh. Null: everything on.
+        /// </summary>
+        public Func<KillSwitches> Flags { get; set; }
+
+        /// <summary>The kill switches now (everything on without a source).</summary>
+        public KillSwitches Switches => Flags?.Invoke() ?? KillSwitches.AllOn;
 
         public Constants K => Db.Constants;
 

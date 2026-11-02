@@ -11,7 +11,7 @@ namespace HeroCat.Server.Tests;
 [TestFixture]
 public sealed class SchemaTests
 {
-    static readonly SqlSchemaModel Spec = SqlSchemaModel.Parse(SqlSchemaModel.SpecBlock());
+    static readonly SqlSchemaModel Spec = SqlSchemaModel.Parse(SqlSchemaModel.SpecBlocks().ToArray());
     static readonly SqlSchemaModel Set = SqlSchemaModel.Parse(SqlSchemaModel.MigrationTexts());
 
     static readonly string[] FinancialTables = { "purchases", "summon_log", "diamond_ledger" };
@@ -23,6 +23,20 @@ public sealed class SchemaTests
         // change is a new migration, and the spec's sentence and this test change with it.
         string init = File.ReadAllText(RepoPaths.Of("server/db/migrations/0001_init.sql"));
         Assert.That(init, Is.EqualTo(SqlSchemaModel.SpecBlock()));
+    }
+
+    [Test]
+    public void Later_spec_blocks_are_their_migration_files_verbatim()
+    {
+        // specs/02 section 12: each ```sql block after the 0001 DDL is a later migration file verbatim, named on its first line.
+        var later = SqlSchemaModel.SpecBlocks().Skip(1).ToList();
+        Assert.That(later, Is.Not.Empty);
+        foreach (string block in later)
+        {
+            var name = Regex.Match(block, @"^-- (\d{4}_[a-z0-9_]+\.sql)\b");
+            Assert.That(name.Success, "a later specs/02 section 12 sql block starts with '-- NNNN_name.sql': " + block.Split('\n')[0]);
+            Assert.That(File.ReadAllText(RepoPaths.Of("server/db/migrations/" + name.Groups[1].Value)), Is.EqualTo(block), name.Groups[1].Value);
+        }
     }
 
     [Test]
@@ -137,7 +151,10 @@ public sealed class SchemaTests
     [Test]
     public void The_reader_rejects_statements_it_does_not_model()
     {
-        Assert.Throws<NotSupportedException>(() => SqlSchemaModel.Parse("alter table accounts add column x int;"));
+        Assert.Throws<NotSupportedException>(() => SqlSchemaModel.Parse("drop table accounts;"));
+        Assert.Throws<NotSupportedException>(() => SqlSchemaModel.Parse("create table accounts (a int); alter table accounts drop column a;"));
+        var added = SqlSchemaModel.Parse("create table t (a int); alter table t add column b uuid not null default gen_random_uuid(), add column c text;");
+        Assert.That(added.Tables["t"].Columns, Is.EqualTo(new[] { new SqlColumn("a", "int", false), new SqlColumn("b", "uuid", true), new SqlColumn("c", "text", false) }));
         var m = SqlSchemaModel.Parse("create table t (a int primary key, -- it's a comment\n b text[] not null default '{}', c timestamptz, primary key (a));");
         Assert.That(m.Tables["t"].Columns, Is.EqualTo(new[]
         {

@@ -8,11 +8,17 @@ namespace HeroCat.Sim.State
     /// <summary>
     /// Deep copy of a GameState (02 section 3.1: bots, tests, the conflict flow, LocalSummonService's roll-on-a-clone).
     /// Every field is copied, the transient Combat.Fight included, so a clone mid-fight continues identically (03 AC15).
-    /// Records (DotInstance, CatchupResult, Pending*, DungeonRunRecord) are immutable and shared.
+    /// Records (CatchupResult, Pending*, DungeonRunRecord) are immutable and shared.
     /// </summary>
     public static class StateCopy
     {
-        public static GameState DeepClone(GameState s)
+        public static GameState DeepClone(GameState s) => DeepClone(s, s?.PlayerId ?? Guid.Empty);
+
+        /// <summary>
+        /// A deep copy owned by <paramref name="playerId"/>: the first guest auth adopting a local guest save
+        /// (<c>PlayerId = Guid.Empty</c>, 01 open question 7). RngRoot is unchanged, so adopting re-seeds nothing (3.4).
+        /// </summary>
+        public static GameState DeepClone(GameState s, Guid playerId)
         {
             if (s == null) throw new ArgumentNullException(nameof(s));
             var c = new GameState
@@ -20,7 +26,7 @@ namespace HeroCat.Sim.State
                 SchemaVersion = s.SchemaVersion,
                 ContentVersion = s.ContentVersion,
                 ContentHash = s.ContentHash,
-                PlayerId = s.PlayerId,
+                PlayerId = playerId,
                 DeviceId = s.DeviceId,
                 RngRoot = s.RngRoot,
                 SaveSeq = s.SaveSeq,

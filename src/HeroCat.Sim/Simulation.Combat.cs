@@ -23,8 +23,20 @@ namespace HeroCat.Sim
         /// <summary>Derived numbers: the cached power breakdown, costs, the wall check (03 section 7).</summary>
         public SimQuery Query => _query ?? (_query = new SimQuery(Db, State));
 
+        /// <summary>
+        /// Which per-tick combat events the loop emits (03 section 1 goal 4); <see cref="CombatEventMask.Default"/> unless set.
+        /// <see cref="CombatEventMask.None"/> is the null sink of 03 criterion 19: the tick then allocates nothing between kills.
+        /// </summary>
+        public CombatEventMask CombatEvents { get; set; } = CombatEventMask.Default;
+
         /// <summary>Opt-in HitLanded events, one per hero hit (03 section 2.2). Off by default: bots and the server never need them.</summary>
-        public bool EmitHitLanded { get; set; }
+        public bool EmitHitLanded
+        {
+            get => Wants(CombatEventMask.HitLanded);
+            set => CombatEvents = value ? CombatEvents | CombatEventMask.HitLanded : CombatEvents & ~CombatEventMask.HitLanded;
+        }
+
+        bool Wants(CombatEventMask m) => (CombatEvents & m) != 0;
 
         /// <summary>Taps the last TapZap accepted and ignored (03 section 2.5; ApplyResult carries no payload).</summary>
         public int LastTapZapUsed { get; private set; }
@@ -215,7 +227,7 @@ namespace HeroCat.Sim
             if (isCrit) dmg *= q.CritDmg;
             f.EnemyHp -= dmg;
             AddDamage(dmg, isCrit);
-            if (EmitHitLanded) Emit(new HitLanded(dmg, isCrit, f.EnemyHp));
+            if (Wants(CombatEventMask.HitLanded)) Emit(new HitLanded(dmg, isCrit, f.EnemyHp));
         }
 
         /// <summary>03 section 2.5: drain the whole FIFO queue into this enemy (no crit, no draw, no buff); surplus is lost with the kill.</summary>
@@ -230,7 +242,7 @@ namespace HeroCat.Sim
                 double dmg = hit * frac;
                 f.EnemyHp -= dmg;
                 AddDamage(dmg, false);
-                Emit(new FishMissileHit(frac, dmg));
+                if (Wants(CombatEventMask.FishMissileHit)) Emit(new FishMissileHit(frac, dmg));
             }
             queue.Clear();
         }
@@ -244,7 +256,7 @@ namespace HeroCat.Sim
             f.EnemyHp -= dmg;
             f.PendingTaps = 0;
             AddDamage(dmg, false);
-            Emit(new TapZapped(n, dmg));
+            if (Wants(CombatEventMask.TapZapped)) Emit(new TapZapped(n, dmg));
         }
 
         /// <summary>Active DOTs tick before any cast (03 section 2.3). DamagePerTick is a multiple of SkillUnit.</summary>
@@ -260,7 +272,7 @@ namespace HeroCat.Sim
                 f.EnemyHp -= dmg;
                 AddDamage(dmg, false);
                 if (d.TicksLeft <= 1) dots.RemoveAt(i);
-                else { dots[i] = d with { TicksLeft = d.TicksLeft - 1 }; i++; }
+                else { dots[i] = new DotInstance(d.TicksLeft - 1, d.DamagePerTick); i++; }
             }
         }
 
@@ -280,7 +292,7 @@ namespace HeroCat.Sim
                 if (lm <= 0) continue;   // not owned: contributes nothing, as in the rated formula
                 CastSkill(f, def, lm);
                 cds[slot] = def.CooldownTicks;
-                Emit(new SkillCast(slot, id));
+                if (Wants(CombatEventMask.SkillCast)) Emit(new SkillCast(slot, id));
                 return;
             }
         }
@@ -307,7 +319,7 @@ namespace HeroCat.Sim
                 c.Mp -= def.MpCost;
                 ApplyCompanion(f, def, lm);
                 cds[slot] = def.CooldownTicks;
-                Emit(new CompanionAbilityUsed(slot, def.Id, c.Mp));
+                if (Wants(CombatEventMask.CompanionAbilityUsed)) Emit(new CompanionAbilityUsed(slot, def.Id, c.Mp));
                 return;
             }
         }
@@ -418,7 +430,7 @@ namespace HeroCat.Sim
             f.AttackProgress = 0;
             f.BossTicksLeft = isBoss ? k.BossTimeTicks : 0;
             f.Phase = FightPhase.Fighting;
-            Emit(new EnemySpawned(fought, isBoss, hp));
+            if (Wants(CombatEventMask.EnemySpawned)) Emit(new EnemySpawned(fought, isBoss, hp));
             if (isBoss) QuestsProgress(QuestGoal.ATTEMPT_BOSS, 1);   // one boss spawn = one attempt, the automatic one included (d_boss)
         }
 

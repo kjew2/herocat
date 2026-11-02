@@ -30,7 +30,7 @@ namespace HeroCat.Sim.Tests
 
         static Simulation Sim(int awakenRank = 3, ContentDb db = null)
         {
-            var sim = new Simulation(TestContent.NewState(), db ?? Mvp);
+            var sim = new Simulation(TestContent.NewState(), db ?? Mvp) { CombatEvents = CombatEventMask.Default | CombatEventMask.CompanionAbilityUsed | CombatEventMask.SkillCast };
             sim.Apply(new ApplyServerTime(TestContent.T0));
             sim.State.Hero.AwakenRank = awakenRank;
             sim.Query.MarkDirty();
