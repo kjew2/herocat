@@ -615,18 +615,26 @@ The summon streams are not combat's: they stay in the save in every mode and are
 
 ## 11. Analytics events
 
-This section owns these events' fields (issue #245); every event also carries 02 section 14.1's envelope, and 02 section 14.4 indexes them. The sim publishes the event named in the last column and the Runtime sink maps it.
+This section owns these events' fields (issue #245); every event also carries 02 section 14.1's envelope, and 02 section 14.4 indexes them. The sim publishes the event named in the last column and the Runtime sink maps it. The envelope's `stage` is the current frontier, so an event about another stage names it `clearedStage`, `bossStage` or `wallStage` (an owner field may not reuse an envelope name, 02 section 14.1; issue #274).
 
 | Event | Fields | When |
 |---|---|---|
-| `stage_cleared` | `stage`, `isBoss`, `firstClear`, `diamondsGranted`, `attempts` (boss stages only), `ticksOnStage`, `dps` | `StageCleared`; feeds the 00 section 6.6 day table |
-| `boss_failed` | `stage`, `bossHpLeftPct`, `attempt` | `BossFailed` (2.7); the first one on a stage is the wall hit (2.8) |
-| `wall_broken` | `stage`, `wallSec`, `activeSecDuringWall`, `attempts`, `layersChangedDuringWall[]` | `StageCleared` of a boss stage that was `Walled` |
+| `stage_cleared` | `clearedStage`, `isBoss`, `firstClear`, `diamondsGranted`, `attempts` (boss stages only), `ticksOnStage`, `dps` | `StageCleared`; feeds the 00 section 6.6 day table |
+| `boss_failed` | `bossStage`, `bossHpLeftPct`, `attempt` | `BossFailed` (2.7); the first one on a stage is the wall hit (2.8) |
+| `wall_broken` | `wallStage`, `wallSec`, `activeSecDuringWall`, `attempts`, `layersChangedDuringWall[]` | `StageCleared` of a boss stage that was `Walled` |
 | `training` | `stat`, `levelFrom`, `levelTo`, `goldCost` | `StatTrained`; one per command, not per level (01) |
 | `level_up` | `heroLevel` | `LevelUp` (5.2) |
 | `awakened` | `rank`, `rockCandyCost`, `rockCandyAfter` (the stage is the envelope's) | `Awakened` (5.3) |
 | `research_bought` | `researchId`, `level`, `fishCoinCost` | `ResearchLeveled` (6) |
 | `currency_changed` | 06 section 13, reasons `KILL`, `BOSS`, `FIRST_CLEAR`, `TRAINING`, `RESEARCH`, `AWAKENING` | per wallet delta |
+
+As built (`HeroCat.Runtime.Session.FeatureAnalytics`, issue #274): the sim's events carry no stage-entry tick, wall start or per-stage fight count, so the Runtime tracks them from the events and seeds them from the state when it attaches; nothing is saved and the sim is unchanged.
+
+- `attempts` counts the boss fights on the stage including the clearing one (`BossFailsOnStage + 1`); `attempt` is `BossFailed.Attempt`. `bossHpLeftPct` is the remaining fraction in percentage points (0-100).
+- `firstClear`: `clearedStage` is above the highest stage cleared so far; `diamondsGranted` is the `StageFirstCleared` payment for that stage, else 0.
+- `ticksOnStage` counts sim ticks from the previous frontier advance (tick 0 for a new profile); `dps` is `Query.RatedDps` when the row is sent.
+- A wall opens on the first `BossFailed` of a stage. `wallSec` is virtual server seconds (offline gaps included), `activeSecDuringWall` ticked seconds, and `layersChangedDuringWall` the `PowerLayer` names other than `Base` whose factor differs between the wall's opening and its break.
+- A stage or wall entered before this process attached (a cold boot mid-stage or mid-wall) has no known start: the row omits `ticksOnStage`, or `wallSec`, `activeSecDuringWall` and `layersChangedDuringWall`, rather than send a partial value.
 
 ## 12. Open questions
 

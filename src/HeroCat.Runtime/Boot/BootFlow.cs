@@ -191,7 +191,7 @@ namespace HeroCat.Runtime.Boot
             if (!(analytics is NullAnalytics))   // before Start, so the first rollover's LOGIN row (and day_rollover) is counted
             {
                 r.CurrencyAnalytics = new CurrencyAnalytics(r.Bus, analytics, () => r.Sim.State, r.Content.Constants.TickHz);
-                r.FeatureAnalytics = new FeatureAnalytics(r.Bus, analytics, r.Content, () => r.Sim.State);
+                r.FeatureAnalytics = new FeatureAnalytics(r.Bus, analytics, r.Content, () => r.Sim.State, () => r.Sim.Query.Power);
             }
             Done(BootStep.Save);
 

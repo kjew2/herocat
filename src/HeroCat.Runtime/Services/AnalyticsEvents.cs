@@ -188,9 +188,13 @@ namespace HeroCat.Runtime.Services
             };
         }
 
-        /// <summary>02 section 14.3: Runtime on pause/quit. Trigger: pause, quit or gap.</summary>
+        /// <summary>02 section 14.3: SessionRunner on pause, quit or an in-app gap (issue #274). Trigger: the constants below.</summary>
         public sealed record SessionEnd(long DurationSec, int StageStart, int StageEnd, long Kills, long Ticks, string Trigger) : AnalyticsEvent
         {
+            public const string PAUSE = "pause";
+            public const string QUIT = "quit";
+            public const string GAP = "gap";
+
             public override string Name => AnalyticsNames.SESSION_END;
 
             public override Dictionary<string, object> Props() => new Dictionary<string, object>
