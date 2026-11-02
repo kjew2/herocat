@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "2026.11.02.8",
+  "content_version": "2026.11.02.9",
   "min_client_version": "0.2.0",
   "source_revision": "2026-11-01 m0 skeleton, spec 00 seed values (agent)",
   "hot_apply": false,
@@ -23,7 +23,7 @@
     "banner_levels": {
       "file": "banner_levels.json",
       "rows": 30,
-      "sha256": "7b39d7af528f00aadfe5c2c49cd154b3f39c83549eee89f943ef9cd76af61ad4"
+      "sha256": "bd5e253fd6c0b5421b9ce81d0a2c8fd4631c074b11686203ccfe932fc947ce08"
     },
     "banners": {
       "file": "banners.json",
@@ -153,7 +153,7 @@
       "sha256": "a1576267c923bb46be168e84d013411a70a8c55a4a1ea9fb64783f425af21858"
     }
   },
-  "content_hash": "8de61436aff500af808e18894f2b0f31041221f5e4aef977e439311149ca1413",
+  "content_hash": "111dd4df9b112d0ec856903bf644519dd3ba240785794929690858805284067c",
   "s_constants": [
     "BASE_HP",
     "BOSS_ROCK_CANDY_P",
@@ -181,5 +181,5 @@
     "TAP_ZAP_DMG_PCT",
     "TAP_ZAP_MAX_PER_SEC"
   ],
-  "notes": "M0 skeleton: values are spec 00 section 6 seeds; S values pending tools/power_curve_model.py and fish_model.py. Party model (00 decisions 109, 110): BASE_ATK per companion, PARTY_SLOTS, MP_REGEN0 0.5 per slot pool; decision 111: COMPANION_ATK_MULT, COMPANION_DPS_PCT +25%, Awakening costs /5, five starter weapons"
+  "notes": "M0 skeleton: values are spec 00 section 6 seeds; S values pending tools/power_curve_model.py and fish_model.py. Party model (00 decisions 109, 110): BASE_ATK per companion, PARTY_SLOTS, MP_REGEN0 0.5 per slot pool; decision 111: COMPANION_ATK_MULT, COMPANION_DPS_PCT +25%, Awakening costs /5, five starter weapons; BANNER_LVL_EXP x0.26 (decision 70 rule)"
 }

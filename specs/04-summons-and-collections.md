@@ -155,21 +155,21 @@ Each pull on a banner grants `BANNER_EXP_PER_PULL = 1` EXP to that banner, paid 
 | Level | `BANNER_LVL_EXP` (cumulative pulls; tuned from the tool's cadence, issue #38) | C | R | E | L | M | P(E+) |
 |---|---|---|---|---|---|---|---|
 | 1 | 0 | 0.600 | 0.280 | 0.090 | 0.025 | 0.005 | 0.120 |
-| 2 | 10 | 0.580 | 0.292 | 0.098 | 0.025 | 0.005 | 0.128 |
-| 3 | 25 | 0.560 | 0.304 | 0.106 | 0.025 | 0.005 | 0.136 |
-| 4 | 55 | 0.540 | 0.316 | 0.114 | 0.025 | 0.005 | 0.144 |
-| 5 | 90 | 0.520 | 0.328 | 0.122 | 0.025 | 0.005 | 0.152 |
-| 6 | 145 | 0.500 | 0.340 | 0.130 | 0.025 | 0.005 | 0.160 |
-| 7 | 215 | 0.480 | 0.352 | 0.138 | 0.025 | 0.005 | 0.168 |
-| 8 | 305 | 0.460 | 0.364 | 0.146 | 0.025 | 0.005 | 0.176 |
-| 9 | 415 | 0.440 | 0.376 | 0.154 | 0.025 | 0.005 | 0.184 |
-| 10 | 540 | 0.420 | 0.388 | 0.162 | 0.025 | 0.005 | 0.192 |
+| 2 | 15 | 0.580 | 0.292 | 0.098 | 0.025 | 0.005 | 0.128 |
+| 3 | 40 | 0.560 | 0.304 | 0.106 | 0.025 | 0.005 | 0.136 |
+| 4 | 80 | 0.540 | 0.316 | 0.114 | 0.025 | 0.005 | 0.144 |
+| 5 | 130 | 0.520 | 0.328 | 0.122 | 0.025 | 0.005 | 0.152 |
+| 6 | 210 | 0.500 | 0.340 | 0.130 | 0.025 | 0.005 | 0.160 |
+| 7 | 310 | 0.480 | 0.352 | 0.138 | 0.025 | 0.005 | 0.168 |
+| 8 | 440 | 0.460 | 0.364 | 0.146 | 0.025 | 0.005 | 0.176 |
+| 9 | 600 | 0.440 | 0.376 | 0.154 | 0.025 | 0.005 | 0.184 |
+| 10 | 780 | 0.420 | 0.388 | 0.162 | 0.025 | 0.005 | 0.192 |
 
 Rule: per level above 1, `C -= BANNER_LVL_C_SHIFT (0.020)`, `R += BANNER_LVL_R_SHIFT (0.012)`, `E += BANNER_LVL_E_SHIFT (0.008)`; L and M never change. Every row sums to 1.0 within 1e-9 and the content validator (09) rejects a `banner_levels` table that does not. The table is content, not code: the sim reads the row for the current level; the shift constants exist only so the sheet can regenerate the rows.
 
 What the player sees: `SCR_SUMMON` shows the current level's full rate table, the next threshold ("12 pulls to level 4"), and a note "Legendary and Mythic rates do not change with level".
 
-Threshold rule (issue #38): F2P pull cadence per banner is never hand-entered. `gacha_model.py` computes it from 06's diamond and ticket income and 03's bot spending policy (section 14), and `BANNER_LVL_EXP` is retuned from that output so the F2P bot reaches weapon banner level 4 between day 20 and day 35. The table above is that retune, made with the old single-hero bot; the cadence and level days quoted in this paragraph are stale until #309 reruns the bot on the party model (00 decision 109), and the thresholds stay as they are until then. The retune was the original placeholder column (0, 50, 150, ..., 3000) scaled by 0.18 and rounded to multiples of 5, which keeps the level count and the shape. At the computed cadence (`power_curve_model.py --check`, 20 seeds, 30 days, diamonds from 06's quests, login, first clears and achievements since issue #178: weapon 2.37 pulls/day, range 1.70..2.97; skill 1.37; companion 0.58) the weapon banner reaches level 2 on day 1, level 3 around day 6-7 and level 4 on a median day 23.5 (range 9..33 over a 45-day run; 19 of 20 seeds by day 30). The skill banner reaches level 2 around day 5 and level 3 around day 14 and does not reach level 4 inside 30 days (1 of 20 seeds does); the companion banner reaches level 2 around day 15 and level 3 after day 30 on 17 of 20 seeds. (The retune itself was made at the earlier flat 400 diamonds a day, median day 27.) Skill and companion have no separate level target. A whale buying 540 pulls reaches level 10 on one banner; its E+ rate is 1.6x the F2P player's, its L+ rate identical. That is the intended shape of the paid edge on summons: more dupes and more Epics, not more Mythics per pull.
+Threshold rule (issue #38): F2P pull cadence per banner is never hand-entered. `gacha_model.py` computes it from 06's diamond and ticket income and 03's bot spending policy (section 14), and `BANNER_LVL_EXP` is retuned from that output so the F2P bot reaches weapon banner level 4 between day 20 and day 35. The table above is that retune on the party model (00 decisions 70, 111): the original placeholder column (0, 50, 150, ..., 3000) scaled by 0.26 and rounded to multiples of 5, which keeps the level count and the shape (the hero-model retune used 0.18; the party bot pulls faster, so 0.18 put level 4 on day 16.5). At the computed cadence (`gacha_model.py --cadence` / `power_curve_model.py --check`, 20 seeds, 30 days, decision 111's content: weapon 3.30 pulls/day, range 2.57..4.33; skill 0.63; companion 0.65) the weapon banner reaches level 2 on day 2, level 3 on day 10.5 and level 4 on a median day 24 (range 16..31; 19 of 20 seeds by day 30); the skill banner reaches level 2 around day 20 and the companion banner around day 14, neither reaches level 3 inside 30 days. Skill and companion have no separate level target. A whale buying 780 pulls reaches level 10 on one banner; its E+ rate is 1.6x the F2P player's, its L+ rate identical. That is the intended shape of the paid edge on summons: more dupes and more Epics, not more Mythics per pull.
 
 Banner level is a per-banner integer derived from the cumulative `BannerState.Exp` at read time, never stored, and not reset by anything (issue #7). P1 rate-up banners (section 9) share the parent banner's level and pity.
 
@@ -547,7 +547,7 @@ How `--cadence` computes it (issue #164): it runs `power_curve_model.py`'s greed
 
 | Name | Value | Kind | Section | Note |
 |---|---|---|---|---|
-| `BANNER_LVL_EXP` | 0, 10, 25, 55, 90, 145, 215, 305, 415, 540 | S | 4 | Cumulative pulls for levels 1..10. Tuned from the computed cadence: 20-seed median weapon level 4 on day 27 at the flat 400 diamonds a day, day 23.5 under 06's diamond rules (issue #178), inside days 20-35 (issue #38). Single-hero-bot figures, stale pending #309. |
+| `BANNER_LVL_EXP` | 0, 15, 40, 80, 130, 210, 310, 440, 600, 780 | S | 4 | Cumulative pulls for levels 1..10. Tuned from the computed cadence: 20-seed median weapon level 4 on day 27 at the flat 400 diamonds a day, day 23.5 under 06's diamond rules (issue #178), inside days 20-35 (issue #38). Single-hero-bot figures, stale pending #309. |
 | `BANNER_LVL_C_SHIFT`, `BANNER_LVL_R_SHIFT`, `BANNER_LVL_E_SHIFT` | 0.020, 0.012, 0.008 per level | S | 4 | Generate the `banner_levels` rows; L/M fixed. |
 | `LIMIT_BREAK_RANKS` | 5 | S | 5.2 | Per item; 00 section 6.5 name, 09 `constants` (issue #37). |
 | `LIMIT_BREAK_COST[r]` | C 10 / R 20 / E 40 / L 80 / M 150, times rank (placeholder) | S | 5.2 | Rock Candy; column `rarities.limit_break_cost` (issue #37). Validated by `power_curve_model.py`; repricing pending the tool (issue #36). |

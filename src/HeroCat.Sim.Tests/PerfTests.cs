@@ -135,7 +135,8 @@ namespace HeroCat.Sim.Tests
         {
             RequireRelease();
             var sim = Combat.NewSim(hits: false);
-            sim.State.Combat.Stage = 300;   // a fresh hero against stage 300: hits for a long time, no kill
+            sim.CombatEvents = CombatEventMask.Default;   // the opt-in cast events allocate by design; the starter party casts (00 decision 109)
+            sim.State.Combat.Stage = 300;   // a fresh party against stage 300: hits for a long time, no kill
             sim.Advance(2000);
             sim.DrainEvents();
             long kills = sim.State.Stats.Kills;

@@ -200,13 +200,14 @@ namespace HeroCat.Sim.Tests
             var sim = Sim();
             Give(sim, Currency.DIAMOND, 100_000);
             var def = Db.Banners[Banner.WEAPON];
-            int pullsToLevel2 = def.Levels[1].ExpRequired / def.ExpPerPull;
+            int pullsToLevel2 = (def.Levels[1].ExpRequired + def.ExpPerPull - 1) / def.ExpPerPull;
+            int tenPulls = (pullsToLevel2 + 9) / 10;   // the 10-pull that crosses the threshold
             int levelUps = 0;
-            for (int i = 0; i < pullsToLevel2 / 10; i++)
+            for (int i = 0; i < tenPulls; i++)
             {
                 sim.Apply(new ApplySummonResult(Roll(sim, Banner.WEAPON, 10)));
                 var ups = sim.DrainEvents().OfType<BannerLeveledUp>().ToList();
-                if (i < pullsToLevel2 / 10 - 1) Assert.That(ups, Is.Empty);
+                if (i < tenPulls - 1) Assert.That(ups, Is.Empty);
                 levelUps += ups.Count;
                 if (ups.Count > 0) Assert.That((ups[0].Banner, ups[0].Level), Is.EqualTo((Banner.WEAPON, 2)));
             }
