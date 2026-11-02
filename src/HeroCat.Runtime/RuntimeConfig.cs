@@ -64,6 +64,13 @@ namespace HeroCat.Runtime
         public const int ARCHIVE_KEEP_DAYS = 30;
 
         /// <summary>
+        /// 08 section 2.1 (issue #273), mirrored: the server takes a same-device retry of a refresh token rotated out at
+        /// most this long ago as a lost response, not reuse. The AuthClient starts refresh retries only within
+        /// <c>REFRESH_REUSE_GRACE_S - HTTP_TIMEOUT_S</c> of the first send, so every retry lands inside the grace.
+        /// </summary>
+        public const int REFRESH_REUSE_GRACE_S = 30;
+
+        /// <summary>
         /// 8.11: the week epoch offset, <c>4 * DAY_SECONDS</c>. DAY_SECONDS is a content constant, so this is a day count;
         /// HeroCat.Sim.DayKeys.FirstMondayDayKey is the one used by the sim (06 owns the week start).
         /// </summary>
