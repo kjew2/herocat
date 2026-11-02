@@ -38,13 +38,6 @@ namespace HeroCat.Runtime.Tests
         }
 
         [Test]
-        public void SplashCompanions_AreTheLegendaryAndMythicRows_MythicFirst()   // the debug splash viewer's order
-        {
-            var ids = ArtAddresses.SplashCompanions(TestContent.Db).ConvertAll(c => c.Id);
-            Assert.That(ids, Is.EqualTo(new[] { "comp_m_01", "comp_m_02", "comp_l_01", "comp_l_02", "comp_l_03", "comp_l_04", "comp_l_05", "comp_l_06" }));
-        }
-
-        [Test]
         public void EveryPilotAssetIsCommitted()   // issue #291: the pilot companions (and Yuki, added after) resolve to files
         {
             string res = System.IO.Path.Combine(TestContent.RepoRoot, "unity", "HeroCatClient", "Assets", "Resources");

@@ -42,18 +42,5 @@ namespace HeroCat.Client.Core
         /// </summary>
         public static string SplashFor(Banner banner, string id, Rarity rarity) =>
             banner == Banner.COMPANION && id != null && rarity >= Rarity.LEGENDARY ? "art_splash_" + id : null;
-
-        /// <summary>
-        /// Every companion that has a splash (Legendary and Mythic, 00 decision 108), Mythic first, then by id: the order the
-        /// debug splash viewer steps through.
-        /// </summary>
-        public static System.Collections.Generic.List<CompanionDef> SplashCompanions(ContentDb db)
-        {
-            var list = new System.Collections.Generic.List<CompanionDef>();
-            foreach (var c in db.Companions.Values)
-                if (SplashFor(Banner.COMPANION, c.Id, c.Rarity) != null) list.Add(c);
-            list.Sort((a, b) => a.Rarity != b.Rarity ? b.Rarity.CompareTo(a.Rarity) : string.CompareOrdinal(a.Id, b.Id));
-            return list;
-        }
     }
 }
