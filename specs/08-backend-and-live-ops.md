@@ -411,7 +411,10 @@ The client learns on the next `PUT /save` response (`diamondReconcile`) or `GET 
 }
 ```
 
-- `inBucket = hash(playerId || content.version) % 100 < rolloutPct`, computed by the server only (the client never hashes; issue #31). Stable per version; raising `rolloutPct` adds players, never removes them.
+- `inBucket = hash(playerId || content.version) % 100 < rolloutPct`, computed by the server only (the client never hashes; issue #31). Stable per version; raising `rolloutPct` adds players, never removes them. As built (issue #204): `hash` is the first 8 bytes, big-endian, of SHA-256 over the UTF-8 of `playerId` (lowercase, hyphenated) followed by `content.version`.
+- The non-rollout default is the stored payload's `defaultContent` (same shape as `content`, required while `content.rolloutPct < 100`; at 100 the default is `content` itself). A caller without a valid JWT, or outside the bucket, is served `defaultContent` as `content`; `defaultContent` itself never appears in the response, and `configVersion` (the row id) and `serverTime` are filled per request (issue #204).
+- `maintenance` is the payload's announcement (`active: false` with a future `until`, section 8.4) unless the Redis `maint` key is set, in which case the live flag is served. With no active config for the env, `GET /config` is `404 NOT_FOUND` and the client keeps its cached config or defaults (01 section 8.1).
+- `limits` overrides the declared rate limits by name: the endpoint attribute is the default, `summonPerMinute` replaces `POST /summon/pull`'s per-minute limit and `saveUploadsPerDay` `PUT /save`'s per-day limit, read from the active config with the rest of it (issue #265).
 - Content bundles apply only at next cold boot unless the manifest's `hot_apply` bool is set (01 section 8.12, 09); the exporter computes it from the four-table allowlist of 00 contract 3, which is the single source. `hotApplyTables` only echoes that exporter constant for diagnostics; the client does not read it to decide (issue #54).
 - `minContentVersionByClient` lets the server refuse sim-sensitive requests from a client running stale content (`CONTENT_TOO_OLD`) without blocking the client entirely.
 - Kill switches are read by view-models at every config refresh; none touches `GameState`.
@@ -419,6 +422,8 @@ The client learns on the next `PUT /save` response (`diamondReconcile`) or `GET 
 ### 6.2 Publishing
 
 Config and content are published through the admin API (`POST /admin/config` with the payload, `created_by` from SSO), stored as a new `config_versions` row, activated with `POST /admin/config/{id}/activate`. Activation is a single row flip, so rollback is `activate` on the previous id (section 8.5 runbook in 10). Content bundles are uploaded to the CDN bucket by the exporter pipeline (09) under their version path before the config that references them is activated; the server verifies the manifest's `sha256` at activation (`CONTENT_HASH_MISMATCH` 400) so a config can never point at a bundle that is not there.
+
+As built (issue #204): `POST /admin/config` validates the payload (`400 VALIDATION` with `details.field`) and returns `201` with the new, inactive row's `id`; rows are per environment (`HeroCat:Env`). Activation checks every content pointer of the payload (`content`, and `defaultContent` when present); a manifest whose bytes do not hash to its `sha256`, or that is not on the CDN, is `400 CONTENT_HASH_MISMATCH` (`details: { field, url, expected, actual }`) and leaves the previous config active. Activations of one env serialise on a Postgres advisory lock, so at most one row is active. Each api instance keeps the active row in memory and reloads it once the copy is `CONFIG_REFRESH_S` old (the activating instance at once), so a kill switch or version floor reaches every instance within that time; while Postgres is unreachable the last copy keeps serving. `POST /admin/maintenance` sets the `maint` key for `active: true` and deletes it for `active: false`.
 
 Version rules: client semver + build; content `YYYY.MM.DD[.n]`; save schema integer; API `v1` in the path, additive changes only within `v1`, a breaking change is `v2` beside it (10 compatibility matrix).
 
@@ -540,6 +545,7 @@ flowchart LR
 - PostgreSQL via Npgsql with connection pooling (RDS Proxy at 100k DAU). Migrations are plain versioned SQL files (`server/db/migrations/NNNN_<name>.sql`, 02 section 12's DDL verbatim; no EF Core migrations, EF Core at most for queries) applied by a small runner (`HeroCat.Server --migrate`, from the same image; it records each file and its SHA-256 in `schema_migrations` under a Postgres advisory lock and refuses an applied file that changed or disappeared) in the deploy pipeline before the new image receives traffic and in CI against an empty PostgreSQL 16 (issue #33) (expand/contract pattern: never drop a column in the same release that stops writing it).
 - S3 buckets per environment: `herocat-saves-{env}` (versioning on, SSE-KMS, lifecycle: non-current versions expire after 7 days), `herocat-receipts-{env}` (object lock, 7 years), `herocat-content-{env}` (public read via CloudFront OAC only).
 - Redis is a cache and a lock service only; losing it loses rate-limit counters and in-flight summon locks (the idempotency table in Postgres still prevents double rolls).
+- Trusted hops (issue #263): the api's peer is the ALB, so the client address for per-IP rate limits comes from `X-Forwarded-For`. Only a peer inside `HeroCat:Network:TrustedProxies` (the ALB subnets' CIDRs, from the IaC outputs) is trusted, and only for its own last hop (`ForwardLimit = 1`): an `X-Forwarded-For` a client forges is ignored from an untrusted peer and sits left of the entry the ALB appends otherwise. The list is empty by default, which trusts no hop and keys on the peer address (local runs, tests).
 
 ### 9.2 Environments
 
@@ -742,6 +748,7 @@ Engineering/operational constants, code- or config-resident (`HeroCat.Server` `a
 | `CLOCK_MAX_SKEW_ACCEPT_S` | 120 | S (declared in 02) | 3.1 |
 | `SAVE_BLOB_MAX_BYTES` | 262144 | S (declared in 02) | 3.1 |
 | `SAVE_HISTORY_KEEP` | 10 | S (declared in 02) | 3.1 |
+| `CONFIG_REFRESH_S` | 30 | S (issue #204) | 6.2 |
 | Rate limits | per endpoint, sections 2-5 | S | |
 | Alarm thresholds | 10 section 10 (issue #59) | S | |
 | Age of digital consent default | 13 | S | 10.1 |

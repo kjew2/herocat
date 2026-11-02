@@ -14,11 +14,15 @@ public sealed class ServerOptions
     /// <summary>The server version shown by <c>/health</c> (specs/10 section 6.3: the <c>YYYY.MM.DD[.N]</c> deploy tag).</summary>
     public string Version { get; set; } = "dev";
 
+    /// <summary>The environment this deployment serves (specs/08 section 9.2: <c>dev</c>, <c>stage</c>, <c>prod</c>); <c>config_versions.env</c>.</summary>
+    public string Env { get; set; } = "dev";
+
     public ServerLimits Limits { get; set; } = new();
     public DatabaseOptions Database { get; set; } = new();
     public RedisOptions Redis { get; set; } = new();
     public BlobOptions Blobs { get; set; } = new();
     public KeysOptions Keys { get; set; } = new();
+    public NetworkOptions Network { get; set; } = new();
 }
 
 /// <summary>
@@ -49,6 +53,8 @@ public sealed class ServerLimits
     [ConfigurationKeyName("SAVE_HISTORY_KEEP")] public int SaveHistoryKeep { get; set; }
     /// <summary>specs/08 section 10.1 "Age of digital consent default" (the table gives it no UPPER_SNAKE name).</summary>
     [ConfigurationKeyName("AGE_OF_DIGITAL_CONSENT_DEFAULT")] public int AgeOfDigitalConsentDefault { get; set; }
+    /// <summary>How old the in-process copy of the active config may get before a read reloads it (specs/08 section 6.2, issue #204).</summary>
+    [ConfigurationKeyName("CONFIG_REFRESH_S")] public int ConfigRefreshSeconds { get; set; }
 }
 
 /// <summary>A bound with a <c>suspicious</c> and a <c>certain</c> level (specs/08 section 7.2).</summary>
@@ -64,6 +70,16 @@ public sealed class RefundAbuseCount
     public int SoftFlag { get; set; }
     public int BanReview { get; set; }
     public int WindowDays { get; set; }
+}
+
+/// <summary>
+/// Which proxy hops are trusted to report the client address (specs/08 section 9.1, issue #263). Only a peer inside
+/// <see cref="TrustedProxies"/> may set <c>X-Forwarded-For</c>, and only its last hop is used; empty trusts nobody.
+/// </summary>
+public sealed class NetworkOptions
+{
+    /// <summary>CIDRs (<c>10.0.0.0/16</c>) or single addresses of the load balancer subnets, from the IaC outputs (#211).</summary>
+    public List<string> TrustedProxies { get; set; } = new();
 }
 
 public sealed class DatabaseOptions

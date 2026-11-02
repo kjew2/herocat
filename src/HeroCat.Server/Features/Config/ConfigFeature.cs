@@ -1,3 +1,8 @@
+using HeroCat.Server.Hosting;
+using HeroCat.Server.Infrastructure.Db;
+using HeroCat.Server.Pipeline;
+using Microsoft.Extensions.Options;
+
 namespace HeroCat.Server.Features.Config;
 
 /// <summary>
@@ -6,6 +11,20 @@ namespace HeroCat.Server.Features.Config;
 /// </summary>
 public static class ConfigFeature
 {
-    // TODO(#204): the Config endpoints and their services.
-    public static IServiceCollection AddConfigFeature(this IServiceCollection services) => services;
+    public static IServiceCollection AddConfigFeature(this IServiceCollection services)
+    {
+        // Postgres when configured; otherwise per-process rows (tests, a local run), as the idempotency store does.
+        services.AddSingleton<IConfigStore>(sp =>
+            string.IsNullOrWhiteSpace(sp.GetRequiredService<IOptions<ServerOptions>>().Value.Database.ConnectionString)
+                ? new InMemoryConfigStore()
+                : new PostgresConfigStore(sp.GetRequiredService<IDbConnectionFactory>()));
+        services.AddSingleton<ActiveConfigCache>();
+        services.AddSingleton<IActiveConfigSource>(sp => sp.GetRequiredService<ActiveConfigCache>());
+        // The pipeline's version floors and limit overrides (registered before AddRequestPipeline, whose default only fills the gap).
+        services.AddSingleton<IClientGateConfigSource>(sp => sp.GetRequiredService<ActiveConfigCache>());
+        services.AddHttpClient(HttpContentManifestFetcher.ClientName, c => c.Timeout = TimeSpan.FromSeconds(10));
+        services.AddSingleton<IContentManifestFetcher, HttpContentManifestFetcher>();
+        services.AddSingleton<ContentManifestVerifier>();
+        return services;
+    }
 }

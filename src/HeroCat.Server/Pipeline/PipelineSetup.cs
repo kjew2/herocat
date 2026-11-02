@@ -1,5 +1,6 @@
 using HeroCat.Server.Hosting;
 using HeroCat.Server.Infrastructure.Redis;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
@@ -29,6 +30,9 @@ public static class PipelineSetup
             ? new RedisRateLimitStore(sp.GetRequiredService<IRedisConnection>())
             : new InMemoryRateLimitStore());
 
+        services.AddOptions<ForwardedHeadersOptions>()
+            .Configure<IOptions<ServerOptions>>((o, server) => ForwardedNetwork.Apply(o, server.Value.Network));
+
         services.Configure<ApiBehaviorOptions>(o =>
         {
             // Bare error statuses get the error body from RequestContextMiddleware, not ProblemDetails.
@@ -52,12 +56,14 @@ public static class PipelineSetup
         !string.IsNullOrWhiteSpace(sp.GetRequiredService<IOptions<ServerOptions>>().Value.Redis.Configuration);
 
     /// <summary>
-    /// The pipeline's middleware, outermost first: request id / server time / error body, routing, the gates, the
-    /// idempotency store (after the gates, so it knows the player and never stores a gate's refusal).
+    /// The pipeline's middleware, outermost first: the trusted proxy's forwarded client address (issue #263), request id /
+    /// server time / error body, routing, the gates, the idempotency store (after the gates, so it knows the player and
+    /// never stores a gate's refusal).
     /// Call before mapping endpoints.
     /// </summary>
     public static WebApplication UseRequestPipeline(this WebApplication app)
     {
+        app.UseForwardedHeaders();
         app.UseMiddleware<RequestContextMiddleware>();
         if (app.Environment.IsDevelopment())
             app.UseSwagger(o => o.RouteTemplate = "openapi/{documentName}.json");
