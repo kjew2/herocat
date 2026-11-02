@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using HeroCat.Sim.Content;
+using HeroCat.Sim.Economy;
 
 namespace HeroCat.Runtime.Services
 {
@@ -48,7 +49,8 @@ namespace HeroCat.Runtime.Services
 
         /// <summary>
         /// 04 section 13: one per acquired item: each summon result (AcquireReason SUMMON, RequestId the summon's) and the
-        /// non-summon grants (TUTORIAL: the profile-created weapon, RequestId null; MAIL once inbox grants exist).
+        /// non-summon grants (TUTORIAL: the profile-created weapon, RequestId null; MAIL with the inbox claim's requestId once
+        /// the sim applies inbox item lines, TODO(#271)).
         /// </summary>
         public sealed record ItemAcquired(Banner Banner, string ItemId, Rarity Rarity, bool IsNew, int CopiesAfter, int LevelBefore,
                                           int LevelAfter, string AcquireReason, string RequestId) : AnalyticsEvent
@@ -64,6 +66,35 @@ namespace HeroCat.Runtime.Services
                 ["banner"] = Banner.ToString(), ["itemId"] = ItemId, ["rarity"] = Rarity.ToString(), ["isNew"] = IsNew,
                 ["copiesAfter"] = CopiesAfter, ["levelBefore"] = LevelBefore, ["levelAfter"] = LevelAfter,
                 ["acquireReason"] = AcquireReason, ["requestId"] = RequestId,
+            };
+        }
+
+        /// <summary>
+        /// 04 section 13, Remote mode: the local balance minus the payload's debit differs from the server's balance after the
+        /// pull (the server ledger wins, 00 section 4). LocalAfter is what the local wallet would have held; ServerAfter is
+        /// the payload's BalancesAfter row, which ApplySummonResult snapped the wallet to.
+        /// </summary>
+        public sealed record SummonReconciled(string RequestId, Banner Banner, Currency Currency, double LocalAfter, double ServerAfter)
+            : AnalyticsEvent
+        {
+            public override string Name => AnalyticsNames.SUMMON_RECONCILED;
+
+            public override Dictionary<string, object> Props() => new Dictionary<string, object>
+            {
+                ["requestId"] = RequestId, ["banner"] = Banner.ToString(), ["currency"] = Currency.ToString(), ["localAfter"] = LocalAfter,
+                ["serverAfter"] = ServerAfter,
+            };
+        }
+
+        /// <summary>04 section 13: on ItemLimitBroken. RankAfter is LimitBreaks after; RockCandySpent is this rank's cost.</summary>
+        public sealed record LimitBreak(Banner Banner, string ItemId, Rarity Rarity, int RankAfter, long RockCandySpent) : AnalyticsEvent
+        {
+            public override string Name => AnalyticsNames.LIMIT_BREAK;
+
+            public override Dictionary<string, object> Props() => new Dictionary<string, object>
+            {
+                ["banner"] = Banner.ToString(), ["itemId"] = ItemId, ["rarity"] = Rarity.ToString(), ["rankAfter"] = RankAfter,
+                ["rockCandySpent"] = RockCandySpent,
             };
         }
 

@@ -80,6 +80,7 @@ namespace HeroCat.Remote.Services
             lock (_lock) _typeById[id] = type;
             long available = row["availableAt"] is JValue a && a.Type == JTokenType.Integer ? (long)a : 0;
             long expires = row["expiresAt"] is JValue e && e.Type == JTokenType.Integer ? (long)e : InboxRules.NeverExpires;
+            long created = row["createdAt"] is JValue cr && cr.Type == JTokenType.Integer ? (long)cr : 0;
             Dictionary<string, string> args = null;
             if ((row["params"] ?? row["bodyArgs"]) is JObject p)
             {
@@ -88,7 +89,7 @@ namespace HeroCat.Remote.Services
                     args[kv.Key] = kv.Value?.Type == JTokenType.String ? (string)kv.Value : kv.Value?.ToString(Newtonsoft.Json.Formatting.None);
             }
             var grant = new InboxGrantPayload(id, ParseLines(row["grants"]), InboxRules.ReasonFor(type));
-            return new InboxItem(id, grant, expires, available, type, (string)row["titleKey"], (string)row["bodyKey"], args);
+            return new InboxItem(id, grant, expires, available, type, (string)row["titleKey"], (string)row["bodyKey"], args, created);
         }
 
         /// <summary>A claim response's grant: its lines and its <c>reason</c>, else the reason the listed item's kind implies.</summary>

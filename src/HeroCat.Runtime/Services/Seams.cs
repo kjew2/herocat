@@ -115,10 +115,11 @@ namespace HeroCat.Runtime.Services
     /// (IAP, PACKAGE_DAILY, MAIL, COMPENSATION, COUPON, REFUND; 08's wire <c>kind</c> upper-cased). AvailableAtServerSeconds
     /// above now: a scheduled package portion, not claimable yet (issue #51). ExpiresAtServerSeconds is
     /// <see cref="InboxRules.NeverExpires"/> for IAP items (06 rule 9.1). TitleKey / BodyKey / Args are presentation (07).
+    /// CreatedAtServerSeconds is 08's <c>createdAt</c> (0 when unknown), for <c>inbox_claimed.ageSec</c> (06 section 13).
     /// </summary>
     public sealed record InboxItem(string Id, InboxGrantPayload Grant, long ExpiresAtServerSeconds, long AvailableAtServerSeconds = 0,
                                    string Type = null, string TitleKey = null, string BodyKey = null,
-                                   IReadOnlyDictionary<string, string> Args = null);
+                                   IReadOnlyDictionary<string, string> Args = null, long CreatedAtServerSeconds = 0);
 
     /// <summary>A claim's grants. AlreadyClaimed: the 409 INBOX_ALREADY_CLAIMED success-equivalent (01 5.2, 8.9 step 6).</summary>
     public sealed record InboxClaimResult(InboxGrantPayload Grant, bool AlreadyClaimed);

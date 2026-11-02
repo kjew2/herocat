@@ -1228,7 +1228,7 @@ Every client build copies `content/` into `StreamingAssets/content/` at build ti
 2. If `ContentVersion.Compare(config.version, loaded.Version) <= 0`, stop.
 3. If `config.minClientVersion > clientVersion`, stop and set `SCR_SETTINGS` note "update the app for new content"; the server will still accept this client's current content until `minContentVersion[clientVersion]` moves (08).
 4. Download `manifest.json`; verify its sha256 against `config.content.sha256` (`E900`); verify `schema_version` (`E901`). Download every listed file; verify each sha256 (`E900`). All to `persistentDataPath/content/<version>.tmp/`.
-5. Parse into `ContentDtos` and run `ContentDb.Build` on the thread pool. A `ContentBuildException` deletes the temp dir and logs `content_update_failed` with the first error; the client keeps running.
+5. Parse into `ContentDtos` and run `ContentDb.Build` on the thread pool. A `ContentBuildException` deletes the temp dir and logs `content_update_failed` with the first error (`{version, code, location}`, 02 section 14.3); the client keeps running.
 6. Rename `<version>.tmp` to `<version>` (atomic on both platforms). Mark ready.
 7. Apply: if `manifest.hot_apply` is `true`, swap `Localizer` strings, `ShopProducts`, `ShopPackages` and `InboxTemplates` at a safe point (no modal open, not in a boss); the live `ContentDb` instance stays the same object for the sim. Otherwise the new version loads at the next cold boot (01: "Update ready, restarts on next launch").
 8. Cold boot prefers the newest verified cached version whose `min_client_version <= clientVersion`; falls back to the bundle. Older cached versions beyond the two newest are deleted.
