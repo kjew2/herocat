@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using HeroCat.Server.Features.Config;
+using HeroCat.Server.Hosting;
 using HeroCat.Server.Pipeline;
 using HeroCat.Server.Tests.Pipeline;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -44,6 +45,9 @@ sealed class ConfigHost : IDisposable
     }
 
     public IServiceProvider Services => _factory.Services;
+
+    /// <summary>The host's resolved <c>HeroCat:Env</c> (<c>local</c> under appsettings.Development.json unless overridden).</summary>
+    public string Env => Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<ServerOptions>>().Value.Env;
     public HttpClient Client() => _factory.CreateClient();
     public void Dispose() => _factory.Dispose();
 

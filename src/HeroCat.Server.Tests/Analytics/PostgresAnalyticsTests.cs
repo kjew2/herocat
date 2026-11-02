@@ -49,7 +49,7 @@ public sealed class PostgresAnalyticsTests
         _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
         {
             b.UseSetting("HeroCat:Database:ConnectionString", _db.ConnectionString);
-            b.UseSetting("HeroCat:Analytics:Env", "test");
+            b.UseSetting("HeroCat:Env", "test");
             b.UseSetting("HeroCat:Analytics:PlayerIdSalt", "test-salt");
             b.ConfigureServices(s =>
             {

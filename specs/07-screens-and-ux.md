@@ -229,6 +229,8 @@ Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them
 
 Events `SCR_MAIN` reacts to: `EnemySpawned` (new sprite, HP full), `HitLanded` / `SkillCast` / `CompanionAbilityUsed` / `FishMissileHit` (number), `EnemyKilled` (death VFX, gold burst toward chip), `StageCleared` (stage label pulse), `BossFailed` (WALL badge in, boss button in, toast with need ratio), `BossCleared` (green flash, first-clear diamond toast if `FirstClearGranted`), `LevelUp` (hero sprite flash, "Lv 32" float), `FishReleased` (cell pop-in), `FishMerged` (merge VFX, missile launch toward enemy), `FishDiscovered` (discovery card overlay 1.5 s with coins), `QuestCompleted` (Quests badge), `DayRolledOver` (toast, badges), `Awakened` (full-width card over the combat viewport, combat keeps running), `StageCapReached` (toast), `OfflineRewardComputed` (push `SCR_OFFLINE_REWARD`). Login diamonds are auto-granted on the first tick of the day (`CurrencyChanged(DIAMOND, LOGIN)`, issue #20) and toast "+{LOGIN_DIAMONDS} diamonds: daily login" with the `DayRolledOver` toast.
 
+`HitLanded`, `SkillCast` and `CompanionAbilityUsed` are outside the sim's default `CombatEventMask` (03 section 2.1, issue #160); the client opts in by setting `CombatEvents = CombatEventMask.All` (`GameViewModel.cs`); bots and the server leave them off.
+
 States: Loading never (boot covers it). First-time: `SCR_TUTORIAL` overlay. Error: 01's `Offline` banner is drawn as the non-blocking `SCR_ERROR` card in the action strip position (MVP), keeping the combat viewport clear while the sim keeps running offline (issue #30). Locked elements: Rock Candy chip, stage label tap, the Research button and the Dungeons/Quests tabs before their `feature_unlocks` condition (issue #45) show a lock glyph and a toast naming the condition; the HUD Fish Coin chip still opens `SCR_RESEARCH`, which shows its Locked state. The Shop tab is never locked.
 
 ### 4.4 `SCR_HERO` (Full, M0)
@@ -494,7 +496,7 @@ Purpose: the fixed fight. Replaces the combat viewport region; the HUD stays. Th
 | Skip fight | runs the remaining ticks headlessly in one frame (no player input can change the outcome, issue #40) and shows the result card |
 | Result card | `Outcome` (Cleared / Failed), `RewardText`, `RemainingHpPct`; `[Collect]` pops to `SCR_DUNGEONS`; a clear debits one ticket, a fail costs nothing (00 decision 16, issue #42); on Cleared with another ticket, `[Next floor]` sends `cmd StartDungeon(d, floor + 1)` if `Clearable` |
 
-Events: `DungeonStarted`, `HitLanded`, `SkillCast`, `CompanionAbilityUsed`, `DungeonCleared`, `DungeonFailed`, `DungeonAbandoned`. Back button: same as Skip fight.
+Events: `DungeonStarted`, `HitLanded`, `SkillCast`, `CompanionAbilityUsed`, `DungeonCleared`, `DungeonFailed`, `DungeonAbandoned`. `HitLanded`, `SkillCast` and `CompanionAbilityUsed` are opt-in events the client masks in (section 4.3). Back button: same as Skip fight.
 
 ### 4.14 `SCR_STAGE_SELECT` (Modal, MVP)
 

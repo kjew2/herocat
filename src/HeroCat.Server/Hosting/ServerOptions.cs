@@ -14,8 +14,14 @@ public sealed class ServerOptions
     /// <summary>The server version shown by <c>/health</c> (specs/10 section 6.3: the <c>YYYY.MM.DD[.N]</c> deploy tag).</summary>
     public string Version { get; set; } = "dev";
 
-    /// <summary>The environment this deployment serves (specs/08 section 9.2: <c>dev</c>, <c>stage</c>, <c>prod</c>); <c>config_versions.env</c>.</summary>
+    /// <summary>
+    /// The environment this deployment serves (specs/08 section 9.2: <c>dev</c>, <c>stage</c>, <c>prod</c>; <c>local</c> for a
+    /// local run). The one env setting (issue #300): <c>config_versions.env</c> and the analytics <c>events.env</c> both read it.
+    /// </summary>
     public string Env { get; set; } = "dev";
+
+    public string RequireEnv() =>
+        string.IsNullOrWhiteSpace(Env) ? throw new InvalidOperationException("HeroCat:Env is not configured") : Env;
 
     public ServerLimits Limits { get; set; } = new();
     public DatabaseOptions Database { get; set; } = new();
@@ -94,20 +100,14 @@ public sealed class NetworkOptions
 }
 
 /// <summary>
-/// The backend analytics sink (specs/02 section 14, specs/08 section 3.5). Neither value is a secret: the salt also ships in
+/// The backend analytics sink (specs/02 section 14, specs/08 section 3.5); <c>events.env</c> is <see cref="ServerOptions.Env"/>. The salt is not a secret: it also ships in
 /// the client build, so the server's <c>player_id_hash</c> equals the client's <c>playerIdHash</c> and Firebase rows join
 /// the <c>events</c> table.
 /// </summary>
 public sealed class AnalyticsOptions
 {
-    /// <summary>The <c>events.env</c> value: <c>dev</c>, <c>stage</c>, <c>prod</c> (section 9.2), <c>local</c> for a local run.</summary>
-    public string Env { get; set; } = "";
-
     /// <summary>The per-environment salt of <c>playerIdHash</c> (specs/02 section 14.1), the same one the client build uses.</summary>
     public string PlayerIdSalt { get; set; } = "";
-
-    public string RequireEnv() =>
-        string.IsNullOrWhiteSpace(Env) ? throw new InvalidOperationException("HeroCat:Analytics:Env is not configured") : Env;
 
     public string RequireSalt() =>
         string.IsNullOrEmpty(PlayerIdSalt) ? throw new InvalidOperationException("HeroCat:Analytics:PlayerIdSalt is not configured") : PlayerIdSalt;

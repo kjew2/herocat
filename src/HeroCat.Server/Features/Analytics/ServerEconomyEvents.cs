@@ -13,12 +13,12 @@ namespace HeroCat.Server.Features.Analytics;
 /// </summary>
 public sealed class ServerEconomyEvents
 {
-    readonly AnalyticsOptions _options;
+    readonly ServerOptions _options;
     readonly TimeProvider _clock;
 
     public ServerEconomyEvents(IOptions<ServerOptions> options, TimeProvider clock)
     {
-        _options = options.Value.Analytics;
+        _options = options.Value;
         _clock = clock;
     }
 
@@ -44,7 +44,7 @@ public sealed class ServerEconomyEvents
         foreach (string k in props.Keys)
             if (!AnalyticsEventRules.IsCamelCase(k) || AnalyticsEventRules.EnvelopeFields.Contains(k))
                 throw new ArgumentException($"'{k}' is not an owner field name (02 section 14.1)", nameof(props));
-        return new EventRow(Guid.NewGuid(), _clock.GetUtcNow(), name, AnalyticsEventRules.HashPlayerId(playerId, _options.RequireSalt()),
+        return new EventRow(Guid.NewGuid(), _clock.GetUtcNow(), name, AnalyticsEventRules.HashPlayerId(playerId, _options.Analytics.RequireSalt()),
                             null, null, null, JsonSerializer.Serialize(props), _options.RequireEnv(), AnalyticsEventRules.SourceServer,
                             null, null, null, null, null, true, AnalyticsEventRules.EnvelopeAgeGate(accountAgeGate));
     }
