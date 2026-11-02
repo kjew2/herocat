@@ -18,6 +18,9 @@ namespace HeroCat.Client.Screens
         /// <summary>Reference pixels per chibi sprite pixel; the art bible (issue #287) owns the final value (07 section 15.3).</summary>
         const float ChibiRpPerPixel = 4f;
 
+        /// <summary>Reference pixels per held-weapon sprite pixel: 07 section 15.2 sets 160 rp for a 20 px held sprite.</summary>
+        const float HeldRpPerPixel = 8f;
+
         RectTransform _hud, _combat, _action, _board, _tabs;
         RectTransform _goldChip, _diamondChip, _fishChip, _stageLabel, _enemy, _hero, _mergeAllBtn, _grid;
         Image _enemyImg, _heroOutline, _bossTimerFill;
@@ -155,6 +158,22 @@ namespace HeroCat.Client.Screens
             {
                 outline.enabled = r > 0;
                 outline.effectColor = UiKit.C(Palette.Gold);
+            }));
+
+            // The equipped weapon's held pixel sprite at the squire's hand (07 sections 15.2-15.3, issue #290): native size x
+            // HeldRpPerPixel, point-filtered by ArtImportSettings. Hidden when the weapon has no art yet.
+            var heldRt = UiKit.Rect("Held", _hero);
+            heldRt.anchorMin = heldRt.anchorMax = new Vector2(0.8f, 0.35f);
+            heldRt.pivot = new Vector2(0.2f, 0.2f);
+            var held = heldRt.gameObject.AddComponent<Image>();
+            held.raycastTarget = false;
+            held.gameObject.SetActive(false);
+            c.WeaponId.Bind(new ActionSink<string>(id =>
+            {
+                var sprite = id != null && Vm.Context.Db.Weapons.TryGetValue(id, out var w) ? SpriteLibrary.Get(w.Sprite) : null;
+                held.sprite = sprite;
+                held.gameObject.SetActive(sprite != null);
+                if (sprite != null) heldRt.sizeDelta = new Vector2(sprite.rect.width * HeldRpPerPixel, sprite.rect.height * HeldRpPerPixel);
             }));
 
             _enemyImg = UiKit.Panel("Enemy", _combat, Palette.Muted);
