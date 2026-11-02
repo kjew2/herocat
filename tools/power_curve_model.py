@@ -86,7 +86,8 @@ RESEARCH_FALLBACK = [   # 03 section 6 / 09 section 5.18. Only for content witho
 # Pool sizes come from banners[COMPANION].pool_size and dps_pct from rarities.companion_dps_pct. TODO(#161).
 COMPANION_FALLBACK = {"mix": [("DAMAGE", 0.50), ("BUFF_ATK", 0.20), ("BUFF_GOLD", 0.15), ("MP_REGEN", 0.15)],
                       "mp_cost": 10, "cooldown_ticks": 100}
-# 06 sections 6.1-6.3 / 09 sections 5.24-5.25. TODO(#173): read dungeons and dungeon_floors once they ship.
+# 06 sections 6.1-6.3 / 09 sections 5.24-5.25: equal to content/dungeons.json and dungeon_floors.json today.
+# TODO(#165): read the per-floor rewards from dungeon_floors when the Fish Coin curve is settled.
 DUNGEON_FALLBACK = {"tickets_per_day": 2, "floor_stage_step": 20, "floors": 40,
                     "FISH_COIN": 50.0, "ROCK_CANDY": 10.0, "EXP_KILLS": 300}
 # 06 section 1 / 00 decision 15: weeklies and achievements pay about 0.15 skill and 0.15 companion tickets a day.
@@ -178,7 +179,7 @@ class Params:
 
         dungeons = db.table("dungeons", None)
         if not m0 and dungeons is None:
-            self.fallbacks.append("dungeons: 06 section 6.3 formulas 50f / 10f / 300 kills (content has no dungeons, TODO(#173))")
+            self.fallbacks.append("dungeons: 06 section 6.3 formulas 50f / 10f / 300 kills (content has no dungeons table)")
         for k, v in DUNGEON_FALLBACK.items():
             c[f"DUNGEON_{k}"] = v
         if not m0:

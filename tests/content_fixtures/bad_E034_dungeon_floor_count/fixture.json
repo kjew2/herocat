@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "dungeons",
+      "TICKET_FISH_COIN,2,20,2,",
+      "TICKET_FISH_COIN,2,20,3,"
+    ]
+  ],
+  "csharp": true
+}

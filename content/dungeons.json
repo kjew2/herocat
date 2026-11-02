@@ -1,0 +1,47 @@
+{
+  "table": "dungeons",
+  "rows": [
+    {
+      "id": "dungeon_fish",
+      "kind": "FISH_COIN",
+      "ticket_currency": "TICKET_FISH_COIN",
+      "tickets_per_day": 2,
+      "floor_stage_step": 20,
+      "floors": 40,
+      "sweep_allowed": true,
+      "tier": "MVP",
+      "name_key": "dungeon.dungeon_fish.name",
+      "desc_key": "dungeon.dungeon_fish.desc",
+      "icon": "icon_dungeon_fish",
+      "background": "bg_dungeon_fish"
+    },
+    {
+      "id": "dungeon_candy",
+      "kind": "ROCK_CANDY",
+      "ticket_currency": "TICKET_ROCK_CANDY",
+      "tickets_per_day": 2,
+      "floor_stage_step": 20,
+      "floors": 40,
+      "sweep_allowed": true,
+      "tier": "MVP",
+      "name_key": "dungeon.dungeon_candy.name",
+      "desc_key": "dungeon.dungeon_candy.desc",
+      "icon": "icon_dungeon_candy",
+      "background": "bg_dungeon_candy"
+    },
+    {
+      "id": "dungeon_exp",
+      "kind": "EXP",
+      "ticket_currency": "TICKET_EXP",
+      "tickets_per_day": 2,
+      "floor_stage_step": 20,
+      "floors": 40,
+      "sweep_allowed": true,
+      "tier": "MVP",
+      "name_key": "dungeon.dungeon_exp.name",
+      "desc_key": "dungeon.dungeon_exp.desc",
+      "icon": "icon_dungeon_exp",
+      "background": "bg_dungeon_exp"
+    }
+  ]
+}

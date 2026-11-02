@@ -97,6 +97,7 @@ Every economy command rejects through 01's `ApplyResult.Reject(RejectCode, reaso
 | `DUNGEON_RUN_IN_PROGRESS` | `NotAvailable` | `StartDungeon`, `SweepDungeon` |
 | `BOSS_ATTEMPT_IN_PROGRESS` | `NotAvailable` | `StartDungeon` while a boss fight is active (issue #42); a sweep has no fight and is allowed |
 | `NOTHING_TO_SWEEP` | `NotAvailable` | `SweepDungeon` |
+| `INVALID_DUNGEON` | `BadArgument` | `StartDungeon`, `SweepDungeon` with a `Dungeon` value outside the enum (no `dungeons` row) |
 | `SHOP_LOCKED` | `Locked` | `ClaimDailyGift`, `ExchangeItem` when the `feature_unlocks` row `SHOP` is not met: never in MVP (`ALWAYS`, 09 `E063`), always in an M0 build, which has no shop (section 1.2; issue #174) |
 | `DAILY_GIFT_ALREADY_CLAIMED` | `AlreadyClaimed` | `ClaimDailyGift` |
 | `EXCHANGE_LIMIT_REACHED` | `Capped` | `ExchangeItem` with `qty` above the offer's remaining daily limit |
@@ -212,7 +213,7 @@ void EnsureDay(long now)
 | Resets at day rollover | Persists across rollover |
 |---|---|
 | Daily mission progress and claim state; daily progress bonus state | Weekly mission progress (until week rollover) |
-| Dungeon tickets topped up to `DUNGEON_TICKETS_PER_DAY` | Achievement progress and claims |
+| Dungeon tickets topped up to `DUNGEON_TICKETS_PER_DAY`; `Dungeons.EntriesToday` / `SweepsToday` cleared | Achievement progress and claims |
 | Daily free gift claimed flag | Pity counters, banner levels, banner EXP |
 | Exchange purchase counts | Dungeon best floors and the sweep eligibility they imply |
 | Login grant eligibility | Inbox items (they have their own expiry, section 9) |
@@ -358,18 +359,18 @@ Both run `EnsureDay` first (section 4.2), then the `QUESTS` gate (`QUESTS_LOCKED
 
 Three dungeons, each a ladder of floors. Floor `f` is one fixed fight: a single boss enemy with `HP = HP0 * HP_G^(DUNGEON_FLOOR_STAGE_STEP * f) * BOSS_HP_MULT` and a time limit of `BOSS_TIME_TICKS`, fought with the player's current loadout, skills, companions and the passive Fish Board DPS (no fish missiles, no Tap Zap, no fish merging: the board is hidden during a run, 07). `DUNGEON_FLOOR_STAGE_STEP` = 20, so floor `f` is as hard as the stage-`20f` boss. A player at stage `s` can clear about floor `floor(s / 20)`.
 
-The fight is a deterministic sim run ticked in the main loop (issue #42): `StartDungeon` switches `Combat.Mode = Dungeon` and stores `Combat.DungeonRun { Kind, Floor, Seed, GrantId, EnemyIndex, TicksLeft }` (02). Each tick then runs the normal hero, skill and companion code (03) against the floor's boss on a *temporary* `dungeon_run` RNG stream seeded with `seed`; the persistent `dungeon` stream is untouched in MVP. The run ends `Cleared` when the boss dies or `Failed(remainingHpPct)` when `TicksLeft` reaches 0, and `Combat.Mode` returns to `Stage` at the same stage and kill count. One boss per floor, so `EnemyIndex` is always 0 in MVP. `seed` comes from the `IDungeonSeedService` seam (00 contract 11, issue #25): in MVP `RemoteDungeonSeedService` gets it from the server per run request (08 `POST /dungeon/seed`, with a `grantId`); in M0 and bots `LocalDungeonSeedService` derives it from one `dungeon` stream draw, `Rng.Derive(state.Streams.dungeon, dayKey, dungeon, floor)`. Server validation is correlation only (issue #52): the save keeps a short `Dungeons.RecentRuns[{GrantId, Kind, Floor, Cleared}]` list (02) that the server matches against issued seeds, flagging clears without a seed (08 `DUNGEON_WITHOUT_SEED`); together with the soft-currency bounds (`GOLD_DELTA_BOUND`, `RESEARCH_WITHOUT_COINS`) that is the MVP check. Replaying runs from a power snapshot is a P1 follow-up if soft-launch data shows abuse.
+The fight is a deterministic sim run ticked in the main loop (issue #42): `StartDungeon` switches `Combat.Mode = Dungeon` and stores `Combat.DungeonRun { Kind, Floor, Seed, GrantId, EnemyIndex, TicksLeft }` (02). Each tick then runs the normal hero, skill and companion code (03) against the floor's boss on a *temporary* `dungeon_run` RNG stream seeded with `seed`; the persistent `dungeon` stream is untouched in MVP. The boss fight is transient (`Combat.DungeonRun.Fight`, never saved, like `Combat.Fight`), and the frontier fight in `Combat.Fight` is frozen for the run: its enemy, HP, timers and buffs resume exactly where they were. Steps 3 (fish missiles) and 7 (Tap Zap) of 03 section 2.1 do not run, and `TapZap` and `AttemptBoss` are rejected `(NotAvailable, DUNGEON_RUN_IN_PROGRESS)` during a run (issue #172); the boss's kill pays no kill gold, EXP, loot or quest progress, only the floor reward. The run ends `Cleared` when the boss dies or `Failed(remainingHpPct)` when `TicksLeft` reaches 0, and `Combat.Mode` returns to `Stage` at the same stage and kill count. One boss per floor, so `EnemyIndex` is always 0 in MVP. `seed` comes from the `IDungeonSeedService` seam (00 contract 11, issue #25): in MVP `RemoteDungeonSeedService` gets it from the server per run request (08 `POST /dungeon/seed`, with a `grantId`); in M0 and bots `LocalDungeonSeedService` returns the next `dungeon` stream draw, `Derive(seed(dungeon), dungeon.Counter)`, peeked without advancing it (the sim's `Rng.LocalDungeonSeed.Peek`, 01 section 8.8 step 2), and `StartDungeon(..., localSeed: true)` consumes that one draw. Server validation is correlation only (issue #52): the save keeps a short `Dungeons.RecentRuns[{GrantId, Kind, Floor, Cleared}]` list (02) that the server matches against issued seeds, flagging clears without a seed (08 `DUNGEON_WITHOUT_SEED`); together with the soft-currency bounds (`GOLD_DELTA_BOUND`, `RESEARCH_WITHOUT_COINS`) that is the MVP check. Replaying runs from a power snapshot is a P1 follow-up if soft-launch data shows abuse.
 
-The Fish Board is hidden and frozen during a run (issue #40): the fight uses only the board's passive DPS, the tank keeps refilling, and board commands are rejected while `Combat.Mode == Dungeon` (`Locked`, reason `BOARD_LOCKED`, 05). No player input changes the outcome, which is what makes `PreviewDungeon` exact.
+The Fish Board is hidden and frozen during a run (issue #40): the fight uses only the board's passive DPS, the tank keeps refilling, and board commands are rejected while `Combat.Mode == Dungeon` (`Locked`, reason `BOARD_LOCKED`, 05). No player input changes the outcome, which is what makes `PreviewDungeon` exact under the same seed (issue #277 for a server seed).
 
 Unlock: the `feature_unlocks` row `DUNGEONS` (`STAGE_HIGHEST >= 30`, 09; issue #45) for all three; `SCR_DUNGEONS` is visible but locked before that. The row replaces the former `DUNGEON_UNLOCK_STAGE` constant, so the sim rejection and the client's Locked state read one value. The Tower (P1) later gates floor ranges: Tower floor 10 unlocks dungeon floors 11 to 20, and so on; in MVP all floors are open to whoever can clear the previous one.
 
 ### 6.2 Tickets, runs and sweeps
 
 - `DUNGEON_TICKETS_PER_DAY` = 2 per dungeon, topped up at rollover (section 4.2). Extra tickets from the exchange (section 8.4) or mail stack above 2 and survive rollover.
-- `StartDungeon(dungeon, floor, seed, grantId, localSeed)`: `floor` must be `bestFloor + 1` (the next uncleared) or any cleared floor. Rejections: `DUNGEON_LOCKED`, `DUNGEON_FLOOR_NOT_UNLOCKED`, `NOT_ENOUGH_TICKET_<DUNGEON>` (e.g. `NOT_ENOUGH_TICKET_FISH_COIN`, issue #244), `DUNGEON_RUN_IN_PROGRESS`, and `BOSS_ATTEMPT_IN_PROGRESS` while a boss fight is active: the player finishes the boss first (01 section 8.8; issue #42). The ticket is checked at start but not debited.
-- **Ticket on clear only** (00 decision 16). The ticket is debited when the run ends in `Cleared`. A `Failed` run, and a run abandoned by a crash or kill mid-run (02 recovery rule P16, `DungeonAbandoned`), cost nothing and grant nothing. The sim is deterministic, so `SCR_DUNGEONS` runs `Simulation.PreviewDungeon(state, dungeon, floor)` (the same ticked fight run headlessly on a cloned state with a local seed, no state change) and labels the button "Clearable" or "Not clearable yet (need about x1.4 DPS)". A player therefore never spends a ticket to learn they are too weak; the run exists for the reward moment and the fight spectacle, not for risk.
-- `SweepDungeon(dungeon)`: grants the reward of `bestFloor` instantly without a run or seed, debits one ticket, emits `DungeonSwept`. Rejections: `DUNGEON_LOCKED`, `NOTHING_TO_SWEEP` when `bestFloor` = 0, `NOT_ENOUGH_TICKET_<DUNGEON>`, `DUNGEON_RUN_IN_PROGRESS`. The reward is identical to re-clearing `bestFloor`. The bot always sweeps when it cannot clear `bestFloor + 1` and runs otherwise.
+- `StartDungeon(dungeon, floor, seed, grantId, localSeed)`: `floor` must be `bestFloor + 1` (the next uncleared) or any cleared floor, and at most the dungeon's `floors` (section 6.4). Rejections: `DUNGEON_LOCKED`, `DUNGEON_FLOOR_NOT_UNLOCKED`, `NOT_ENOUGH_TICKET_<DUNGEON>` (e.g. `NOT_ENOUGH_TICKET_FISH_COIN`, issue #244), `DUNGEON_RUN_IN_PROGRESS`, and `BOSS_ATTEMPT_IN_PROGRESS` while a boss fight is active: the player finishes the boss first (01 section 8.8; issue #42). The ticket is checked at start but not debited.
+- **Ticket on clear only** (00 decision 16). The ticket is debited when the run ends in `Cleared`. A `Failed` run, and a run abandoned by a crash or kill mid-run (02 recovery rule P16, `DungeonAbandoned`), cost nothing and grant nothing. The sim is deterministic, so `SCR_DUNGEONS` runs `Simulation.PreviewDungeon(state, dungeon, floor)` (the same ticked fight run headlessly on a cloned state with a local seed, no state change) and labels the button "Clearable" or "Not clearable yet (need about x1.4 DPS)". The preview's seed defaults to the next local seed (`Rng.LocalDungeonSeed.Peek`), so in M0 it is exactly the run that follows; under a server seed (MVP) only the crit rolls differ, so a floor that clears or fails by a hair can disagree with the preview (issue #277). The DPS multiple is linear: boss HP over damage dealt for a `Failed` preview (`1 / (1 - remainingFraction)`), and the share of `BOSS_TIME_TICKS` used for a `Cleared` one. A player therefore never spends a ticket to learn they are too weak; the run exists for the reward moment and the fight spectacle, not for risk.
+- `SweepDungeon(dungeon)`: grants the reward of `bestFloor` instantly without a run or seed, debits one ticket, emits `DungeonSwept` (before its two `CurrencyChanged` rows, like `ItemExchanged`) and counts as a clear for quests; it is not a run, so it adds no `RecentRuns` entry and no `Stats.DungeonClears`. Rejections: `DUNGEON_LOCKED`, `NOTHING_TO_SWEEP` when `bestFloor` = 0, `NOT_ENOUGH_TICKET_<DUNGEON>`, `DUNGEON_RUN_IN_PROGRESS`. The reward is identical to re-clearing `bestFloor`. The bot always sweeps when it cannot clear `bestFloor + 1` and runs otherwise.
 - Clearing floor `f` for the first time sets `bestFloor = f` and emits `DungeonFloorFirstCleared`; there is no separate first-clear bonus in MVP (the ladder itself is the progression).
 
 ```csharp
@@ -379,20 +380,21 @@ ApplyResult StartDungeon(Dungeon d, int floor, ulong seed, string grantId, bool 
     int best = State.Dungeons.BestFloor[(int)d];                     // 02 arrays by Dungeon ordinal (issue #7)
     if (!ContentDb.IsUnlocked("DUNGEONS", State))   return Reject(Locked, "DUNGEON_LOCKED");   // 09 feature_unlocks (issue #45)
     if (State.Combat.Mode == CombatMode.Dungeon)     return Reject(NotAvailable, "DUNGEON_RUN_IN_PROGRESS");
-    if (State.Combat.Fight?.EnemyIsBoss == true)     return Reject(NotAvailable, "BOSS_ATTEMPT_IN_PROGRESS");   // issue #42
-    if (floor < 1 || floor > best + 1)               return Reject(Locked, "DUNGEON_FLOOR_NOT_UNLOCKED");
+    if (State.Combat.Fight is { Phase: Fighting, EnemyIsBoss: true }) return Reject(NotAvailable, "BOSS_ATTEMPT_IN_PROGRESS");   // issue #42
+    if (floor < 1 || floor > best + 1 || floor > DungeonOf(d).Floors) return Reject(Locked, "DUNGEON_FLOOR_NOT_UNLOCKED");
     if (!Wallet.CanAfford(TicketOf(d), 1))           return Reject(CannotAfford, "NOT_ENOUGH_" + TicketOf(d));   // checked, not debited (issue #244)
     if (localSeed) Rng["dungeon"].Next();                             // M0/bots: consume the draw LocalDungeonSeedService peeked (01 section 8.8)
     State.Combat.Mode = CombatMode.Dungeon;
     State.Combat.DungeonRun = new DungeonRunState { Kind = d, Floor = floor, Seed = seed, GrantId = grantId,
-                                                    StreamCounter = 0, EnemyIndex = 0, TicksLeft = BOSS_TIME_TICKS };
+                                                    StreamCounter = 0, EnemyIndex = 0, TicksLeft = BOSS_TIME_TICKS,
+                                                    Fight = BossFight(BOSS_HP_MULT * EnemyHp(floor * floor_stage_step)) };   // transient
     Streams.ResetTemporary("dungeon_run", seed);                     // temporary stream, not in Rng; counter is DungeonRun.StreamCounter (02 section 3.4); `dungeon` untouched in MVP
     Sink.Emit(new DungeonStarted(d, floor, seed));
     return Accepted;
 }
 
 // Called by the tick loop when the run's boss dies (cleared) or TicksLeft reaches 0 (failed).
-void EndDungeonRun(bool cleared, double remainingHpPct)
+void EndDungeonRun(bool cleared, double remainingFraction)   // fraction of the boss's HP left, in [0, 1], as BossFailed
 {
     var run = State.Combat.DungeonRun!;
     var (d, floor) = (run.Kind, run.Floor);
@@ -400,14 +402,15 @@ void EndDungeonRun(bool cleared, double remainingHpPct)
     State.Combat.Mode = CombatMode.Stage;                            // back to the same stage and kills
     State.Dungeons.RecentRuns.Add(new(run.GrantId, d, floor, cleared));   // 02; bounded list for 08 correlation (issue #52)
     if (State.Dungeons.RecentRuns.Count > DUNGEON_RECENT_RUNS_MAX) State.Dungeons.RecentRuns.RemoveAt(0);   // trim oldest (02)
-    if (!cleared) { Sink.Emit(new DungeonFailed(d, floor, remainingHpPct)); return; }   // costs nothing
+    if (!cleared) { Sink.Emit(new DungeonFailed(d, floor, remainingFraction, run.Seed, ticksUsed, run.GrantId)); return; }   // costs nothing
     int best = State.Dungeons.BestFloor[(int)d];
     Wallet.Apply(new(TicketOf(d), -1), CurrencyReason.DUNGEON, Sink);   // debit on clear only (00 decision 16); from the new day's allotment after a rollover
     Wallet.Apply(RewardOf(d, floor), CurrencyReason.DUNGEON, Sink);
+    State.Dungeons.EntriesToday[(int)d] += 1; State.Stats.DungeonClears += 1;   // HUD count; 08 correlates DungeonClears with seeds
     if (floor > best) { State.Dungeons.BestFloor[(int)d] = floor; Sink.Emit(new DungeonFloorFirstCleared(d, floor)); }
     Quests.Progress(QuestKind.DAILY, QuestGoal.CLEAR_DUNGEON, 1, filter: d.ToString());
     Quests.Progress(QuestKind.WEEKLY, QuestGoal.CLEAR_DUNGEON, 1);
-    Sink.Emit(new DungeonCleared(d, floor, RewardOf(d, floor), run.Seed));
+    Sink.Emit(new DungeonCleared(d, floor, RewardOf(d, floor), run.Seed, ticksUsed, run.GrantId));
 }
 ```
 
@@ -425,7 +428,7 @@ Linear tables for Fish Coins and Rock Candy are deliberate: both sinks (Research
 
 ### 6.4 Floors beyond content
 
-`DUNGEON_FLOORS_MVP` = 40 floors per dungeon, enough for stage 800 (the last `AWAKEN_STAGES` entry). Clearing floor 40 shows "More floors coming" and sweeps floor 40. P1 extends the tables.
+`DUNGEON_FLOORS_MVP` = 40 floors per dungeon, enough for stage 800 (the last `AWAKEN_STAGES` entry). Clearing floor 40 shows "More floors coming" and sweeps floor 40; `StartDungeon` on floor 41 is rejected `(Locked, DUNGEON_FLOOR_NOT_UNLOCKED)`. P1 extends the tables. The values `DUNGEON_TICKETS_PER_DAY`, `DUNGEON_FLOOR_STAGE_STEP`, `DUNGEON_FLOORS_MVP` and `EXP_DUNGEON_KILLS` live in the `dungeons` columns `tickets_per_day`, `floor_stage_step`, `floors` and the `dungeon_floors` column `reward_kills_equiv` (09 sections 5.24-5.25), not in `constants`; the `tower` row (P1) is added with its reward rows.
 
 ### 6.5 Awakening cost cadence and Rock Candy flow
 

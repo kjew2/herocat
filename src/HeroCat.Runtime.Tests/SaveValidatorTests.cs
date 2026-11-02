@@ -355,8 +355,11 @@ namespace HeroCat.Runtime.Tests
         {
             var s = Fresh();
             s.Combat.Mode = CombatMode.Dungeon;
-            s.Combat.DungeonRun = new DungeonRunState { Kind = Dungeon.EXP, Floor = 1 };
-            Assert.That(SaveValidator.RunWithReport(s, Now, Db, Opt()).DungeonAbandoned, Is.True);
+            s.Combat.DungeonRun = new DungeonRunState { Kind = Dungeon.EXP, Floor = 3, GrantId = "dgr_9" };
+            var report = SaveValidator.RunWithReport(s, Now, Db, Opt());
+            Assert.That(report.DungeonAbandoned, Is.True);
+            Assert.That(report.AbandonedRun, Is.EqualTo(new HeroCat.Sim.Events.DungeonAbandoned(Dungeon.EXP, 3, "dgr_9")));
+            Assert.That(SaveValidator.RunWithReport(Fresh(), Now, Db, Opt()).AbandonedRun, Is.Null);
         }
 
         [Test]

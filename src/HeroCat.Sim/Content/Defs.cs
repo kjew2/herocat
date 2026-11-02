@@ -486,4 +486,63 @@ namespace HeroCat.Sim.Content
         public string NameKey { get; }
         public string Icon { get; }
     }
+
+    /// <summary>
+    /// A dungeon (09 section 5.24, 06 section 6.1; issue #173): a ladder of <see cref="Floors"/> fixed boss fights, floor f
+    /// fought at stage-equivalent <c>f * FloorStageStep</c>. <see cref="Kind"/> and <see cref="TicketCurrency"/> are null only
+    /// for the P1 Tower row. The unlock is the feature_unlocks row DUNGEONS, not a column (issue #45).
+    /// </summary>
+    public sealed class DungeonDef
+    {
+        internal DungeonDef(string id, Dungeon? kind, Currency? ticketCurrency, int ticketsPerDay, int floorStageStep, int floors,
+                            bool sweepAllowed, Tier tier, string nameKey, string descKey, string icon, string background,
+                            IReadOnlyList<DungeonFloorDef> floorDefs)
+        {
+            Id = id; Kind = kind; TicketCurrency = ticketCurrency; TicketsPerDay = ticketsPerDay; FloorStageStep = floorStageStep;
+            Floors = floors; SweepAllowed = sweepAllowed; Tier = tier; NameKey = nameKey; DescKey = descKey; Icon = icon;
+            Background = background; FloorDefs = floorDefs;
+        }
+
+        public string Id { get; }
+        public Dungeon? Kind { get; }
+        public Currency? TicketCurrency { get; }
+        public int TicketsPerDay { get; }        // DUNGEON_TICKETS_PER_DAY
+        public int FloorStageStep { get; }       // DUNGEON_FLOOR_STAGE_STEP
+        public int Floors { get; }               // DUNGEON_FLOORS_MVP; == FloorDefs.Count (E034)
+        public bool SweepAllowed { get; }
+        public Tier Tier { get; }
+        public string NameKey { get; }
+        public string DescKey { get; }
+        public string Icon { get; }
+        public string Background { get; }
+
+        /// <summary>By floor: FloorDefs[f - 1] is floor f (E060).</summary>
+        public IReadOnlyList<DungeonFloorDef> FloorDefs { get; }
+
+        /// <summary>Floor <paramref name="floor"/>, or null outside 1..Floors.</summary>
+        public DungeonFloorDef Floor(int floor) => floor >= 1 && floor <= FloorDefs.Count ? FloorDefs[floor - 1] : null;
+    }
+
+    /// <summary>
+    /// One dungeon floor (09 section 5.25): its stage-equivalent and its reward. <see cref="RewardAmount"/> is resolved at build:
+    /// the fixed reward_amount, or for HERO_EXP rows reward_kills_equiv x ExpPerKill(StageEquiv) from curves[exp_per_kill]
+    /// (06 section 6.3, EXP_FLOOR before EXP_GAIN training).
+    /// </summary>
+    public sealed class DungeonFloorDef
+    {
+        internal DungeonFloorDef(int floor, int stageEquiv, Currency rewardCurrency, double rewardAmount, int? rewardKillsEquiv,
+                                 string boss, IReadOnlyList<Grant> firstClearBonus)
+        {
+            Floor = floor; StageEquiv = stageEquiv; RewardCurrency = rewardCurrency; RewardAmount = rewardAmount;
+            RewardKillsEquiv = rewardKillsEquiv; Boss = boss; FirstClearBonus = firstClearBonus;
+        }
+
+        public int Floor { get; }
+        public int StageEquiv { get; }
+        public Currency RewardCurrency { get; }
+        public double RewardAmount { get; }
+        public int? RewardKillsEquiv { get; }
+        public string Boss { get; }
+        public IReadOnlyList<Grant> FirstClearBonus { get; }
+    }
 }

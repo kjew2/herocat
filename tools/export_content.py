@@ -231,13 +231,11 @@ SCHEMA = {
     "dungeons": T("DungeonRowDto", [c("id", "id"), c("kind", "enum(Dungeon)", True),
                                     c("ticket_currency", "enum(Currency)", True), c("tickets_per_day", "int"),
                                     c("floor_stage_step", "int"), c("floors", "int"), c("sweep_allowed", "bool"), TIER,
-                                    NAME, DESC, c("icon", "asset"), c("background", "asset")], "id",
-                  required=False, todo=173),
+                                    NAME, DESC, c("icon", "asset"), c("background", "asset")], "id"),
     "dungeon_floors": T("DungeonFloorRowDto", [c("dungeon", "ref(dungeons)"), c("floor", "int"),
                                                c("reward_currency", "enum(Currency)"), c("reward_amount", "long", True),
                                                c("reward_kills_equiv", "int", True), c("boss", "ref(bosses)", True),
-                                               c("first_clear_bonus", "grantlist", True)], ("dungeon", "floor"),
-                        required=False, todo=173),
+                                               c("first_clear_bonus", "grantlist", True)], ("dungeon", "floor")),
     "shop_products": T("ShopProductRowDto", [c("sku", "id"), c("apple_product_id", "string"),
                                              c("google_product_id", "string"), c("usd_tier", "int"), c("usd", "double"),
                                              c("grant_currency", "enum(Currency)"), c("base_amount", "long"),
@@ -608,7 +606,7 @@ def check_tutorial_events(tables, errs):
 # table the rule order below holds. ContentDb.Build (src/HeroCat.Sim/Content/ContentDb.Rules.cs) runs the loader-scope
 # rules in the same order with byte-identical messages (09 section 7.2, acceptance 20).
 # Rules over a table that is not authored yet (optional and absent: companions, research,
-# dungeons, enemies, bosses, shop) skip; each starts checking the day its table lands.
+# enemies, bosses, shop) skip; each starts checking the day its table lands.
 
 TABLE_ORDER = list(SCHEMA)
 RATE_COLS = ["rate_c", "rate_r", "rate_e", "rate_l", "rate_m"]

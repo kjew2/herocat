@@ -1,0 +1,3 @@
+dungeon,floor,reward_currency,reward_amount,reward_kills_equiv,boss,first_clear_bonus
+dungeon_fish,1,FISH_COIN,50,,,
+dungeon_fish,2,FISH_COIN,100,,,

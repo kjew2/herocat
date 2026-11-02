@@ -1,0 +1,2 @@
+id,kind,ticket_currency,tickets_per_day,floor_stage_step,floors,sweep_allowed,tier,name_key,desc_key,icon,background
+dungeon_fish,FISH_COIN,TICKET_FISH_COIN,2,20,2,true,MVP,chapter.01.name,chapter.02.name,icon_dungeon_fish,bg_dungeon_fish

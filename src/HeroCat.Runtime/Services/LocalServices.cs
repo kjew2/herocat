@@ -123,9 +123,7 @@ namespace HeroCat.Runtime.Services
         public Task<DungeonSeedGrant> RequestSeedAsync(DungeonSeedRequest request, CancellationToken ct = default)
         {
             var s = _state() ?? throw new InvalidOperationException("no game state yet: dungeon seeds are requested after boot");
-            if (!s.Rng.TryGetValue(RngStreams.Dungeon, out var stream) || !RngStreams.TryParseSeed(stream.Seed, out ulong seed))
-                throw new InvalidOperationException("the `dungeon` stream is missing or malformed (02 R4)");
-            ulong draw = SplitMix64.Derive(seed, (ulong)stream.Counter);
+            ulong draw = LocalDungeonSeed.Peek(s);   // the sim's seam (issue #172): PreviewDungeon peeks the same draw
             return Task.FromResult(new DungeonSeedGrant(draw, "", long.MaxValue, LocalSeed: true));
         }
     }

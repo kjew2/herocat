@@ -84,10 +84,17 @@ namespace HeroCat.Sim
         {
             _damageCount = 0;
             var c = State.Combat;
+            if (c.Mode == CombatMode.Dungeon && c.DungeonRun != null)
+            {
+                // 06 section 6.1 (issue #42): the floor's boss in this same loop; the frontier fight stays frozen.
+                TickCooldowns(c);                                               // 2. (1. MP regen: TODO(#156))
+                TickDungeonFight(c.DungeonRun);                                 // 3.-9., Simulation.Dungeons.cs
+                return;
+            }
             var f = EnsureFight();
             // 1. MP regen: TODO(#156) companions and the MP pool (MVP).
             TickCooldowns(c);                                                   // 2.
-            if (c.Mode == CombatMode.Stage)                                     // TODO(#172): the dungeon fight (06) ticks here too
+            if (c.Mode == CombatMode.Stage)
             {
                 if (f.Phase == FightPhase.Spawning)
                 {
@@ -104,29 +111,47 @@ namespace HeroCat.Sim
 
         void FightTick(FightState f)
         {
-            var k = Db.Constants;
-            ApplyQueuedFishMissiles(f);                                         // 3.
-            if (f.EnemyHp <= 0) { Kill(f); return; }
-            ApplyDots(f);                                                       // 4. DOTs first, then at most one cast
-            if (f.EnemyHp <= 0) { Kill(f); return; }
-            AutoCastSkills(f);
-            // 5. companion abilities: TODO(#156) (MVP).
-            if (f.EnemyHp <= 0) { Kill(f); return; }
-            f.AttackProgress += Query.AttackGainUnits;                          // 6.
-            int interval = k.AttackIntervalTicks * k.AttackProgressUnit;
-            if (f.AttackProgress >= interval)
-            {
-                f.AttackProgress -= interval;
-                HeroHit(f);
-                if (f.EnemyHp <= 0) { Kill(f); return; }
-            }
-            ApplyTapZaps(f);                                                    // 7.
-            if (f.EnemyHp <= 0) { Kill(f); return; }
+            if (DamageSteps(f, null)) { Kill(f); return; }                      // 3.-7.
             if (f.EnemyIsBoss)                                                  // 8. timer last: a hit on the final tick counts
             {
                 f.BossTicksLeft -= 1;
                 if (f.BossTicksLeft <= 0) BossFail(f);
             }
+        }
+
+        /// <summary>
+        /// Steps 3-7 of 03 section 2.1, shared by the stage fight and a dungeon run (<paramref name="run"/> non-null). True as
+        /// soon as the enemy is dead. In a run step 3 (fish missiles) and step 7 (Tap Zap) do not apply: the board fires
+        /// nothing and no player input changes the outcome (03 section 2.1, 06 section 6.1), and the hero's crit draws come
+        /// from the run's `dungeon_run` stream.
+        /// </summary>
+        bool DamageSteps(FightState f, DungeonRunState run)
+        {
+            var k = Db.Constants;
+            if (run == null)
+            {
+                ApplyQueuedFishMissiles(f);                                     // 3.
+                if (f.EnemyHp <= 0) return true;
+            }
+            ApplyDots(f);                                                       // 4. DOTs first, then at most one cast
+            if (f.EnemyHp <= 0) return true;
+            AutoCastSkills(f);
+            // 5. companion abilities: TODO(#156) (MVP).
+            if (f.EnemyHp <= 0) return true;
+            f.AttackProgress += Query.AttackGainUnits;                          // 6.
+            int interval = k.AttackIntervalTicks * k.AttackProgressUnit;
+            if (f.AttackProgress >= interval)
+            {
+                f.AttackProgress -= interval;
+                HeroHit(f, run);
+                if (f.EnemyHp <= 0) return true;
+            }
+            if (run == null)
+            {
+                ApplyTapZaps(f);                                                // 7.
+                if (f.EnemyHp <= 0) return true;
+            }
+            return false;
         }
 
         void TickCooldowns(CombatState c)
@@ -151,13 +176,21 @@ namespace HeroCat.Sim
 
         // ================================================================================================ damage sources
 
-        /// <summary>03 section 2.2: exactly one `crit` draw per hero hit, always; the ATK buff applies here only.</summary>
-        void HeroHit(FightState f)
+        /// <summary>
+        /// 03 section 2.2: exactly one crit draw per hero hit, always; the ATK buff applies here only. The draw is from `crit`
+        /// (counted in Stats.HeroHits) in the stage fight, from the run's temporary `dungeon_run` stream in a dungeon run.
+        /// </summary>
+        void HeroHit(FightState f, DungeonRunState run = null)
         {
             var q = Query;
             double dmg = q.HeroHit * (1.0 + f.AtkBuffPct / Units.Percent);
-            double u = RngStreams.NextUnit(State.Rng[RngStreams.Crit]);
-            State.Stats.HeroHits += 1;
+            double u;
+            if (run != null) u = NextDungeonRunUnit(run);
+            else
+            {
+                u = RngStreams.NextUnit(State.Rng[RngStreams.Crit]);
+                State.Stats.HeroHits += 1;
+            }
             bool isCrit = u < q.CritRate;
             if (isCrit) dmg *= q.CritDmg;
             f.EnemyHp -= dmg;
@@ -401,6 +434,8 @@ namespace HeroCat.Sim
         internal ApplyResult HandleAttemptBoss()
         {
             var c = State.Combat;
+            if (c.Mode != CombatMode.Stage)   // the stage fields are frozen during a run (02 section 3.3)
+                return ApplyResult.Reject(RejectCode.NotAvailable, CombatRejectReasons.DUNGEON_RUN_IN_PROGRESS);
             if (c.Boss == BossPhase.Pending && c.Selected == null)
                 return ApplyResult.Reject(RejectCode.NotAvailable, CombatRejectReasons.BOSS_ALREADY_PENDING);
             if (!Db.Constants.IsBossStage(c.Stage) || c.Boss == BossPhase.None)
@@ -438,6 +473,8 @@ namespace HeroCat.Sim
         internal ApplyResult HandleTapZap(TapZap cmd)
         {
             if (cmd.Count < 0) return ApplyResult.Reject(RejectCode.BadArgument, CombatRejectReasons.INVALID_COUNT);
+            if (State.Combat.Mode != CombatMode.Stage)   // no Tap Zap in a dungeon run: no input changes its outcome (06 section 6.1)
+                return ApplyResult.Reject(RejectCode.NotAvailable, CombatRejectReasons.DUNGEON_RUN_IN_PROGRESS);
             var k = Db.Constants;
             var f = EnsureFight();
             long now = State.Time.Tick;

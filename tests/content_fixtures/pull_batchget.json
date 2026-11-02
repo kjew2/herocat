@@ -48,6 +48,16 @@
    },
    {
     "properties": {
+     "title": "dungeon_floors"
+    }
+   },
+   {
+    "properties": {
+     "title": "dungeons"
+    }
+   },
+   {
+    "properties": {
      "title": "dupe_levels"
     }
    },
@@ -826,6 +836,73 @@
       "5",
       "1.025",
       "0"
+     ]
+    ]
+   },
+   {
+    "range": "dungeon_floors!A1:G3",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "dungeon",
+      "floor",
+      "reward_currency",
+      "reward_amount",
+      "reward_kills_equiv",
+      "boss",
+      "first_clear_bonus"
+     ],
+     [
+      "dungeon_fish",
+      "1",
+      "FISH_COIN",
+      "50",
+      "",
+      "",
+      ""
+     ],
+     [
+      "dungeon_fish",
+      "2",
+      "FISH_COIN",
+      "100",
+      "",
+      "",
+      ""
+     ]
+    ]
+   },
+   {
+    "range": "dungeons!A1:L2",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "id",
+      "kind",
+      "ticket_currency",
+      "tickets_per_day",
+      "floor_stage_step",
+      "floors",
+      "sweep_allowed",
+      "tier",
+      "name_key",
+      "desc_key",
+      "icon",
+      "background"
+     ],
+     [
+      "dungeon_fish",
+      "FISH_COIN",
+      "TICKET_FISH_COIN",
+      "2",
+      "20",
+      "2",
+      "true",
+      "MVP",
+      "chapter.01.name",
+      "chapter.02.name",
+      "icon_dungeon_fish",
+      "bg_dungeon_fish"
      ]
     ]
    },
