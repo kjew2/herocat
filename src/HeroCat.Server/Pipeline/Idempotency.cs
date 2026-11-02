@@ -2,6 +2,7 @@ using System.Data.Common;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using HeroCat.Server.Infrastructure.Idempotency;
+using HeroCat.Server.Infrastructure.Secrets;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 
@@ -26,6 +27,12 @@ public sealed class IdempotentAttribute : Attribute
 {
     public IdempotentAttribute(IdempotencyKeyKind key = IdempotencyKeyKind.Player) => Key = key;
     public IdempotencyKeyKind Key { get; }
+
+    /// <summary>
+    /// Store the response body encrypted under the data key (specs/08 section 9.3), for a response that carries
+    /// credentials (<c>/auth/guest</c>'s tokens), so a database read does not yield live tokens.
+    /// </summary>
+    public bool ProtectStoredBody { get; set; }
 }
 
 /// <summary>
@@ -126,7 +133,10 @@ public sealed partial class IdempotencyMiddleware
         switch (begin.Outcome)
         {
             case IdempotencyOutcome.Replay:
-                await WriteReplayAsync(ctx, begin.Response!).ConfigureAwait(false);
+                var stored = begin.Response!;
+                if (stored.Protected)
+                    stored = stored with { Body = Protector(ctx).Unprotect(stored.Body, Aad(key, requestId)), Protected = false };
+                await WriteReplayAsync(ctx, stored).ConfigureAwait(false);
                 return;
             case IdempotencyOutcome.InFlight:
                 throw ApiException.Of(ErrorCodes.IDEMPOTENCY_IN_FLIGHT, retryAfterSec: 1);
@@ -140,10 +150,15 @@ public sealed partial class IdempotencyMiddleware
                                       new { header = ApiHeaders.RequestId, reason = ReasonReused });
         }
 
-        await RunAsync(ctx, key, requestId).ConfigureAwait(false);
+        await RunAsync(ctx, key, requestId, attr.ProtectStoredBody).ConfigureAwait(false);
     }
 
-    async Task RunAsync(HttpContext ctx, Guid key, string requestId)
+    static SecretProtector Protector(HttpContext ctx) => ctx.RequestServices.GetRequiredService<SecretProtector>();
+
+    /// <summary>Binds a protected body to its row.</summary>
+    static byte[] Aad(Guid key, string requestId) => System.Text.Encoding.UTF8.GetBytes("idempotency/" + key.ToString("D") + "/" + requestId);
+
+    async Task RunAsync(HttpContext ctx, Guid key, string requestId, bool protect)
     {
         var original = ctx.Features.Get<IHttpResponseBodyFeature>()!;
         using var buffer = new MemoryStream();
@@ -188,8 +203,10 @@ public sealed partial class IdempotencyMiddleware
             foreach (string h in ReplayedHeaders)
                 if (ctx.Response.Headers.TryGetValue(h, out var v) && v.Count > 0) headers[h] = v.ToString();
             // Stored even if the client went away: the handler's writes are done, and the retry must replay them.
-            await _store.CompleteAsync(key, requestId, new StoredResponse(code, ctx.Response.ContentType, headers, body), CancellationToken.None)
-                .ConfigureAwait(false);
+            var response = protect
+                ? new StoredResponse(code, ctx.Response.ContentType, headers, Protector(ctx).Protect(body, Aad(key, requestId)), Protected: true)
+                : new StoredResponse(code, ctx.Response.ContentType, headers, body);
+            await _store.CompleteAsync(key, requestId, response, CancellationToken.None).ConfigureAwait(false);
         }
 
         if (body.Length > 0) await ctx.Response.Body.WriteAsync(body, ctx.RequestAborted).ConfigureAwait(false);

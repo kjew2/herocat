@@ -24,7 +24,6 @@ public sealed class OpenApiContractTests
     static readonly (string prefix, int issue)[] Pending =
     {
         ("/auth/link", 196), ("/auth/merge", 196),
-        ("/auth/", 195), ("/devices", 195), ("/time", 195),
         ("/profile", 197), ("/account/", 197),
         ("/save", 198),
         ("/summon/rates", 200), ("/summon/", 199),

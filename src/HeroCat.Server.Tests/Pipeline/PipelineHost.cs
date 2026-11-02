@@ -26,6 +26,7 @@ sealed class PipelineHost : IDisposable
     public readonly FakeAdmins Admins = new();
     public readonly InMemoryRateLimitStore Limits = new();
     public IRateLimitStore? LimitStoreOverride;
+    public IAccessTokenValidator? TokenValidatorOverride;
     public readonly InMemoryIdempotencyStore Idempotency = new(TimeSpan.FromHours(24));
     public IIdempotencyStore? IdempotencyOverride;
     public readonly RecordingFlags Flags = new();
@@ -40,7 +41,7 @@ sealed class PipelineHost : IDisposable
             s.AddSingleton<TimeProvider>(Clock);
             s.AddSingleton<IMaintenanceFlag>(Maintenance);
             s.AddSingleton<IClientGateConfigSource>(Gates);
-            s.AddSingleton<IAccessTokenValidator>(Tokens);
+            s.AddSingleton<IAccessTokenValidator>(_ => TokenValidatorOverride ?? Tokens);
             s.AddSingleton<IAccountStatusSource>(Bans);
             s.AddSingleton<IAdminAuthenticator>(Admins);
             s.AddSingleton<IRateLimitStore>(_ => LimitStoreOverride ?? Limits);

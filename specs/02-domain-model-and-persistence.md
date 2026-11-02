@@ -384,7 +384,8 @@ public sealed record Profile(
     bool     IsGuest,                  // Links.Length == 0
     string   Region,                   // ISO 3166-1 alpha-2 from the store account or IP at creation; drives loot-box disclosure rules (08)
     int      AgeGate,                  // 0 unknown, 1 under-13 (COPPA mode), 2 adult; set once at first launch (08 compliance)
-    long     LastLoginServerTime);
+    long     LastLoginServerTime,
+    string   SupportCode);             // 08 section 2.1: base32(hmac(playerId, serverKey))[:12], computed by the server, never stored (issue #195)
 
 public sealed record LinkedPlatform(string Provider /* "apple" | "google_play" */, string ProviderUserIdHash, long LinkedServerTime);
 ```

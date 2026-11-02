@@ -59,11 +59,11 @@ flowchart LR
     Guest -->|new device, no link| Lost["Lost (recoverable via support code only)"]
 ```
 
-- **Tokens.** Access JWT: RS256, `exp` 1 h, claims `sub` (playerId), `dev` (deviceId), `age` (age gate), `iat`, `jti`. Refresh token: 256-bit random, stored hashed in `refresh_tokens`, 60 days, **rotated on every use** (the old one is revoked; reuse of a revoked refresh token revokes the whole family and returns `TOKEN_REUSED`, which forces re-login and is logged as a possible theft).
+- **Tokens.** Access JWT: RS256, `exp` 1 h, claims `sub` (playerId), `dev` (deviceId), `age` (age gate), `iat`, `jti`. Refresh token: 256-bit random, stored hashed in `refresh_tokens`, 60 days, **rotated on every use** (the old one is revoked; reuse of a revoked refresh token revokes the whole family and returns `TOKEN_REUSED`, which forces re-login and is logged as a possible theft). As built (issue #195): the JWT header carries `kid`; the first configured key signs and every active key verifies, so tokens of the outgoing key stay valid through a rotation. A refresh token is written `r1.` + base64url of its 32 bytes (`r1` is the format version) and only `sha256(token)` is stored. A rotated-out token marks reuse; a token revoked without a successor (logout, a deleted or merged-away account) is `TOKEN_REVOKED`. Whether a lost refresh response should lock out an unlinked guest is open (issue #273).
 - **Guest.** `POST /auth/guest` with a device id creates an account and a device row. The device key for HMAC (02 section 10) is registered in the same call. A guest can play, buy, and cloud-save; the only thing a guest cannot do is recover the account on another device without linking.
 - **Linking.** Sign in with Apple: the client sends the identity token (JWT) from `ASAuthorizationAppleIDCredential`; the server verifies signature against Apple's JWKS, `aud` = our bundle id, `nonce`, and takes `sub`. Google Play Games Services v2: the client sends the server auth code; the server exchanges it for tokens and calls `games.players.get('me')` for `playerId`. The provider id is stored as `sha256(providerUserId || pepper)`.
 - **Multiple devices.** Allowed concurrently. Each has its own `deviceId`, key and refresh token family. Saves reconcile by 02 section 9.3. Summons are serialised per player by the Redis lock, so two devices pulling at once get `409 IDEMPOTENCY_IN_FLIGHT` / a replayed result, never a double roll.
-- **Recovery.** `SCR_SETTINGS` shows a 12-character support code (`base32(hmac(playerId, serverKey))[:12]`). A player who lost a guest account can give support the code plus a recent purchase receipt; support links a new device via the admin API. No self-service recovery for unlinked guests, by design.
+- **Recovery.** `SCR_SETTINGS` shows a 12-character support code (`base32(hmac(playerId, serverKey))[:12]`; as built, HMAC-SHA256 over the lowercase 36-character `playerId` and RFC 4648 base32 `A-Z2-7`, returned as `supportCode` in every `Profile` and never stored). A player who lost a guest account can give support the code plus a recent purchase receipt; support links a new device via the admin API. No self-service recovery for unlinked guests, by design.
 - **Age gate** is set once at first launch (`PATCH /profile {ageGate}`) from a neutral age screen (section 10.1). It is in the JWT so every handler can branch without a lookup.
 
 ### 2.2 Endpoints
@@ -77,7 +77,7 @@ flowchart LR
 { "playerId": "6b1f2c40-...", "accessToken": "eyJ...", "refreshToken": "r1.…", "accessExpiresAt": 1793670800, "profile": { ...Profile (02 section 4)... }, "serverTime": 1793667200 }
 ```
 
-Errors: `DEVICE_ALREADY_BOUND` (409; this device already has a guest account; response includes `playerId` so the client refreshes instead), `VALIDATION`.
+Errors: `DEVICE_ALREADY_BOUND` (409; this device already has a guest account; response includes `playerId` so the client refreshes instead), `VALIDATION`. As built (issue #195): `playerId` is in `details`; `deviceId` must be a GUID equal to `X-Device-Id` (the idempotency rows are keyed by it, section 1.1), `deviceKey` base64 of exactly 32 bytes, and `region` two letters (upper-cased; `ZZ` when absent); the account starts with `displayName` `Cat#` + the last 4 of `playerId` (02 section 4) and `ageGate = 0`. The device key is stored AES-GCM encrypted under the data key (9.3), and the stored idempotency body is encrypted too, so the table never holds a live refresh token. A device that already holds a local save with `PlayerId = Guid.Empty` just sends that save's `DeviceId` here (open question 9).
 
 **`POST /auth/refresh`** -- auth `none` (refresh token in body) -- not idempotent (rotation) -- 30/min.
 
@@ -87,7 +87,7 @@ Errors: `DEVICE_ALREADY_BOUND` (409; this device already has a guest account; re
 { "accessToken": "eyJ...", "refreshToken": "r2.…", "accessExpiresAt": 1793674400, "serverTime": 1793670800 }
 ```
 
-Errors: `TOKEN_EXPIRED` (401), `TOKEN_REVOKED` (401), `TOKEN_REUSED` (401, family revoked), `DEVICE_MISMATCH` (403).
+Errors: `TOKEN_EXPIRED` (401), `TOKEN_REVOKED` (401), `TOKEN_REUSED` (401, family revoked), `DEVICE_MISMATCH` (403). An unknown or malformed refresh token is `401 UNAUTHENTICATED`; a token presented with another `deviceId` is `DEVICE_MISMATCH` and revokes nothing.
 
 **`POST /auth/link`** -- auth `jwt+device` -- idempotent -- 10/min.
 
@@ -104,9 +104,9 @@ Errors: `PROVIDER_TOKEN_INVALID` (400), `PROVIDER_ALREADY_LINKED` (409; this pla
 
 **`POST /auth/merge`** -- auth `jwt+device` -- idempotent -- 2/hour. Resolves `PROVIDER_ALREADY_LINKED`: `{ "provider", "identityToken"|"serverAuthCode", "keep": "this"|"other" }`. `keep: "other"` re-issues tokens for the other account and archives this guest (status `merged_away`, save blob retained 30 days). `keep: "this"` moves the platform link to this account and archives the other. Both write `moderation_actions` with `action = account_merge`.
 
-**`POST /auth/logout`** -- auth `jwt` -- idempotent -- 10/min. `{ "refreshToken": "…" }` -> `204`. Revokes that family only.
+**`POST /auth/logout`** -- auth `jwt` -- idempotent -- 10/min. `{ "refreshToken": "…" }` -> `204`. Revokes that family only. A token that is unknown or belongs to another player is also `204` and revokes nothing.
 
-**`POST /devices`** -- auth `jwt` -- idempotent -- 5/min. Registers or rotates a device key: `{ "deviceId", "deviceKey", "model", "os", "clientVersion", "pushToken"? }` -> `204`. Key rotation is only accepted from a request whose save HMAC verified under the old key or within 24 h of `/auth/guest` for that device.
+**`POST /devices`** -- auth `jwt` -- idempotent -- 5/min. Registers or rotates a device key: `{ "deviceId", "deviceKey", "model", "os", "clientVersion", "pushToken"? }` -> `204`. Key rotation is only accepted from a request whose save HMAC verified under the old key or within 24 h of `/auth/guest` for that device. As built (issue #195): `deviceId` must be the token's `dev` (else `403 FORBIDDEN`, `details.reason = DEVICE_MISMATCH`), so an account cannot squat another install's id; a device bound to another player is `409 DEVICE_ALREADY_BOUND`; "save HMAC verified under the old key" reads as the player's save of record (`saves`) coming from this device with `hmac_valid`, and "within 24 h" as `devices.first_seen_at` less than 24 h ago; a rotation outside both is `403 FORBIDDEN` with `details.reason = KEY_ROTATION_NOT_ALLOWED`. The same key only updates `model`, `os`, `clientVersion`, `pushToken` and `last_seen_at`.
 
 **`GET /time`** -- auth `none` -- 60/min per IP. `{ "serverTime": 1793670800 }`. Also every response's `X-Server-Time`.
 
@@ -538,7 +538,7 @@ Each env is a separate AWS account (billing isolation and blast radius). Config 
 
 ### 9.3 Secrets
 
-AWS Secrets Manager, read at container start into memory, rotated by schedule: database credentials (RDS-managed rotation, 30 days), JWT signing key (RSA, two active keys for rotation, `kid` in the JWT header, 90 days), Apple App Store Server API private key (`.p8`, manual rotation, yearly), Google service account JSON (yearly), provider pepper for `account_links` hashing (never rotated; rotating would orphan links), device HMAC keys (in Postgres, column-encrypted with a KMS data key), Redis auth token. No secret in an environment variable, image layer, or log. The client has no secrets at all (store validation is server-side).
+AWS Secrets Manager, read at container start into memory, rotated by schedule: database credentials (RDS-managed rotation, 30 days), JWT signing key (RSA, two active keys for rotation, `kid` in the JWT header, 90 days), Apple App Store Server API private key (`.p8`, manual rotation, yearly), Google service account JSON (yearly), provider pepper for `account_links` hashing (never rotated; rotating would orphan links), device HMAC keys (in Postgres, column-encrypted with a KMS data key), Redis auth token. No secret in an environment variable, image layer, or log. As built (issue #195): `HeroCat:Keys` holds the signing keys (`SigningKeys`, a list of `{ Kid, Pem | PemFile }`), the support-code key (`RecoveryKey`) and the data key (`DataKey`, AES-256-GCM, bound to its row by associated data); with `AllowEphemeral` (on in `appsettings.Development.json` only) a missing key is generated in memory at start-up, and otherwise auth fails until it is set. Reading them from Secrets Manager and wrapping the data key with KMS is issue #272. The client has no secrets at all (store validation is server-side).
 
 ### 9.4 Logging and metrics
 
@@ -674,7 +674,7 @@ M0 has no server. Every service above is reached through an interface in `HeroCa
 6. **Age-of-consent table** (`compliance_ages`) and whether to apply the regional age rather than 13 everywhere. Owner: legal. Default: 13 everywhere except where the region's digital-consent age is higher.
 7. **Sampling rate of re-simulation** (1%). Owner: ops after measuring worker cost. Default: 1% + all suspicious.
 8. **Per-region day rollover** (00 decision 8 names it as a P1 question). Server-side implication: `WeekKey`/`DayKey` would need a per-account timezone; leaderboards and daily resets would then differ by region. Owner: 06/08 at P1. Default: stay on 00:00 UTC.
-9. **Guest cloud save before any server contact** (01 open question 7): the first `/auth/guest` call must adopt a save that already has `DeviceId` set and `PlayerId = Guid.Empty`; the server assigns `playerId`, the client rewrites the save root and uploads with `If-Match: *`. RNG seeds derive from the immutable `GameState.RngRoot`, not from `PlayerId`, so adopting the save re-seeds nothing and the server can re-simulate across the change (issue #9). Default: supported as described.
+9. **Guest cloud save before any server contact** (01 open question 7): the first `/auth/guest` call must adopt a save that already has `DeviceId` set and `PlayerId = Guid.Empty`; the server assigns `playerId`, the client rewrites the save root and uploads with `If-Match: *`. RNG seeds derive from the immutable `GameState.RngRoot`, not from `PlayerId`, so adopting the save re-seeds nothing and the server can re-simulate across the change (issue #9). Default: supported as described. As built server-side (issue #195): `/auth/guest` takes the save's `DeviceId` as is and nothing else is needed from the server until the `If-Match: *` upload (issue #198).
 
 ## Acceptance criteria
 

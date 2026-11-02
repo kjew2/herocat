@@ -9,9 +9,11 @@ namespace HeroCat.Server.Infrastructure.Idempotency;
 
 /// <summary>
 /// A response as the idempotency store keeps it (specs/08 section 1.1): status, the headers a replay must repeat and the
-/// exact body bytes, so a replay is byte-identical.
+/// exact body bytes, so a replay is byte-identical. <see cref="Protected"/> marks a body stored encrypted under the
+/// data key (a response that carries tokens, <c>/auth/guest</c>); the middleware encrypts and decrypts it.
 /// </summary>
-public sealed record StoredResponse(int StatusCode, string? ContentType, IReadOnlyDictionary<string, string> Headers, byte[] Body);
+public sealed record StoredResponse(int StatusCode, string? ContentType, IReadOnlyDictionary<string, string> Headers, byte[] Body,
+                                    bool Protected = false);
 
 public enum IdempotencyOutcome
 {
@@ -74,6 +76,8 @@ internal sealed class StoredRow
     [JsonPropertyName("headers")] public Dictionary<string, string>? Headers { get; set; }
     /// <summary>Base64, so the bytes survive jsonb exactly (jsonb would re-order keys and drop whitespace of a JSON value).</summary>
     [JsonPropertyName("bodyBase64")] public string? BodyBase64 { get; set; }
+    /// <summary>True when <see cref="BodyBase64"/> is the body encrypted under the data key.</summary>
+    [JsonPropertyName("protected"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool Protected { get; set; }
 
     public static string InFlight(string requestHash) => JsonSerializer.Serialize(new StoredRow { RequestHash = requestHash });
 
@@ -83,10 +87,11 @@ internal sealed class StoredRow
         ContentType = r.ContentType,
         Headers = new Dictionary<string, string>(r.Headers),
         BodyBase64 = Convert.ToBase64String(r.Body),
+        Protected = r.Protected,
     });
 
     public StoredResponse ToResponse(int status) => new(status, ContentType,
-        Headers ?? new Dictionary<string, string>(), BodyBase64 == null ? Array.Empty<byte>() : Convert.FromBase64String(BodyBase64));
+        Headers ?? new Dictionary<string, string>(), BodyBase64 == null ? Array.Empty<byte>() : Convert.FromBase64String(BodyBase64), Protected);
 }
 
 public static class IdempotencyKeys
@@ -127,27 +132,12 @@ public sealed class PostgresIdempotencyStore : IIdempotencyStore
         _ttl = ttl;
     }
 
-    static DbCommand Command(DbConnection c, string sql, DbTransaction? tx, params (string name, object? value)[] args)
-    {
-        var cmd = c.CreateCommand();
-        cmd.CommandText = sql;
-        cmd.Transaction = tx;
-        foreach (var (name, value) in args)
-        {
-            var p = cmd.CreateParameter();
-            p.ParameterName = name;
-            p.Value = value ?? DBNull.Value;
-            cmd.Parameters.Add(p);
-        }
-        return cmd;
-    }
-
     public async Task<IdempotencyBegin> BeginAsync(Guid key, string requestId, string route, string requestHash, DateTimeOffset now, CancellationToken ct)
     {
         await using var c = await _db.OpenAsync(ct).ConfigureAwait(false);
         var liveSince = now - _ttl;
 
-        await using (var other = Command(c,
+        await using (var other = c.Command(
             "select exists(select 1 from idempotency where request_id = @r and player_id <> @p and created_at > @since)", null,
             ("r", requestId), ("p", key), ("since", liveSince)))
         {
@@ -155,11 +145,11 @@ public sealed class PostgresIdempotencyStore : IIdempotencyStore
         }
 
         // An expired row the purge has not reached yet no longer counts (00 decision 28).
-        await using (var expired = Command(c, "delete from idempotency where player_id = @p and request_id = @r and created_at <= @since", null,
+        await using (var expired = c.Command("delete from idempotency where player_id = @p and request_id = @r and created_at <= @since", null,
             ("p", key), ("r", requestId), ("since", liveSince)))
             await expired.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
 
-        await using (var insert = Command(c,
+        await using (var insert = c.Command(
             "insert into idempotency (player_id, request_id, route, status_code, response, created_at) " +
             "values (@p, @r, @route, 0, cast(@response as jsonb), @now) on conflict do nothing", null,
             ("p", key), ("r", requestId), ("route", route), ("response", StoredRow.InFlight(requestHash)), ("now", now)))
@@ -167,7 +157,7 @@ public sealed class PostgresIdempotencyStore : IIdempotencyStore
             if (await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false) == 1) return IdempotencyBegin.Started;
         }
 
-        await using var read = Command(c, "select status_code, response::text from idempotency where player_id = @p and request_id = @r", null,
+        await using var read = c.Command("select status_code, response::text from idempotency where player_id = @p and request_id = @r", null,
             ("p", key), ("r", requestId));
         await using var rd = await read.ExecuteReaderAsync(ct).ConfigureAwait(false);
         if (!await rd.ReadAsync(ct).ConfigureAwait(false)) return IdempotencyBegin.InFlight; // deleted between the two statements; the client retries
@@ -180,7 +170,7 @@ public sealed class PostgresIdempotencyStore : IIdempotencyStore
     async Task CompleteOn(DbConnection c, DbTransaction? tx, Guid key, string requestId, StoredResponse response, CancellationToken ct)
     {
         // The row keeps the fingerprint its in_flight insert recorded.
-        await using var cmd = Command(c,
+        await using var cmd = c.Command(
             "update idempotency set status_code = @s, " +
             "response = cast(@response as jsonb) || jsonb_build_object('requestSha256', response->'requestSha256') " +
             "where player_id = @p and request_id = @r and status_code = 0", tx,
@@ -201,7 +191,7 @@ public sealed class PostgresIdempotencyStore : IIdempotencyStore
     public async Task AbandonAsync(Guid key, string requestId, CancellationToken ct)
     {
         await using var c = await _db.OpenAsync(ct).ConfigureAwait(false);
-        await using var cmd = Command(c, "delete from idempotency where player_id = @p and request_id = @r and status_code = 0", null,
+        await using var cmd = c.Command("delete from idempotency where player_id = @p and request_id = @r and status_code = 0", null,
             ("p", key), ("r", requestId));
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
@@ -209,7 +199,7 @@ public sealed class PostgresIdempotencyStore : IIdempotencyStore
     public async Task<int> PurgeAsync(DateTimeOffset cutoff, CancellationToken ct)
     {
         await using var c = await _db.OpenAsync(ct).ConfigureAwait(false);
-        await using var cmd = Command(c, "delete from idempotency where created_at < @cutoff", null, ("cutoff", cutoff));
+        await using var cmd = c.Command("delete from idempotency where created_at < @cutoff", null, ("cutoff", cutoff));
         return await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 }

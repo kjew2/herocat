@@ -12,6 +12,7 @@ using HeroCat.Server.Infrastructure.Db;
 using HeroCat.Server.Infrastructure.Db.Migrations;
 using HeroCat.Server.Infrastructure.Idempotency;
 using HeroCat.Server.Infrastructure.Redis;
+using HeroCat.Server.Infrastructure.Secrets;
 using HeroCat.Server.Pipeline;
 using HeroCat.Server.Worker;
 using Microsoft.Extensions.Options;
@@ -118,6 +119,10 @@ public static class ServerHost
                 ? new InMemoryDistributedLock(sp.GetRequiredService<TimeProvider>())
                 : ActivatorUtilities.CreateInstance<RedisDistributedLock>(sp));
         services.AddSingleton<SummonLock>();
+        // Built on first use, so a process without keys still starts and serves /health (specs/08 section 9.3).
+        services.AddSingleton(sp => new Lazy<ServerKeyRing>(() => ServerKeyRing.Create(sp)));
+        services.AddSingleton(sp => sp.GetRequiredService<Lazy<ServerKeyRing>>().Value);
+        services.AddSingleton(sp => new SecretProtector(sp.GetRequiredService<Lazy<ServerKeyRing>>()));
         services.AddSingleton<IMigrationJournal, NpgsqlMigrationJournal>();
         services.AddSingleton<MigrationRunner>();
     }
