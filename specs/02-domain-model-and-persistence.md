@@ -386,7 +386,8 @@ public sealed record Profile(
     bool     IsGuest,                  // Links.Length == 0
     string   Region,                   // ISO 3166-1 alpha-2 from the store account or IP at creation; drives loot-box disclosure rules (08)
     int      AgeGate,                  // 0 unknown, 1 under-13 (COPPA mode), 2 adult; set once at first launch (08 compliance)
-    long     LastLoginServerTime);
+    long     LastLoginServerTime,
+    string   SupportCode);             // 08 section 2.1: base32(hmac(playerId, serverKey))[:12], computed by the server, never stored (issue #195)
 
 public sealed record LinkedPlatform(string Provider /* "apple" | "google_play" */, string ProviderUserIdHash, long LinkedServerTime);
 ```
@@ -1233,6 +1234,8 @@ create table guild_chat (id bigserial primary key, guild_id uuid references guil
 **Trim trigger** (`0002`): `save_history_trim`, after each insert into `save_history`, deletes the player's rows beyond the newest `SAVE_HISTORY_KEEP` (newest by `uploaded_at`, then `save_seq`).
 
 **Partitions** (`0003`; issue #154): `ensure_partitions(p_parent regclass, p_grain text, p_from timestamptz, p_until timestamptz) returns integer` creates every missing partition whose range touches `[p_from, p_until]`: UTC month ranges named `<parent>_pYYYYMM` for `p_grain = 'month'`, UTC day ranges named `<parent>_pYYYYMMDD` for `'day'`; it returns how many it created and a rerun is harmless. The migration creates the current month plus 3 months for `diamond_ledger` and `summon_log` and today plus 14 days for `events`; the worker's partition job keeps that horizon ahead of now (issue #262). There is no default partition: a row outside every partition fails its insert, so a missing partition is loud, and a new range partition never collides with rows parked in a default one.
+
+**Idempotency rows** (as built, issue #194; 08 section 1.1): `status_code = 0` marks a row `in_flight`; any other value is the final HTTP status of the stored response. `response` is a jsonb object `{ "v": 1, "requestSha256", "contentType", "headers", "bodyBase64" }`: `requestSha256` fingerprints method, route and body (a reused id with another fingerprint is refused), and the body is base64 so the replay is byte-identical (jsonb would re-order a JSON body's keys and drop its whitespace); the `in_flight` row holds only `v` and `requestSha256`. `/auth/guest` has no player yet, so its rows use `player_id` = the first 16 bytes of `SHA-256("herocat/idempotency/device/" + lowercase deviceId)` with the RFC 9562 version-8 and variant bits set, which cannot equal a server-made (version 4) `playerId`; the 13.2 delete leaves those rows to the purge. A row older than `IDEMPOTENCY_TTL_H` counts as absent before the hourly purge deletes it.
 
 Redis structures (P1 leaderboards, MVP rate limits and sessions):
 

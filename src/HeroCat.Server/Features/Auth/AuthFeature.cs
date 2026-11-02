@@ -1,3 +1,8 @@
+using HeroCat.Server.Hosting;
+using HeroCat.Server.Infrastructure.Secrets;
+using HeroCat.Server.Pipeline;
+using Microsoft.Extensions.Options;
+
 namespace HeroCat.Server.Features.Auth;
 
 /// <summary>
@@ -6,6 +11,15 @@ namespace HeroCat.Server.Features.Auth;
 /// </summary>
 public static class AuthFeature
 {
-    // TODO(#195, #196): the Auth endpoints and their services.
-    public static IServiceCollection AddAuthFeature(this IServiceCollection services) => services;
+    // TODO(#196): platform linking, link-login and merge.
+    public static IServiceCollection AddAuthFeature(this IServiceCollection services)
+    {
+        services.AddSingleton(sp => new AccessTokenService(sp.GetRequiredService<Lazy<ServerKeyRing>>(), sp.GetRequiredService<TimeProvider>(),
+                                                           sp.GetRequiredService<IOptions<ServerOptions>>()));
+        // The pipeline's token check (registered before AddRequestPipeline, whose default only fills the gap).
+        services.AddSingleton<IAccessTokenValidator>(sp => sp.GetRequiredService<AccessTokenService>());
+        services.AddSingleton<AuthService>();
+        services.AddSingleton<AuthStore>();
+        return services;
+    }
 }

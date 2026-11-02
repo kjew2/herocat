@@ -7,9 +7,9 @@ using Microsoft.OpenApi.Models;
 
 namespace HeroCat.Server.Tests.Pipeline;
 
-/// <summary>One endpoint line of specs/08 (<c>**`POST /auth/guest`** -- auth `none` -- ... -- 5/min, 20/day</c>) and its example JSON.</summary>
+/// <summary>One endpoint line of specs/08 (<c>**`POST /auth/guest`** -- auth `none` -- idempotent ... -- 5/min, 20/day</c>) and its example JSON.</summary>
 sealed record SpecEndpoint(string Method, string Path, string Auth, IReadOnlyList<RateLimitRule> Limits,
-                           IReadOnlyDictionary<string, HashSet<string>> BodyKeys, int Line)
+                           IReadOnlyDictionary<string, HashSet<string>> BodyKeys, int Line, bool Idempotent = false)
 {
     public string Id => Method + " " + Path;
 }
@@ -46,6 +46,7 @@ static partial class SpecContract
             var auth = AuthName().Match(segments[0]);
             if (!auth.Success) throw new FormatException($"specs/08 line {i + 1}: no auth policy in the first segment");
             var limits = new List<RateLimitRule>();
+            bool idempotent = segments.Skip(1).Any(seg => seg.TrimStart().StartsWith("idempotent", StringComparison.Ordinal));
             foreach (string seg in segments.Skip(1))
             {
                 string head = seg.Split(". ")[0];
@@ -59,7 +60,7 @@ static partial class SpecContract
                     else limits.Add(new RateLimitRule(Int(l.Groups[3].Value), Int(l.Groups[4].Value) * RateLimitAttribute.Day));
                 }
             }
-            list.Add(new SpecEndpoint(m.Groups[1].Value, m.Groups[2].Value, auth.Groups[1].Value, limits, BlockKeys(lines, i + 1), i + 1));
+            list.Add(new SpecEndpoint(m.Groups[1].Value, m.Groups[2].Value, auth.Groups[1].Value, limits, BlockKeys(lines, i + 1), i + 1, idempotent));
         }
         return list;
     }
@@ -176,6 +177,10 @@ static partial class SpecContract
                 var wantLimits = want.Limits.Select(r => r.ToString()).OrderBy(x => x).ToList();
                 if (!limits.SequenceEqual(wantLimits))
                     problems.Add($"{id}: rate limits [{string.Join(", ", limits)}], specs/08 line {want.Line} says [{string.Join(", ", wantLimits)}]");
+
+                bool idem = op.Extensions.TryGetValue(OpenApi.IdempotentExtension, out var ie) && ie is OpenApiBoolean b && b.Value;
+                if (idem != want.Idempotent)
+                    problems.Add($"{id}: idempotent {idem.ToString().ToLowerInvariant()}, specs/08 line {want.Line} says {want.Idempotent.ToString().ToLowerInvariant()}");
 
                 foreach (var (label, wantKeys) in want.BodyKeys)
                 {
