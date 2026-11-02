@@ -38,7 +38,13 @@ public sealed class PostgresInboxTests
     Guid _player;
 
     [OneTimeSetUp]
-    public async Task CreateDatabase() => _db = await ScratchDatabase.CreateAsync("herocat_inbox");
+    public async Task CreateDatabase()
+    {
+        _db = await ScratchDatabase.CreateAsync("herocat_inbox");
+        // A claim's currency_changed rows are stamped with the fake clock's day (specs/08 section 3.5), which may be outside
+        // the migration's partition horizon.
+        await _db.ExecAsync("select ensure_partitions('events', 'day', @t, @t)", ("t", T0));
+    }
 
     [OneTimeTearDown]
     public async Task DropDatabase()
@@ -145,6 +151,19 @@ public sealed class PostgresInboxTests
 
     Task<long> DiamondRows(Guid id) => _db.CountAsync("select count(*) from diamond_ledger where ref_type = 'inbox_item' and ref_id = @r", ("r", id.ToString("D")));
     Task<long> TicketRows(Guid id) => _db.CountAsync("select count(*) from ticket_ledger where ref_type = 'inbox_item' and ref_id = @r", ("r", id.ToString("D")));
+    /// <summary>The server-side <c>currency_changed</c> rows of an item: (currency, delta, balanceAfter, reason), by currency then balance.</summary>
+    async Task<(string, long, long, string)[]> ServerEvents(Guid id)
+    {
+        await using var cmd = _db.DataSource.CreateCommand(
+            "select props->>'currency', (props->>'delta')::bigint, (props->>'balanceAfter')::bigint, props->>'reason' from events " +
+            "where name = 'currency_changed' and source = 'server' and props->>'refId' = @r order by 1, 3");
+        cmd.Parameters.AddWithValue("r", id.ToString("D"));
+        var rows = new List<(string, long, long, string)>();
+        await using var r = await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync()) rows.Add((r.GetString(0), r.GetInt64(1), r.GetInt64(2), r.GetString(3)));
+        return rows.ToArray();
+    }
+
     Task<long> Claimed(Guid id) => _db.CountAsync("select count(*) from inbox_items where inbox_item_id = @i and claimed_at is not null", ("i", id));
     Task<long> DiamondBalance() => _db.CountAsync("select coalesce(sum(delta), 0) from diamond_ledger where player_id = @p", ("p", _player));
 
@@ -223,8 +242,11 @@ public sealed class PostgresInboxTests
         Assert.That(await DiamondRows(id), Is.EqualTo(1));
         Assert.That(await _db.CountAsync("select count(*) from diamond_ledger where ref_id = @r and delta = 300 and reason = 'MAIL' and request_id = @rid",
                                          ("r", id.ToString("D")), ("rid", rid)), Is.EqualTo(1));
-        Assert.That(await _db.CountAsync("select count(*) from ticket_ledger where ref_id = @r and ticket = 'TICKET_SUMMON_WEAPON' and delta = 5 and reason = 'MAIL'",
-                                         ("r", id.ToString("D"))), Is.EqualTo(1));
+        Assert.That(await _db.CountAsync(
+            "select count(*) from ticket_ledger where ref_id = @r and ticket = 'TICKET_SUMMON_WEAPON' and delta = 5 and reason = 'MAIL' and request_id = @rid",
+            ("r", id.ToString("D")), ("rid", rid)), Is.EqualTo(1));
+        // One server-side currency_changed per ledger line (specs/08 section 3.5; issue #296); Rock Candy is the client's to report.
+        Assert.That(await ServerEvents(id), Is.EqualTo(new[] { ("DIAMOND", 300L, 1300L, "MAIL"), ("TICKET_SUMMON_WEAPON", 5L, 5L, "MAIL") }));
         Assert.That(await _db.CountAsync("select count(*) from inbox_items where inbox_item_id = @i and claimed_request_id = @rid and claimed_at = @t",
                                          ("i", id), ("rid", rid), ("t", T0)), Is.EqualTo(1));
         Assert.That(await _db.CountAsync("select count(*) from ticket_ledger where ticket = 'ROCK_CANDY'"), Is.Zero, "Rock Candy has no server ledger");
@@ -320,6 +342,29 @@ public sealed class PostgresInboxTests
     }
 
     // ---- POST /inbox/claim-all ----
+
+    [Test]
+    public async Task Claim_all_writes_every_ticket_row_under_its_request_id_with_running_balances_in_the_events()
+    {
+        // Issue #294: several ticket rows of one request (two lines of one item, and two items) all carry the request id.
+        string twoLines = "[{\"kind\":\"currency\",\"id\":\"TICKET_SUMMON_SKILL\",\"amount\":2},{\"kind\":\"currency\",\"id\":\"TICKET_SUMMON_SKILL\",\"amount\":3}]";
+        var first = await Seed(twoLines, createdAt: T0.AddMinutes(-20));
+        var second = await Seed("[{\"kind\":\"currency\",\"id\":\"TICKET_SUMMON_SKILL\",\"amount\":4}]", kind: "admin", createdAt: T0.AddMinutes(-10));
+        await _db.ExecAsync("insert into ticket_ledger (player_id, ticket, delta, reason) values (@p, 'TICKET_SUMMON_SKILL', 10, 'QUEST')", ("p", _player));
+        string rid = NewId();
+
+        var b = await Ok(await ClaimAll(rid));
+        Assert.That(b.GetProperty("balances").GetProperty("TICKET_SUMMON_SKILL").GetInt64(), Is.EqualTo(19));
+        Assert.That(await _db.CountAsync("select count(*) from ticket_ledger where player_id = @p and request_id = @rid and ref_type = 'inbox_item'",
+                                         ("p", _player), ("rid", rid)), Is.EqualTo(3));
+        Assert.That(await ServerEvents(first), Is.EqualTo(new[] { ("TICKET_SUMMON_SKILL", 2L, 12L, "MAIL"), ("TICKET_SUMMON_SKILL", 3L, 15L, "MAIL") }));
+        Assert.That(await ServerEvents(second), Is.EqualTo(new[] { ("TICKET_SUMMON_SKILL", 4L, 19L, "ADMIN") }));
+
+        using var replay = await ClaimAll(rid);
+        Assert.That(replay.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(await _db.CountAsync("select count(*) from events where source = 'server' and props->>'refId' in (@a, @b)",
+                                         ("a", first.ToString("D")), ("b", second.ToString("D"))), Is.EqualTo(3), "a replay writes no second event");
+    }
 
     [Test]
     public async Task Claim_all_over_60_items_claims_the_50_oldest()

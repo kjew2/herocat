@@ -10,6 +10,8 @@ namespace HeroCat.Server.Features.Analytics;
 /// records its <c>currency_changed</c> row (06 section 13's fields) in the <c>events</c> table itself, in the ledger write's
 /// own transaction, so the warehouse never depends on the client for money events. Rows carry <c>source = 'server'</c>
 /// (the client's rows are <c>'client'</c>), no session, device or day index.
+/// TODO(batch6-gap-1): with no day_index, these rows group under a null day in currency_daily, which takes server-ledger
+/// pairs only from them (migration 0008).
 /// </summary>
 public sealed class ServerEconomyEvents
 {

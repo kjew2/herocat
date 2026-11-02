@@ -127,6 +127,73 @@ where n.nspname = 'public' and not t.relispartition");
     }
 
     [Test]
+    public async Task Primary_keys_are_section_12()
+    {
+        var rows = await Rows(@"
+select t.relname::text,
+       (select string_agg(a.attname::text, ', ' order by k.ord)
+        from unnest(ix.indkey::int2[]) with ordinality k(attnum, ord)
+        join pg_attribute a on a.attrelid = t.oid and a.attnum = k.attnum)
+from pg_index ix join pg_class t on t.oid = ix.indrelid join pg_namespace n on n.oid = t.relnamespace
+where n.nspname = 'public' and ix.indisprimary and not t.relispartition and t.relname <> 'schema_migrations'");
+        var live = rows.ToDictionary(r => (string)r[0], r => (string?)r[1]);
+        var spec = Spec.Tables.Values.Where(t => t.PrimaryKey != null).ToDictionary(t => t.Name, t => t.PrimaryKey);
+        Assert.That(live, Is.EquivalentTo(spec));
+    }
+
+    [Test]
+    public async Task Ticket_ledger_request_ids_are_unique_only_for_the_summon_charge()
+    {
+        // 0006 (issue #294): an inbox claim or a save upload may write several ticket rows under one request id; a summon
+        // charge is still one row per request.
+        Guid p = Guid.NewGuid();
+        await Exec(NewAccount(p));
+        string Row(string reason, string refType) =>
+            $"insert into ticket_ledger (player_id, ticket, delta, reason, ref_type, ref_id, request_id) values ('{p}', 'TICKET_SUMMON_SKILL', 1, '{reason}', '{refType}', 'x', 'r1')";
+        await Exec(Row("MAIL", "inbox_item") + ";" + Row("MAIL", "inbox_item") + ";" + Row("QUEST", "save_reconcile"));
+        await Exec(Row("SUMMON", "summon"));
+        var e = Assert.ThrowsAsync<PostgresException>(() => Exec(Row("SUMMON", "summon")));
+        Assert.That(e!.SqlState, Is.EqualTo(PostgresErrorCodes.UniqueViolation));
+    }
+
+    [Test]
+    public async Task An_env_has_at_most_one_active_config_version()
+    {
+        string env = "t" + Guid.NewGuid().ToString("N")[..8];
+        string Row(bool active) =>
+            $"insert into config_versions (env, payload, min_client_version, content_version, active, created_by) values ('{env}', '{{}}', '1.0.0', 'c', {active}, 'test')";
+        await Exec(Row(true) + ";" + Row(false) + ";" + Row(false));
+        var e = Assert.ThrowsAsync<PostgresException>(() => Exec(Row(true)));
+        Assert.That(e!.SqlState, Is.EqualTo(PostgresErrorCodes.UniqueViolation));
+    }
+
+    [Test]
+    public async Task Currency_daily_counts_each_currency_and_reason_from_one_source()
+    {
+        // 0008 (issue #296): a server-ledger currency with a server-originated reason comes from the server's row, the
+        // rest from the client's, so a change both report is counted once.
+        byte[] h = Guid.NewGuid().ToByteArray();
+        string hx = Convert.ToHexString(h).ToLowerInvariant();
+        string Ev(string source, string currency, string reason, int delta) =>
+            $@"insert into events (ts, name, player_id_hash, day_index, props, env, source) values (now(), 'currency_changed', '\x{hx}', 3,
+                '{{""currency"":""{currency}"",""delta"":{delta},""reason"":""{reason}""}}', 'test', '{source}')";
+        await Exec(string.Join(";", new[]
+        {
+            Ev("server", "DIAMOND", "SUMMON", -300), Ev("client", "DIAMOND", "SUMMON", -300),
+            Ev("server", "TICKET_SUMMON_RUNE", "MAIL", 2), Ev("client", "TICKET_SUMMON_RUNE", "MAIL", 2),
+            Ev("client", "DIAMOND", "QUEST", 50), Ev("server", "DIAMOND", "QUEST", 50),
+            Ev("client", "ROCK_CANDY", "MAIL", 7), Ev("client", "ROCK_CANDY", "SUMMON", 4),
+        }));
+        await Exec("refresh materialized view currency_daily");
+        var rows = await Rows($"select currency, reason, sum_delta from currency_daily where player_id_hash = '\\x{hx}' order by 1, 2");
+        Assert.That(rows.Select(r => ((string)r[0], (string)r[1], (double)r[2])), Is.EqualTo(new[]
+        {
+            ("DIAMOND", "QUEST", 50.0), ("DIAMOND", "SUMMON", -300.0), ("ROCK_CANDY", "MAIL", 7.0), ("ROCK_CANDY", "SUMMON", 4.0),
+            ("TICKET_SUMMON_RUNE", "MAIL", 2.0),
+        }));
+    }
+
+    [Test]
     public async Task Partitions_cover_now_and_ensure_partitions_is_idempotent()
     {
         foreach (string t in new[] { "diamond_ledger", "summon_log", "events" })
@@ -160,6 +227,26 @@ where n.nspname = 'public' and not t.relispartition");
         int keep = SchemaTests.SpecConstant("SAVE_HISTORY_KEEP");
         Assert.That(await Count($"select count(*) from save_history where player_id = '{p}'"), Is.EqualTo(keep));
         Assert.That(await Count($"select min(save_seq) from save_history where player_id = '{p}'"), Is.EqualTo(11 - keep + 1));
+    }
+
+    [Test]
+    public async Task Two_devices_keep_a_history_entry_each_for_one_save_seq_and_the_trim_counts_both()
+    {
+        // 0007 (issue #295): the history key holds the device, and the trim tells rows apart by (save_seq, device_id).
+        Guid p = Guid.NewGuid(), a = Guid.NewGuid(), b = Guid.NewGuid();
+        await Exec(NewAccount(p) + NewDevice(p, a) + NewDevice(p, b));
+        string Row(int seq, Guid d, int minute) =>
+            $@"insert into save_history (player_id, save_seq, device_id, blob_key, sha256, progress_score, uploaded_at)
+               values ('{p}', {seq}, '{d}', 'k{seq}{d:N}', '\x00', {seq}, now() - interval '1 hour' + interval '{minute} minutes')";
+        await Exec(Row(7, a, 0));
+        await Exec(Row(7, b, 1));
+        Assert.That(await Count($"select count(*) from save_history where player_id = '{p}' and save_seq = 7"), Is.EqualTo(2));
+        for (int i = 0; i < 9; i++) await Exec(Row(8 + i, a, 2 + i));
+        int keep = SchemaTests.SpecConstant("SAVE_HISTORY_KEEP");
+        Assert.That(await Count($"select count(*) from save_history where player_id = '{p}'"), Is.EqualTo(keep));
+        // The oldest of the eleven (device a's saveSeq 7) went; device b's saveSeq 7 stays.
+        Assert.That(await Count($"select count(*) from save_history where player_id = '{p}' and save_seq = 7 and device_id = '{b}'"), Is.EqualTo(1));
+        Assert.That(await Count($"select count(*) from save_history where player_id = '{p}' and save_seq = 7 and device_id = '{a}'"), Is.Zero);
     }
 
     /// <summary>One row in every player-keyed table (financial ones only when <paramref name="purchaser"/>).</summary>

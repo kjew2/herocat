@@ -204,9 +204,10 @@ public sealed class PostgresSaveTests
         Assert.That(body.GetProperty("requestCmdLog").GetBoolean(), Is.False);
         string etag = body.GetProperty("etag").GetString()!;
 
-        Assert.That(await _blobs.Inner.GetAsync(Bucket, $"saves/{p.Id:D}/1875.sav"), Is.EqualTo(file));
+        string key = $"saves/{p.Id:D}/1875-{p.Device.ToString("N")[..8]}.sav";
+        Assert.That(await _blobs.Inner.GetAsync(Bucket, key), Is.EqualTo(file));
         Assert.That(await _db.CountAsync("select count(*) from saves where player_id = @p and hmac_valid and save_seq = 1875 and blob_key = @k",
-                                         ("p", p.Id), ("k", $"s3://{Bucket}/saves/{p.Id:D}/1875.sav")), Is.EqualTo(1));
+                                         ("p", p.Id), ("k", $"s3://{Bucket}/{key}")), Is.EqualTo(1));
         Assert.That(await _db.CountAsync("select count(*) from save_history where player_id = @p", ("p", p.Id)), Is.EqualTo(1));
 
         using var metaResp = await Get(p, "/v1/save/meta");
@@ -311,6 +312,35 @@ public sealed class PostgresSaveTests
         Assert.That(Flags(body), Is.Empty);
     }
 
+    [Test]
+    public async Task Two_devices_uploading_one_saveSeq_keep_both_blobs_and_both_history_entries()
+    {
+        // Issue #295: B's accepted SEQ_REGRESSION upload of A's saveSeq replaces neither A's blob nor A's history entry.
+        var a = await Guest();
+        var b = await SecondDevice(a);
+        string etag = await UploadOk(a, 7, "*");
+        _clock.Advance(TimeSpan.FromSeconds(61));
+        etag = await UploadOk(a, 8, etag);
+        _clock.Advance(TimeSpan.FromSeconds(61));
+        byte[] fromB = File(b, 7);
+        var (resp, body) = await Upload(b, 7, etag, fromB);
+        Assert.That(resp.StatusCode, Is.EqualTo(HttpStatusCode.OK), body.ToString());
+        Assert.That(Flags(body), Is.EqualTo(new[] { SaveFlags.SEQ_REGRESSION }));
+
+        string keyA = SaveController.BlobKey(a.Id, 7, a.Device), keyB = SaveController.BlobKey(a.Id, 7, b.Device);
+        Assert.That(keyA, Is.Not.EqualTo(keyB));
+        Assert.That(await _blobs.Inner.GetAsync(Bucket, keyA), Is.Not.Null.And.Not.EqualTo(fromB));
+        Assert.That(await _blobs.Inner.GetAsync(Bucket, keyB), Is.EqualTo(fromB));
+        Assert.That(await _db.CountAsync("select count(*) from save_history where player_id = @p and save_seq = 7", ("p", a.Id)), Is.EqualTo(2));
+        Assert.That(await _db.CountAsync("select count(*) from save_history where player_id = @p and save_seq = 7 and device_id = @d and blob_key = @k",
+                                         ("p", a.Id), ("d", a.Device), ("k", SaveController.BlobUri(Bucket, keyA))), Is.EqualTo(1));
+
+        using var hist = await Get(a, "/v1/save/history");
+        var list = JsonDocument.Parse(await hist.Content.ReadAsStringAsync()).RootElement;
+        Assert.That(list.EnumerateArray().Select(e => (e.GetProperty("saveSeq").GetInt64(), e.GetProperty("deviceId").GetGuid())),
+                    Is.EqualTo(new[] { (7L, b.Device), (8L, a.Device), (7L, a.Device) }));
+    }
+
     // ---- integrity ----
 
     [Test]
@@ -395,7 +425,7 @@ public sealed class PostgresSaveTests
         Assert.That(first.GetProperty("summary").GetProperty("stage").GetInt64(), Is.EqualTo(12));
         Assert.That(await _db.CountAsync("select count(*) from save_history where player_id = @p", ("p", p.Id)), Is.EqualTo(10));
         for (long seq = 1; seq <= 12; seq++)
-            Assert.That(await _blobs.Inner.GetAsync(Bucket, SaveController.BlobKey(p.Id, seq)), Is.Not.Null, $"blob {seq}");
+            Assert.That(await _blobs.Inner.GetAsync(Bucket, SaveController.BlobKey(p.Id, seq, p.Device)), Is.Not.Null, $"blob {seq}");
     }
 
     [Test]
@@ -468,7 +498,7 @@ public sealed class PostgresSaveTests
         _blobs.Sign = true;
         using var dl = await Get(p, "/v1/save");
         Assert.That(dl.StatusCode, Is.EqualTo(HttpStatusCode.Redirect));
-        Assert.That(dl.Headers.Location!.AbsoluteUri, Does.StartWith($"https://{Bucket}.s3.example/saves/{p.Id:D}/1.sav"));
+        Assert.That(dl.Headers.Location!.AbsoluteUri, Does.StartWith($"https://{Bucket}.s3.example/saves/{p.Id:D}/1-{p.Device.ToString("N")[..8]}.sav"));
         Assert.That(dl.Headers.Location.AbsoluteUri, Does.Contain("X-Amz-Expires=300"));
         Assert.That(dl.Headers.ETag, Is.Not.Null);
 

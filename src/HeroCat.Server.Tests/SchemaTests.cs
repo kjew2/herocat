@@ -70,7 +70,10 @@ public sealed class SchemaTests
             var got = Set.Tables[t.Name];
             Assert.That(got.Columns, Is.EqualTo(t.Columns), t.Name);
             Assert.That(got.PartitionBy, Is.EqualTo(t.PartitionBy), t.Name);
+            Assert.That(got.PrimaryKey, Is.EqualTo(t.PrimaryKey), t.Name);
         }
+        // 0007 (issue #295): a history entry is per device, so two devices' uploads of one saveSeq are both kept.
+        Assert.That(Set.Tables["save_history"].PrimaryKey, Is.EqualTo("player_id, save_seq, device_id"));
         Assert.That(Set.ForeignKeys, Is.EquivalentTo(Spec.ForeignKeys));
         Assert.That(Set.Indexes, Is.EquivalentTo(Spec.Indexes));
     }
@@ -122,7 +125,9 @@ public sealed class SchemaTests
     public void Save_history_trim_trigger_keeps_SAVE_HISTORY_KEEP()
     {
         Assert.That(Set.Triggers, Does.Contain(("save_history_trim", "save_history")));
-        string sql = File.ReadAllText(RepoPaths.Of("server/db/migrations/0002_save_history_trim.sql"));
+        // The function's current body is the last migration that (re)defines it (0002, replaced by 0007 for issue #295).
+        string sql = SqlSchemaModel.MigrationTexts().Last(t => Regex.IsMatch(t, @"\bcreate (or replace )?function save_history_trim\("));
+        Assert.That(sql, Does.Contain("order by k.uploaded_at desc, k.save_seq desc, k.device_id desc"));
         var limits = Regex.Matches(sql, @"\blimit (\d+)").Select(m => int.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture)).ToList();
         Assert.That(limits, Is.EqualTo(new[] { SpecConstant("SAVE_HISTORY_KEEP") }));
     }
@@ -155,6 +160,16 @@ public sealed class SchemaTests
         Assert.Throws<NotSupportedException>(() => SqlSchemaModel.Parse("create table accounts (a int); alter table accounts drop column a;"));
         var added = SqlSchemaModel.Parse("create table t (a int); alter table t add column b uuid not null default gen_random_uuid(), add column c text;");
         Assert.That(added.Tables["t"].Columns, Is.EqualTo(new[] { new SqlColumn("a", "int", false), new SqlColumn("b", "uuid", true), new SqlColumn("c", "text", false) }));
+        var keyed = SqlSchemaModel.Parse(
+            "create table t (a int not null, b int not null, primary key (a)); create index on t (a, b); create unique index on t (b) where a > 0;",
+            "alter table t drop constraint t_pkey, add primary key (a, b); drop index t_a_b_idx; create materialized view v as select 1; drop materialized view v;",
+            "create function f() returns int language sql as $$ select 1 $$; create or replace function f() returns int language sql as $$ select 2 $$;");
+        Assert.That(keyed.Tables["t"].PrimaryKey, Is.EqualTo("a, b"));
+        Assert.That(keyed.Indexes, Is.EqualTo(new[] { new SqlIndex("t", "b", true, true) }));
+        Assert.That(keyed.MaterializedViews, Is.Empty);
+        Assert.That(keyed.Functions, Is.EqualTo(new[] { "f" }));
+        Assert.Throws<InvalidOperationException>(() => SqlSchemaModel.Parse("create table t (a int); drop index t_a_idx;"));
+        Assert.Throws<NotSupportedException>(() => SqlSchemaModel.Parse("create table t (a int); alter table t drop constraint t_a_key;"));
         var m = SqlSchemaModel.Parse("create table t (a int primary key, -- it's a comment\n b text[] not null default '{}', c timestamptz, primary key (a));");
         Assert.That(m.Tables["t"].Columns, Is.EqualTo(new[]
         {
