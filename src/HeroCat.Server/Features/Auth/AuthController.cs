@@ -29,6 +29,7 @@ public sealed class AuthService
 
     public DateTimeOffset Now => _clock.GetUtcNow();
     public DateTimeOffset RefreshExpiry(DateTimeOffset now) => now.AddDays(_limits.RefreshTokenTtlDays > 0 ? _limits.RefreshTokenTtlDays : 60);
+    public TimeSpan RefreshReuseGrace => TimeSpan.FromSeconds(_limits.RefreshReuseGraceSeconds);
     public IssuedAccessToken Issue(Guid playerId, Guid deviceId, int ageGate) => _tokens.Issue(playerId, deviceId.ToString("D"), ageGate);
 
     public ProfileDto Profile(AccountRow a) => new(a.PlayerId, a.DisplayName, a.AvatarId, a.CreatedAt.ToUnixTimeSeconds(), a.Links.ToArray(),
@@ -113,7 +114,8 @@ public sealed partial class AuthController : ControllerBase
 
     /// <summary>
     /// Rotates a refresh token: the presented one is revoked, a new one in the same family is returned with a fresh
-    /// access token. Reusing a rotated-out token revokes the family (<c>401 TOKEN_REUSED</c>, logged as possible theft).
+    /// access token. Reusing a rotated-out token revokes the family (<c>401 TOKEN_REUSED</c>, logged as possible theft), except a same-device
+    /// retry within <c>REFRESH_REUSE_GRACE_S</c> of the rotation, which rotates the family's live token (issue #273).
     /// </summary>
     [HttpPost("v1/auth/refresh"), Auth(AuthPolicy.None), RateLimit(30)]
     [ProducesResponseType(typeof(RefreshResponse), StatusCodes.Status200OK)]
@@ -124,7 +126,8 @@ public sealed partial class AuthController : ControllerBase
 
         var now = _auth.Now;
         string next = RefreshTokens.New();
-        var r = await _store.RotateRefreshAsync(RefreshTokens.Hash(request.RefreshToken!), deviceId, RefreshTokens.Hash(next), now, _auth.RefreshExpiry(now), ct);
+        var r = await _store.RotateRefreshAsync(RefreshTokens.Hash(request.RefreshToken!), deviceId, RefreshTokens.Hash(next), now, _auth.RefreshExpiry(now),
+                                                 _auth.RefreshReuseGrace, ct);
         switch (r.Outcome)
         {
             case RefreshOutcome.Rotated:

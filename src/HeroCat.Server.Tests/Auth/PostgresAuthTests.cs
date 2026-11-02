@@ -217,11 +217,36 @@ public sealed class PostgresAuthTests
         Assert.That(current, Is.Not.EqualTo(s.Refresh));
         Assert.That(b1.GetProperty("accessExpiresAt").GetInt64(), Is.EqualTo(_clock.GetUtcNow().ToUnixTimeSeconds() + 3600));
 
+        _clock.Advance(TimeSpan.FromSeconds(31));   // past REFRESH_REUSE_GRACE_S
         using var reuse = await Refresh(s.Refresh, s.Device);
         await AssertError(reuse, HttpStatusCode.Unauthorized, "TOKEN_REUSED");
         using var afterTheft = await Refresh(current, s.Device);
         await AssertError(afterTheft, HttpStatusCode.Unauthorized, "TOKEN_REVOKED");
         Assert.That(await _db.CountAsync("select count(*) from refresh_tokens where player_id = @p and revoked_at is null", ("p", s.PlayerId)), Is.Zero);
+    }
+
+    [Test]
+    public async Task Refresh_retry_within_the_grace_rotates_the_live_token_issue_273()
+    {
+        var s = await Guest();
+        using var lost = await Refresh(s.Refresh, s.Device);   // the client never sees this response
+        string lostToken = (await Body(lost)).GetProperty("refreshToken").GetString()!;
+
+        _clock.Advance(TimeSpan.FromSeconds(10));
+        using var retry = await Refresh(s.Refresh, s.Device);
+        Assert.That(retry.StatusCode, Is.EqualTo(HttpStatusCode.OK), await retry.Content.ReadAsStringAsync());
+        string current = (await Body(retry)).GetProperty("refreshToken").GetString()!;
+        Assert.That(current, Is.Not.EqualTo(lostToken));
+        Assert.That(await _db.CountAsync("select count(*) from refresh_tokens where player_id = @p and revoked_at is null", ("p", s.PlayerId)), Is.EqualTo(1));
+
+        using var mismatch = await Refresh(s.Refresh, NewDevice());   // the grace is same-device only
+        await AssertError(mismatch, HttpStatusCode.Forbidden, "DEVICE_MISMATCH");
+
+        using var next = await Refresh(current, s.Device);
+        Assert.That(next.StatusCode, Is.EqualTo(HttpStatusCode.OK), await next.Content.ReadAsStringAsync());
+        _clock.Advance(TimeSpan.FromSeconds(31));
+        using var late = await Refresh(s.Refresh, s.Device);
+        await AssertError(late, HttpStatusCode.Unauthorized, "TOKEN_REUSED");
     }
 
     [Test]

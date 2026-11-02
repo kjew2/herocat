@@ -73,9 +73,11 @@ public sealed class AuthStore
     /// Rotates a refresh token (specs/08 section 2.1): the presented token is revoked and replaced by
     /// <paramref name="newHash"/> in the same family. A rotated-out token revokes the whole family (<c>TOKEN_REUSED</c>);
     /// a token revoked by logout (no successor) is <c>TOKEN_REVOKED</c>, as is one of a deleted or merged-away account.
+    /// A same-device retry of a token rotated out at most <paramref name="reuseGrace"/> ago (<c>REFRESH_REUSE_GRACE_S</c>,
+    /// a lost refresh response, issue #273) rotates the family's live token instead, so the old one never becomes valid again.
     /// </summary>
     public async Task<RefreshResult> RotateRefreshAsync(byte[] hash, Guid deviceId, byte[] newHash, DateTimeOffset now, DateTimeOffset newExpiresAt,
-                                                        CancellationToken ct)
+                                                        TimeSpan reuseGrace, CancellationToken ct)
     {
         await using var c = await _db.OpenAsync(ct).ConfigureAwait(false);
         await using var tx = await c.BeginTransactionAsync(ct).ConfigureAwait(false);
@@ -83,8 +85,9 @@ public sealed class AuthStore
         Guid player, device, family;
         bool rotatedOut, revoked;
         DateTimeOffset expiresAt;
+        DateTimeOffset? revokedAt;
         await using (var sel = c.Command(
-            "select player_id, device_id, family_id, replaced_by is not null, revoked_at is not null, expires_at " +
+            "select player_id, device_id, family_id, replaced_by is not null, revoked_at is not null, expires_at, revoked_at " +
             "from refresh_tokens where token_hash = @h for update", tx, ("h", hash)))
         await using (var rd = await sel.ExecuteReaderAsync(ct).ConfigureAwait(false))
         {
@@ -95,9 +98,23 @@ public sealed class AuthStore
             rotatedOut = rd.GetBoolean(3);
             revoked = rd.GetBoolean(4);
             expiresAt = rd.GetFieldValue<DateTimeOffset>(5);
+            revokedAt = rd.IsDBNull(6) ? null : rd.GetFieldValue<DateTimeOffset>(6);
         }
 
         if (device != deviceId) return new RefreshResult(RefreshOutcome.DeviceMismatch);
+        if (revoked && rotatedOut && revokedAt is DateTimeOffset at && now - at <= reuseGrace)
+        {
+            // A retry after a lost response: rotate the family's live token (at most one), if there still is one.
+            await using var head = c.Command(
+                "select token_hash, expires_at from refresh_tokens where family_id = @f and revoked_at is null for update", tx, ("f", family));
+            await using var hr = await head.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            if (await hr.ReadAsync(ct).ConfigureAwait(false))
+            {
+                hash = hr.GetFieldValue<byte[]>(0);
+                expiresAt = hr.GetFieldValue<DateTimeOffset>(1);
+                revoked = rotatedOut = false;
+            }
+        }
         if (revoked && rotatedOut)
         {
             await RevokeFamilyAsync(c, tx, family, now, ct).ConfigureAwait(false);

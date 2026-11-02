@@ -31,6 +31,8 @@ public sealed class ServerLimits
     [ConfigurationKeyName("IDEMPOTENCY_TTL_H")] public int IdempotencyTtlHours { get; set; }
     [ConfigurationKeyName("ACCESS_TOKEN_TTL_S")] public int AccessTokenTtlSeconds { get; set; }
     [ConfigurationKeyName("REFRESH_TOKEN_TTL_DAYS")] public int RefreshTokenTtlDays { get; set; }
+    /// <summary>A same-device retry of a refresh token rotated out this recently is a lost response, not reuse (issue #273).</summary>
+    [ConfigurationKeyName("REFRESH_REUSE_GRACE_S")] public int RefreshReuseGraceSeconds { get; set; }
     [ConfigurationKeyName("SUMMON_LOCK_TTL_S")] public int SummonLockTtlSeconds { get; set; }
     /// <summary>Seeds per day per dungeon kind.</summary>
     [ConfigurationKeyName("DUNGEON_SEEDS_PER_DAY")] public int DungeonSeedsPerDay { get; set; }
