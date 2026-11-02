@@ -30,6 +30,15 @@ When unsure between 1 and 3, treat it as 3. Create issues with `gh api repos/kje
 - A change is not done while any check fails. Do not weaken a test, threshold or golden file to make it pass unless the user agreed to that change (and then the spec rule above applies).
 - If you add a new kind of check, wire it into `check.sh`.
 
+## Pull requests auto-merge when checks pass
+
+Agreed with the user: a PR an agent opens merges itself once its required checks pass (`pr / checks`, `content / content`, `specs/10` section 6.1).
+
+- Right after opening the PR, enable auto-merge with the merge-commit method (`enable_pr_auto_merge`). Do not wait for a review.
+- If auto-merge can't be enabled (the repo setting is off, or the PR is already mergeable), merge it yourself once every check is green.
+- Never merge with a failing or pending check, and never get a check to pass by skipping or weakening it. If a check fails, fix it on the branch and auto-merge goes ahead when it turns green.
+- A change that needs a user decision (rule 3 above) does not get a PR until the user has answered.
+
 ## Learn from mistakes
 
 This file is how lessons reach the next agent. When the user corrects you on something that is likely to come up again (a convention, a command, a gotcha, a wrong assumption), add a short rule for it under "Lessons" below in the same change. Keep each rule to one or two lines, say what to do rather than what went wrong, and remove a rule once it no longer applies.
