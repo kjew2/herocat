@@ -13,10 +13,13 @@ public sealed record MaintenanceState(
     [property: JsonPropertyName("messageKey")] string? MessageKey,
     [property: JsonPropertyName("until")] long? Until);
 
-/// <summary>Reads whether maintenance is on. Null means it is off.</summary>
+/// <summary>Reads whether maintenance is on (null means off), and sets or clears it (<c>POST /admin/maintenance</c>, section 8.4).</summary>
 public interface IMaintenanceFlag
 {
     Task<MaintenanceState?> GetAsync(CancellationToken ct);
+
+    /// <summary>Stores an active state, or clears the flag for null or <c>active: false</c>.</summary>
+    Task SetAsync(MaintenanceState? state, CancellationToken ct);
 }
 
 /// <summary>A process-local flag: tests, and a local run without Redis.</summary>
@@ -25,6 +28,12 @@ public sealed class InMemoryMaintenanceFlag : IMaintenanceFlag
     volatile MaintenanceState? _state;
 
     public void Set(MaintenanceState? state) => _state = state;
+
+    public Task SetAsync(MaintenanceState? state, CancellationToken ct)
+    {
+        Set(state is { Active: true } ? state : null);
+        return Task.CompletedTask;
+    }
 
     public Task<MaintenanceState?> GetAsync(CancellationToken ct) =>
         Task.FromResult(_state is { Active: true } s ? s : null);
@@ -48,6 +57,13 @@ public sealed class RedisMaintenanceFlag : IMaintenanceFlag
         var db = await _redis.DatabaseAsync().ConfigureAwait(false);
         var value = await db.StringGetAsync(Key).ConfigureAwait(false);
         return Parse(value.HasValue ? value.ToString() : null);
+    }
+
+    public async Task SetAsync(MaintenanceState? state, CancellationToken ct)
+    {
+        var db = await _redis.DatabaseAsync().ConfigureAwait(false);
+        if (state is not { Active: true }) await db.KeyDeleteAsync(Key).ConfigureAwait(false);
+        else await db.StringSetAsync(Key, JsonSerializer.Serialize(state)).ConfigureAwait(false);
     }
 
     public static MaintenanceState? Parse(string? value)

@@ -36,13 +36,70 @@ namespace HeroCat.Runtime.Services
         public bool IsSummonEnabled(Banner b) => SummonEnabled == null || !SummonEnabled.TryGetValue(b, out bool on) || on;
     }
 
-    /// <summary>The parts of GET /config the client acts on (08 section 4.6; 01 section 8.1 step 2 and 8.12).</summary>
-    public sealed record ClientConfig(string ContentVersion, string MinClientVersion, MaintenanceInfo Maintenance, KillSwitches Flags);
+    /// <summary>Where <see cref="ClientConfig"/> came from (01 section 8.1 step 2).</summary>
+    public enum ConfigSource
+    {
+        /// <summary>A live <c>GET /config</c> answer this session (also the default for hand-built configs).</summary>
+        Fetched,
+
+        /// <summary>The persisted copy of an earlier answer, under CONFIG_CACHE_MAX_AGE_S old.</summary>
+        Cached,
+
+        /// <summary>No usable answer or cache: everything enabled, no gate.</summary>
+        Defaults,
+
+        /// <summary>Local mode: the bundled content, every switch on (08 section 12).</summary>
+        Bundled,
+    }
+
+    /// <summary>
+    /// 08 section 6.1's <c>content</c> block: the bundle the server offers this caller (rollout bucket applied server-side
+    /// from the JWT; issue #31). <see cref="RolloutPct"/> and <see cref="InBucket"/> are informational and never acted on.
+    /// </summary>
+    public sealed record ContentPointer(string Version, string Url, string Sha256, long SizeBytes, string MinClientVersion)
+    {
+        public int? RolloutPct { get; init; }
+
+        /// <summary>Omitted by the server without a JWT (null here).</summary>
+        public bool? InBucket { get; init; }
+    }
+
+    /// <summary>
+    /// The parts of GET /config the client acts on (08 sections 3.4 and 6.1; 01 section 8.1 step 2 and 8.12).
+    /// <see cref="ContentVersion"/> is <c>content.version</c> (Local: the bundled version).
+    /// </summary>
+    public sealed record ClientConfig(string ContentVersion, string MinClientVersion, MaintenanceInfo Maintenance, KillSwitches Flags)
+    {
+        /// <summary>The offered bundle; null when the body has none (Local, defaults).</summary>
+        public ContentPointer Content { get; init; }
+
+        public string LatestClientVersion { get; init; }
+
+        /// <summary><c>storeUrls</c> by platform (<c>ios</c>, <c>android</c>), for the CLIENT_TOO_OLD block's store link.</summary>
+        public IReadOnlyDictionary<string, string> StoreUrls { get; init; }
+
+        public long ConfigVersion { get; init; }
+
+        public ConfigSource Source { get; init; }
+
+        /// <summary>Server seconds when this answer was fetched (the cache's age is measured from it); 0 when never fetched.</summary>
+        public long FetchedAtServerSeconds { get; init; }
+
+        /// <summary>No usable answer or cache (01 section 8.1 step 2): everything enabled, no gate, no maintenance.</summary>
+        public static ClientConfig Defaults(string bundledContentVersion) =>
+            new ClientConfig(bundledContentVersion ?? "", null, MaintenanceInfo.None, KillSwitches.AllOn) { Source = ConfigSource.Defaults };
+    }
 
     public interface IConfigService
     {
         /// <summary>The config in force: the last fetched, else the cached, else the defaults (everything on, no gate).</summary>
         ClientConfig Current { get; }
+
+        /// <summary>
+        /// The kill switches in force (<c>Current.Flags</c>; 01 section 8.12 step 1). View-models read it on every refresh, so
+        /// a switch applies as soon as a fetch lands, without a restart. Never touches GameState.
+        /// </summary>
+        KillSwitches Flags { get; }
 
         /// <summary>
         /// Boot step 2 and every CONFIG_REFRESH_S. Never throws for a network failure: on timeout or offline it keeps the

@@ -40,7 +40,7 @@ Grouped by what they protect. Each group names the fixtures it uses; fixtures ar
 | Quests, dungeons, day keys | 48 | 06: `EnsureDay` resets and preserves the right fields; weekly key via `WEEK_EPOCH_OFFSET`; every `QuestGoal` increments from its event; `SetMax` goals; achievement rungs; dungeon ticket grant, a ticked run (`Combat.Mode = Dungeon`) with a fixed seed is deterministic and the reward matches `dungeon_floors`; the ticket is debited only on `DungeonCleared`, a failed or abandoned run costs nothing (issue #42); sweep rule; app open across rollover. |
 | Content | 30 | 09 acceptance 2, 5, 6 (loader scope), 7, 8, 9, 11, 12, 13, 17, 18 as listed there. |
 | Snapshot and events | 20 | Per-tick snapshot fields match state; event buffer coalescing at `EVENT_COALESCE_AT` (01); every `Event` type serialises to the analytics envelope. |
-| Perf (`[Category("Perf")]`) | 6 | 03 criterion 19: `Advance(1_000_000)` from stage 300 under 2 s Release; under 128 B allocated per kill with the default sink; `Build` under 30 ms. |
+| Perf (`[Category("Perf")]`) | 6 | 03 criterion 19 on `PerfFixture` (stage 300, six skills, four companions): `Advance(1_000_000)` with the null sink under 2 s Release; 0 B per fighting tick with no event masked in; under 128 B allocated per kill with the default mask; `Build` under 30 ms. |
 
 ### 1.2 `HeroCat.Runtime.Tests`
 
@@ -63,7 +63,7 @@ Integration tests run against real Postgres and Redis in containers; unit tests 
 
 | Group | Tests | What they assert |
 |---|---|---|
-| Summon algorithm vs Python model | 20 | 04's pull algorithm (08 keeps only the handler, issue #24) on `Fixtures/Summon/vectors.json`; a 1,000,000-pull Monte Carlo per banner level compared to `tools/gacha_model.py` output within 0.3 pp per rarity and within 0.05 pp on L+ (the Python model is the oracle, run in CI from the same content); pity state is per banner and per player; 10-pull guarantee; the audit row count equals pulls; `rateTableHash` in the published rates endpoint equals the hash of `banner_levels` rows for that level. |
+| Summon algorithm vs Python model | 20 | 04's pull algorithm (08 keeps only the handler, issue #24) on `Fixtures/Summon/vectors.json`; a 1,000,000-pull Monte Carlo per banner level compared to `tools/gacha_model.py` output within 0.3 pp per rarity and within 0.05 pp on L+ (the Python model is the oracle, run in CI from the same content); pity state is per banner and per player; 10-pull guarantee; the audit row count equals pulls; `rateTableHash` in the published rates endpoint equals 08 section 4.4's hash of that banner level's table (its `banner_levels` row, pity ramp, guarantee and pool). |
 | Idempotency replay | 14 | 00 section 8 item 13: the same `requestId` twice returns the stored response and performs no second write (summon, inbox claim, save PUT, dungeon seed); a different body with the same `requestId` -> `400 VALIDATION` (`details.reason = REQUEST_ID_REUSED`); a concurrent request with the same id -> `409 IDEMPOTENCY_IN_FLIGHT`; the key expires after `IDEMPOTENCY_TTL_H`. The replay half is one shared helper, `IdempotencyReplay` in `HeroCat.Server.Tests`, that each endpoint's tests call (issue #194). |
 | Receipt validation stubs | 18 | 08 section 5 with recorded App Store Server API and Google Developer API responses: valid, already-consumed, refunded, sandbox-on-prod, expired JWS, malformed; grant lands in `inbox_items` exactly once; refund flips the row and queues a `REFUND` wallet delta; restore purchases re-grants nothing already granted. |
 | Plausibility checks | 24 | 08 section 7, one test per named check: stage vs elapsed time vs re-simulated DPS bound, currency delta bounds, duplicate `requestId`, clock skew above `CLOCK_MAX_SKEW_ACCEPT_S`, save blob over `SAVE_BLOB_MAX_BYTES`; the action matrix (log / soft flag / rollback / ban) chosen per severity; a flagged save never silently overwrites the previous good one. |
@@ -309,7 +309,7 @@ report      --longest-walls | --layer-shares | --diamonds  --seeds  --days
 golden      --check | --update | --replay
 stage-bound --check | --update  [--seeds 1-20] [--days 60]
 save-fixture --check | --update                              # 02 section 7.3's v1.json from a played bot profile; check.sh drift-checks it until V1Frozen
-bench       --ticks 1000000 --stage 300 --max-ms 2000
+bench       --ticks 1000000 --stage 300 --max-ms 2000          # PerfFixture: six skills, four companions; MVP content unless --tier (03 criterion 19)
 ```
 
 `--tier M0` builds the content at tier M0 (09 section 5.32) so the M0 milestone's "two weeks of simulated play within tolerance" (00 section 11) is `acceptance --tier M0 --days 14` with `stageCheckDays` clipped to the days that exist.
@@ -591,7 +591,7 @@ Shorter runbooks for the remaining alarm targets; same four parts, with Communic
 | `RB-REFUND` | refund spike | check for a grant bug or fraud ring by SKU and region; refund debt handling per 08 section 5.4 |
 | `RB-SAVE-CONFLICT` | save conflict rate | check a client build for upload loops or a clock issue; conflict UI fixes ship as a client patch |
 | `RB-DUPLICATE-GRANT` | duplicate grant | disable the affected route's write path via kill switch; repair ledgers from `summon_log` / `purchases`; idempotency test gap goes into the postmortem |
-| `RB-DB` | DB alarm | failover or scale per the provider; pause worker jobs; check long queries from the last deploy |
+| `RB-DB` | DB alarm | failover or scale per the provider; pause worker jobs; check long queries from the last deploy; for a partition horizon alarm, check the worker's partition job log and run `select ensure_partitions(...)` by hand with 02 section 12's horizons |
 | `RB-REDIS` | Redis alarm | scale or fail over; check whether evictions dropped idempotency keys (00 section 8 item 13) during the window |
 | `RB-WORKER` | worker alarm | restart the job; mail blasts resume idempotently on `(mail_blast_id, player_id)` |
 | `RB-SECRETS` | certificate / key expiry | rotate the TLS cert, Apple `.p8` or JWT key on stage first, then prod |
@@ -634,7 +634,7 @@ Alarms (PagerDuty P1 pages the on-call; P2 is a channel message and a ticket nex
 | Boot time | `boot_ms` p95 > 6 s on the mid device class over 1 h | P2 | `RB-CONFIG` |
 | CDN | 4xx on `content/*` > 0.5% (a missing file after a publish) | P1 | `RB-CONFIG` |
 | Config | active config changed (notify only); content sha256 mismatch at activation (P1) | - / P1 | `RB-CONFIG` |
-| DB | connections > 80% of pool or pool exhaustion events > 0, replication lag > 10 s, CPU > 80% over 10 min, disk > 80% | P1 | `RB-DB` |
+| DB | connections > 80% of pool or pool exhaustion events > 0, replication lag > 10 s, CPU > 80% over 10 min, disk > 80%, `db_partition_horizon_days` below one partition period (a month for `diamond_ledger` and `summon_log`, a day for `events`; issue #262) | P1 | `RB-DB` |
 | Redis | memory > 80%, evictions > 0 (P2); primary failover (P1) | P2 / P1 | `RB-REDIS` |
 | Worker | any job failing 3 consecutive runs; mail blast `sent_count` stalled 15 min | P2 | `RB-WORKER` |
 | Certificate / key expiry | TLS, Apple `.p8` or JWT key < 14 days | P2 | `RB-SECRETS` |

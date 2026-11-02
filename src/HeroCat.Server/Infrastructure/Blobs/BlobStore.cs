@@ -20,6 +20,12 @@ public interface IBlobStore
     Task<byte[]?> GetAsync(string bucket, string key, CancellationToken ct = default);
 
     Task DeleteAsync(string bucket, string key, CancellationToken ct = default);
+
+    /// <summary>
+    /// A URL that GETs the object without credentials until <paramref name="lifetime"/> passes (a presigned S3 URL), or
+    /// null when this store cannot sign one; the caller then serves the bytes itself (<c>GET /save</c>, specs/08 section 3.1).
+    /// </summary>
+    Task<Uri?> PresignGetAsync(string bucket, string key, TimeSpan lifetime, CancellationToken ct = default) => Task.FromResult<Uri?>(null);
 }
 
 public sealed class InMemoryBlobStore : IBlobStore
@@ -94,6 +100,12 @@ public sealed class S3BlobStore : IBlobStore, IDisposable
 
     public Task DeleteAsync(string bucket, string key, CancellationToken ct = default) =>
         _client.Value.DeleteObjectAsync(bucket, key, ct);
+
+    public async Task<Uri?> PresignGetAsync(string bucket, string key, TimeSpan lifetime, CancellationToken ct = default) =>
+        new(await _client.Value.GetPreSignedURLAsync(new GetPreSignedUrlRequest
+        {
+            BucketName = bucket, Key = key, Verb = HttpVerb.GET, Expires = DateTime.UtcNow.Add(lifetime),
+        }).ConfigureAwait(false));
 
     public void Dispose()
     {

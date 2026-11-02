@@ -1,3 +1,6 @@
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
+
 namespace HeroCat.Server.Features.Summon;
 
 /// <summary>
@@ -6,6 +9,15 @@ namespace HeroCat.Server.Features.Summon;
 /// </summary>
 public static class SummonFeature
 {
-    // TODO(#199, #200): the Summon endpoints and their services.
-    public static IServiceCollection AddSummonFeature(this IServiceCollection services) => services;
+    // TODO(#200): the published rates endpoint (/summon/rates), built on RateTableHash.
+    public static IServiceCollection AddSummonFeature(this IServiceCollection services)
+    {
+        services.AddOptions<ContentSetOptions>().BindConfiguration(ContentSetOptions.Section);
+        services.TryAddSingleton<IContentSets>(sp => new DirectoryContentSets(sp.GetRequiredService<IOptions<ContentSetOptions>>()));
+        services.TryAddSingleton<ISummonConfigSource, OpenSummonConfigSource>();
+        services.TryAddSingleton(CsprngUniformSource.Factory);
+        services.AddSingleton<SummonStore>();
+        services.AddSingleton<SummonService>();
+        return services;
+    }
 }

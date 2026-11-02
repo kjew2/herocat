@@ -20,6 +20,7 @@ One ASP.NET Core 8 deployable (`HeroCat.Server`), organised as feature folders; 
 | IAP / Receipt | catalog, validate, restore, store webhooks, refunds | `purchases`, `inbox_items`, `diamond_ledger` | MVP | `DisabledReceiptValidator`; `FakeReceiptValidator` in debug builds |
 | Config / Content | remote config, kill switches, content manifest pointer, min versions, maintenance | `config_versions` | MVP | `LocalConfigService` (bundled content, all flags on) |
 | Dungeon seed | seed issue, result correlation | `dungeon_seeds` | MVP | `LocalDungeonSeedService : IDungeonSeedService` (one draw from `dungeon`; issue #25) |
+| Analytics | economy-events ingest, server-side economy events of ledger writes (section 3.5; issue #209) | `events` | MVP | `NullAnalytics` (no backend; 02 section 14.2) |
 | Mail / Admin | mail blasts, compensation, moderation actions, config publishing, support lookups | `mail_blasts`, `moderation_actions`, `config_versions` | MVP (internal) | n/a |
 | Guild | create/join/chat/boss | `guilds`, `guild_members`, `guild_chat` | P1 | n/a |
 | Leaderboard | weekly boards from save summaries | Redis ZSETs | P1 | n/a |
@@ -122,7 +123,7 @@ Errors: `PROVIDER_TOKEN_INVALID` (400), `PROVIDER_ALREADY_LINKED` (409; this pla
 
 **`POST /account/export`** -- `jwt` -- idempotent -- 1 per 7 days (`EXPORT_RATE_LIMITED` 429 with `retryAfterSec`). `{}` -> `{ "status": "queued", "estimatedMinutes": 10 }`; the link appears in `GET /account/export` -> `{ "status": "ready", "url": "https://…", "expiresAt": … }`.
 
-## 3. Save, Inbox, Dungeon seed, Config endpoints
+## 3. Save, Inbox, Dungeon seed, Config, Analytics endpoints
 
 ### 3.1 Save
 
@@ -138,14 +139,16 @@ Request: headers `If-Match: <etag>` (or `*` for first upload), `X-Save-Meta: <js
 
 ```json
 // 200
-{ "etag": "W/\"1875-0f9e\"", "saveSeq": 1875, "serverTime": 1793670900, "flags": [], "diamondReconcile": null }
+{ "etag": "W/\"1875-0f9e3a1b\"", "saveSeq": 1875, "serverTime": 1793670900, "flags": [], "diamondReconcile": null, "requestCmdLog": false }
 // 200 with reconciliation (section 7.4)
 { "etag": "...", "saveSeq": 1875, "serverTime": ..., "flags": ["DIAMOND_LEDGER_MISMATCH"], "diamondReconcile": { "clientBalance": 9999, "serverBalance": 1240, "applied": true } }
 // 409
 { "code": "SAVE_CONFLICT", "details": { "serverMeta": { ...02 section 9.1... } } }
 ```
 
-Server steps, in order: (1) parse header, verify `len`/CRC (`SAVE_MALFORMED` 400); (2) verify HMAC against `devices.hmac_key_enc` for `X-Device-Id` (record `hmac_valid`; not a rejection); (3) `If-Match` vs `saves.etag` (`SAVE_CONFLICT` 409 unless `*` and no row); (4) `saveSeq` must exceed the stored one for the same `deviceId` (`SEQ_REGRESSION` flag, accepted but flagged; a lower seq from the *same* device is rejected `SAVE_STALE` 409 because the device itself knows better); (5) `lastSavedServerTime <= now + CLOCK_MAX_SKEW_ACCEPT_S` (`CLOCK_AHEAD` flag); (5a) credit client-earned currency (issue #49, below); (6) plausibility checks (section 7) asynchronously *except* `DIAMOND_LEDGER_MISMATCH`, which runs inline because its reconciliation is in the response; (7) write blob to S3 `saves/{playerId}/{saveSeq}.sav`, upsert `saves`, insert `save_history`, trim to `SAVE_HISTORY_KEEP`; (8) P1: update leaderboard ZSETs from `summary`.
+Server steps, in order: (1) parse header, verify `len`/CRC (`SAVE_MALFORMED` 400); (2) verify HMAC against `devices.hmac_key_enc` for `X-Device-Id` (record `hmac_valid`; not a rejection); (3) `If-Match` vs `saves.etag` (`SAVE_CONFLICT` 409 unless `*` and no row); (4) `saveSeq` must exceed the last one stored for the same `deviceId`, else `SAVE_STALE` 409 (the device itself knows better); a `saveSeq` below the save of record of *another* device of the same player is accepted and flagged `SEQ_REGRESSION` (section 7.2, `info`; issue #198); (5) `lastSavedServerTime <= now + CLOCK_MAX_SKEW_ACCEPT_S` (`CLOCK_AHEAD` flag); (5a) credit client-earned currency (issue #49, below); (6) plausibility checks (section 7) asynchronously *except* `DIAMOND_LEDGER_MISMATCH`, which runs inline because its reconciliation is in the response; (7) write blob to S3 `saves/{playerId}/{saveSeq}.sav`, upsert `saves`, insert `save_history`, trim to `SAVE_HISTORY_KEEP`; (8) P1: update leaderboard ZSETs from `summary`.
+
+As built (issue #198): a file over `SAVE_BLOB_MAX_BYTES` is `413 SAVE_TOO_LARGE` (`details.maxBytes`) before step 1. Step 1 also reads the body's root `SchemaVersion`, `PlayerId`, `DeviceId`, `SaveSeq`, `ContentVersion` and `Time.LastSavedServerTime` (missing or mistyped is `SAVE_MALFORMED`); the body's `PlayerId` must be the caller and its `DeviceId` the `X-Device-Id`, and `X-Save-Meta` must be JSON whose `playerId`, `deviceId` and `saveSeq`, when present, agree with the body and which carries `clockAuthoritative`, a finite `progressScore` and a `summary` object (each refusal `400 VALIDATION` with `details.field` or `details.header`). The stored metadata takes those body fields, `sizeBytes` (the whole file), `sha256` (of the body bytes) and `hmac` (the header field) from the file and only `clientVersion` (else `X-Client-Version`), `clockAuthoritative`, `progressScore` and `summary` from `X-Save-Meta`. A pending rollback is `409 SAVE_ROLLED_BACK` (`details.serverMeta`) after step 2. A missing `If-Match` is `400 VALIDATION`; an etag when the player has no save is `SAVE_CONFLICT` with `serverMeta: null`. "The last one stored for the same `deviceId`" is the highest `saveSeq` of that device in `saves` and `save_history`. Each upload's flags are its own `HMAC_INVALID`, `SEQ_REGRESSION` and `CLOCK_AHEAD` plus the inline checks'; they go to `saves.flags`, `save_history.flags` and the action matrix. `requestCmdLog` is `saves.cmdlog_requested`, set when the section 7.3 sampler picks the upload. Uploads of one player are serialised by a transaction-scoped advisory lock; the blob, the rows and the idempotency row commit together. The etag is `W/"{saveSeq}-{8 random hex}"`. `GET /save` answers a large file with `302` to the presigned URL (inline where the blob store cannot sign, as in tests) and clears `saves.rollback_pending`. `GET /save/history` is newest first.
 
 **Crediting client-earned currency** (step 5a, issue #49). Diamonds and summon tickets earned in the client sim (login, quests, first clears, achievements, tutorial, daily gift, weekly grants) and diamonds spent client-side (`SHOP_EXCHANGE`) reach the server ledgers only through this step. The save carries cumulative per-reason counters (02 `Stats`): `Stats.ClientDiamondsEarned[reason]`, `Stats.ClientDiamondsSpent[reason]` and `Stats.ClientTicketsEarned[ticket][reason]`, counting only client-originated reasons (server-originated reasons such as `IAP`, `MAIL`, `ADMIN`, `REFUND` and `SUMMON` are written by the server and excluded). For each `(currency, reason)` the server takes `delta = counter - sum(ledger rows with ref_type = save_reconcile for that reason)` and writes one ledger row per non-zero delta (`diamond_ledger` or `ticket_ledger`, that reason, `ref_type = save_reconcile`, `ref_id = saveSeq`), in the same transaction as step 7. Earned diamond credits for one upload are clamped to `clientSideAllowance` (section 7.2); a clamped excess is not credited and raises `DIAMOND_LEDGER_MISMATCH`. Summon ticket credits are clamped the same way, per ticket, to `maxTicketsPerDay(ticket) * daysSinceLastUpload`, where `maxTicketsPerDay` is derived from that ticket's client-side sources in content (06 section 1.1 rule 6) and `daysSinceLastUpload` counts the day keys from the last upload's to this one's, inclusive (so at least 1); an excess is not credited. Dungeon tickets stay client-side and are not credited. A pull can spend only what has been credited, so the client uploads before a summon when it holds unsynced earnings (01 summon flow).
 
@@ -166,17 +169,30 @@ Server steps, in order: (1) parse header, verify `len`/CRC (`SAVE_MALFORMED` 400
   "serverTime": 1793670900 }
 ```
 
-Unclaimed items only; expired items are excluded and purged nightly. Rows whose `available_at` is in the future (scheduled package portions, section 5.2; issue #51) are hidden, except the earliest future portion of each package, which is returned with `availableAt` set so the client can show the next delivery (07 shows at most one); claiming it early returns `INBOX_NOT_AVAILABLE` 409. Inbox items never contain diamonds that were not first written to `diamond_ledger` with `ref_type = inbox_item` at claim time (not at creation), so an unclaimed item is not a balance.
+Unclaimed items only; expired items are excluded and purged nightly. Rows whose `available_at` is in the future (scheduled package portions, section 5.2; issue #51) are hidden, except the earliest future portion of each package, which is returned with `availableAt` set so the client can show the next delivery (07 shows at most one); claiming it early returns `INBOX_NOT_AVAILABLE` 409. Inbox items never contain diamonds that were not first written to `diamond_ledger` with `ref_type = inbox_item` at claim time (not at creation), so an unclaimed item is not a balance. As built (issue #201): items are ordered oldest first (`available_at`, then `created_at`); a package is the rows sharing `kind` and `source_ref`; `availableAt` (unix seconds) is present only on such a future portion, and `expiresAt` is `null` for an item that never expires.
 
-**`POST /inbox/claim`** -- `jwt` -- idempotent -- 30/min. `{ "inboxItemId" }` ->
+**`POST /inbox/claim`** -- `jwt` -- idempotent -- 30/min.
 
 ```json
+{ "inboxItemId": "…" }
+// 200
 { "inboxItemId": "…", "grants": [ ... ], "balances": { "DIAMOND": 3640 }, "reason": "IAP", "serverTime": … }
 ```
 
-Writes `diamond_ledger` (`+amount`, reason `IAP`/`MAIL`/`ADMIN`, `ref_type = inbox_item`) and, for summon ticket grants, `ticket_ledger` with the same reason and ref (issue #49), sets `claimed_at`, in one transaction. Errors: `INBOX_NOT_FOUND` 404, `INBOX_NOT_AVAILABLE` 409 (`available_at` in the future), `INBOX_ALREADY_CLAIMED` 409 (the error body's `details` still carries the original `{ "inboxItemId", "grants", "reason" }` so the client can reconcile `Inbox.ClaimedIds`; issue #176), `INBOX_EXPIRED` 410. Item grants (`kind: item`) are returned for the client to apply through `ApplyInboxGrant`; the server also appends them to a per-player `granted_items` ledger used by `ITEM_WITHOUT_PULL` (section 7).
+Writes `diamond_ledger` (`+amount`, reason `IAP`/`MAIL`/`ADMIN`/`REFUND`, `ref_type = inbox_item`) and, for summon ticket grants, `ticket_ledger` with the same reason and ref (issue #49), sets `claimed_at`, in one transaction. Errors: `INBOX_NOT_FOUND` 404, `INBOX_NOT_AVAILABLE` 409 (`available_at` in the future), `INBOX_ALREADY_CLAIMED` 409 (the error body's `details` still carries the original `{ "inboxItemId", "grants", "reason" }` so the client can reconcile `Inbox.ClaimedIds`; issue #176), `INBOX_EXPIRED` 410. Item grants (`kind: item`) are returned for the client to apply through `ApplyInboxGrant`; the server also appends them to a per-player `granted_items` ledger used by `ITEM_WITHOUT_PULL` (section 7).
+
+As built (issue #201): `inboxItemId` is the row's UUID (`D` format); a value that is not a UUID is `INBOX_NOT_FOUND`. `reason` follows the item's `kind` as the client's does (06 section 9): `iap` and `package_daily` are `IAP`, `refund` is `REFUND`, `admin` is `ADMIN`, the rest `MAIL`. `balances` holds the ledger sums after the claim: `DIAMOND` always, plus each summon ticket the claim granted. Other currencies (Rock Candy, Fish Coins; 06 rule 9.4) have no server ledger and are only returned in `grants`. The claim checks, in order: already claimed, expired (`now >= expires_at`), not available, then the lines. Until issue #271 decides how the client applies item lines, an item with a `kind: item` line is refused `409 INBOX_ITEM_GRANT_UNSUPPORTED` and stays unclaimed (nothing is written, so `granted_items` has no inbox writer yet), and a line that is not a known currency with a positive whole amount is refused `409 INBOX_BAD_GRANT` and logged. Inbox ticket rows leave `ticket_ledger.request_id` null (its unique `(player_id, request_id)` index allows one row per request); the request id is on `inbox_items.claimed_request_id`. The ledger rows take the database clock for `created_at`, so they always land in a partition.
 
 **`POST /inbox/claim-all`** -- `jwt` -- idempotent -- 10/min. `{}` -> `{ "claimed": [ ...per-item results... ], "balances": {...} }`. Claims up to 50 items oldest-first; a partial failure (an item expiring between list and claim) is skipped and reported, not an error. Each `claimed` row is the claim response's item shape, `{ "inboxItemId", "grants", "reason" }`, or `{ "inboxItemId", "code" }` for a skipped row (`code` one of the claim errors above; issue #176).
+
+```json
+{}
+// 200
+{ "claimed": [ { "inboxItemId": "…", "grants": [ ... ], "reason": "MAIL" }, { "inboxItemId": "…", "code": "INBOX_EXPIRED" } ],
+  "balances": { "DIAMOND": 3940, "TICKET_SUMMON_WEAPON": 5 } }
+```
+
+As built (issue #201): the 50 are the player's unclaimed rows with `available_at <= now`, oldest first by `available_at`, then `created_at`, in one transaction; rows that expired at most one hour ago are among them and come back as `INBOX_EXPIRED` (so an item that expired between the client's list and its claim-all is reported, not silently missing), and an item- or bad-grant row comes back with that code. Skipped rows count toward the 50. The nightly purge (worker) deletes unclaimed rows that expired more than that hour ago; claimed rows stay. `balances` is the claim's rule over every row claimed.
 
 ### 3.3 Dungeon seed
 
@@ -195,6 +211,26 @@ Checks: `floor` in `[1, maxFloor(kind)]` (`VALIDATION`); the player's last uploa
 **`GET /config`** -- `none` (optionally `jwt`, which enables the rollout bucket) -- 30/min per IP. The rollout bucket is computed server-side only (issue #31): without a valid JWT the response carries the non-rollout default content, and the client re-fetches config once after auth at boot (01 section 8.1). Section 6 gives the body. Served with `Cache-Control: max-age=60`; the client caches for `CONFIG_CACHE_MAX_AGE_S` (01).
 
 Content bundles are **not** served by the API; `config.content.url` points to the CDN (`https://cdn.whiskerhero.example/content/{version}/manifest.json`), immutable per version, `Cache-Control: public, max-age=31536000`.
+
+### 3.5 Analytics events
+
+The backend half of 02 section 14 (00 section 3: economy events go to our own `events` table so they join `purchases` and `saves`; issue #209). The client's uploader sends only the economy events (02 section 14.1, `AnalyticsNames.Economy`); Firebase gets every event.
+
+**`POST /analytics/events`** -- `jwt` -- idempotent -- 60/min. Body: up to `ANALYTICS_BATCH_MAX` queued lines, oldest first, each exactly as 02 section 14.1 queues it (`{"name", "eventId", <envelope>, "props"}`); `X-Request-Id` is the batch id of 02 section 14.2.
+
+```json
+{ "events": [ { "name": "currency_changed", "eventId": "9f2c…", "ts": 1793670900, "sessionId": "…", "playerIdHash": "…", "deviceId": "…",
+    "clientVersion": "1.0.0", "contentVersion": "2026.11.03", "schemaVersion": 1, "debugTainted": false, "clockAuthoritative": true,
+    "dayIndex": 3, "stage": 41, "ageGate": 0, "props": { "currency": "DIAMOND", "delta": 50, "balanceAfter": 640, "reason": "QUEST" } } ] }
+// 200
+{ "accepted": 1, "duplicates": 0, "rejected": [ { "index": 3, "eventId": "…", "code": "EVENT_REASON_INVALID" } ], "serverTime": 1793670900 }
+```
+
+- **Batch.** A missing `events`, an empty list or more than `ANALYTICS_BATCH_MAX` events is `400 VALIDATION` (`details.field = events`), which the client's queue treats as rejected. Anything else is `200`, and the client drops the batch from its queue: a refused event can never succeed on a retry.
+- **Per event**, refused in `rejected` (`index` in the batch, `eventId` when readable, `code`) while the rest are stored: `EVENT_MALFORMED` (not an object; `eventId` not 32 hex; `ts` not an integer; `props` not an object or with a key that is not camelCase, names an envelope field or is `playerId`; an envelope field of the wrong type), `EVENT_NAME_INVALID` (not one of 02 section 14.1's economy events), `EVENT_REASON_INVALID` (a `props.reason` outside 00 contract 6's closed enum, or a `currency_changed` without one), `EVENT_TS_OUT_OF_RANGE` (`ts` older than `ANALYTICS_EVENT_MAX_AGE_DAYS`, more than `CLOCK_MAX_SKEW_ACCEPT_S` ahead of server time, or on a day with no `events` partition) and `EVENT_TOO_LARGE` (`props` over `ANALYTICS_PROPS_MAX_BYTES` as JSON).
+- **Stored once.** The pipeline replays a retried `X-Request-Id` (section 1.1), and each row is unique on `(event_id, ts)` (02 section 12, `0005`), so an event retried in another batch or after `IDEMPOTENCY_TTL_H` is counted in `duplicates`, not stored twice.
+- **Server-stamped fields.** `player_id_hash` is computed from the token's player with the environment's salt (`HeroCat:Analytics:PlayerIdSalt`, the client build's salt, so it equals the client's `playerIdHash`) and `age_gate` comes from the token's `age` claim (1 for under-age, else 0; section 10.1); the client's `playerIdHash` and `ageGate` are ignored. `env` is `HeroCat:Analytics:Env`, `source = 'client'`. Advertising-id props (`advertisingId`, `adId`, `idfa`, `idfv`, `gaid`, `aaid`) are dropped before storing for every player, so an `ageGate = 1` row never holds one. The other envelope fields are stored as sent.
+- **Server-side economy events.** A server ledger write (summon debit, inbox claim, refund, IAP grant) writes its own `currency_changed` row (06 section 13's fields, `source = 'server'`, no session or device) in the ledger write's transaction (`HeroCat.Server.Features.Analytics.ServerEconomyEvents`), and the IAP service writes `iap_status` the same way, so the warehouse does not rely on the client for money events. TODO(#199, #201, #202): those handlers call it when they land.
 
 ## 4. Summon service (server-authoritative, MVP)
 
@@ -257,9 +293,10 @@ Handle(player, req):
   tx:
     pity = select ... from banner_pity for update (insert default if absent)
     cost  = payment == DIAMOND ? PULL_COST[banner] * count : count tickets
+    tickets = sum(ticket_ledger) for the banner's ticket (credited at PUT /save step 5a and inbox claim; issue #49)
+    if payment == DIAMOND and tickets >= count: 409 PAYMENT_MISMATCH {expected: "TICKET"}   // 06 rule: tickets first; client out of date; checked before funds (issue #199)
     if payment == DIAMOND: balance = sum(diamond_ledger) ; if balance < cost: 402 INSUFFICIENT_FUNDS {need, have}
-    else: tickets = sum(ticket_ledger) for the banner's ticket (credited at PUT /save step 5a and inbox claim; issue #49); if tickets < count: 402 INSUFFICIENT_FUNDS
-    if payment == DIAMOND and tickets >= count: 409 PAYMENT_MISMATCH {expected: "TICKET"}   // 06 rule: tickets first; client out of date
+    else: if tickets < count: 402 INSUFFICIENT_FUNDS
     st  = BannerState { Pity = pity.pity, TotalPulls = pity.total_pulls, Exp = pity.exp }      // cumulative exp; level derived
     col = CollectionState from the player's item ledger (granted_items + summon_log aggregates)
     results = count == 10 ? Pull10(content.Banner(banner), st, col, csprng)                                  // 04 section 3.2; banner level and
@@ -274,11 +311,22 @@ Handle(player, req):
 
 As built (issue #194), the idempotency middleware runs before the handler, so the lookup precedes the lock; the outcome is the same (one id in flight is `409`, a final one replays, and a second request id waits for the lock). The lock records `redis_lock_wait_seconds` (tags `lock`, `outcome` = `acquired` / `timeout` / `unavailable`) and fails open when Redis is unreachable (section 9.1). Latency target p99 under 150 ms. The response is the `SummonResultPayload` of 01 section 2.5, with per-pull `copiesAfter` and `overflowRockCandy` (issue #13); the client applies it with `ApplySummonResult`, the only summon mutator in both modes, replacing `DIAMOND` with `balances.DIAMOND` (server wins). Replacing is safe because the client uploads its save before the pull whenever it holds unsynced client-earned diamonds or tickets (issue #49).
 
+As built (issue #199): the handler is `Features/Summon` (`SummonService`, `SummonEngine`) and runs 04's `PullAlgorithm` from `HeroCat.Sim` unchanged. Request checks come first (`banner` an exact `Banner` name, `count` 1 or 10, `payment` `DIAMOND` or `TICKET`, `clientContentVersion` present; else `400 VALIDATION` with `details.field`), then the kill switch (`503 SUMMON_DISABLED`, which the idempotency middleware never stores, so the same request id rolls once the switch is lifted), then the lock. The content set is the one whose manifest version equals `clientContentVersion` exactly; the server holds the sets listed in `HeroCat:Content:Directories` (default: the `content/` set shipped in the image, loaded with Runtime's `ContentLoader` source compiled into the server, 01 section 1.2), and a version it does not hold is `409 CONTENT_TOO_OLD` (`details.minContentVersion` = the newest held) when older than the newest held set, else `400 VALIDATION` (`details.reason = UNKNOWN_CONTENT_VERSION`). A banner is closed when content disables it or has no `banner_levels` rows, or when `config.banners[]` lists windows for it and none contains `serverTime`; a banner the schedule does not list, or missing from `summonEnabled`, is open. The transaction first locks the player's `accounts` row (`for no key update`) so two pulls never read one balance even when the Redis lock fails open. `PAYMENT_MISMATCH` is checked before the funds check, so a player with enough tickets but too few diamonds gets `409`, not `402`; `INSUFFICIENT_FUNDS` carries `details: { need, have, currency }`. The collection the pull reads is one copy per `summon_log` row of the banner, plus `granted_items` of the banner's pool, plus content's profile-created item grants (the starter weapon every account holds), capped at the copy cap. Uniforms are the top 53 bits of a CSPRNG word times 2^-53. On the wire `rarity` is the one-letter code `C`/`R`/`E`/`L`/`M` (as in `summon_log`), `balances` holds `DIAMOND` and the banner's ticket after the charge, `debits` is the one charge (`DIAMOND` or the ticket currency, negative), and the top-level `rateTableHash` is the table of the batch's last pull (every pull's own is in `summon_log`). The charge is one `diamond_ledger` (`-cost`) or `ticket_ledger` (`-count`) row with reason `SUMMON`, `ref_type = summon`, `ref_id` and `request_id` = the request id. `summon_pulls_total{banner,rarity}` counts committed pulls.
+
 Errors: `INSUFFICIENT_FUNDS` 402, `PAYMENT_MISMATCH` 409, `BANNER_CLOSED` 409, `CONTENT_TOO_OLD` 409, `IDEMPOTENCY_IN_FLIGHT` 409, `SUMMON_DISABLED` 503 (kill switch).
 
 ### 4.4 Audit log
 
-One `summon_log` row per pull, never per batch, so a regulator or support agent can reproduce any pull: given `rate_table_hash` (which identifies the exact published table), `pity_before`, `guarantee` (whether slot 10 ran with `forceEplus`) and the pull's three uniforms, 04's `Pull` yields the logged rarity and item. The row records `guarantee` so forced 10-pull slots are visible. Retention 7 years (02 section 13). `GET /summon/history?banner=WEAPON&limit=100` -- `jwt` -- 10/min -> the player's own rows (item, rarity, pity, time; not the uniforms).
+One `summon_log` row per pull, never per batch, so a regulator or support agent can reproduce any pull: given `rate_table_hash` (which identifies the exact published table), `pity_before`, `guarantee` (whether slot 10 ran with `forceEplus`) and the pull's three uniforms, 04's `Pull` yields the logged rarity and item. The row records `guarantee` so forced 10-pull slots are visible. Retention 7 years (02 section 13).
+
+`rate_table_hash` (issue #199) is SHA-256 over a canonical UTF-8 text of everything a pull at one banner level depends on, so the hash alone selects the table to replay a row with: the lines `herocat.rate_table.v1`, `banner=<BANNER>`, `level=<n>`, `rates=C:<c>,R:<r>,E:<e>,L:<l>,M:<m>`, `pity=softStart:<n>,softStep:<x>,hard:<n>,mShareOfLplus:<x>`, `guarantee=batch:<n>,min:<RARITY>` and `pool.<C|R|E|L|M>=<itemId,...>` in pool order, each ending in a newline, numbers in invariant round-trip form. `summon_log` stores the 32 bytes; the wire (`rateTableHash` here and in section 4.5) is lowercase hex. `RateTableHash` in `Features/Summon` is the one implementation.
+
+**`GET /summon/history?banner=WEAPON&limit=100`** -- `jwt` -- 10/min. The player's own rows, newest first (item, rarity, pity, time; not the uniforms). `banner` is optional; `limit` defaults to 100, at most 500 (as built, issue #199).
+
+```json
+// 200
+{ "pulls": [ { "requestId": "c1f0…", "banner": "WEAPON", "batchIndex": 9, "itemId": "wpn_017", "rarity": "R", "pityBefore": 32, "pityAfter": 33, "bannerLevel": 4, "guarantee": false, "payment": "DIAMOND", "createdAt": 1793670900 }, "..." ] }
+```
 
 ### 4.5 Published rates
 
@@ -396,7 +444,10 @@ The client learns on the next `PUT /save` response (`diamondReconcile`) or `GET 
 }
 ```
 
-- `inBucket = hash(playerId || content.version) % 100 < rolloutPct`, computed by the server only (the client never hashes; issue #31). Stable per version; raising `rolloutPct` adds players, never removes them.
+- `inBucket = hash(playerId || content.version) % 100 < rolloutPct`, computed by the server only (the client never hashes; issue #31). Stable per version; raising `rolloutPct` adds players, never removes them. As built (issue #204): `hash` is the first 8 bytes, big-endian, of SHA-256 over the UTF-8 of `playerId` (lowercase, hyphenated) followed by `content.version`.
+- The non-rollout default is the stored payload's `defaultContent` (same shape as `content`, required while `content.rolloutPct < 100`; at 100 the default is `content` itself). A caller without a valid JWT, or outside the bucket, is served `defaultContent` as `content`; `defaultContent` itself never appears in the response, and `configVersion` (the row id) and `serverTime` are filled per request (issue #204).
+- `maintenance` is the payload's announcement (`active: false` with a future `until`, section 8.4) unless the Redis `maint` key is set, in which case the live flag is served. With no active config for the env, `GET /config` is `404 NOT_FOUND` and the client keeps its cached config or defaults (01 section 8.1).
+- `limits` overrides the declared rate limits by name: the endpoint attribute is the default, `summonPerMinute` replaces `POST /summon/pull`'s per-minute limit and `saveUploadsPerDay` `PUT /save`'s per-day limit, read from the active config with the rest of it (issue #265).
 - Content bundles apply only at next cold boot unless the manifest's `hot_apply` bool is set (01 section 8.12, 09); the exporter computes it from the four-table allowlist of 00 contract 3, which is the single source. `hotApplyTables` only echoes that exporter constant for diagnostics; the client does not read it to decide (issue #54).
 - `minContentVersionByClient` lets the server refuse sim-sensitive requests from a client running stale content (`CONTENT_TOO_OLD`) without blocking the client entirely.
 - Kill switches are read by view-models at every config refresh; none touches `GameState`.
@@ -404,6 +455,8 @@ The client learns on the next `PUT /save` response (`diamondReconcile`) or `GET 
 ### 6.2 Publishing
 
 Config and content are published through the admin API (`POST /admin/config` with the payload, `created_by` from SSO), stored as a new `config_versions` row, activated with `POST /admin/config/{id}/activate`. Activation is a single row flip, so rollback is `activate` on the previous id (section 8.5 runbook in 10). Content bundles are uploaded to the CDN bucket by the exporter pipeline (09) under their version path before the config that references them is activated; the server verifies the manifest's `sha256` at activation (`CONTENT_HASH_MISMATCH` 400) so a config can never point at a bundle that is not there.
+
+As built (issue #204): `POST /admin/config` validates the payload (`400 VALIDATION` with `details.field`) and returns `201` with the new, inactive row's `id`; rows are per environment (`HeroCat:Env`). Activation checks every content pointer of the payload (`content`, and `defaultContent` when present); a manifest whose bytes do not hash to its `sha256`, or that is not on the CDN, is `400 CONTENT_HASH_MISMATCH` (`details: { field, url, expected, actual }`) and leaves the previous config active. Activations of one env serialise on a Postgres advisory lock, so at most one row is active. Each api instance keeps the active row in memory and reloads it once the copy is `CONFIG_REFRESH_S` old (the activating instance at once), so a kill switch or version floor reaches every instance within that time; while Postgres is unreachable the last copy keeps serving. `POST /admin/maintenance` sets the `maint` key for `active: true` and deletes it for `active: false`.
 
 Version rules: client semver + build; content `YYYY.MM.DD[.n]`; save schema integer; API `v1` in the path, additive changes only within `v1`, a breaking change is `v2` beside it (10 compatibility matrix).
 
@@ -520,11 +573,12 @@ flowchart LR
     Warehouse[(Analytics warehouse: Firebase export + events table)] --- RDS
 ```
 
-- One container image, two roles by command-line flag: `api` (no flag; stateless, horizontally scaled on CPU + request latency) and `--worker` (mail blasts, plausibility replays, purges, refund polls; one instance, leader lock in Redis; serves no HTTP). A third flag, `--migrate`, runs the migration runner below and exits. Both roles share Npgsql, Redis and the S3 client behind interfaces (`IDbConnectionFactory`, `IRedisConnection`, `IBlobStore`, the last with an in-memory implementation for tests and local runs and MinIO through the S3 client's service URL), so unit tests need no containers (issue #192).
+- One container image, two roles by command-line flag: `api` (no flag; stateless, horizontally scaled on CPU + request latency) and `--worker` (mail blasts, plausibility replays, purges, refund polls, the daily partition job of 02 section 12; one instance, leader lock in Redis; serves no HTTP). A third flag, `--migrate`, runs the migration runner below and exits. Both roles share Npgsql, Redis and the S3 client behind interfaces (`IDbConnectionFactory`, `IRedisConnection`, `IBlobStore`, the last with an in-memory implementation for tests and local runs and MinIO through the S3 client's service URL), so unit tests need no containers (issue #192).
 - `GET /health` (outside `/v1`, no auth) is the load balancer's liveness probe and the version 10 section 6.3 reads: `{ "status": "ok", "version": "2026.11.03", "role": "api", "sim": { "version", "saveSchemaVersion", "newStateHash" } }`, where `sim` comes from the referenced `HeroCat.Sim` (`newStateHash` is the `StateHash` of a new `GameState`, a fingerprint of the encoding the re-simulator shares with the client). It reads no database or Redis, so a dependency outage does not drain the target group; dependency readiness comes with 9.4's observability.
 - PostgreSQL via Npgsql with connection pooling (RDS Proxy at 100k DAU). Migrations are plain versioned SQL files (`server/db/migrations/NNNN_<name>.sql`, 02 section 12's DDL verbatim; no EF Core migrations, EF Core at most for queries) applied by a small runner (`HeroCat.Server --migrate`, from the same image; it records each file and its SHA-256 in `schema_migrations` under a Postgres advisory lock and refuses an applied file that changed or disappeared) in the deploy pipeline before the new image receives traffic and in CI against an empty PostgreSQL 16 (issue #33) (expand/contract pattern: never drop a column in the same release that stops writing it).
 - S3 buckets per environment: `herocat-saves-{env}` (versioning on, SSE-KMS, lifecycle: non-current versions expire after 7 days), `herocat-receipts-{env}` (object lock, 7 years), `herocat-content-{env}` (public read via CloudFront OAC only).
 - Redis is a cache and a lock service only; losing it loses rate-limit counters and in-flight summon locks (the idempotency table in Postgres still prevents double rolls).
+- Trusted hops (issue #263): the api's peer is the ALB, so the client address for per-IP rate limits comes from `X-Forwarded-For`. Only a peer inside `HeroCat:Network:TrustedProxies` (the ALB subnets' CIDRs, from the IaC outputs) is trusted, and only for its own last hop (`ForwardLimit = 1`): an `X-Forwarded-For` a client forges is ignored from an untrusted peer and sits left of the entry the ALB appends otherwise. The list is empty by default, which trusts no hop and keys on the peer address (local runs, tests).
 
 ### 9.2 Environments
 
@@ -561,6 +615,7 @@ Metrics (Prometheus naming), by route where applicable:
 | `db_pool_in_use`, `db_query_duration_seconds{name}` | gauge, histogram |
 | `redis_lock_wait_seconds` | histogram |
 | `worker_job_duration_seconds{job}`, `worker_job_failures_total{job}` | histogram, counter |
+| `db_partition_horizon_days{table}` | gauge (days from now to the end of the table's last partition; the worker's partition job, 02 section 12, issue #262) |
 | `config_active_version`, `content_active_version_info` | gauge |
 
 ### 9.5 Alarm list
@@ -703,6 +758,7 @@ M0 has no server. Every service above is reached through an interface in `HeroCa
 23. Every error `code` named in this spec has a localization key (09 validator), and every endpoint has an OpenAPI entry generated from the controllers that matches the request/response JSON shown here (contract test).
 24. A Local-mode client build makes zero network calls during a 20-minute PlayMode session (network interceptor assertion), proving the M0 note.
 25. IAP: the first granted purchase of `diamonds_3` is doubled and a second is not, while the first purchase of another diamond pack is still doubled; a package is never doubled and creates one `inbox_items` row per scheduled portion at purchase, `GET /inbox` shows only the delivered portions plus the next one, and a refund expires every unclaimed portion (issues #50, #51).
+26. Analytics (section 3.5; issue #209): a batch retried with the same `X-Request-Id`, and the same events under another id, are stored once (`(event_id, ts)` unique); an event whose `reason` is outside 00 contract 6's enum is refused per event while the rest of the batch is stored; an under-age token's events are stored with `age_gate = 1` and no advertising-id prop; the worker's partition job creates the missing partitions up to `PARTITION_AHEAD_MONTHS` / `PARTITION_AHEAD_DAYS` ahead, a rerun creates none, and a horizon below one period is reported (issue #262). `HeroCat.Server.Tests` (`Analytics/`) runs these against Postgres.
 
 ## Constants introduced
 
@@ -727,6 +783,12 @@ Engineering/operational constants, code- or config-resident (`HeroCat.Server` `a
 | `CLOCK_MAX_SKEW_ACCEPT_S` | 120 | S (declared in 02) | 3.1 |
 | `SAVE_BLOB_MAX_BYTES` | 262144 | S (declared in 02) | 3.1 |
 | `SAVE_HISTORY_KEEP` | 10 | S (declared in 02) | 3.1 |
+| `CONFIG_REFRESH_S` | 30 | S (issue #204) | 6.2 |
+| `ANALYTICS_BATCH_MAX` | 100 | S (declared in 02) | 3.5 |
+| `ANALYTICS_EVENT_MAX_AGE_DAYS` | 30 | S (issue #209) | 3.5 |
+| `ANALYTICS_PROPS_MAX_BYTES` | 4096 | S (issue #209) | 3.5 |
+| `PARTITION_AHEAD_MONTHS` | 3 | S (declared in 02 section 12; issue #262) | 9.4 |
+| `PARTITION_AHEAD_DAYS` | 14 | S (declared in 02 section 12; issue #262) | 9.4 |
 | Rate limits | per endpoint, sections 2-5 | S | |
 | Alarm thresholds | 10 section 10 (issue #59) | S | |
 | Age of digital consent default | 13 | S | 10.1 |

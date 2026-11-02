@@ -19,10 +19,12 @@ namespace HeroCat.Runtime.Services
     {
         public LocalConfigService(string contentVersion)
         {
-            Current = new ClientConfig(contentVersion ?? "", null, MaintenanceInfo.None, KillSwitches.AllOn);
+            Current = new ClientConfig(contentVersion ?? "", null, MaintenanceInfo.None, KillSwitches.AllOn) { Source = ConfigSource.Bundled };
         }
 
         public ClientConfig Current { get; }
+
+        public KillSwitches Flags => Current.Flags;
 
         public Task<ClientConfig> FetchAsync(CancellationToken ct = default) => Task.FromResult(Current);
     }

@@ -1,3 +1,4 @@
+#nullable disable   // also compiled into HeroCat.Server (nullable enabled), which links this file (issue #199)
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -11,7 +12,13 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 
+// HeroCat.Server compiles this file under its own namespace (HEROCAT_SERVER), so a project that sees both the server and
+// HeroCat.Runtime (the server tests) gets two distinct types instead of an ambiguous one.
+#if HEROCAT_SERVER
+namespace HeroCat.Server.Content
+#else
 namespace HeroCat.Runtime.Content
+#endif
 {
     /// <summary>Where a content set's files come from: a directory, Unity Resources/StreamingAssets, a test dictionary.</summary>
     public interface IContentSource
@@ -226,7 +233,10 @@ namespace HeroCat.Runtime.Content
             }
         }
 
-        /// <summary>Semver compare on MAJOR.MINOR.PATCH; anything unparsable compares as 0.0.0.</summary>
+        /// <summary>
+        /// Semver compare on MAJOR.MINOR.PATCH; anything unparsable compares as 0.0.0. Build metadata and a pre-release tag
+        /// are ignored, so <c>X-Client-Version</c>'s <c>1.4.2+318</c> compares as 1.4.2 (08 section 1.1: build metadata ignored).
+        /// </summary>
         public static int CompareSemver(string a, string b)
         {
             int[] pa = Semver(a), pb = Semver(b);
@@ -237,7 +247,10 @@ namespace HeroCat.Runtime.Content
         static int[] Semver(string v)
         {
             var r = new int[3];
-            var bits = (v ?? "").Split('.');
+            v = v ?? "";
+            int cut = v.IndexOfAny(new[] { '+', '-' });
+            if (cut >= 0) v = v.Substring(0, cut);
+            var bits = v.Split('.');
             for (int i = 0; i < 3 && i < bits.Length; i++) int.TryParse(bits[i], NumberStyles.None, CultureInfo.InvariantCulture, out r[i]);
             return r;
         }

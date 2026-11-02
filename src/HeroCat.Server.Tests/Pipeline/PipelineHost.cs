@@ -2,6 +2,8 @@ using System.ComponentModel.DataAnnotations;
 using HeroCat.Server.Infrastructure.Idempotency;
 using HeroCat.Server.Pipeline;
 using HeroCat.Server.Tests.Idempotency;
+using System.Net;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -34,26 +36,32 @@ sealed class PipelineHost : IDisposable
 
     readonly WebApplicationFactory<Program> _factory;
 
-    public PipelineHost()
+    /// <param name="settings">Configuration overrides (<c>HeroCat:Network:TrustedProxies:0</c>, ...).</param>
+    public PipelineHost(IReadOnlyDictionary<string, string?>? settings = null)
     {
-        _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b => b.ConfigureServices(s =>
+        _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
         {
-            s.AddSingleton<TimeProvider>(Clock);
-            s.AddSingleton<IMaintenanceFlag>(Maintenance);
-            s.AddSingleton<IClientGateConfigSource>(Gates);
-            s.AddSingleton<IAccessTokenValidator>(_ => TokenValidatorOverride ?? Tokens);
-            s.AddSingleton<IAccountStatusSource>(Bans);
-            s.AddSingleton<IAdminAuthenticator>(Admins);
-            s.AddSingleton<IRateLimitStore>(_ => LimitStoreOverride ?? Limits);
-            s.AddSingleton<IIdempotencyStore>(_ => IdempotencyOverride ?? Idempotency);
-            s.AddSingleton<IPlausibilityFlagSink>(Flags);
-            s.AddSingleton(Probe);
-            s.AddControllers().ConfigureApplicationPartManager(m =>
+            foreach (var (k, v) in settings ?? new Dictionary<string, string?>()) b.UseSetting(k, v);
+            b.ConfigureServices(s =>
             {
-                foreach (var part in m.ApplicationParts.OfType<AssemblyPart>().ToList()) m.ApplicationParts.Remove(part);
-                m.ApplicationParts.Add(new AssemblyPart(typeof(FakeRoutesController).Assembly));
+                s.AddSingleton<IStartupFilter, TestPeerStartupFilter>();
+                s.AddSingleton<TimeProvider>(Clock);
+                s.AddSingleton<IMaintenanceFlag>(Maintenance);
+                s.AddSingleton<IClientGateConfigSource>(Gates);
+                s.AddSingleton<IAccessTokenValidator>(_ => TokenValidatorOverride ?? Tokens);
+                s.AddSingleton<IAccountStatusSource>(Bans);
+                s.AddSingleton<IAdminAuthenticator>(Admins);
+                s.AddSingleton<IRateLimitStore>(_ => LimitStoreOverride ?? Limits);
+                s.AddSingleton<IIdempotencyStore>(_ => IdempotencyOverride ?? Idempotency);
+                s.AddSingleton<IPlausibilityFlagSink>(Flags);
+                s.AddSingleton(Probe);
+                s.AddControllers().ConfigureApplicationPartManager(m =>
+                {
+                    foreach (var part in m.ApplicationParts.OfType<AssemblyPart>().ToList()) m.ApplicationParts.Remove(part);
+                    m.ApplicationParts.Add(new AssemblyPart(typeof(FakeRoutesController).Assembly));
+                });
             });
-        }));
+        });
     }
 
     public IServiceProvider Services => _factory.Services;
@@ -84,6 +92,25 @@ sealed class PipelineHost : IDisposable
         }
         return r;
     }
+}
+
+/// <summary>
+/// TestServer connections have no remote address; this sets it from <see cref="Header"/> ahead of the app's pipeline,
+/// so the forwarded-headers tests can play the load balancer or an outside client (issue #263).
+/// </summary>
+sealed class TestPeerStartupFilter : IStartupFilter
+{
+    public const string Header = "X-Test-Peer";
+
+    public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
+    {
+        app.Use((ctx, nextMiddleware) =>
+        {
+            if (IPAddress.TryParse(ctx.Request.Headers[Header].FirstOrDefault(), out var ip)) ctx.Connection.RemoteIpAddress = ip;
+            return nextMiddleware(ctx);
+        });
+        next(app);
+    };
 }
 
 sealed class FakeClock : TimeProvider
@@ -165,6 +192,9 @@ public sealed class FakeRoutesController : ControllerBase
     [ProducesResponseType(typeof(GuestResponse), StatusCodes.Status201Created)]
     public IActionResult Guest(GuestRequest request) =>
         StatusCode(StatusCodes.Status201Created, new GuestResponse(Guid.NewGuid(), "a", "r", 1, new { }, 1));
+
+    [HttpGet("v1/_test/peer"), Auth(AuthPolicy.None), RateLimit(2)]
+    public object Peer() => new { ip = HttpContext.Connection.RemoteIpAddress?.ToString() };
 
     [HttpGet("v1/_test/undeclared")]
     public object Undeclared() => new { ok = true };

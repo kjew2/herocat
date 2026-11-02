@@ -60,8 +60,18 @@ namespace HeroCat.Runtime
         public const int DUNGEON_SEED_TTL_S = 600;
         public const int RECEIPT_RETRY_S = 60;
         public const int MAINT_POLL_S = 60;
+
+        /// <summary>08 section 8.4: a maintenance window set in advance (<c>active: false</c>) shows a banner this long before <c>until</c>.</summary>
+        public const int MAINT_ANNOUNCE_S = 3600;
         public const int LOGOUT_UPLOAD_TIMEOUT_S = 10;
         public const int ARCHIVE_KEEP_DAYS = 30;
+
+        /// <summary>
+        /// 08 section 2.1 (issue #273), mirrored: the server takes a same-device retry of a refresh token rotated out at
+        /// most this long ago as a lost response, not reuse. The AuthClient starts refresh retries only within
+        /// <c>REFRESH_REUSE_GRACE_S - HTTP_TIMEOUT_S</c> of the first send, so every retry lands inside the grace.
+        /// </summary>
+        public const int REFRESH_REUSE_GRACE_S = 30;
 
         /// <summary>
         /// 8.11: the week epoch offset, <c>4 * DAY_SECONDS</c>. DAY_SECONDS is a content constant, so this is a day count;

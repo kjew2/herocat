@@ -43,6 +43,12 @@ namespace HeroCat.Runtime.Services
         public byte[] DeviceKey { get; set; }
 
         /// <summary>
+        /// Platform secure storage for <c>device_key</c> and <c>tokens.json</c> (02 section 8.4; the Keychain / Keystore
+        /// stores are issue #151). Null in Remote mode: a FileSecureStore under {DataDir}/secure (not secure), else in memory.
+        /// </summary>
+        public HeroCat.Runtime.Account.ISecureStore SecureStore { get; set; }
+
+        /// <summary>
         /// Debug builds: wraps the clock before any service captures it (the client's OffsetClock for the clock cheats), so
         /// saves, summons and the runner all read the same time.
         /// </summary>
@@ -56,9 +62,9 @@ namespace HeroCat.Runtime.Services
 
         /// <summary>
         /// Remote mode wiring, supplied by HeroCat.Remote (Runtime cannot reference it): RemoteGameServices.Wire builds the
-        /// ApiClient (issue #143), ServerClock(api) and the cloud slots; the other ApiClient-based clients of 01 section 1.2
-        /// land with their issues (SummonClient #145, ConfigClient #144, DungeonSeedClient #146, receipts and inbox #147,
-        /// AuthClient #148, CloudSaveClient #152, analytics uploader #209).
+        /// ApiClient (issue #143), ServerClock(api), the cloud slots and the ConfigClient (#144); the other ApiClient-based
+        /// clients of 01 section 1.2 land with their issues (SummonClient #145, DungeonSeedClient #146, receipts and inbox #147,
+        /// AuthClient #148 (GameServices.Account), CloudSaveClient #152, analytics uploader #209).
         /// </summary>
         public Func<ServicesOptions, GameServices> Remote { get; set; }
     }
@@ -90,6 +96,12 @@ namespace HeroCat.Runtime.Services
         public IConfigService Config { get; init; }
         public IDungeonSeedService Dungeons { get; init; }
         public IAnalytics Analytics { get; init; }
+
+        /// <summary>Boot step 3 and 01 section 8.13: LocalAccountService in Local mode, the AuthClient (#148) in Remote.</summary>
+        public HeroCat.Runtime.Account.IAccountService Account { get; init; }
+
+        /// <summary>The logout archive of {DataDir}/saves (01 section 8.13); null without a DataDir.</summary>
+        public HeroCat.Runtime.Account.SaveArchive Archives { get; init; }
 
         /// <summary>The mode this set was built for (diagnostics only; nothing may branch on it).</summary>
         public BackendMode Mode { get; init; }
@@ -133,6 +145,8 @@ namespace HeroCat.Runtime.Services
                 Config = new LocalConfigService(options.Content?.Version),
                 Dungeons = new LocalDungeonSeedService(state),
                 Analytics = analytics,
+                Account = new HeroCat.Runtime.Account.LocalAccountService(),
+                Archives = options.DataDir != null ? new HeroCat.Runtime.Account.SaveArchive(options.DataDir) : null,
             };
         }
 
