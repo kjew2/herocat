@@ -32,6 +32,10 @@
          and still has no assembly reference to HeroCat.Runtime (01 section 1.2; issue #199). -->
     <Compile Include="../HeroCat.Runtime/Content/ContentLoader.cs" Link="Features/Summon/Linked/ContentLoader.cs" />
   </ItemGroup>
+  <PropertyGroup>
+    <!-- The linked loader's namespace becomes HeroCat.Server.Content here (see the file's #if). -->
+    <DefineConstants>$(DefineConstants);HEROCAT_SERVER</DefineConstants>
+  </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="HeroCat.Server.Tests" />
   </ItemGroup>

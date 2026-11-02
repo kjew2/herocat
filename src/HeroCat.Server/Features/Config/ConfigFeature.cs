@@ -22,6 +22,8 @@ public static class ConfigFeature
         services.AddSingleton<IActiveConfigSource>(sp => sp.GetRequiredService<ActiveConfigCache>());
         // The pipeline's version floors and limit overrides (registered before AddRequestPipeline, whose default only fills the gap).
         services.AddSingleton<IClientGateConfigSource>(sp => sp.GetRequiredService<ActiveConfigCache>());
+        // The summon handler's kill switch and banner schedule (acceptance 17); replaces Summon's all-open default.
+        services.AddSingleton<HeroCat.Server.Features.Summon.ISummonConfigSource, HeroCat.Server.Features.Summon.ActiveConfigSummonSource>();
         services.AddHttpClient(HttpContentManifestFetcher.ClientName, c => c.Timeout = TimeSpan.FromSeconds(10));
         services.AddSingleton<IContentManifestFetcher, HttpContentManifestFetcher>();
         services.AddSingleton<ContentManifestVerifier>();

@@ -12,7 +12,13 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
 
+// HeroCat.Server compiles this file under its own namespace (HEROCAT_SERVER), so a project that sees both the server and
+// HeroCat.Runtime (the server tests) gets two distinct types instead of an ambiguous one.
+#if HEROCAT_SERVER
+namespace HeroCat.Server.Content
+#else
 namespace HeroCat.Runtime.Content
+#endif
 {
     /// <summary>Where a content set's files come from: a directory, Unity Resources/StreamingAssets, a test dictionary.</summary>
     public interface IContentSource

@@ -1,5 +1,5 @@
 using System.Text.Json;
-using HeroCat.Runtime.Content;
+using HeroCat.Server.Content;
 using HeroCat.Server.Features.Summon;
 using HeroCat.Server.Pipeline;
 using HeroCat.Sim.Content;

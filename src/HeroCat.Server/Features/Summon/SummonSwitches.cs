@@ -39,7 +39,6 @@ public interface ISummonConfigSource
 /// <summary>Every banner enabled and open: the api's default until the Config feature serves the active payload.</summary>
 public sealed class OpenSummonConfigSource : ISummonConfigSource
 {
-    // TODO(#204): the Config feature registers an ISummonConfigSource over the active config_versions payload, cached at
-    // most 60 s so a kill switch takes effect within acceptance 17's bound.
+    // The Config feature registers ActiveConfigSummonSource over the active payload; this stays for hosts without it.
     public ValueTask<SummonSwitches> GetAsync(CancellationToken ct) => ValueTask.FromResult(SummonSwitches.AllOpen);
 }
