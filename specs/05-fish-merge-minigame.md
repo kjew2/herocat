@@ -88,6 +88,8 @@ CatchUpTank(elapsedTicks):                    # closed form, no per-tick loop; p
   return (added, refillTickAfter)
 ```
 
+Research only raises `TankCap` and lowers `TankRefillTicks` (issue #167). After `RES_TANK_CAP` a full tank resumes refilling on the next tick. When `RES_TANK_REFILL` shortens the period below the current progress, `Research` clamps `Fish.TankRefillTick` to `TankRefillTicks - 1`, the same repair 02's P9b applies to a loaded save, so the fish lands on the next tick.
+
 A new profile starts with a full tank, `TankCount = TankCap` (`TANK_CAP0` at Research 0) and `TankRefillTick = 0`, set by `ProfileFactory` through the `TankCap` query, so the first session can release and merge at once (02 section 3.1; issue #246).
 
 The timer runs on sim ticks, not wall time, so it advances exactly as fast as combat does and offline catch-up can fill it with the same arithmetic 06 uses for gold (`elapsedTicks = creditedSeconds * TICK_HZ`, credited not full gap; issue #21). The effective offline cap (`OFFLINE_CAP_H` plus `RES_OFFLINE_CAP`) applies to the tank too: a player back after a weekend finds a full tank, not three days of fish. At Research 0 the tank is full one minute after it empties; with `RES_TANK_CAP` 10 and `RES_TANK_REFILL` 10 it holds 60 fish and refills in two minutes. Progress while the tank is full is discarded, which is the whole reason to release fish before closing the app.

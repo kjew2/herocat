@@ -14,16 +14,16 @@ namespace HeroCat.Sim.Fish
         // ---------------------------------------------------------------------------------------- tank (05 section 3)
 
         /// <summary>
-        /// TankCap = TANK_CAP0 + RES_TANK_CAP_PER_LVL * research[RES_TANK_CAP].
-        /// TODO(#167): switch to ResearchRules.TankCap (the Research term, issue #158); until then this is TANK_CAP0.
+        /// TankCap = TANK_CAP0 + RES_TANK_CAP_PER_LVL * research[RES_TANK_CAP] (10..60 with the shipped rows). Research
+        /// only raises it, so a full tank simply resumes refilling on the next tick after RES_TANK_CAP (05 section 3).
         /// </summary>
-        public static int TankCap(GameState s, ContentDb db) => db.Tank.Cap0;
+        public static int TankCap(GameState s, ContentDb db) => ResearchRules.TankCap(db, s);
 
         /// <summary>
-        /// TankRefillTicks = round(max(TANK_REFILL_FLOOR_S, TANK_REFILL_S0 - RES_TANK_REFILL_PER_LVL * research) * TICK_HZ).
-        /// TODO(#167): switch to ResearchRules.TankRefillTicks (issue #158); until then the Research-0 whole-tick value.
+        /// TankRefillTicks = round(max(TANK_REFILL_FLOOR_S, TANK_REFILL_S0 - RES_TANK_REFILL_PER_LVL * research) * TICK_HZ):
+        /// a whole number of ticks, 60, 56, ..., 20, never below the 2.0 s floor.
         /// </summary>
-        public static int TankRefillTicks(GameState s, ContentDb db) => db.Tank.RefillTicks0;
+        public static int TankRefillTicks(GameState s, ContentDb db) => ResearchRules.TankRefillTicks(db, s);
 
         /// <summary>TankRefillS in seconds, for display and the tools.</summary>
         public static double TankRefillSeconds(GameState s, ContentDb db) => (double)TankRefillTicks(s, db) / db.Constants.TickHz;
@@ -68,12 +68,12 @@ namespace HeroCat.Sim.Fish
 
         // ---------------------------------------------------------------------------------------- board
 
-        /// <summary>FishMaxLvl = FISH_MAX_LVL0 + research[RES_FISH_CAP], never above the table (FISH_MAX_LVL_HARD). TODO(#167): switch to ResearchRules.FishMaxLvl.</summary>
-        public static int FishMaxLvl(GameState s, ContentDb db)
-        {
-            int cap = db.Constants.FishMaxLvl0;
-            return cap > db.FishLevels.Count ? db.FishLevels.Count : cap;
-        }
+        /// <summary>
+        /// FishMaxLvl = FISH_MAX_LVL0 + research[RES_FISH_CAP], never above the table (FISH_MAX_LVL_HARD). After a
+        /// RES_FISH_CAP level the old cap fish merge at once; discovery is paid only when the new level is first made
+        /// (05 sections 4.3 and 11).
+        /// </summary>
+        public static int FishMaxLvl(GameState s, ContentDb db) => ResearchRules.FishMaxLvl(db, s);
 
         /// <summary>FISH_MAX_LVL_HARD: the fish_levels row count, the only clamp a saved cell gets (issue #41).</summary>
         public static int FishMaxLvlHard(ContentDb db) => db.FishLevels.Count;
