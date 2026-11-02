@@ -60,6 +60,9 @@ namespace HeroCat.Runtime
         public const int DUNGEON_SEED_TTL_S = 600;
         public const int RECEIPT_RETRY_S = 60;
         public const int MAINT_POLL_S = 60;
+
+        /// <summary>08 section 8.4: a maintenance window set in advance (<c>active: false</c>) shows a banner this long before <c>until</c>.</summary>
+        public const int MAINT_ANNOUNCE_S = 3600;
         public const int LOGOUT_UPLOAD_TIMEOUT_S = 10;
         public const int ARCHIVE_KEEP_DAYS = 30;
 

@@ -50,6 +50,12 @@ namespace HeroCat.Runtime.Boot
 
         /// <summary>Wall-time source for the step timings logged to analytics (01 AC 15 is measured on device).</summary>
         public IMonoClock Mono { get; set; }
+
+        /// <summary>
+        /// MVP: builds the content updater for the loaded content (01 section 8.12, issue #144); every landed config is
+        /// checked against it. Null (Local builds, bots): no content updates.
+        /// </summary>
+        public Func<ContentDb, ContentUpdater> ContentUpdates { get; set; }
     }
 
     public enum BootOutcome { Ready, Blocked, Fatal }
@@ -66,6 +72,12 @@ namespace HeroCat.Runtime.Boot
         public ContentDb Content { get; internal set; }
         public GameServices Services { get; internal set; }
         public ClientConfig Config { get; internal set; }
+
+        /// <summary>The config cadence (01 section 8.12), also set as <see cref="SessionRunner.Config"/>.</summary>
+        public ConfigRefresher ConfigRefresher { get; internal set; }
+
+        /// <summary>The content update flow when <see cref="BootOptions.ContentUpdates"/> is set; null otherwise.</summary>
+        public ContentUpdater ContentUpdates { get; internal set; }
         public Simulation Sim { get; internal set; }
         public EventBus Bus { get; internal set; }
         public SessionRunner Runner { get; internal set; }
@@ -142,22 +154,40 @@ namespace HeroCat.Runtime.Boot
             var svc = r.Services;
             var analytics = svc.Analytics ?? NullAnalytics.Instance;
 
-            // 2. Config. LocalConfigService answers at once; a remote fetch degrades to cache or defaults (section 6).
+            // 2. Config. LocalConfigService answers at once; a remote fetch degrades to cache or defaults (section 6) and
+            // never holds boot longer than CONFIG_FETCH_TIMEOUT_S (the ConfigClient bounds itself; this wait is the backstop).
             progress?.Invoke(BootStep.Config);
-            r.Config = svc.Config?.FetchAsync().GetAwaiter().GetResult();
+            r.Config = FetchConfig(svc.Config);
             if (r.Config != null)
             {
                 if (o.ClientVersion != null && !string.IsNullOrEmpty(r.Config.MinClientVersion) &&
                     ContentLoader.CompareSemver(r.Config.MinClientVersion, o.ClientVersion) > 0)
                     return Fail(r, BootOutcome.Blocked, "CLIENT_TOO_OLD", o, svc.Clock.NowServerSeconds);
-                if (r.Config.Maintenance != null && r.Config.Maintenance.Active)
+                // Only a live answer blocks: offline, a cached maintenance flag is stale news, and players keep playing
+                // offline through a maintenance window anyway (08 section 8.4).
+                if (r.Config.Maintenance != null && r.Config.Maintenance.Active && r.Config.Source != ConfigSource.Cached)
                     return Fail(r, BootOutcome.Blocked, "MAINTENANCE", o, svc.Clock.NowServerSeconds);
+            }
+            if (svc.Config != null)
+            {
+                r.ConfigRefresher = new ConfigRefresher(svc.Config, svc.Clock, o.Runner?.Mono, o.ClientVersion, o.SessionId);
+                r.ConfigRefresher.Start(r.Config);
+            }
+            r.ContentUpdates = o.ContentUpdates?.Invoke(r.Content);
+            if (r.ContentUpdates != null)
+            {
+                // A newer bundle downloads in the background and applies at the next cold boot (8.12); never this ContentDb.
+                r.ContentUpdates.Check(r.Config);
+                if (r.ConfigRefresher != null) r.ConfigRefresher.Landed += c => r.ContentUpdates.Check(c);
             }
             Done(BootStep.Config);
 
             // 3. Auth (MVP). Offline continues with the cached account or a local guest.
             progress?.Invoke(BootStep.Auth);
             o.Auth?.Invoke(svc);
+            // 01 section 8.1 step 2: after auth, config is re-fetched once in the background with the fresh JWT (the server
+            // applies the rollout bucket only then). It lands on a later frame; any newer bundle applies at the next boot.
+            if (o.Auth != null) r.ConfigRefresher?.RefreshNow();
             Done(BootStep.Auth);
 
             // 4. Save load, or a new profile with the profile-created grant (TUTORIAL_DIAMONDS + TUTORIAL_WEAPON_ID, tutorial step 0).
@@ -187,7 +217,7 @@ namespace HeroCat.Runtime.Boot
             }
             r.Sim = new Simulation(state, r.Content);
             r.Bus = new EventBus();
-            r.Runner = new SessionRunner(r.Sim, svc, r.Bus, o.CommandLog, o.Runner ?? new SessionRunnerOptions());
+            r.Runner = new SessionRunner(r.Sim, svc, r.Bus, o.CommandLog, o.Runner ?? new SessionRunnerOptions()) { Config = r.ConfigRefresher };
             if (!(analytics is NullAnalytics))   // before Start, so the first rollover's LOGIN row (and day_rollover) is counted
             {
                 r.CurrencyAnalytics = new CurrencyAnalytics(r.Bus, analytics, () => r.Sim.State, r.Content.Constants.TickHz);
@@ -220,6 +250,22 @@ namespace HeroCat.Runtime.Boot
             var pending = state.Offline.Pending;   // 02 section 14.3: the stage is the envelope's
             analytics.Track(new AnalyticsEvents.SessionStart(pending?.ElapsedSec ?? 0, pending?.CreditedSec ?? 0, ColdBoot: true, bootMs));
             return r;
+        }
+
+        /// <summary>Boot step 2's fetch, bounded by CONFIG_FETCH_TIMEOUT_S whatever the service does.</summary>
+        static ClientConfig FetchConfig(IConfigService config)
+        {
+            if (config == null) return null;
+            try
+            {
+                var t = config.FetchAsync();
+                if (t.Wait(TimeSpan.FromSeconds(RuntimeConfig.CONFIG_FETCH_TIMEOUT_S))) return t.Result ?? config.Current;
+            }
+            catch (AggregateException)
+            {
+                // the contract says FetchAsync never throws; a broken one degrades like a timeout
+            }
+            return config.Current;
         }
 
         static BootResult Fail(BootResult r, BootOutcome outcome, string code, BootOptions o, long now)

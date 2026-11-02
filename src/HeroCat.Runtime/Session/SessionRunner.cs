@@ -128,6 +128,12 @@ namespace HeroCat.Runtime.Session
         HeroCat.Runtime.Inbox.InboxFlow _inbox;
 
         /// <summary>
+        /// The config cadence of 01 section 8.12 (issue #144), set by BootFlow: updated every frame and told about resumes.
+        /// Null runs no refresh (tests that build a runner by hand).
+        /// </summary>
+        public HeroCat.Runtime.Services.ConfigRefresher Config { get; set; }
+
+        /// <summary>
         /// A manual tick switch (debug and tests): false runs no ticks and accumulates no time; commands, clock syncs,
         /// events and saves continue. The offline reward needs no toggle: see <see cref="TicksHeldForOfflineReward"/>.
         /// </summary>
@@ -207,6 +213,7 @@ namespace HeroCat.Runtime.Session
             HandleLandedClockSyncs();
             // 02 section 11.1: CLOCK_RESYNC_SEC of foreground time without an observation fires a /time sync (issue #149).
             if (_resync != null && _resync.ResyncDue) _ = _resync.SyncAsync();
+            Config?.Update();   // CONFIG_REFRESH_S / MAINT_POLL_S re-fetch; a landed answer swaps the kill switches (8.12)
 
             long mono = _mono.Ticks;
             double dt = (mono - _lastMono) / (double)_mono.Frequency;
@@ -291,6 +298,7 @@ namespace HeroCat.Runtime.Session
             _accTicks = 0;
             _summons?.OnResume();
             SyncAndCatchUp();
+            Config?.OnResume();   // 01 section 8.12 step 1: config is re-fetched on every resume
         }
 
         public void OnQuit()

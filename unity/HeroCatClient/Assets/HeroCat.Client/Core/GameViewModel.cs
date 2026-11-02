@@ -59,7 +59,10 @@ namespace HeroCat.Client.Core
             _now = options.Now ?? (() => sw.Elapsed.TotalSeconds);
 
             Router = new ScreenRouter();
-            Context = new VmContext(_sim.Db, Localizer, this, Toasts, Cues, Prefs, Router, _now);
+            Context = new VmContext(_sim.Db, Localizer, this, Toasts, Cues, Prefs, Router, _now)
+            {
+                Flags = () => _runner.Services.Config?.Flags,
+            };
             Main = new MainVm(Context);
             Hero = new HeroVm(Context);
             Weapons = new WeaponsVm(Context);

@@ -929,6 +929,8 @@ sequenceDiagram
 4. Rollout buckets are computed by the server only (issue #31): `GET /config` returns the version for the caller's bucket when the request carries a valid JWT, and the non-rollout default otherwise. The client never hashes `playerId`; `rolloutPct` and `inBucket` in the response are informational. A guest with `playerId = null` gets the default until its first auth. `maintenance: {active, message, until}` blocks at boot and shows a banner mid-session with a countdown; at `until` the client re-fetches config.
 5. Server-side minimum content version per client version (09) means an old client is never handed a bundle it cannot parse.
 
+As built (issue #144): `RemoteConfigService` (HeroCat.Remote) is the `ConfigClient`: one `GET /config` attempt, never retried, bounded by `CONFIG_FETCH_TIMEOUT_S` (and `BootFlow` waits no longer than that whatever the service does); a good answer is cached under `persistentDataPath/config/` with its `serverTime`, and the cache counts as fresh while `|now - fetchedAt| < CONFIG_CACHE_MAX_AGE_S`. Only a live answer blocks boot for maintenance; a cached `maintenance.active` does not (offline play continues through a window, 08 section 8.4), while a cached `minClientVersion` still gates. `ConfigRefresher` (Runtime) runs the cadence from `SessionRunner.OnFrame`/`OnResume`: every `CONFIG_REFRESH_S`, every resume, every `MAINT_POLL_S` while maintenance is active and once at `until`; the maintenance banner shows during the window and from `MAINT_ANNOUNCE_S` before an announced one. `ContentUpdater` (Runtime) validates a downloaded bundle (manifest, per-table sha256, `E903`, `ContentDb.Build`) on the thread pool over the `IContentStaging` seam whose CDN implementation is issue #212, discards a failing one (not re-downloaded that session) and treats a bundle as hot only when its manifest sets `hot_apply` and its tables differ from the running set's only in the four allowlist tables; the hot tables reach the client as a `HotContentSet` beside the sim's `ContentDb`. A kill-switched banner refuses in `SummonFlow` before any intent is saved (`SummonError.Disabled`) and its buttons show `err.summon_disabled.title`.
+
 ### 8.13 Logout and account switch
 
 ```mermaid
@@ -1018,6 +1020,7 @@ Engineering constants, code-resident in `HeroCat.Runtime.RuntimeConfig` (not bal
 | `DUNGEON_SEED_TTL_S` | 600 | S | 8.8 |
 | `RECEIPT_RETRY_S` | 60 | S | 8.9 |
 | `MAINT_POLL_S` | 60 | S | 7 |
+| `MAINT_ANNOUNCE_S` | 3600 | S | 8.12 (08 section 8.4's "banner 1 h before") |
 | `LOGOUT_UPLOAD_TIMEOUT_S` | 10 | S | 8.13 |
 | `ARCHIVE_KEEP_DAYS` | 30 | S | 8.13 |
 | `WEEK_EPOCH_OFFSET` | `4 * DAY_SECONDS` | S | 8.11 (06 owns the week-start decision) |
