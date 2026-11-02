@@ -8,7 +8,8 @@ namespace HeroCat.Server.Pipeline;
 /// <summary>
 /// The OpenAPI document generated from the controllers (specs/08 acceptance 23; the contract test compares it with the
 /// spec, and specs/10's compatibility test reads it). Every operation carries its auth policy as <c>x-herocat-auth</c>,
-/// its rate limits as <c>x-herocat-rate-limits</c> (<c>5/60s</c>), and the error body as its <c>default</c> response.
+/// its rate limits as <c>x-herocat-rate-limits</c> (<c>5/60s</c>), whether it is idempotent by <c>X-Request-Id</c> as
+/// <c>x-herocat-idempotent</c>, and the error body as its <c>default</c> response.
 /// Served at <see cref="DocumentPath"/> in Development only.
 /// </summary>
 public static class OpenApi
@@ -17,6 +18,7 @@ public static class OpenApi
     public const string DocumentPath = "/openapi/v1.json";
     public const string AuthExtension = "x-herocat-auth";
     public const string RateLimitsExtension = "x-herocat-rate-limits";
+    public const string IdempotentExtension = "x-herocat-idempotent";
 
     public static IServiceCollection AddHeroCatOpenApi(this IServiceCollection services)
     {
@@ -46,6 +48,7 @@ public static class OpenApi
             foreach (var r in attrs.OfType<RateLimitAttribute>().Select(a => a.Rule).Distinct())
                 limits.Add(new OpenApiString(r.ToString()));
             operation.Extensions[RateLimitsExtension] = limits;
+            operation.Extensions[IdempotentExtension] = new OpenApiBoolean(attrs.OfType<IdempotentAttribute>().Any());
 
             var error = context.SchemaGenerator.GenerateSchema(typeof(ErrorBody), context.SchemaRepository);
             operation.Responses["default"] = new OpenApiResponse
