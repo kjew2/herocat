@@ -214,7 +214,7 @@ Content bundles are **not** served by the API; `config.content.url` points to th
 
 ### 3.5 Analytics events
 
-The backend half of 02 section 14 (00 section 3: economy events go to our own `events` table so they join `purchases` and `saves`; issue #209). The client's uploader sends only the economy events (02 section 14.1, `AnalyticsNames.Economy`); Firebase gets every event.
+The backend half of 02 section 14 (00 section 3: economy events go to our own `events` table so they join `purchases` and `saves`; issue #209). The client's uploader sends only the economy events (02 section 14.1, `AnalyticsNames.Economy`); Firebase gets every event. The client side as built (`RemoteAnalyticsUploader`, issue #297: batching, retry and drop rules, upload points, consent and age) is 02 section 14.2 items 5-8.
 
 **`POST /analytics/events`** -- `jwt` -- idempotent -- 60/min. Body: up to `ANALYTICS_BATCH_MAX` queued lines, oldest first, each exactly as 02 section 14.1 queues it (`{"name", "eventId", <envelope>, "props"}`); `X-Request-Id` is the batch id of 02 section 14.2.
 

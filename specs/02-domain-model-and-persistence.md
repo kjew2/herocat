@@ -47,6 +47,7 @@ Engineering constants in `HeroCat.Runtime.SaveConfig` (code, not `ContentDb`; mi
 | `RETENTION_INACTIVE_DAYS` | 730 | S | Inactive accounts purged after 2 years. |
 | `ANALYTICS_BATCH_MAX` | 100 | I | Events per upload batch. |
 | `ANALYTICS_QUEUE_MAX` | 10000 | I | Offline queue cap, oldest dropped. |
+| `ANALYTICS_UPLOAD_SEC` | 60 | S | Foreground seconds between interval uploads of the analytics queue (14.2); pause and quit also upload. |
 | `PENDING_STALE_DAYS` | 7 | S | `Pending.Summon` / `Pending.Dungeon` older than this is cleared on load (6.4 P17). |
 | `SAVE_HISTORY_KEEP` | 10 | S | Server-side blobs kept per player for support rollback (9.2, 13). |
 | `DUNGEON_RECENT_RUNS_MAX` | 30 | S | `Dungeons.RecentRuns` length (issue #52). Covers a day of seeds (`DUNGEON_SEEDS_PER_DAY` 10 x 3 kinds, 08) between uploads. A sim constant (`HeroCat.Sim`), since the run-end code trims the list. |
@@ -1350,14 +1351,18 @@ Names snake_case; properties camelCase. The sink drops an event whose name is no
 
 ### 14.2 Offline queue
 
-The sink enqueues on the main thread and flushes on the thread pool (01 threading table). Pending events persist to `analytics/queue.ndjson` (8.4; excluded from OS backup) so they survive a kill while offline. Uploads go in batches of at most `ANALYTICS_BATCH_MAX` events; `OnPause` and `OnQuit` flush (01). The queue holds at most `ANALYTICS_QUEUE_MAX` events; past that the oldest are dropped.
+The sink enqueues on the main thread and flushes on the thread pool (01 threading table). Pending events persist to `analytics/queue.ndjson` (8.4; excluded from OS backup) so they survive a kill while offline. Uploads go in batches of at most `ANALYTICS_BATCH_MAX` events; `OnPause` and `OnQuit` flush (01), and the queue also uploads every `ANALYTICS_UPLOAD_SEC` of foreground time. The queue holds at most `ANALYTICS_QUEUE_MAX` events; past that the oldest are dropped.
 
 As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
 
 1. The file is one JSON event per line (14.1), appended per event. It may hold up to `2 * ANALYTICS_QUEUE_MAX` lines between compactions; it is rewritten (temp file, then rename) after each accepted batch and when an overflow finds it that long. A load keeps the newest `ANALYTICS_QUEUE_MAX` lines and skips a line that does not parse (a torn last line after a kill). A file error never throws: the events stay in memory.
 2. A flush first raises the sink's flush hook, so in-memory aggregates (06 section 13's `KILL`/`BOSS` window) reach the queue, then uploads on the thread pool, oldest first. Each batch's `X-Request-Id` is the first 32 hex of `sha256` of its events' `eventId`s, so a retry of the same events reuses it and a different set never does.
-3. An upload outcome is accepted (the events leave the queue), retry (offline, timeout, 5xx, 429, or the uploader threw: the flush stops and the next flush retries the same batch) or rejected (a non-retryable 4xx: the batch is dropped so it cannot block the queue). The remote uploader (Firebase for every event, the backend's `POST /analytics/events` of 08 section 3.5 for the economy ones; issue #209) waits on `ApiClient` (issue #143); a sink with no uploader keeps the events on disk. The backend answers `200` with per-event refusals (accepted), or `400` for a malformed batch (rejected).
+3. An upload outcome is accepted (the events leave the queue), retry (offline, timeout, 5xx, 429, or the uploader threw: the flush stops and the next flush retries the same batch) or rejected (a non-retryable 4xx: the batch is dropped so it cannot block the queue). A sink with no uploader keeps the events on disk. The backend answers `200` with per-event refusals (accepted), or `400` for a malformed batch (rejected).
 4. A Local build without a backend uses `NullAnalytics` and writes no queue file (01 section 1.2); bots and tests use `MemoryAnalytics` (no envelope, no files).
+5. The backend leg is `HeroCat.Remote.Services.RemoteAnalyticsUploader` over `ApiClient` (issue #297): one `POST /analytics/events` (08 section 3.5) per batch, `X-Request-Id` = the batch id of item 2, carrying the batch's economy events (14.1) byte for byte as queued, oldest first. Any `2xx` is accepted and the response's per-event `rejected` rows are final (counted, never resent). Offline, timeout, `5xx`, `408`/`425`/`429`, `409` (`IDEMPOTENCY_IN_FLIGHT`), `401`/`403` and `426` are retry, after the ApiClient's own 01 section 5.2 backoff; a client with credentials but no access token (signed out) sends nothing and retries. Any other `4xx` is rejected. Lines that are not economy events, or do not parse, are not sent and leave the queue with their batch; a batch without an economy event sends nothing. The Firebase leg, which gets every event, is not built yet (TODO(batch6-gap-1)), so a Remote build today records only the backend's economy events.
+6. Consent and age (08 sections 10.1, 10.2) do not gate the backend leg: economy events are recorded for every player (legitimate interest), with the server stamping `age_gate` from the token's `age` claim. Advertising-id props (`advertisingId`, `adId`, `idfa`, `idfv`, `gaid`, `aaid`) are removed from a line before it is sent, for every player. Firebase's `analytics_storage = denied` mode for `ageGate = 1` and the advertising consent belong to the Firebase leg.
+7. Uploads run on `OnPause` and `OnQuit` (a flush: the flush hook of item 2, then the upload) and every `ANALYTICS_UPLOAD_SEC` of foreground time (`SessionRunner`, through `IAnalyticsUpload.Upload`: the upload alone, without the flush hook, so 06 section 13's aggregation windows close only on their own clock, pause and quit). Background time does not count toward the interval.
+8. Composition: `RemoteGameServices.Wire` builds the sink (envelope, the queue under `{dataDir}/analytics`, the backend uploader) when `ServicesOptions.AnalyticsSalt` is set (the environment's `playerIdHash` salt, equal to the server's `HeroCat:Analytics:PlayerIdSalt`) and no `Analytics` is passed; `ServicesOptions.SessionId` is the envelope's `sessionId`. Without a salt, analytics stays `NullAnalytics`.
 
 ### 14.3 Events owned here (session, save health, cloud, clock, client performance)
 
@@ -1443,6 +1448,7 @@ As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
 | `RETENTION_INACTIVE_DAYS` | 730 | S | 13 |
 | `ANALYTICS_BATCH_MAX` | 100 | I | 14 |
 | `ANALYTICS_QUEUE_MAX` | 10000 | I | 14 |
+| `ANALYTICS_UPLOAD_SEC` | 60 | S | 14.2 |
 | `DUNGEON_RECENT_RUNS_MAX` | 30 | S | 2, 3.2 |
 | `progressScore` weights | 100 / 10 / 1 / 5 / 50 / 2000 / 20 | S | 9.1 |
 

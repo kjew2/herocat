@@ -99,7 +99,7 @@ public static GameServices Build(BackendMode mode, ServicesOptions o)   // o: da
         Receipts = new ReceiptClient(api),
         Config   = new ConfigClient(api, cacheDir),
         Dungeons = new DungeonSeedClient(api),                       // POST /dungeon/seed
-        Analytics = new AnalyticsSinks(api),                         // Firebase + backend economy events (08); flushed in 3.1
+        Analytics = new AnalyticsSinks(api),                         // Firebase + backend economy events (08); flushed in 3.1 and 3.3
     };
 }
 ```
@@ -327,6 +327,8 @@ public sealed class SessionRunner
         bus.Publish(sim.DrainEvents());
 
         if (dirty && (mono - lastSaveMono) / (double)MonoClock.Frequency >= AUTOSAVE_INTERVAL_SEC) SaveNow(SaveTrigger.Periodic);
+        if ((mono - lastUploadMono) / (double)MonoClock.Frequency >= ANALYTICS_UPLOAD_SEC)   // 02 section 14.2: upload only,
+        {   (svc.Analytics as IAnalyticsUpload)?.Upload(); lastUploadMono = mono; }        // no flush hook (06 section 13 windows stay open)
     }
 
     public void OnPause()  { SaveNow(SaveTrigger.Pause); svc.Analytics.Flush(); }
@@ -399,7 +401,7 @@ The client requests `Screen.sleepTimeout = NeverSleep` while on `SCR_MAIN` (idle
 | HTTP (`ApiClient`) | `async`/`await` on the thread pool via `HttpClient`; continuations marshalled back to main thread by Unity's `SynchronizationContext` | IO never blocks a frame. |
 | Cloud save upload | Thread pool; reads an already-encoded `byte[]`, never `GameState` | No shared mutable state crosses threads. |
 | Content bundle download and hash check | Thread pool, then an atomic swap on main thread at a safe point (section 8.12) | |
-| Analytics sink | Main thread enqueue, thread-pool flush | |
+| Analytics sink | Main thread enqueue, thread-pool flush and upload (`OnPause`, `OnQuit`, every `ANALYTICS_UPLOAD_SEC` of foreground time; 02 section 14.2) | |
 | Bot harness | One thread per bot, each with its own `Simulation` and `FakeClock` | Sim instances share nothing but the immutable `ContentDb`. |
 
 Rule: nothing off the main thread holds a reference to `GameState` or `Simulation`. Background work receives copies (`byte[]`, records) and returns results that are turned into commands on the main thread.

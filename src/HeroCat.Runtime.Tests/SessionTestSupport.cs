@@ -22,11 +22,15 @@ namespace HeroCat.Runtime.Tests
         public HeroCat.Sim.Simulation Sim => Boot.Sim;
         public EventBus Bus => Boot.Bus;
 
-        /// <summary>Boots (load or create, sync, catch-up, save). Asserts the boot is Ready unless <paramref name="expectReady"/> is false.</summary>
+        /// <summary>
+        /// Boots (load or create, sync, catch-up, save). Asserts the boot is Ready unless <paramref name="expectReady"/> is false.
+        /// <paramref name="sink"/> replaces <see cref="Analytics"/> as the services' analytics (which then stays unused).
+        /// </summary>
         public static TestSession Open(FakeClock clock = null, ISaveSlotStore store = null, MemoryAnalytics analytics = null,
                                        Action<SessionRunnerOptions> configure = null, bool expectReady = true,
                                        INetTransport network = null, IClock clockOverride = null, Guid? installId = null,
-                                       FakeMonoClock mono = null, HeroCat.Sim.Content.ContentDb content = null)
+                                       FakeMonoClock mono = null, HeroCat.Sim.Content.ContentDb content = null,
+                                       IAnalytics sink = null)
         {
             var t = new TestSession
             {
@@ -43,7 +47,7 @@ namespace HeroCat.Runtime.Tests
                 Content = new Func<HeroCat.Sim.Content.ContentDb>[] { () => content ?? TestContent.Db },
                 Services = (db, state) => GameServices.Build(BackendMode.Local, new ServicesOptions
                 {
-                    Clock = clockOverride ?? t.Clock, Slots = t.Store, Analytics = t.Analytics, State = state, Content = db,
+                    Clock = clockOverride ?? t.Clock, Slots = t.Store, Analytics = sink ?? t.Analytics, State = state, Content = db,
                     Network = network, InstallId = installId ?? TestContent.Device,
                 }),
                 NewProfileRngRoot = TestContent.Root,

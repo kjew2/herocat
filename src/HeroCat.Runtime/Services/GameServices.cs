@@ -36,6 +36,17 @@ namespace HeroCat.Runtime.Services
 
         public IAnalytics Analytics { get; set; }
 
+        /// <summary>
+        /// Remote mode: the per-environment salt of 02 section 14.1's <c>playerIdHash</c> (the server's
+        /// <c>HeroCat:Analytics:PlayerIdSalt</c>). With it and no <see cref="Analytics"/>, RemoteGameServices.Wire builds the
+        /// AnalyticsSink over <c>{DataDir}/analytics/queue.ndjson</c> and the backend uploader (issue #297); without it
+        /// analytics stays <see cref="NullAnalytics"/>. Local mode ignores it.
+        /// </summary>
+        public string AnalyticsSalt { get; set; }
+
+        /// <summary>The envelope's <c>sessionId</c> (02 section 14.1; the client passes BootOptions.SessionId). Empty: a fresh one.</summary>
+        public Guid SessionId { get; set; }
+
         /// <summary>This install's id (02 section 8.4). Guid.Empty: the persisted install_id under DataDir, else a fresh one.</summary>
         public Guid InstallId { get; set; }
 
@@ -62,9 +73,10 @@ namespace HeroCat.Runtime.Services
 
         /// <summary>
         /// Remote mode wiring, supplied by HeroCat.Remote (Runtime cannot reference it): RemoteGameServices.Wire builds the
-        /// ApiClient (issue #143), ServerClock(api), the cloud slots and the ConfigClient (#144); the other ApiClient-based
-        /// clients of 01 section 1.2 land with their issues (SummonClient #145, DungeonSeedClient #146, receipts and inbox #147,
-        /// AuthClient #148 (GameServices.Account), CloudSaveClient #152, analytics uploader #209).
+        /// ApiClient (issue #143), ServerClock(api), the cloud slots, the ConfigClient (#144), the inbox (#176), the AuthClient
+        /// (#148, GameServices.Account) and the analytics sink with its backend uploader (#297, when
+        /// <see cref="AnalyticsSalt"/> is set); the other ApiClient-based clients of 01 section 1.2 land with their issues
+        /// (SummonClient #145, DungeonSeedClient #146, ReceiptClient #147, CloudSaveClient #152).
         /// </summary>
         public Func<ServicesOptions, GameServices> Remote { get; set; }
     }
