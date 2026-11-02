@@ -602,7 +602,7 @@ Gold, Fish Coins, Rock Candy, EXP, any collectible, pity progress, banner level,
 
 ## 9. Inbox (MVP)
 
-Server-authored grants awaiting claim. The client never creates inbox items; it lists and claims (08 `GET /inbox`, `POST /inbox/{id}/claim` with `requestId`).
+Server-authored grants awaiting claim. The client never creates inbox items; it lists and claims (08 `GET /inbox`, `POST /inbox/claim` and `POST /inbox/claim-all` with `requestId`). The JSON below is the client model; the wire format is 08 section 3.2's (`inboxItemId`, a lowercase `kind` for `type`, `params` for `bodyArgs`, grant lines `{ "kind": "currency", "id": "DIAMOND", "amount": 2400 }`).
 
 ```json
 {
@@ -626,6 +626,8 @@ Rules:
 4. Grants may contain any currency including Rock Candy and Fish Coins (compensation), because the Inbox is not a sale.
 5. Badge: count of available unclaimed items, shown on the HUD inbox icon (07).
 6. Scheduled rows: `GET /inbox` hides rows whose `availableAt` is in the future (08). The client shows at most one upcoming portion per package (07), so a monthly card does not fill the list (issue #51).
+
+As built (issue #176): Runtime's `InboxFlow` runs `ClaimInbox` / `ClaimAllInbox` over `IInboxService` and ends each confirmed row with `ApplyInboxGrant`. The grant's reason is the server's `reason`, else the type's: `IAP` and `PACKAGE_DAILY` are `IAP`, `REFUND` is `REFUND`, `ADMIN` is `ADMIN`, and `MAIL`, `COMPENSATION` and `COUPON` are `MAIL`. `ApplyInboxGrant` rejects, mutating nothing: `BadArgument`/`INBOX_BAD_GRANT` (no id, a reason outside those four, or a line that is not a known currency with a positive amount), `NotAvailable`/`INBOX_ITEM_GRANT_UNSUPPORTED` (an item line, issue #271), and `AlreadyClaimed`/`INBOX_ALREADY_APPLIED` (the id is already in `Inbox.ClaimedIds`). The flow does not issue a grant whose id is already there, so a replay or a reconciled `INBOX_ALREADY_CLAIMED` credits nothing twice. A grant with no lines (a refund notice) only records its id. Rows before `availableAt` or at or past `expiresAt` are neither listed as claimable nor counted in the badge. A network failure is retried with the same `requestId` while the row shows "Retrying..." (rule 12.8). After 10 s the claim fails as retryable, and the player's retry replays the same `requestId`.
 
 ## 10. Rewarded Ads and Events (P1 outline)
 

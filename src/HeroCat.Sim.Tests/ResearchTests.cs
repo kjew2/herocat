@@ -275,5 +275,125 @@ namespace HeroCat.Sim.Tests
             Assert.That(replay.State.Research.Level, Is.EqualTo(sim.State.Research.Level));
             Assert.That(replay.State.Wallet.FishCoin, Is.EqualTo(sim.State.Wallet.FishCoin));
         }
+    
+
+        // ------------------------------------------------------------------------------------- Fish Board effects (#167)
+
+        static void SetBoard(Simulation sim, params int[] levels)
+        {
+            var f = sim.State.Fish;
+            Array.Clear(f.Cells, 0, f.Cells.Length);
+            for (int i = 0; i < levels.Length; i++) f.Cells[i] = levels[i];
+            foreach (int n in levels)
+                if (n > 0 && f.DiscoveredLevels.Add(n) && n > f.HighestLevel) f.HighestLevel = n;
+        }
+
+        [Test]
+        public void Board_TankCapAndRefill_FollowResearch()   // #167 acceptance 1, on the live board
+        {
+            var sim = Sim();
+            for (int k = 0; k <= 10; k++)
+            {
+                SetLevel(sim, "res_tank_refill", k);
+                SetLevel(sim, "res_tank_cap", k);
+                Assert.That(sim.FishTankRefillTicks, Is.EqualTo(60 - 4 * k), "level " + k);
+                Assert.That(sim.FishTankRefillTicks, Is.GreaterThanOrEqualTo(20));
+                Assert.That(sim.FishTankCap, Is.EqualTo(10 + 5 * k));
+                Assert.That(Fish.FishBoard.TankRefillSeconds(sim.State, Mvp), Is.EqualTo((60 - 4 * k) / 10.0).Within(1e-12));
+            }
+
+            // At RES_TANK_REFILL 10 an empty tank gains one fish every 20 ticks, up to 60.
+            sim.State.Fish.TankCount = 0; sim.State.Fish.TankRefillTick = 0;
+            sim.Advance(19);
+            Assert.That(sim.State.Fish.TankCount, Is.EqualTo(0));
+            sim.Advance(1);
+            Assert.That((sim.State.Fish.TankCount, sim.State.Fish.TankRefillTick), Is.EqualTo((1, 0)));
+            Assert.That(sim.GetSnapshot().TankCap, Is.EqualTo(60));
+            Assert.That(Fish.FishBoard.CatchUpTank(sim.State, Mvp, 20 * 100), Is.EqualTo((59, 0)), "catch-up uses the same cap and period");
+        }
+
+        [Test]
+        public void TankCap_RaisedWhileFull_ResumesRefillOnTheNextTick()   // #167 acceptance 3
+        {
+            var sim = Sim(fishCoin: 200);
+            var f = sim.State.Fish;
+            Assert.That(f.TankCount, Is.EqualTo(10));
+            sim.Advance(100);
+            Assert.That((f.TankCount, f.TankRefillTick), Is.EqualTo((10, 0)), "full at cap 10");
+            Assert.That(sim.Apply(new Research("res_tank_cap")).Ok, Is.True);
+            Assert.That(sim.FishTankCap, Is.EqualTo(15));
+            Assert.That(Fish.FishBoard.FirstViolation(sim.State, Mvp), Is.Null);
+            sim.Advance(1);
+            Assert.That(f.TankRefillTick, Is.EqualTo(1), "refill resumes on the first tick after the purchase");
+            sim.Advance(59);
+            Assert.That((f.TankCount, f.TankRefillTick), Is.EqualTo((11, 0)));
+        }
+
+        [Test]
+        public void TankRefill_ShorterPeriod_ClampsProgress_FishOnTheNextTick()   // decision in #167: same repair as 02 P9b
+        {
+            var sim = Sim(fishCoin: 300);
+            var f = sim.State.Fish;
+            f.TankCount = 3; f.TankRefillTick = 58;
+            Assert.That(sim.Apply(new Research("res_tank_refill")).Ok, Is.True);
+            Assert.That(sim.FishTankRefillTicks, Is.EqualTo(56));
+            Assert.That(f.TankRefillTick, Is.EqualTo(55));
+            Assert.That(Fish.FishBoard.FirstViolation(sim.State, Mvp), Is.Null);
+            sim.Advance(1);
+            Assert.That((f.TankCount, f.TankRefillTick), Is.EqualTo((4, 0)));
+        }
+
+        [Test]
+        public void FishCap1_TwoCapFishMergeToLevel11_DiscoveryOnce_NoRetroactiveDiscovery()   // #167 acceptance 2, 05 section 11
+        {
+            var sim = Sim(fishCoin: 2500);
+            var f = sim.State.Fish;
+            for (int n = 1; n <= 10; n++) f.DiscoveredLevels.Add(n);
+            SetBoard(sim, 10, 10, 10, 10);
+            Assert.That(sim.FishMaxLvl, Is.EqualTo(10));
+            Assert.That(sim.Apply(new MergeFish(0, 1)).Code, Is.EqualTo(RejectCode.Capped));
+            Assert.That(sim.FishMergeablePairs, Is.EqualTo(0));
+            sim.DrainEvents();
+
+            Assert.That(sim.Apply(new Research("res_fish_cap")).Ok, Is.True);
+            Assert.That(sim.State.Wallet.FishCoin, Is.EqualTo(0));
+            Assert.That(sim.FishMaxLvl, Is.EqualTo(11));
+            Assert.That(sim.DrainEvents().OfType<FishDiscovered>(), Is.Empty, "buying the level discovers nothing");
+            Assert.That(f.DiscoveredLevels.Contains(11), Is.False);
+            Assert.That(sim.FishMergeablePairs, Is.EqualTo(2));
+
+            Assert.That(sim.Apply(new MergeFish(0, 1)).Ok, Is.True);
+            var ev = sim.DrainEvents();
+            var merged = ev.OfType<FishMerged>().Single();
+            Assert.That((merged.NewLevel, merged.Discovered, merged.Coins), Is.EqualTo((11, true, 10_240.0)));
+            Assert.That(ev.OfType<FishDiscovered>().Single().Level, Is.EqualTo(11));
+            Assert.That(sim.State.Wallet.FishCoin, Is.EqualTo(10_240));
+
+            // MergeAll picks up the other pair of old cap fish; level 11 is now known, so it pays merge coins only.
+            Assert.That(sim.Apply(new MergeAll()).Ok, Is.True);
+            ev = sim.DrainEvents();
+            Assert.That(ev.OfType<FishDiscovered>(), Is.Empty);
+            var second = ev.OfType<FishMerged>().Single();
+            Assert.That((second.NewLevel, second.Discovered), Is.EqualTo((11, false)));
+            Assert.That(sim.State.Wallet.FishCoin, Is.EqualTo(10_240 + Mvp.FishLevels[10].MergeCoins).Within(1e-9));
+            Assert.That(f.Cells.Count(c => c == 11), Is.EqualTo(2));
+            Assert.That(sim.Apply(new MergeFish(1, 3)).Code, Is.EqualTo(RejectCode.Capped), "11 is the new cap");
+        }
+
+        [Test]
+        public void FishCapAndTankNodes_LeaveDpsUnchanged()   // #167 acceptance 4
+        {
+            var sim = Sim(fishCoin: 1e6);
+            SetBoard(sim, 10, 10, 9);
+            sim.Query.MarkDirty();
+            double dps = sim.Query.RatedDps;
+            foreach (var id in new[] { "res_fish_cap", "res_tank_cap", "res_tank_refill" })
+            {
+                Assert.That(sim.Apply(new Research(id)).Ok, Is.True, id);
+                Assert.That(sim.Query.RatedDps, Is.EqualTo(dps), id + " leaves DPS unchanged");
+            }
+            Assert.That(sim.Apply(new Research("res_atk")).Ok, Is.True);
+            Assert.That(sim.Query.RatedDps, Is.GreaterThan(dps), "a DPS node does change it");
+        }
     }
 }

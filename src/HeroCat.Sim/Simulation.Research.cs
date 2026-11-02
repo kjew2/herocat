@@ -30,6 +30,10 @@ namespace HeroCat.Sim
                 !Ledger.Apply(State, new CurrencyDelta(Currency.FISH_COIN, -cost), CurrencyReason.RESEARCH, this))
                 return ApplyResult.Reject(RejectCode.CannotAfford, CombatRejectReasons.NOT_ENOUGH_FISH_COIN);
             State.Research.Level[node.Id] = level + 1;
+            // A shorter TankRefillTicks can leave the refill progress at or past the new period: clamp it to the last tick
+            // so the fish lands on the next tick, the same repair a loaded save gets (02 P9b, 05 section 3; issue #167).
+            int refill = Fish.FishBoard.TankRefillTicks(State, Db);
+            if (State.Fish.TankRefillTick > refill - 1) State.Fish.TankRefillTick = refill - 1;
             MarkDpsDirty();
             Emit(new ResearchLeveled(node.Id, level + 1, cost));
             // No quest goal reads Research (06 section 5); an achievement ladder, if 06 adds one, hooks here (#171).
@@ -103,7 +107,7 @@ namespace HeroCat.Sim
 
         /// <summary>
         /// TankCap with Research: TANK_CAP0 + RES_TANK_CAP_PER_LVL * research[res_tank_cap] (05 section 3; 10..60 with the
-        /// shipped rows). The Fish Board does not read this yet (TODO(#167)); FishBoard.TankCap is still TANK_CAP0.
+        /// shipped rows). FishBoard.TankCap reads it (issue #167).
         /// </summary>
         public static int TankCap(ContentDb db, GameState s) =>
             db.Tank.Cap0 + (int)Math.Round(EffectTotal(db, s, ResearchEffect.TANK_CAP), MidpointRounding.AwayFromZero);
@@ -111,7 +115,7 @@ namespace HeroCat.Sim
         /// <summary>
         /// TankRefillTicks with Research: round(max(TANK_REFILL_FLOOR_S, TANK_REFILL_S0 - RES_TANK_REFILL_PER_LVL * level)
         /// * TICK_HZ), half away from zero (05 section 3; 60, 56, ..., 20 ticks, never below the 2.0 s floor). The floor is
-        /// tank.refill_floor_s, which E056 keeps equal to the node's effect_floor. Not read by the board yet (TODO(#167)).
+        /// tank.refill_floor_s, which E056 keeps equal to the node's effect_floor. FishBoard reads it (issue #167).
         /// </summary>
         public static int TankRefillTicks(ContentDb db, GameState s)
         {
@@ -123,7 +127,7 @@ namespace HeroCat.Sim
 
         /// <summary>
         /// FishMaxLvl with Research: FISH_MAX_LVL0 + research[res_fish_cap], never above the fish_levels row count
-        /// (05 section 4.3, E038). Not read by the board yet (TODO(#167)).
+        /// (05 section 4.3, E038). FishBoard reads it (issue #167).
         /// </summary>
         public static int FishMaxLvl(ContentDb db, GameState s)
         {

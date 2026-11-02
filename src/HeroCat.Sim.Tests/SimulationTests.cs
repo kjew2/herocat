@@ -56,7 +56,7 @@ namespace HeroCat.Sim.Tests
             var x = TestContent.NewSim().Apply(new ApplyServerTime(-1));
             Assert.That((x.Code, x.Reason), Is.EqualTo((RejectCode.BadArgument, SimRejectReasons.BAD_SERVER_TIME)));
             var y = TestContent.NewSim().Apply(new ApplyInboxGrant(null));
-            Assert.That((y.Code, y.Reason), Is.EqualTo((RejectCode.NotAvailable, SimRejectReasons.NOT_IMPLEMENTED)));
+            Assert.That((y.Code, y.Reason), Is.EqualTo((RejectCode.BadArgument, InboxRejectReasons.INBOX_BAD_GRANT)));   // issue #176
             var z = TestContent.NewSim().Apply(new ApplySummonResult(null));
             Assert.That((z.Code, z.Reason), Is.EqualTo((RejectCode.BadArgument, CollectionRejectReasons.SUMMON_BAD_PAYLOAD)));
         }

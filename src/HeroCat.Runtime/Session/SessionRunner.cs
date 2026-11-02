@@ -123,6 +123,10 @@ namespace HeroCat.Runtime.Session
         /// <summary>The kill-safe summon flow of 01 section 8.5.1 over this runner (issue #68).</summary>
         public SummonFlow Summons => _summons ??= new SummonFlow(this);
 
+        /// <summary>The inbox list / claim flow of 01 section 8.9 step 6 over this runner (issue #176).</summary>
+        public HeroCat.Runtime.Inbox.InboxFlow Inbox => _inbox ??= new HeroCat.Runtime.Inbox.InboxFlow(this);
+        HeroCat.Runtime.Inbox.InboxFlow _inbox;
+
         /// <summary>
         /// A manual tick switch (debug and tests): false runs no ticks and accumulates no time; commands, clock syncs,
         /// events and saves continue. The offline reward needs no toggle: see <see cref="TicksHeldForOfflineReward"/>.

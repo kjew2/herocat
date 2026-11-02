@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using HeroCat.Runtime.Errors;
@@ -27,40 +28,80 @@ namespace HeroCat.Runtime.Services
     }
 
     /// <summary>
-    /// The local inbox (08 section 5.5): empty in M0, so a claim is INBOX_NOT_FOUND. Bots and debug builds can
-    /// <see cref="Add"/> rows (issue #215's spender bots). Claims are idempotent: the same requestId replays its result,
-    /// and a second claim of the same item with a new requestId is the INBOX_ALREADY_CLAIMED success-equivalent.
+    /// The local inbox (08 sections 3.2 and 12): empty in M0, so a claim is INBOX_NOT_FOUND. Bots and debug builds can
+    /// <see cref="Add"/> rows (issue #215's spender bots). It follows the server's rules: rows before availableAt or past
+    /// expiresAt are not listed, claiming one early is INBOX_NOT_AVAILABLE and a late one INBOX_EXPIRED. Claims are
+    /// idempotent: the same requestId replays its result, and a second claim of the same item with a new requestId is the
+    /// INBOX_ALREADY_CLAIMED success-equivalent carrying the original grant.
     /// </summary>
     public sealed class LocalInboxService : IInboxService
     {
-        public const string INBOX_NOT_FOUND = "INBOX_NOT_FOUND";
+        public const string INBOX_NOT_FOUND = InboxRules.INBOX_NOT_FOUND;
 
+        readonly Func<long> _now;
         readonly List<InboxItem> _items = new List<InboxItem>();
         readonly Dictionary<string, InboxClaimResult> _byRequest = new Dictionary<string, InboxClaimResult>(StringComparer.Ordinal);
+        readonly Dictionary<string, InboxClaimAllResult> _allByRequest = new Dictionary<string, InboxClaimAllResult>(StringComparer.Ordinal);
         readonly Dictionary<string, InboxGrantPayload> _claimed = new Dictionary<string, InboxGrantPayload>(StringComparer.Ordinal);
+
+        /// <param name="nowServerSeconds">Server time for availableAt / expiresAt; null treats every row as available and unexpired.</param>
+        public LocalInboxService(Func<long> nowServerSeconds = null) { _now = nowServerSeconds; }
 
         public void Add(InboxItem item) => _items.Add(item ?? throw new ArgumentNullException(nameof(item)));
 
-        public Task<IReadOnlyList<InboxItem>> ListAsync(CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlyList<InboxItem>>(_items.ToArray());
+        public Task<IReadOnlyList<InboxItem>> ListAsync(CancellationToken ct = default)
+        {
+            var list = new List<InboxItem>(_items.Count);
+            foreach (var i in _items) if (_now == null || InboxRules.IsAvailable(i, _now())) list.Add(i);
+            return Task.FromResult<IReadOnlyList<InboxItem>>(list);
+        }
 
         public Task<InboxClaimResult> ClaimAsync(string requestId, string inboxItemId, CancellationToken ct = default)
         {
             if (requestId != null && _byRequest.TryGetValue(requestId, out var replay)) return Task.FromResult(replay);
-            InboxClaimResult result;
-            if (inboxItemId != null && _claimed.TryGetValue(inboxItemId, out var grant))
-                result = new InboxClaimResult(grant, AlreadyClaimed: true);
-            else
-            {
-                int i = _items.FindIndex(x => x.Id == inboxItemId);
-                if (i < 0) throw new ServiceException(ErrorClass.Rejected, INBOX_NOT_FOUND, "inbox item " + inboxItemId + " not found", 404);
-                var item = _items[i];
-                _items.RemoveAt(i);
-                _claimed[item.Id] = item.Grant;
-                result = new InboxClaimResult(item.Grant, AlreadyClaimed: false);
-            }
+            var result = ClaimOne(inboxItemId);
             if (requestId != null) _byRequest[requestId] = result;
             return Task.FromResult(result);
+        }
+
+        public Task<InboxClaimAllResult> ClaimAllAsync(string requestId, CancellationToken ct = default)
+        {
+            if (requestId != null && _allByRequest.TryGetValue(requestId, out var replay)) return Task.FromResult(replay);
+            var rows = new List<InboxItem>();
+            foreach (var i in _items) if (_now == null || InboxRules.IsAvailable(i, _now())) rows.Add(i);
+            rows = rows.OrderBy(i => i.AvailableAtServerSeconds).Take(InboxRules.ClaimAllMax).ToList();   // stable: oldest first
+            var results = new List<InboxClaimItemResult>(rows.Count);
+            foreach (var row in rows)
+            {
+                try { results.Add(new InboxClaimItemResult(row.Id, ClaimOne(row.Id).Grant, null)); }
+                catch (ServiceException e) { results.Add(new InboxClaimItemResult(row.Id, null, e.Code)); }
+            }
+            var all = new InboxClaimAllResult(results);
+            if (requestId != null) _allByRequest[requestId] = all;
+            return Task.FromResult(all);
+        }
+
+        InboxClaimResult ClaimOne(string inboxItemId)
+        {
+            if (inboxItemId != null && _claimed.TryGetValue(inboxItemId, out var grant))
+                return new InboxClaimResult(grant, AlreadyClaimed: true);
+            int i = _items.FindIndex(x => x.Id == inboxItemId);
+            if (i < 0) throw new ServiceException(ErrorClass.Rejected, INBOX_NOT_FOUND, "inbox item " + inboxItemId + " not found", 404);
+            var item = _items[i];
+            if (_now != null)
+            {
+                long now = _now();
+                if (now < item.AvailableAtServerSeconds)
+                    throw new ServiceException(ErrorClass.Rejected, InboxRules.INBOX_NOT_AVAILABLE, "inbox item " + inboxItemId + " not available yet", 409);
+                if (now >= item.ExpiresAtServerSeconds)
+                {
+                    _items.RemoveAt(i);   // the server purges expired rows
+                    throw new ServiceException(ErrorClass.Rejected, InboxRules.INBOX_EXPIRED, "inbox item " + inboxItemId + " expired", 410);
+                }
+            }
+            _items.RemoveAt(i);
+            _claimed[item.Id] = item.Grant;
+            return new InboxClaimResult(item.Grant, AlreadyClaimed: false);
         }
     }
 
@@ -102,8 +143,8 @@ namespace HeroCat.Runtime.Services
             var lines = _catalog(request.Sku);
             if (lines == null) throw new ServiceException(ErrorClass.Rejected, "RECEIPT_INVALID", "unknown sku " + request.Sku, 400);
             string inboxId = "iap_" + (request.TransactionId ?? request.RequestId);
-            _inbox.Add(new InboxItem(inboxId, new InboxGrantPayload(inboxId, lines, CurrencyReason.IAP), long.MaxValue,
-                                     _clock.NowServerSeconds));
+            _inbox.Add(new InboxItem(inboxId, new InboxGrantPayload(inboxId, lines, CurrencyReason.IAP), InboxRules.NeverExpires,
+                                     _clock.NowServerSeconds, Type: "IAP"));
             if (request.TransactionId != null) _granted[request.TransactionId] = inboxId;
             return Task.FromResult(new ReceiptResult(ReceiptResult.GRANTED, inboxId));
         }

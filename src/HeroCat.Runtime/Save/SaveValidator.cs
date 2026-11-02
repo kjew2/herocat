@@ -310,8 +310,8 @@ namespace HeroCat.Runtime.Save
             void P9b()
             {
                 var f = s.Fish;
-                int cap = FishBoard.TankCap(s, db);                  // TODO(#167) lives there: the TANK_CAP Research term
-                int refillTicks = FishBoard.TankRefillTicks(s, db);  // TODO(#167) lives there: the TANK_REFILL Research term
+                int cap = FishBoard.TankCap(s, db);                  // with the TANK_CAP Research term (levels read clamped, P13)
+                int refillTicks = FishBoard.TankRefillTicks(s, db);  // with the TANK_REFILL Research term
                 int maxRelease = db.Tank.ReleaseLevel;  // TODO(#231): the content max of the P1 release-level upgrade
                 if (f.TankCount < 0) { f.TankCount = 0; Hit("P9b"); }
                 if (f.TankCount > cap) { f.TankCount = cap; Hit("P9b"); }

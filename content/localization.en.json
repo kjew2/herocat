@@ -803,6 +803,18 @@
       "text": "Already the highest level"
     },
     {
+      "key": "reject.inbox_already_applied",
+      "text": "Already claimed"
+    },
+    {
+      "key": "reject.inbox_bad_grant",
+      "text": "This reward could not be read"
+    },
+    {
+      "key": "reject.inbox_item_grant_unsupported",
+      "text": "Update the game to claim this reward"
+    },
+    {
       "key": "reject.invalid_count",
       "text": "Invalid amount"
     },

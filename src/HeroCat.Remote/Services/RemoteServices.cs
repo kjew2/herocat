@@ -23,7 +23,7 @@ namespace HeroCat.Remote.Services
     /// ServicesOptions.Remote because HeroCat.Runtime cannot reference this assembly. Builds the process's one
     /// <see cref="ApiClient"/>, Runtime's ServerClock over <c>GET /time</c> (which also observes every response's
     /// X-Server-Time) and the local-first cloud save; the other seams keep their local implementations until their
-    /// clients land: SummonClient #145, ConfigClient #144, DungeonSeedClient #146, ReceiptClient and inbox #147, AuthClient
+    /// clients land: SummonClient #145, ConfigClient #144, DungeonSeedClient #146, ReceiptClient #147 (the inbox is RemoteInboxService, #176), AuthClient
     /// (the <see cref="IApiCredentials"/>) #148, cloud-save metadata #152.
     /// </summary>
     public static class RemoteGameServices
@@ -58,12 +58,14 @@ namespace HeroCat.Remote.Services
             api.ServerTime = clock;                                             // every X-Server-Time (01 section 5.1)
             if (syncNow) clock.SyncAsync().GetAwaiter().GetResult();          // false offline; SessionRunner syncs again at boot
             var slots = new CloudSaveStore(o.Slots ?? new FileSaveStore(Path.Combine(o.DataDir, "saves")), client);
-            return GameServices.Build(BackendMode.Local, new ServicesOptions
+            var set = GameServices.Build(BackendMode.Local, new ServicesOptions
             {
                 DataDir = o.DataDir, Content = o.Content, State = o.State, Analytics = o.Analytics, Network = o.Network,
                 Clock = clock, Slots = slots, InstallId = installId, DeviceKey = o.DeviceKey, WrapClock = o.WrapClock,
                 DebugReceiptCatalog = o.DebugReceiptCatalog,
             });
+            // The server inbox (issue #176). A debug receipt catalog grants into the local inbox, so that build keeps it.
+            return o.DebugReceiptCatalog != null ? set : set with { Inbox = new RemoteInboxService(client) };
         }
     }
 

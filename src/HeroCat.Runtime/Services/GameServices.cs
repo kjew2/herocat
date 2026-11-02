@@ -115,7 +115,7 @@ namespace HeroCat.Runtime.Services
             var slots = options.Slots ?? (options.DataDir != null
                 ? new FileSaveStore(Path.Combine(options.DataDir, "saves"))
                 : (ISaveSlotStore)new MemorySaveStore());
-            var inbox = new LocalInboxService();
+            var inbox = new LocalInboxService(() => clock.NowServerSeconds);
             return new GameServices
             {
                 Mode = BackendMode.Local,
