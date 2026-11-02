@@ -18,6 +18,8 @@
   <ItemGroup>
     <ProjectReference Include="../HeroCat.Server/HeroCat.Server.csproj" />
     <ProjectReference Include="../HeroCat.Sim/HeroCat.Sim.csproj" />
+    <!-- Only so tests can diff the server's mirrors (analytics economy names, playerIdHash) against the client's. -->
+    <ProjectReference Include="../HeroCat.Runtime/HeroCat.Runtime.csproj" />
   </ItemGroup>
   <!-- Mirrors the server's target: the copied migration directory exists even while the set is empty. -->
   <Target Name="EnsureMigrationsDirectory" AfterTargets="Build">

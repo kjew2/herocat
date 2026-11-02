@@ -591,7 +591,7 @@ Shorter runbooks for the remaining alarm targets; same four parts, with Communic
 | `RB-REFUND` | refund spike | check for a grant bug or fraud ring by SKU and region; refund debt handling per 08 section 5.4 |
 | `RB-SAVE-CONFLICT` | save conflict rate | check a client build for upload loops or a clock issue; conflict UI fixes ship as a client patch |
 | `RB-DUPLICATE-GRANT` | duplicate grant | disable the affected route's write path via kill switch; repair ledgers from `summon_log` / `purchases`; idempotency test gap goes into the postmortem |
-| `RB-DB` | DB alarm | failover or scale per the provider; pause worker jobs; check long queries from the last deploy |
+| `RB-DB` | DB alarm | failover or scale per the provider; pause worker jobs; check long queries from the last deploy; for a partition horizon alarm, check the worker's partition job log and run `select ensure_partitions(...)` by hand with 02 section 12's horizons |
 | `RB-REDIS` | Redis alarm | scale or fail over; check whether evictions dropped idempotency keys (00 section 8 item 13) during the window |
 | `RB-WORKER` | worker alarm | restart the job; mail blasts resume idempotently on `(mail_blast_id, player_id)` |
 | `RB-SECRETS` | certificate / key expiry | rotate the TLS cert, Apple `.p8` or JWT key on stage first, then prod |
@@ -634,7 +634,7 @@ Alarms (PagerDuty P1 pages the on-call; P2 is a channel message and a ticket nex
 | Boot time | `boot_ms` p95 > 6 s on the mid device class over 1 h | P2 | `RB-CONFIG` |
 | CDN | 4xx on `content/*` > 0.5% (a missing file after a publish) | P1 | `RB-CONFIG` |
 | Config | active config changed (notify only); content sha256 mismatch at activation (P1) | - / P1 | `RB-CONFIG` |
-| DB | connections > 80% of pool or pool exhaustion events > 0, replication lag > 10 s, CPU > 80% over 10 min, disk > 80% | P1 | `RB-DB` |
+| DB | connections > 80% of pool or pool exhaustion events > 0, replication lag > 10 s, CPU > 80% over 10 min, disk > 80%, `db_partition_horizon_days` below one partition period (a month for `diamond_ledger` and `summon_log`, a day for `events`; issue #262) | P1 | `RB-DB` |
 | Redis | memory > 80%, evictions > 0 (P2); primary failover (P1) | P2 / P1 | `RB-REDIS` |
 | Worker | any job failing 3 consecutive runs; mail blast `sent_count` stalled 15 min | P2 | `RB-WORKER` |
 | Certificate / key expiry | TLS, Apple `.p8` or JWT key < 14 days | P2 | `RB-SECRETS` |
