@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Content exporter: content_src/<table>.csv -> content/<table>.json + manifest.json (specs/09).
 
-    python3 tools/export_content.py pull  --sheet <id> [--service-account creds.json | --csv-export] [--src content_src]
+    python3 tools/export_content.py pull  --sheet <id> [--adc | --service-account creds.json | --csv-export] [--src content_src]
     python3 tools/export_content.py build [--src content_src] [--out content] [--dto-out PATH] [--previous DIR]
                                           [--ui-keys FILE] [--strict-warnings]
     python3 tools/export_content.py check [--src content_src] [--out content] [--dto-out PATH] [--previous DIR]
@@ -19,8 +19,9 @@ DTO file (`HeroCat.Sim.Content.Dto`, 09 section 9.1) from SCHEMA, so the Python 
 `--previous` runs 6.3's version rules (E090-E093, W030, W031) and computes hot_apply from the changed-file set.
 `diff` prints the row-level changes between two built content dirs for a PR description (7.1).
 `pull` fetches every workbook tab named as a table (or `meta`) to content_src/<tab>.csv in one canonical CSV form, so a
-pull of an unchanged sheet leaves no git diff (7.1, issue #132). `--service-account` uses Sheets API v4 batchGet and
-needs the optional google-api-python-client (imported only by pull); `--csv-export` uses the gviz CSV URL.
+pull of an unchanged sheet leaves no git diff (7.1, issue #132). `--adc` (Application Default Credentials from
+`gcloud auth application-default login`, no key file) and `--service-account` use Sheets API v4 batchGet and need the
+optional google-api-python-client (imported only by pull); `--csv-export` uses the gviz CSV URL.
 `translator-csv` / `import-translations` are the translator round trip (13.2, E076); `pseudo` writes the normal build
 plus localization.xx.json with every en string pseudo-localized (13.3) to a dir that is never the shipped content/.
 
@@ -32,7 +33,7 @@ import-translations (E076) and pseudo (13.2, 13.3; issue #213). Fixtures for eve
 tests/content_fixtures/ (tools/content_fixtures.py, issue #124).
 
 Exit codes: 0 ok, 1 validation errors (all listed) or drift, 2 usage / IO / network / auth error. Python 3.9+, stdlib
-only except `pull --service-account`.
+only except `pull --adc` / `pull --service-account`.
 """
 import argparse
 import csv
@@ -1905,7 +1906,7 @@ def check_dto_names(errs):
 # ------------------------------------------------------------------------------------------------- pull (7.1)
 SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets.readonly"
 GVIZ_URL = "https://docs.google.com/spreadsheets/d/{sheet}/gviz/tq?tqx=out:csv&headers=1&sheet={tab}"
-PULL_INSTALL_HINT = ("pull --service-account needs the optional Google API client: "
+PULL_INSTALL_HINT = ("pull --adc / --service-account needs the optional Google API client: "
                      "python3 -m pip install google-api-python-client google-auth "
                      "(or use --csv-export for a link-readable sheet)")
 
@@ -1938,6 +1939,30 @@ def normalize_tab(rows):
     return out
 
 
+def lowercase_sheet_bools(table, rows):
+    """Google Sheets turns a typed `true`/`false` into its own boolean, displayed TRUE/FALSE. Bool cells (bool columns,
+    and `constants` values whose type is bool) are lowercased so they read as 3.2's `true`/`false`; other text in them
+    is left for build to report (E010)."""
+    schema = SCHEMA.get(table)
+    if schema is None or not rows:
+        return rows
+    header = rows[0]
+    cols = {i for i, h in enumerate(header) for name, typ, *_ in schema["columns"] if h == name and typ == "bool"}
+    type_col = header.index("type") if table == "constants" and "type" in header else None
+    value_col = header.index("value") if table == "constants" and "value" in header else None
+    out = [header]
+    for r in rows[1:]:
+        r = list(r)
+        bools = set(cols)
+        if type_col is not None and value_col is not None and r[type_col] == "bool":
+            bools.add(value_col)
+        for i in bools:
+            if i < len(r) and r[i] in ("TRUE", "FALSE"):
+                r[i] = r[i].lower()
+        out.append(r)
+    return out
+
+
 def csv_bytes(rows):
     """The one CSV form content_src/ is committed in: minimal quoting, LF line ends, UTF-8 without BOM."""
     buf = io.StringIO()
@@ -1953,20 +1978,39 @@ def tabs_from_batchget(titles, response):
     return {t: vr.get("values", []) for t, vr in zip(titles, ranges)}
 
 
+ADC_HINT = ("no Google sign-in found: run `gcloud auth application-default login "
+            "--impersonate-service-account=<service-account email>` first (specs/09 section 12)")
+
+
+def sheets_service(creds_path=None):
+    """A Sheets v4 client. With `creds_path` it signs in with that service-account key file; without, it uses
+    Application Default Credentials (`gcloud auth application-default login`, optionally impersonating a service
+    account), for organizations that block key creation (iam.disableServiceAccountKeyCreation)."""
+    try:
+        import google.auth
+        import google.auth.exceptions
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build as discovery_build
+    except ImportError:
+        raise PullError(PULL_INSTALL_HINT) from None
+    try:
+        if creds_path:
+            creds = service_account.Credentials.from_service_account_file(creds_path, scopes=[SHEETS_SCOPE])
+        else:
+            creds, _ = google.auth.default(scopes=[SHEETS_SCOPE])
+        return discovery_build("sheets", "v4", credentials=creds, cache_discovery=False)
+    except google.auth.exceptions.DefaultCredentialsError:
+        raise PullError(ADC_HINT) from None
+    except (OSError, ValueError) as e:
+        raise PullError(f"--service-account {creds_path}: {e}" if creds_path else f"--adc: {e}") from None
+
+
 def fetch_service_account(sheet, creds_path, service=None):
     """Every tab via Sheets API v4: spreadsheets.get for the tab titles, then one values.batchGet. FORMATTED_VALUE
-    returns the text a cell displays, the same text --csv-export and File > Download produce."""
+    returns the text a cell displays, the same text --csv-export and File > Download produce. `creds_path` None
+    means Application Default Credentials (--adc)."""
     if service is None:
-        try:
-            from google.oauth2 import service_account
-            from googleapiclient.discovery import build as discovery_build
-        except ImportError:
-            raise PullError(PULL_INSTALL_HINT) from None
-        try:
-            creds = service_account.Credentials.from_service_account_file(creds_path, scopes=[SHEETS_SCOPE])
-            service = discovery_build("sheets", "v4", credentials=creds, cache_discovery=False)
-        except (OSError, ValueError) as e:
-            raise PullError(f"--service-account {creds_path}: {e}") from None
+        service = sheets_service(creds_path)
     try:
         meta = service.spreadsheets().get(spreadsheetId=sheet, fields="sheets.properties.title").execute()
         titles = [sh["properties"]["title"] for sh in meta.get("sheets", [])]
@@ -2027,6 +2071,7 @@ def fetch_csv_export(sheet, get=http_get):
 
 
 def pull(sheet, src, service_account=None, csv_export=False, service=None, get=None):
+    # service_account None (and not csv_export) means --adc: Application Default Credentials.
     """Fetches the workbook into `src` (09 sections 3.1, 7.1). Writes `<tab>.csv` for every tab named as a table or
     `meta`, only when its bytes change; removes the CSV of a known table the workbook no longer has; leaves every other
     file alone. Returns (written, removed, skipped tab titles)."""
@@ -2045,7 +2090,7 @@ def pull(sheet, src, service_account=None, csv_export=False, service=None, get=N
                 os.remove(path)
                 removed.append(table)
             continue
-        data = csv_bytes(normalize_tab(tabs[table]))
+        data = csv_bytes(lowercase_sheet_bools(table, normalize_tab(tabs[table])))
         if read_bytes(path) != data:
             tmp = path + ".tmp"
             with open(tmp, "wb") as f:
@@ -2085,8 +2130,10 @@ def read_ui_keys(path):
 
 
 WORKFLOW_HELP = """content change workflow (specs/09 section 12):
-  1. Edit values in the sheet; bump meta.content_version (YYYY.MM.DD[.N]) and meta.source_revision.
-  2. python3 tools/export_content.py pull --sheet <id> --service-account creds.json   (or --csv-export)
+  1. Edit content_src/*.csv directly (the master copy, issue #278); bump meta.content_version (YYYY.MM.DD[.N])
+     and meta.source_revision.
+  2. Only for a one-off import from a Sheet: python3 tools/export_content.py pull --sheet <id> --adc (or
+     --service-account creds.json / --csv-export). A pull overwrites content_src/ and deletes tables the Sheet lacks.
   3. python3 tools/export_content.py build --previous <last shipped content dir>   (fix every CONTENT E0xx;
      W0xx fail CI). ./check.sh --content runs the same rules against the merge base's content/.
   4. python3 tools/export_content.py diff --a <last shipped content dir> --b content   (paste into the PR)
@@ -2373,6 +2420,8 @@ def main(argv=None):
                                      "import-translations", "pseudo"])
     ap.add_argument("--sheet", help="pull: the Google Sheet id (the part of its URL after /d/)")
     mode = ap.add_mutually_exclusive_group()
+    mode.add_argument("--adc", action="store_true",
+                      help="pull: Sheets API v4 signed in with `gcloud auth application-default login` (no key file)")
     mode.add_argument("--service-account", metavar="CREDS_JSON",
                       help="pull: Sheets API v4 with this service-account key file (needs google-api-python-client)")
     mode.add_argument("--csv-export", action="store_true", help="pull: the gviz CSV URL (link-readable sheets only)")
@@ -2395,8 +2444,9 @@ def main(argv=None):
         args.out = "content"
 
     if args.verb == "pull":
-        if not args.sheet or not (args.service_account or args.csv_export):
-            print("pull needs --sheet <id> and one of --service-account <creds.json> / --csv-export", file=sys.stderr)
+        if not args.sheet or not (args.adc or args.service_account or args.csv_export):
+            print("pull needs --sheet <id> and one of --adc / --service-account <creds.json> / --csv-export",
+                  file=sys.stderr)
             return 2
         try:
             written, removed, skipped = pull(args.sheet, args.src, service_account=args.service_account,
