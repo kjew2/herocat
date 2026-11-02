@@ -62,8 +62,8 @@ namespace HeroCat.Runtime.Services
 
         /// <summary>
         /// Remote mode wiring, supplied by HeroCat.Remote (Runtime cannot reference it): RemoteGameServices.Wire builds the
-        /// ApiClient (issue #143), ServerClock(api) and the cloud slots; the other ApiClient-based clients of 01 section 1.2
-        /// land with their issues (SummonClient #145, ConfigClient #144, DungeonSeedClient #146, receipts and inbox #147,
+        /// ApiClient (issue #143), ServerClock(api), the cloud slots and the ConfigClient (#144); the other ApiClient-based
+        /// clients of 01 section 1.2 land with their issues (SummonClient #145, DungeonSeedClient #146, receipts and inbox #147,
         /// AuthClient #148 (GameServices.Account), CloudSaveClient #152, analytics uploader #209).
         /// </summary>
         public Func<ServicesOptions, GameServices> Remote { get; set; }

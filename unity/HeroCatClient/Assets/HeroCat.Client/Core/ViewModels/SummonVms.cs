@@ -131,13 +131,15 @@ namespace HeroCat.Client.Core
 
             int batch = def.GuaranteeBatchSize;
             long cost1 = v.PullCost, cost10 = (long)v.PullCost * batch;
-            SetPull(Pull1, 1, cost1, v.Diamonds, v.CanAffordDiamonds1);
-            SetPull(Pull10, batch, cost10, v.Diamonds, v.CanAffordDiamonds10);
+            bool on = BannerEnabled(b);
+            SetPull(Pull1, 1, cost1, v.Diamonds, v.CanAffordDiamonds1, on);
+            SetPull(Pull10, batch, cost10, v.Diamonds, v.CanAffordDiamonds10, on);
             TicketCount.Set(v.Tickets);
             Ticket.Visible.Set(v.Tickets > 0);
-            Ticket.Enabled.Set(v.Tickets > 0 && !InFlight);
+            Ticket.Enabled.Set(v.Tickets > 0 && !InFlight && on);
             Ticket.Label.Set(UiKeys.SummonTicket, v.Tickets);
-            Ticket.Reason.Set(null);
+            if (on) Ticket.Reason.Set(null);
+            else Ticket.Reason.Set(DisabledKey);
             InFlightFlag.Set(InFlight);
 
             if (RatesOpen.Value && _rates.Count == 0 || RatesStale(v))
@@ -157,12 +159,19 @@ namespace HeroCat.Client.Core
 
         static readonly Rarity[] RarityOrder = { Rarity.MYTHIC, Rarity.LEGENDARY, Rarity.EPIC, Rarity.RARE, Rarity.COMMON };
 
-        void SetPull(ButtonState btn, int count, long cost, long diamonds, bool afford)
+        /// <summary>The reason a kill-switched banner shows under its buttons: the SUMMON_DISABLED title (01 section 8.12 step 1).</summary>
+        public static readonly string DisabledKey = ErrorClassifier.ErrTitleKey("SUMMON_DISABLED");
+
+        /// <summary>The banner's <c>summonEnabled</c> kill switch, read live (IConfigService.Flags).</summary>
+        public bool BannerEnabled(Banner b) => _c.Switches.IsSummonEnabled(b);
+
+        void SetPull(ButtonState btn, int count, long cost, long diamonds, bool afford, bool on)
         {
             btn.Visible.Set(true);
             btn.Label.Set(UiKeys.SummonPull, count, LabelArg.Int(cost));
-            btn.Enabled.Set(afford && !InFlight);
-            if (afford) btn.Reason.Set(null);
+            btn.Enabled.Set(afford && !InFlight && on);
+            if (!on) btn.Reason.Set(DisabledKey);
+            else if (afford) btn.Reason.Set(null);
             else btn.Reason.Set(UiKeys.NeedMore, LabelArg.Int(cost - diamonds));
         }
 
@@ -185,6 +194,11 @@ namespace HeroCat.Client.Core
         void Start(int count, SummonPayment payment, string anchor)
         {
             if (InFlight || _flow == null) return;
+            if (!BannerEnabled(SelectedBanner.Value))
+            {
+                Fail(SummonError.Disabled, anchor);
+                return;
+            }
             Task<Result<SummonResultPayload, SummonError>> t;
             try
             {
@@ -247,6 +261,7 @@ namespace HeroCat.Client.Core
                 SummonError.NotEnoughTickets => ErrorClassifier.RejectReasonKey(CollectionRejectReasons.NotEnough(_c.Db.Banners[SelectedBanner.Value].TicketCurrency)),
                 SummonError.BannerClosed => ErrorClassifier.RejectReasonKey(CollectionRejectReasons.BANNER_CLOSED),
                 SummonError.RateLimited => ErrorClassifier.RejectCodeKey(RejectCode.RateLimited),   // the reject toast; 429 shows nothing until retries are exhausted
+                SummonError.Disabled => DisabledKey,
                 _ => ErrorClassifier.ErrTitleKey("NET_OFFLINE"),
             };
             _c.Toasts?.Push(_c.Loc.Text(key), ToastStyle.Reject, UiConstants.ToastSec, anchor);
@@ -387,11 +402,13 @@ namespace HeroCat.Client.Core
                 long cost = (long)def.PullCostDiamonds * Count;
                 bool afford = sim.State.Wallet.Diamond >= cost;
                 bool inFlight = Summon != null && Summon.InFlight;
-                bool can = done && afford && !inFlight && !_awaiting;
+                bool on = Summon == null || Summon.BannerEnabled(Banner);   // the kill switch (01 section 8.12 step 1)
+                bool can = done && afford && !inFlight && !_awaiting && on;
                 Again.Visible.Set(true);
                 Again.Label.Set(UiKeys.SummonAgain, Count, LabelArg.Int(cost));
                 Again.Enabled.Set(can);
                 if (can || !done || _awaiting) Again.Reason.Set(null);
+                else if (!on) Again.Reason.Set(SummonVm.DisabledKey);
                 else if (!afford) Again.Reason.Set(UiKeys.NeedMore, LabelArg.Int(cost - sim.State.Wallet.Diamond));
                 else Again.Reason.Set(null);
             }

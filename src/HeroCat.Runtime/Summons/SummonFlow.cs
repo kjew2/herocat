@@ -60,13 +60,17 @@ namespace HeroCat.Runtime.Summons
         internal void OnResume() => _resolveAttempted = false;
 
         /// <summary>
-        /// SCR_SUMMON's x1 / x10 / ticket button. Fails with <see cref="SummonError.InFlight"/> while an intent is pending
-        /// and <see cref="SummonError.SaveFailed"/> when the intent cannot be saved (nothing rolled, nothing charged).
+        /// SCR_SUMMON's x1 / x10 / ticket button. Fails with <see cref="SummonError.InFlight"/> while an intent is pending,
+        /// <see cref="SummonError.Disabled"/> while the banner's kill switch is off, and <see cref="SummonError.SaveFailed"/>
+        /// when the intent cannot be saved (nothing rolled, nothing charged).
         /// </summary>
         public Task<Result<SummonResultPayload, SummonError>> SummonAsync(Banner banner, int count, SummonPayment payment,
                                                                          CancellationToken ct = default)
         {
             if (Pending != null) return Task.FromResult(Result<SummonResultPayload, SummonError>.Fail(SummonError.InFlight));
+            var flags = _runner.Services.Config?.Flags;   // 01 section 8.12 step 1: the kill switch applies at once, before any intent
+            if (flags != null && !flags.IsSummonEnabled(banner))
+                return Task.FromResult(Result<SummonResultPayload, SummonError>.Fail(SummonError.Disabled));
             var request = SummonRequest.New(banner, count, payment);
             Hit(SummonFlowPoint.BeforeIntentSave);
             var state = _runner.Sim.State;

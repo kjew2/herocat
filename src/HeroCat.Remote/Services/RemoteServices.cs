@@ -23,8 +23,9 @@ namespace HeroCat.Remote.Services
     /// The remote half of the composition root (01 section 1.2), supplied to GameServices.Build through
     /// ServicesOptions.Remote because HeroCat.Runtime cannot reference this assembly. Builds the process's one
     /// <see cref="ApiClient"/>, Runtime's ServerClock over <c>GET /time</c> (which also observes every response's
-    /// X-Server-Time) and the local-first cloud save; the other seams keep their local implementations until their
-    /// clients land: SummonClient #145, ConfigClient #144, DungeonSeedClient #146, ReceiptClient #147 (the inbox is RemoteInboxService, #176; the AuthClient is GameServices.Account and the ApiClient credentials, #148),
+    /// X-Server-Time), the local-first cloud save and the ConfigClient (<see cref="RemoteConfigService"/>, #144); the other
+    /// seams keep their local implementations until their clients land: SummonClient #145, DungeonSeedClient #146, ReceiptClient #147
+    /// (the inbox is RemoteInboxService, #176; the AuthClient is GameServices.Account and the ApiClient credentials, #148),
     /// cloud-save metadata #152.
     /// </summary>
     public static class RemoteGameServices
@@ -70,6 +71,12 @@ namespace HeroCat.Remote.Services
                 Clock = clock, Slots = slots, InstallId = installId, DeviceKey = deviceKey, WrapClock = o.WrapClock,
                 DebugReceiptCatalog = o.DebugReceiptCatalog,
             });
+            // The ConfigClient (issue #144): GET /config, cached under {dataDir}/config for CONFIG_CACHE_MAX_AGE_S.
+            set = set with
+            {
+                Config = new RemoteConfigService(client, o.DataDir != null ? new FileConfigCache(o.DataDir) : (IConfigCache)new MemoryConfigCache(),
+                                                 () => clock.NowServerSeconds, () => o.Content?.Version),
+            };
             // The server inbox (issue #176). A debug receipt catalog grants into the local inbox, so that build keeps it.
             set = set with { Account = auth };   // boot step 3 and logout (issue #148)
             return o.DebugReceiptCatalog != null ? set : set with { Inbox = new RemoteInboxService(client) };
