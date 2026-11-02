@@ -64,7 +64,7 @@ namespace HeroCat.Runtime.Session
             }));
             _subs.Add(bus.Subscribe<DailyGiftClaimed>(_ => Track(new AnalyticsEvents.DailyGiftClaimed())));
             _subs.Add(bus.Subscribe<ItemExchanged>(e => Track(new AnalyticsEvents.Exchange(e.OfferId, e.Qty, e.Diamonds))));
-            // dungeon_run (issues #172, #173); the abandoned row comes from the save validator's report: TODO(#146).
+            // dungeon_run (issues #172, #173); the abandoned row is LocalSaveStore's, from the save validator's report (issue #146).
             _subs.Add(bus.Subscribe<DungeonCleared>(e =>
                 Track(new AnalyticsEvents.DungeonRun(e.Dungeon, e.Floor, "cleared", e.TicksUsed, e.RewardCurrency, e.RewardAmount, e.GrantId))));
             _subs.Add(bus.Subscribe<DungeonFailed>(e =>

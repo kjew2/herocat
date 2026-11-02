@@ -54,7 +54,7 @@ public sealed class SchemaTests
         {
             "accounts", "account_links", "devices", "refresh_tokens", "saves", "save_history", "diamond_ledger",
             "ticket_ledger", "granted_items", "idempotency", "purchases", "store_notifications", "inbox_items",
-            "summon_log", "banner_pity", "dungeon_seeds", "config_versions", "mail_blasts", "moderation_actions",
+            "summon_log", "banner_pity", "dungeon_seeds", "dungeon_progress", "config_versions", "mail_blasts", "moderation_actions",
             "account_exports", "events", "coupons", "coupon_redemptions", "guilds", "guild_members", "guild_chat",
         };
         Assert.That(Set.Tables.Keys, Is.EquivalentTo(expected));

@@ -198,6 +198,9 @@ public sealed class SaveController : ControllerBase
         // (5a, 6) crediting and the inline plausibility check
         var inline = await _plausibility.RunInlineAsync(upload, c, tx, ct);
         flags.AddRange(inline.Flags);
+        // (6) the dungeon seed correlation (section 7.3; issue #205), inline because it fills dungeon_seeds.result
+        flags.AddRange(await HttpContext.RequestServices.GetRequiredService<HeroCat.Server.Features.Dungeon.DungeonCorrelation>()
+                                        .CorrelateAsync(c, tx, player, env.SaveSeq, file.AsMemory(env.BodyOffset, env.BodyLength), ct));
         bool requestCmdLog = (current?.CmdlogRequested ?? false) || _sampler.Sample(flags);
         string[] flagCodes = flags.Select(f => f.Code).Distinct().ToArray();
         row = row with { Flags = flagCodes, CmdlogRequested = requestCmdLog };

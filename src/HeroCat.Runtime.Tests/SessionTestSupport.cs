@@ -26,7 +26,8 @@ namespace HeroCat.Runtime.Tests
         public static TestSession Open(FakeClock clock = null, ISaveSlotStore store = null, MemoryAnalytics analytics = null,
                                        Action<SessionRunnerOptions> configure = null, bool expectReady = true,
                                        INetTransport network = null, IClock clockOverride = null, Guid? installId = null,
-                                       FakeMonoClock mono = null, HeroCat.Sim.Content.ContentDb content = null)
+                                       FakeMonoClock mono = null, HeroCat.Sim.Content.ContentDb content = null,
+                                       Func<GameServices, GameServices> services = null)
         {
             var t = new TestSession
             {
@@ -41,11 +42,15 @@ namespace HeroCat.Runtime.Tests
             t.Boot = BootFlow.Run(new BootOptions
             {
                 Content = new Func<HeroCat.Sim.Content.ContentDb>[] { () => content ?? TestContent.Db },
-                Services = (db, state) => GameServices.Build(BackendMode.Local, new ServicesOptions
+                Services = (db, state) =>
                 {
-                    Clock = clockOverride ?? t.Clock, Slots = t.Store, Analytics = t.Analytics, State = state, Content = db,
-                    Network = network, InstallId = installId ?? TestContent.Device,
-                }),
+                    var built = GameServices.Build(BackendMode.Local, new ServicesOptions
+                    {
+                        Clock = clockOverride ?? t.Clock, Slots = t.Store, Analytics = t.Analytics, State = state, Content = db,
+                        Network = network, InstallId = installId ?? TestContent.Device,
+                    });
+                    return services != null ? services(built) : built;   // tests swap one seam (a fake remote service)
+                },
                 NewProfileRngRoot = TestContent.Root,
                 Runner = ro,
                 CommandLog = t.Log,
