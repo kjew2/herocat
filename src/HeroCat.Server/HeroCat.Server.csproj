@@ -12,6 +12,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="AWSSDK.S3" Version="3.7.405" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="Npgsql" Version="8.0.5" />
     <PackageReference Include="StackExchange.Redis" Version="2.8.16" />
     <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="6.9.0" />
@@ -23,6 +24,13 @@
   <ItemGroup>
     <!-- The SQL migration set (specs/02 section 12, server/db/migrations/NNNN_<name>.sql) ships inside the image. -->
     <None Include="../../server/db/migrations/*.sql" LinkBase="db/migrations" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- The content set the summon handler rolls with (specs/08 section 4.3, issue #199): content/*.json ships in the image. -->
+    <None Include="../../content/*.json" LinkBase="content" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The one content loader (09 section 6.2), compiled from Runtime's source so the server holds no second JSON reader
+         and still has no assembly reference to HeroCat.Runtime (01 section 1.2; issue #199). -->
+    <Compile Include="../HeroCat.Runtime/Content/ContentLoader.cs" Link="Features/Summon/Linked/ContentLoader.cs" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="HeroCat.Server.Tests" />
