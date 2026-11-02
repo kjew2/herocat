@@ -73,7 +73,7 @@ Each row maps a reference-game feature to our system name, its tier, and the spe
 | Simulation core | **`HeroCat.Sim`**, pure C# netstandard2.1, no `UnityEngine`, no IO, no clock, no JSON, no reflection | One implementation runs on device, in server validation and in bots. Determinism across x64/ARM64/IL2CPP requires no `Math.Pow/Exp/Log` on the hot path (repeated multiplication only), no floating-point reductions in unspecified order, no `DateTime.Now`. |
 | Runtime glue | **`HeroCat.Runtime`**, plain C#, references Sim + Newtonsoft.Json | Save serialization, migrations, clock, local store, HTTP clients, content loading. Shared by client and bots. No `UnityEngine`. |
 | Backend | **ASP.NET Core 8** stateless API, **PostgreSQL** (accounts, saves, purchases, guilds, mail), **Redis** (leaderboards, rate limits, sessions), **S3-compatible object store** (save blobs, content bundles), CDN in front of content | C# so the server references `HeroCat.Sim` for re-simulation and rate tables, no second implementation. The schema (02 section 12, which owns every server table) ships as plain versioned SQL migration files applied by a small runner, not EF Core migrations; queries use Npgsql/Dapper (EF Core for queries only is allowed) (issue #33). Nakama/PlayFab were considered as a lighter path for a solo dev; rejected because server-authoritative summons with our own pity rules and save plausibility checks need custom code either way, and BaaS pricing scales badly with DAU. If the team is one person at M0, the backend is skipped entirely (local seams, see 01). |
-| Content | Google Sheet -> JSON tables -> versioned content bundle served via CDN, fallback copy shipped in the app | Designers edit the sheet. Exporter validates and emits JSON. Spec 09. |
+| Content | `content_src/*.csv` -> JSON tables -> versioned content bundle served via CDN, fallback copy shipped in the app | People and agents edit the committed CSVs directly (issue #278; a Google Sheet is only a one-off `pull` import). Exporter validates and emits JSON. Spec 09. |
 | Analytics | Event pipeline to a warehouse (Firebase Analytics for MVP, own events table on the backend for economy events) | Economy events need joins with purchases and saves, which third-party analytics cannot do. |
 | CI | GitHub Actions: Sim + Runtime tests on every PR, bot acceptance table on every content change, Unity build via self-hosted runner or Unity Cloud Build | `./check.sh` is the single source of truth: it has modes (`--pr`, `--content`, `--nightly`) and every workflow is a thin wrapper that calls one, with path filters choosing which runs (issue #27). The job that applies the SQL migration set to an empty Postgres 16 and runs 02 AC 16 is wired into `check.sh` behind a "Postgres available" guard, skipped explicitly where there is no Docker (issue #33). Spec 10. |
 
@@ -396,7 +396,7 @@ herocat/
     power_curve_model.py               (sibling copy; rewrite to 03 section 8.6) greedy F2P bot across all layers, prints the day table
     gacha_model.py                     (sibling copy; rename streams, 04 section 14) pity distribution; --vectors writes Fixtures/Summon/vectors.json
     fish_model.py                      tank/merge throughput, coin and DPS income per active minute
-    export_content.py                  sheet exporter, verb CLI (pull/build/check/diff/...), spec 09
+    export_content.py                  content exporter, verb CLI (pull/build/check/diff/...), spec 09
 ```
 
 Planned source layout:
@@ -412,8 +412,8 @@ src/HeroCat.Server/         ASP.NET Core API (spec 08)
 src/HeroCat.Server.Tests/
 server/db/migrations/       NNNN_<name>.sql, the server schema's SQL migration set (02 section 12, issue #33)
 unity/HeroCatClient/        Unity project; Assets/HeroCat.Client references Sim + Runtime as local packages
-content/                    JSON tables exported from the sheet (spec 09); lowercase, replaces today's Content/ (issue #1)
-tools/                      Python models and the sheet exporter (export_content.py replaces content_build.py)
+content/                    JSON tables built from content_src/ (spec 09); lowercase, replaces today's Content/ (issue #1)
+tools/                      Python models and the content exporter (export_content.py replaces content_build.py)
 Fixtures/Summon/            summon vectors (Python-generated) and the C# stream-sequence determinism golden (issue #14)
 ```
 

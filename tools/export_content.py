@@ -2132,8 +2132,10 @@ def read_ui_keys(path):
 
 
 WORKFLOW_HELP = """content change workflow (specs/09 section 12):
-  1. Edit values in the sheet; bump meta.content_version (YYYY.MM.DD[.N]) and meta.source_revision.
-  2. python3 tools/export_content.py pull --sheet <id> --adc   (or --service-account creds.json / --csv-export)
+  1. Edit content_src/*.csv directly (the master copy, issue #278); bump meta.content_version (YYYY.MM.DD[.N])
+     and meta.source_revision.
+  2. Only for a one-off import from a Sheet: python3 tools/export_content.py pull --sheet <id> --adc (or
+     --service-account creds.json / --csv-export). A pull overwrites content_src/ and deletes tables the Sheet lacks.
   3. python3 tools/export_content.py build --previous <last shipped content dir>   (fix every CONTENT E0xx;
      W0xx fail CI). ./check.sh --content runs the same rules against the merge base's content/.
   4. python3 tools/export_content.py diff --a <last shipped content dir> --b content   (paste into the PR)

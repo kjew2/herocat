@@ -1,14 +1,14 @@
 ## 09 - Content Data Pipeline
 
-This spec is the implementation of 00 section 8 item 3 ("content is data"): how every number in 00 section 6, every collectible, quest, dungeon floor, shop row and user-visible string travels from a Google Sheet through `tools/export_content.py` into `content/*.json`, is validated, is handed to `HeroCat.Sim` as an immutable `ContentDb`, is shipped inside the app and later over the CDN, and is read by the Python tuning tools. Constants are referred to by their 00 names; their values appear only in the example rows and files. Where this spec and 00 disagree on a name or value, 00 wins.
+This spec is the implementation of 00 section 8 item 3 ("content is data"): how every number in 00 section 6, every collectible, quest, dungeon floor, shop row and user-visible string travels from the committed `content_src/*.csv` through `tools/export_content.py` into `content/*.json`, is validated, is handed to `HeroCat.Sim` as an immutable `ContentDb`, is shipped inside the app and later over the CDN, and is read by the Python tuning tools. Constants are referred to by their 00 names; their values appear only in the example rows and files. Where this spec and 00 disagree on a name or value, 00 wins.
 
-Tiers covered: **M0** (sheet, exporter, validator, bundled content, `ContentDb`, English strings), **MVP** (CDN delivery with hash verification and min-content-version gate, `hotApply` for sim-neutral tables, `en` plus one locale, pseudo-localization), **P1** (`runes` consumers, `content_migrations`, per-locale asset overrides).
+Tiers covered: **M0** (`content_src/` CSVs, exporter, validator, bundled content, `ContentDb`, English strings), **MVP** (CDN delivery with hash verification and min-content-version gate, `hotApply` for sim-neutral tables, `en` plus one locale, pseudo-localization), **P1** (`runes` consumers, `content_migrations`, per-locale asset overrides).
 
 Depends on: 00 (sections 5, 6, 8), 01 (`ContentLoader`, boot flow 8.1, content hot update 8.12), 02 (`GameState.ContentVersion` and `ContentHash`, the load validator that reconciles saves against content), 03 (stats, Research, curve evaluation), 04 (collectible columns, banner levels), 05 (fish levels, tank), 06 (quests, dungeons, shop, inbox), 07 (locales, length budgets, ICU plurals), 08 (`GET /config`, CDN layout), 10 (CI gate).
 
 ## 1. Principles
 
-1. **One source of truth.** One Google Sheet workbook, one tab per table. CSV, JSON, `ContentDb` and the Python models are derived. Nobody edits `content/*.json` by hand; CI rejects a commit whose JSON does not match what the exporter produces from the committed CSVs.
+1. **One source of truth.** The committed `content_src/*.csv`, one file per table, edited directly by people and agents (issue #278). A Google Sheet (one tab per table) is an optional one-off import through `pull`, not a second master: there is no repo-to-Sheet sync, so a stale Sheet pulled over newer CSVs would delete tables and rows. JSON, `ContentDb` and the Python models are derived. Nobody edits `content/*.json` by hand; CI rejects a commit whose JSON does not match what the exporter produces from the committed CSVs.
 2. **No balance literal in code.** `HeroCat.Sim` receives a `ContentDb` and reads typed properties and rows. Acceptance criterion 1 is a grep: the only numeric literals in `HeroCat.Sim` are 0, 1, -1, 2 (bit ops), array indices and the `ATTACK_PROGRESS_UNIT` fixed-point scale that 03 declares.
 3. **Fail at export time, never in a tick.** The exporter rejects bad content with coded errors (section 8). `ContentDb.Build` re-runs the subset of rules that protect the sim (ids resolve, rates sum, curves monotonic, counts match) so a stale or hand-edited bundle fails at boot with a readable list, not inside `Simulation.Advance`.
 4. **Deterministic bytes.** Same CSV input produces byte-identical JSON and the same `content_hash`. The save (02: `ContentVersion`, `ContentHash`) and every bot report (10) record `content_version` and `content_hash`, so a regression can be tied to the exact data it ran on.
@@ -19,7 +19,8 @@ Depends on: 00 (sections 5, 6, 8), 01 (`ContentLoader`, boot flow 8.1, content h
 
 ```mermaid
 flowchart TD
-    Sheet["Google Sheet<br/>one tab per table"] -->|"export_content.py pull<br/>(service account or CSV)"| CSV["content_src/*.csv<br/>committed"]
+    Edit["people and agents<br/>edit CSVs directly (#278)"] --> CSV["content_src/*.csv<br/>committed, the master copy"]
+    Sheet["Google Sheet (optional)<br/>one-off import only"] -.->|"export_content.py pull<br/>(--adc, service account or CSV)"| CSV
     CSV -->|"export_content.py build<br/>parse + validate + emit"| JSON["content/*.json<br/>content/manifest.json<br/>committed"]
     JSON -->|"content.yml CI (./check.sh --content):<br/>check, bots acceptance"| PR["Pull request"]
     PR -->|"merge"| Main["main"]
@@ -53,7 +54,7 @@ Both the CSVs and the JSON are committed. CSVs are the reviewable diff (one tab,
 | Row order | Preserved into JSON. Meaningful only where a `sort_order`, `level`, `rank`, `floor` or `order` column says so. |
 | One `meta` tab | Key/value tab read by the exporter for `content_version`, `min_client_version`, `source_revision` (section 5.33). Not a `ContentDb` table. |
 
-Tabs are protected so only the design owner edits structure (adding or renaming a column); anyone on the team may edit values. The exporter, not the sheet, is the gate.
+Structure (adding or renaming a column) changes only together with `SCHEMA` and the C# DTOs; anyone may edit values. The exporter is the gate. The file rules above are written for a Sheet tab and apply unchanged to a CSV opened in any spreadsheet app.
 
 ### 3.2 Column types
 
@@ -1257,14 +1258,14 @@ All three gain `--content <dir>` (default `content`). Acceptance criterion 10: w
 ```mermaid
 sequenceDiagram
     participant D as Designer
-    participant S as Sheet
+    participant S as content_src/*.csv
     participant X as export_content.py
     participant G as GitHub PR
     participant CI as content.yml (10)
     participant R as Reviewer
     participant CDN as CDN (stage, prod)
     D->>S: edit values, bump meta.content_version + source_revision
-    D->>X: pull, build --previous content
+    D->>X: build --previous content
     X-->>D: errors / content_hash / hot_apply / S-constant list
     D->>G: PR: content_src/*.csv + content/*.json + diff output in description
     G->>CI: ./check.sh --content: check (stale JSON), build --strict-warnings, Sim+Runtime tests, bots acceptance (10 section 3.6)
@@ -1285,7 +1286,7 @@ Rules:
 
 ### 12.1 One-time setup for `pull --adc`
 
-Google organizations block service-account key files by default (`iam.disableServiceAccountKeyCreation`), so `pull` signs in as the engineer and impersonates a key-less service account. Once per project:
+Only for a one-off import from a Sheet; the normal workflow edits `content_src/` directly (issue #278, where two-way sync is parked). Google organizations block service-account key files by default (`iam.disableServiceAccountKeyCreation`), so `pull` signs in as the engineer and impersonates a key-less service account. Once per project:
 
 1. Google Cloud console, the project selected: APIs & Services > Library > Google Sheets API > Enable.
 2. IAM & Admin > Service Accounts > Create service account (`content-pull`, no project roles). Note its email.
@@ -1367,7 +1368,7 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 ## Open questions
 
 1. **Who owns the sheet.** Default: design owns values and row additions; engineering owns structure (columns, enums) through `SCHEMA` and the C# DTOs. Owner guess: design lead.
-2. **Service-account vs CSV pull.** The service account needs a Google Cloud project and a non-stdlib dependency; the CSV export URL needs the sheet to be link-readable, which exposes live tuning data to anyone with the link. Decided: Sheets API through a service account, reached without a key file (`pull --adc` with gcloud impersonation locally; Workload Identity Federation if CI ever pulls), because key creation is blocked by default org policy. Key files (`--service-account`) remain supported where allowed. Owner guess: engineering.
+2. **Sheet or CSVs as the master copy.** Decided (issue #278): `content_src/*.csv` is the master and is edited directly, because agents edit it and nothing syncs repo changes back to a Sheet; a `push` verb with a drift guard is parked there. For a one-off pull: The service account needs a Google Cloud project and a non-stdlib dependency; the CSV export URL needs the sheet to be link-readable, which exposes live tuning data to anyone with the link. Decided: Sheets API through a service account, reached without a key file (`pull --adc` with gcloud impersonation locally; Workload Identity Federation if CI ever pulls), because key creation is blocked by default org policy. Key files (`--service-account`) remain supported where allowed. Owner guess: engineering.
 3. **Limit-break constants.** Resolved: `constants.LIMIT_BREAK_RANKS` (00's name) in `REQUIRED_CONSTANTS`, per-rarity `rarities.limit_break_cost` and `rarities.dupe_overflow_rock_candy` (issue #37).
 4. **`hero_levels` linear vs compounding.** Resolved: compounding `HERO_LVL_MULT` 1.02 (00 decision 9); `mult_per_level` is populated and `atk_pct_per_level` empty; the exporter still rejects both set or both empty.
 5. **`E039` daily diamond sum tolerance.** Resolved: 10%, recomputed from the quest rows plus `REF_DAILIES_DONE` and `REF_NEW_BOSSES` (issue #55).
