@@ -145,7 +145,7 @@ namespace HeroCat.Client.Screens
             _heroOutline = _hero.GetComponent<Image>();
             var heroLabel = UiKit.Text("Label", _hero, UiKit.Title, 0x121212, TextAlignmentOptions.Center, bold: true);
             UiKit.Fill(heroLabel.rectTransform);
-            heroLabel.text = "CAT";   // placeholder art label (07 section 15.1), not player copy
+            heroLabel.text = "SQUIRE";   // placeholder art label (07 section 15.1), not player copy
             var outline = _hero.gameObject.AddComponent<Outline>();
             outline.effectDistance = new Vector2(6, 6);
             c.AwakenRank.Bind(new ActionSink<int>(r =>

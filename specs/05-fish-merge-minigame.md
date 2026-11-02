@@ -8,7 +8,7 @@ Depends on: 00 (section 6.4 constants), 02 (`FishBoardState` persistence), 03 (t
 
 ## 1. Design goals
 
-1. The board is the thing the thumb does while the cat fights. Every merge should pay out in three ways at once: a coin number, a missile crossing the screen, and a bigger fish that raises the passive DPS line.
+1. The board is the thing the thumb does while the squire fights. Every merge should pay out in three ways at once: a coin number, a missile crossing the screen, and a bigger fish that raises the passive DPS line.
 2. It is never mandatory. A player who only presses `Release max` and `Merge all` once per session still progresses; one who never touches it still gets the passive DPS of whatever is on the board.
 3. It is deterministic. Cell placement is the only random element and it comes from the `fish_spawn` stream; merge results, coins and missiles are pure functions of levels.
 4. It is tiny in the sim: 20 cells of board, a stock count and a refill timer. Everything else is presentation.

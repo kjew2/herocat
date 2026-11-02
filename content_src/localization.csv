@@ -66,7 +66,7 @@ boot.step.auth,Signing in...,,,,28,false,07 M0 screens
 boot.step.catchup,Catching up...,,,,28,false,07 M0 screens
 boot.step.config,Checking for updates...,,,,28,false,07 M0 screens
 boot.step.content,Loading content...,,,,28,false,07 M0 screens
-boot.step.save,Loading your cat...,,,,28,false,07 M0 screens
+boot.step.save,Loading your squire...,,,,28,false,07 M0 screens
 boot.step.warmup,Almost there...,,,,28,false,07 M0 screens
 chapter.01.name,Dreamland 1,,,,24,false,
 chapter.02.name,Dreamland 2,,,,24,false,
@@ -480,7 +480,7 @@ tut.10.skip,Tap to skip.,,,,48,false,
 tut.11.equip,Equip your best weapon.,,,,48,false,
 tut.12.boss,A boss! Merge fish to fire missiles,,,,48,false,
 tut.2.gold,Monsters drop gold.,,,,48,false,
-tut.3.hero,Make your cat stronger,,,,48,false,
+tut.3.hero,Make your squire stronger,,,,48,false,
 tut.4.train,Train Attack.,,,,48,false,
 tut.5.back,Back to the fight.,,,,48,false,
 tut.6.release,Release a fish,,,,48,false,

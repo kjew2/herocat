@@ -381,7 +381,7 @@ namespace HeroCat.Runtime.Account;
 
 public sealed record Profile(
     Guid     PlayerId,
-    string   DisplayName,              // 2..16 chars, server-filtered; default "Cat#" + last 4 of PlayerId
+    string   DisplayName,              // 2..16 chars, server-filtered; default "Squire#" + last 4 of PlayerId (00 decision 104)
     string   AvatarId,                 // content id; default "avatar_default"
     long     CreatedServerTime,
     LinkedPlatform[] Links,            // zero or more
