@@ -336,6 +336,7 @@ public sealed class SessionRunner
     void Issue(Command c)                                              // the one path into the sim: log, then apply
     {
         log.Append(c); var r = sim.Apply(c); if (!r.Ok) bus.PublishReject(c, r);
+        else bus.PublishSystem(new CommandApplied(c, eventsOfThisCommand));   // runtime notice: analytics groups per-command rows (05/06 section 13)
     }
 
     void ResumeFromGap()
@@ -442,6 +443,8 @@ Headers on every request:
 
 Every response carries `X-Server-Time` (unix seconds). `ApiClient` forwards it to `ServerClock.Observe(serverTime, rttMs)` so the clock resyncs on every call for free.
 
+As built (issue #143): `HeroCat.Remote.Api.ApiClient` over one `HttpClient` whose innermost `HttpMessageHandler` is injectable (production: the platform handler; tests: `FakeApiHandler`, a fault-injecting fake of 08's pipeline with its idempotency replay; a build without a deployed server: `OfflineHandler`). `ErrorClass` is Runtime's (`HeroCat.Runtime.Errors`, issue #69). `ApiError` also carries the classifying `ErrorRule` and the body's `details`, and its `Code` is the body's wire code when present, else the row's client code (`NET_OFFLINE`, `NET_TIMEOUT`, `HTTP_<status>`). `ApiResponse<T>` also carries the `RequestId` sent and the attempt count; `EnsureOk()` / `ToServiceException()` turn a failure into the `ServiceException` the seams throw. `SendAsync` never throws for a failed call, only for the caller's cancellation. A mutation (any method but GET/HEAD) without the caller's 32-hex `requestId` is a programming error (`ArgumentException`); a read gets one fresh GUID per call, shared by its retries. `ApiRequest` adds `Timeout` (per attempt, default `HTTP_TIMEOUT_S`), `NoRetry` (used by `GET /time`, whose caller has its own cadence; a 401 `TOKEN_EXPIRED` still refreshes) and extra `Headers` (`If-Match`, `X-Save-Meta`). The observer is Runtime's `IServerTimeObserver`, which `ServerClock` implements; the round trip comes from the injectable `IMonoClock`. `IApiCredentials` (access token plus `RefreshAsync`, implemented by the AuthClient of issue #148) is refreshed single-flight: a 401 that arrives while a refresh runs joins it, and one for a token already replaced replays without refreshing, because refreshing a rotated token again would be `TOKEN_REUSED`. The whole exchange starts on the thread pool (`Task.Run`, then `ConfigureAwait(false)`), so serialization, IO, parsing and backoff never run on the main thread; the caller's own `await` resumes on its context (section 4).
+
 ### 5.2 Retry and backoff
 
 Responses are classified by `(status, code)`, code first (issue #30). 08's wire codes are canonical. A known code decides the class, the retry and the client action; an unknown code falls back to its status rule. This one table (`ErrorClassifier.Table` in `HeroCat.Runtime`) drives `ApiClient` and the localization validator (acceptance 14); flows cite a code's row instead of re-deriving the rule.
@@ -475,13 +478,15 @@ Responses are classified by `(status, code)`, code first (issue #30). 08's wire 
 | 500 | any | `ServerError` | Once | `SRV_5XX` modal. |
 | other 4xx | any other | `Rejected` | Never | Modal with the body's `code`. |
 
-Backoff: `HTTP_RETRY_BASE_MS = 1000`, doubling, full jitter (`delay = random(0, min(HTTP_RETRY_CAP_MS = 8000, base * 2^attempt))`), `HTTP_RETRY_MAX = 4` attempts. Total worst case about 15 s, which is also the summon "pending" threshold (section 8.5).
+Backoff: `HTTP_RETRY_BASE_MS = 1000`, doubling, full jitter (`delay = random(0, min(HTTP_RETRY_CAP_MS = 8000, base * 2^attempt))`), `HTTP_RETRY_MAX = 4` attempts. Total worst case about 15 s, which is also the summon "pending" threshold (section 8.5). As built (issue #143): `attempt` is the 0-based retry index and `HTTP_RETRY_MAX` counts retries after the first send, so a request goes out at most 5 times and the backoff waits sum to at most 1 + 2 + 4 + 8 = 15 s. All retry kinds of one call (offline, timeout, `Backoff` rows, the single 500 retry) share that budget; a `retryAfterSec` / `Retry-After` wait replaces the jittered delay for that retry; the 401 refresh-and-replay is outside the budget and happens once. An HTTP-date `Retry-After` falls back to the backoff schedule.
 
 A mutating request is retried **only with the same `requestId`**. The server replays the stored result (00 section 8.13), so a retry after a timeout can never double-charge. The client treats a replayed 200 identically to a first 200.
 
 ### 5.3 Connectivity state
 
 `NetworkMonitor` (client, wraps `Application.internetReachability` plus the last `ApiClient` outcome) publishes `ConnectivityChanged(online: bool)`. Screens use it to grey out server-only buttons (summon in Remote mode, shop, inbox refresh) with the `NET_OFFLINE` message. It is advisory: the real test is the request.
+
+As built (issue #143): `HeroCat.Remote.Api.NetworkMonitor` over an `IReachability` (the client's `UnityReachability` adapter reads `Application.internetReachability`) and the `ApiClient.ServerReached` outcome. The last outcome since reachability last changed decides: any HTTP response means online, a connection failure offline, a timeout nothing; with no outcome yet, reachability decides. A reachability change in either direction forgets the outcome. The client raises outcomes on the thread pool; `Poll()`, called on the main thread once per frame, is the only place `ConnectivityChanged` is raised.
 
 ## 6. Offline-mode rules (what works without network)
 

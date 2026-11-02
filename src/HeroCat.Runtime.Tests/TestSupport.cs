@@ -18,6 +18,11 @@ namespace HeroCat.Runtime.Tests
 
         static readonly Lazy<ContentDb> _db = new Lazy<ContentDb>(() => ContentLoader.LoadFromDirectory(_dir.Value, Tier.M0));
 
+        static readonly Lazy<ContentDb> _mvp = new Lazy<ContentDb>(() => ContentLoader.LoadFromDirectory(_dir.Value, Tier.MVP));
+
+        /// <summary>The same content at the MVP tier (quests, shop, awakening).</summary>
+        public static ContentDb Mvp => _mvp.Value;
+
         public static string Dir => _dir.Value;
         public static string RepoRoot => Path.GetDirectoryName(_dir.Value);
         public static ContentDb Db => _db.Value;

@@ -36,6 +36,10 @@ namespace HeroCat.Sim
         public int? SelectedStage { get; init; }
 
         public int KillsInStage { get; init; }
+
+        /// <summary>Combat.Mode. In Dungeon mode BossTicksLeft, EnemyHp and EnemyHpMax are the run's boss (06 section 6.1).</summary>
+        public CombatMode Mode { get; init; }
+
         public int Chapter { get; init; }
         public BossPhase BossPhase { get; init; }
         public int BossTicksLeft { get; init; }
@@ -73,6 +77,7 @@ namespace HeroCat.Sim
             Stage = Stage,
             SelectedStage = SelectedStage,
             KillsInStage = KillsInStage,
+            Mode = Mode,
             Chapter = Chapter,
             BossPhase = BossPhase,
             BossTicksLeft = BossTicksLeft,

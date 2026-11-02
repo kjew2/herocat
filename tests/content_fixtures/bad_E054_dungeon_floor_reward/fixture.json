@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "dungeon_floors",
+      "dungeon_fish,2,FISH_COIN,100,,",
+      "dungeon_fish,2,FISH_COIN,100,300,"
+    ]
+  ],
+  "csharp": true
+}

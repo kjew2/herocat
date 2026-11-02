@@ -18,6 +18,7 @@ public sealed class ServerOptions
     public DatabaseOptions Database { get; set; } = new();
     public RedisOptions Redis { get; set; } = new();
     public BlobOptions Blobs { get; set; } = new();
+    public KeysOptions Keys { get; set; } = new();
 }
 
 /// <summary>
@@ -30,6 +31,8 @@ public sealed class ServerLimits
     [ConfigurationKeyName("IDEMPOTENCY_TTL_H")] public int IdempotencyTtlHours { get; set; }
     [ConfigurationKeyName("ACCESS_TOKEN_TTL_S")] public int AccessTokenTtlSeconds { get; set; }
     [ConfigurationKeyName("REFRESH_TOKEN_TTL_DAYS")] public int RefreshTokenTtlDays { get; set; }
+    /// <summary>A same-device retry of a refresh token rotated out this recently is a lost response, not reuse (issue #273).</summary>
+    [ConfigurationKeyName("REFRESH_REUSE_GRACE_S")] public int RefreshReuseGraceSeconds { get; set; }
     [ConfigurationKeyName("SUMMON_LOCK_TTL_S")] public int SummonLockTtlSeconds { get; set; }
     /// <summary>Seeds per day per dungeon kind.</summary>
     [ConfigurationKeyName("DUNGEON_SEEDS_PER_DAY")] public int DungeonSeedsPerDay { get; set; }
@@ -103,4 +106,38 @@ public static class BlobProviders
 {
     public const string S3 = "s3";
     public const string Memory = "memory";
+}
+
+/// <summary>
+/// Key material (specs/08 section 9.3): the JWT signing keys, the support-code server key and the data key that encrypts
+/// device HMAC keys. Values are base64 (PEM for RSA) inline or a <c>...File</c> path, never committed. TODO(#272): load
+/// them from Secrets Manager / KMS instead of configuration.
+/// </summary>
+public sealed class KeysOptions
+{
+    /// <summary>Active RS256 signing keys; the first signs, every one verifies (two during a 90-day rotation).</summary>
+    public List<SigningKeyOptions> SigningKeys { get; set; } = new();
+
+    /// <summary>HMAC key of the support code <c>base32(hmac(playerId, serverKey))[:12]</c> (section 2.1), base64.</summary>
+    public string RecoveryKey { get; set; } = "";
+    public string RecoveryKeyFile { get; set; } = "";
+
+    /// <summary>AES-256 data key for device HMAC keys and protected idempotency bodies, base64 of 32 bytes.</summary>
+    public string DataKey { get; set; } = "";
+    public string DataKeyFile { get; set; } = "";
+
+    /// <summary>
+    /// Generate any missing key in memory at start-up (logged). For local runs and tests only: tokens do not survive a
+    /// restart or validate on another instance. On in appsettings.Development.json; off elsewhere.
+    /// </summary>
+    public bool AllowEphemeral { get; set; }
+}
+
+public sealed class SigningKeyOptions
+{
+    /// <summary>The JWT header <c>kid</c>.</summary>
+    public string Kid { get; set; } = "";
+    /// <summary>PKCS#8 or PKCS#1 PEM of the RSA private key, or the path to it in <see cref="PemFile"/>.</summary>
+    public string Pem { get; set; } = "";
+    public string PemFile { get; set; } = "";
 }

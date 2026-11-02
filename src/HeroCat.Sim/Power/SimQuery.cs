@@ -135,16 +135,13 @@ namespace HeroCat.Sim.Power
         /// <summary>(MP_REGEN0 + res_mp_regen) / TICK_HZ (03 section 2.4).</summary>
         public double MpRegenPerTick => ResearchRules.MpRegenPerTick(_db, _s);
 
-        /// <summary>
-        /// TankCap with the res_tank_cap term (05 section 3). The board applies it from #167 on; until then the live tank
-        /// uses TANK_CAP0 (Simulation.FishTankCap).
-        /// </summary>
+        /// <summary>TankCap with the res_tank_cap term (05 section 3); the live tank's cap (Simulation.FishTankCap).</summary>
         public int ResearchTankCap => ResearchRules.TankCap(_db, _s);
 
-        /// <summary>TankRefillTicks with the res_tank_refill term, floor 2.0 s (05 section 3). Applied to the board by #167.</summary>
+        /// <summary>TankRefillTicks with the res_tank_refill term, floor 2.0 s (05 section 3); the live tank's refill.</summary>
         public int ResearchTankRefillTicks => ResearchRules.TankRefillTicks(_db, _s);
 
-        /// <summary>FishMaxLvl with the res_fish_cap term (05 section 4.3). Applied to the board by #167.</summary>
+        /// <summary>FishMaxLvl with the res_fish_cap term (05 section 4.3); the board's merge cap.</summary>
         public int ResearchFishMaxLvl => ResearchRules.FishMaxLvl(_db, _s);
 
         // ------------------------------------------------------------------------------------------- limit breaks (04 5.2)

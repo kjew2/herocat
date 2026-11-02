@@ -10,7 +10,7 @@ namespace HeroCat.Sim.Power
     /// curve powers come from the content's precomputed tables (00 contract 1).
     ///
     /// M0 layers read state other systems fill (Collections and Loadout from 04, Fish.Cells from 05); a layer whose
-    /// system has not landed returns its neutral value (Companions and Research are MVP, Runes P1).
+    /// system has not landed returns its neutral value (Companions and Research are MVP and neutral in M0 content, Runes P1).
     /// </summary>
     public static class PowerFormula
     {
@@ -143,11 +143,72 @@ namespace HeroCat.Sim.Power
         /// <summary>LevelMult of the skill in <paramref name="slot"/>; scales its per-cast numbers (04 section 5.1).</summary>
         public static double SkillLevelMult(ContentDb db, GameState s, string skillId) => OwnedLevelMult(db, s.Skills, skillId);
 
-        /// <summary>TODO(#156, #161): sum over equipped companions of companionDpsPct (MVP). 0 in M0.</summary>
-        public static double CompanionDpsPct(ContentDb db, GameState s) => 0.0;
+        /// <summary>
+        /// The companion in loadout slot <paramref name="slot"/> when it counts: the slot is open at the current Awakening
+        /// rank (03 section 5.3), the id is a known companion and it is owned. Null otherwise; <paramref name="levelMult"/>
+        /// is its LevelMult (04 section 5.1). The tick loop and the rated formula both read slots through this.
+        /// </summary>
+        public static CompanionDef ActiveCompanion(ContentDb db, GameState s, int slot, int openSlots, out double levelMult)
+        {
+            levelMult = 0.0;
+            var slots = s.Loadout.Companions;
+            if (slots == null || slot < 0 || slot >= slots.Length || slot >= openSlots) return null;
+            string id = slots[slot];
+            if (id == null || !db.Companions.TryGetValue(id, out var def)) return null;
+            levelMult = OwnedLevelMult(db, s.Companions, id);
+            return levelMult > 0 ? def : null;
+        }
 
-        /// <summary>TODO(#156, #161): min(1, regen / demand) with MP_REGEN companions counted as regen (issue #39). 1 in M0.</summary>
-        public static double MpSufficiency(ContentDb db, GameState s) => 1.0;
+        /// <summary>Companion slots open now (COMPANION_SLOTS capped by Awakening, 04 section 8.2).</summary>
+        public static int OpenCompanionSlots(ContentDb db, GameState s) => AwakeningRules.CompanionSlots(db, s);
+
+        /// <summary>
+        /// Sum over equipped companions of dps_pct * LevelMult (04 section 8.2), MP_REGEN and BUFF_GOLD counting 0 (04 section 8.1).
+        /// Locked slots, unowned and unknown ids count 0. 0 in M0 (no companion rows).
+        /// </summary>
+        public static double CompanionDpsPct(ContentDb db, GameState s)
+        {
+            var slots = s.Loadout.Companions;
+            if (slots == null || db.Companions.Count == 0) return 0.0;
+            int open = OpenCompanionSlots(db, s);
+            double sum = 0.0;
+            for (int i = 0; i < slots.Length; i++)
+            {
+                var c = ActiveCompanion(db, s, i, open, out double lm);
+                if (c != null && c.CountsInLayer) sum += c.DpsPct * lm;
+            }
+            return sum;
+        }
+
+        /// <summary>MP restored by one cast of an MP_REGEN companion at <paramref name="levelMult"/>: mp_restored * LevelMult (04 section 8.1).</summary>
+        public static double MpRestored(CompanionDef c, double levelMult) =>
+            c.AbilityType == AbilityType.MP_REGEN ? c.Magnitude * levelMult : 0.0;
+
+        /// <summary>
+        /// The inclusive mpSufficiency (04 section 8.2, 03 section 7.1; issue #39, 00 decision 71):
+        /// <c>supply = mpRegenPerSecond + sum MP_REGEN (mpRestored - mpCost) / cooldownSeconds</c>,
+        /// <c>demand = sum other (mpCost / cooldownSeconds)</c>, <c>demand == 0 ? 1 : min(1, supply / demand)</c>, floored at
+        /// 0 (a net-draining loadout cannot make the layer negative). 1 in M0.
+        /// </summary>
+        public static double MpSufficiency(ContentDb db, GameState s)
+        {
+            var slots = s.Loadout.Companions;
+            if (slots == null || db.Companions.Count == 0) return 1.0;
+            int open = OpenCompanionSlots(db, s);
+            double hz = db.Constants.TickHz;
+            double supply = ResearchRules.MpRegenPerSecond(db, s), demand = 0.0;
+            for (int i = 0; i < slots.Length; i++)
+            {
+                var c = ActiveCompanion(db, s, i, open, out double lm);
+                if (c == null || c.CooldownTicks <= 0) continue;
+                double perSec = hz / c.CooldownTicks;   // casts per second at full uptime
+                if (c.AbilityType == AbilityType.MP_REGEN) supply += (MpRestored(c, lm) - c.MpCost) * perSec;
+                else demand += c.MpCost * perSec;
+            }
+            if (demand <= 0) return 1.0;
+            double r = supply / demand;
+            return r >= 1.0 ? 1.0 : r <= 0.0 ? 0.0 : r;
+        }
 
         // ================================================================================================ Fish Board (05 5)
 
@@ -270,6 +331,8 @@ namespace HeroCat.Sim.Power
                 AttackGainUnits = AttackGainUnits(db, s),
                 GoldMult = GoldMult(db, s),
                 ExpMult = ExpMult(db, s),
+                MpPoolMax = ResearchRules.MpPoolMax(db, s),
+                MpRegenPerTick = ResearchRules.MpRegenPerTick(db, s),
             };
             p.Weapons = 1.0 + (p.EquippedWeaponPct + p.WeaponPassivePct) / Units.Percent;
             p.Skills = 1.0 + p.SkillDpsPct / Units.Percent;

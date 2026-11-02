@@ -103,6 +103,12 @@ namespace HeroCat.Sim
             }
         }
 
+        /// <summary>
+        /// The events buffered since the last drain, as a live read-only view. Runtime notes its count before an Apply and
+        /// reads the tail after it, so analytics can group one command's events (05 section 13's per-command rows).
+        /// </summary>
+        public IReadOnlyList<Event> BufferedEvents => _events;
+
         /// <summary>Moves the buffered events out; the caller owns the returned list.</summary>
         public IReadOnlyList<Event> DrainEvents()
         {
@@ -193,7 +199,7 @@ namespace HeroCat.Sim
         void RefreshSnapshot()
         {
             var s = State;
-            var f = s.Combat.Fight;
+            var f = s.Combat.Mode == CombatMode.Dungeon && s.Combat.DungeonRun != null ? s.Combat.DungeonRun.Fight : s.Combat.Fight;
             var k = Db.Constants;
             _snapshot = new Snapshot(_damage, _damageCount)
             {
@@ -201,6 +207,7 @@ namespace HeroCat.Sim
                 Stage = s.Combat.Stage,
                 SelectedStage = s.Combat.Selected,
                 KillsInStage = s.Combat.KillsInStage,
+                Mode = s.Combat.Mode,
                 Chapter = k.ChapterOf(s.Combat.Stage < 1 ? 1 : s.Combat.Stage),
                 BossPhase = s.Combat.Boss,
                 BossTicksLeft = f != null ? f.BossTicksLeft : 0,

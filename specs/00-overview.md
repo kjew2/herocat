@@ -466,7 +466,7 @@ These were open or contradictory across the writer-produced specs and are now se
 28. **`IDEMPOTENCY_TTL_H = 24`**; a pending summon older than that executes fresh rather than replaying (02, 08).
 29. **Soft-launch markets**: Philippines and Canada, with a New Zealand technical launch (10). Belgium paid-summon handling is deferred to soft launch (08 open question 5).
 
-Known stale spots left for the next pass rather than patched blind: the Fish Coin Dungeon reward `50 * f` falls under the 25-50% income share band on days 1 and 7 in `tools/fish_model.py` (and on days 1, 7 and 30 in `tools/power_curve_model.py`, 06 section 11), and the curve (`50 * f` or `50 * f^0.7`) waits on #165 and #249 item 6 (06 open question).
+Known stale spots left for the next pass rather than patched blind: the Fish Coin Dungeon reward `50 * f` falls under the 25-50% income share band on days 1 and 7 in `tools/fish_model.py` (and on days 1, 7 and 30 in `tools/power_curve_model.py`, 06 section 11), and the curve (`50 * f` or `50 * f^0.7`) waits on #165 and #249 item 6 (06 open question 4, which has `fish_model.py --dungeon-curves`'s numbers: `50 * f^0.7` is further under the band than `50 * f`).
 
 ### 12.2 Decisions made after the spec rewrite
 

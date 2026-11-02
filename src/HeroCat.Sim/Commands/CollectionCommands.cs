@@ -1,6 +1,6 @@
 namespace HeroCat.Sim.Commands
 {
-    // Collection commands (04 sections 6.3 and 7.2; 00 section 5.1 vocabulary). Handlers in Simulation.Summons.cs.
+    // Collection commands (04 sections 6.3, 7.2 and 8.2; 00 section 5.1 vocabulary). Handlers in Simulation.Summons.cs.
 
     /// <summary>Equips an owned weapon (04 section 6.3). There is no unequip command for weapons.</summary>
     public sealed record EquipWeapon(string WeaponId) : Command
@@ -33,8 +33,32 @@ namespace HeroCat.Sim.Commands
     }
 
     /// <summary>
-    /// Spends Rock Candy for one limit-break rank on an owned weapon or skill (04 section 5.2): +1 effective level, up to
-    /// LIMIT_BREAK_RANKS ranks, at LIMIT_BREAK_COST[rarity] * (rank + 1). TODO(#161): companions, once their content lands.
+    /// Puts an owned companion in slot 0..COMPANION_SLOTS-1, replacing the occupant (04 section 8.2). Slot 0 is open from
+    /// the start; slots 1-3 open at Awakening ranks 1-3 (03 section 5.3) and are rejected Locked until then.
+    /// </summary>
+    public sealed record EquipCompanion(int Slot, string CompanionId) : Command
+    {
+        internal override ApplyResult Execute(Simulation sim) => sim.HandleEquipCompanion(this);
+    }
+
+    /// <summary>Empties a companion slot (04 section 8.2).</summary>
+    public sealed record UnequipCompanion(int Slot) : Command
+    {
+        internal override ApplyResult Execute(Simulation sim) => sim.HandleUnequipCompanion(this);
+    }
+
+    /// <summary>
+    /// Fills the open companion slots with the best owned companions, reserving one for the best MP_REGEN companion when
+    /// the pure-damage loadout is MP-starved (04 section 8.2; CollectionRules.BestCompanions).
+    /// </summary>
+    public sealed record AutoEquipBestCompanions : Command
+    {
+        internal override ApplyResult Execute(Simulation sim) => sim.HandleAutoEquipBestCompanions(this);
+    }
+
+    /// <summary>
+    /// Spends Rock Candy for one limit-break rank on an owned weapon, skill or companion (04 section 5.2): +1 effective
+    /// level, up to LIMIT_BREAK_RANKS ranks, at LIMIT_BREAK_COST[rarity] * (rank + 1).
     /// </summary>
     public sealed record LimitBreak(string ItemId) : Command
     {
@@ -48,6 +72,10 @@ namespace HeroCat.Sim.Commands
         public const string UNKNOWN_ITEM = "UNKNOWN_ITEM";
         public const string ALREADY_EQUIPPED = "ALREADY_EQUIPPED";
         public const string SKILL_IN_OTHER_SLOT = "SKILL_IN_OTHER_SLOT";
+        public const string COMPANION_IN_OTHER_SLOT = "COMPANION_IN_OTHER_SLOT";
+
+        /// <summary>EquipCompanion into a slot its Awakening rank has not opened yet (03 section 5.3), under Locked.</summary>
+        public const string COMPANION_SLOT_LOCKED = "COMPANION_SLOT_LOCKED";
         public const string BAD_SLOT = "BAD_SLOT";
         public const string SLOT_EMPTY = "SLOT_EMPTY";
 

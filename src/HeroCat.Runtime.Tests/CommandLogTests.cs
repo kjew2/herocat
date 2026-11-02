@@ -43,7 +43,8 @@ namespace HeroCat.Runtime.Tests
                                       typeof(DiscardFish), typeof(AttemptBoss), typeof(AutoEquipBestWeapon), typeof(AutoEquipBestSkills),
                                       typeof(ReleaseFish), typeof(MoveFish), typeof(LimitBreak), typeof(Awaken),
                                       typeof(ClaimQuest), typeof(ClaimAllQuests), typeof(Research),
-                                      typeof(ClaimDailyGift), typeof(ExchangeItem) })
+                                      typeof(ClaimDailyGift), typeof(ExchangeItem),
+                                      typeof(StartDungeon), typeof(SweepDungeon) })
                 Assert.That(CommandCodec.RegisteredTypes, Does.Contain(t), t.Name);
             Assert.That(CommandCodec.Encode(new ApplyServerTime(123)), Does.Not.Contain("HeroCat."));
             Assert.Throws<FormatException>(() => CommandCodec.Decode("{\"tick\":1,\"type\":\"NoSuchCommand\"}"));

@@ -286,6 +286,10 @@ namespace HeroCat.Runtime.Tests
                 new AnalyticsEvents.SaveWriteFailed(1),
                 new AnalyticsEvents.MigrationApplied(1, 2),
                 new AnalyticsEvents.ClockAnomaly(AnalyticsEvents.ClockAnomaly.RESYNC, 400),
+                new AnalyticsEvents.ProfileCreated(),
+                new AnalyticsEvents.BootMs(6, 1, 1, 1, 1, 1, 1),
+                new AnalyticsEvents.ResumeMs(1),
+                new AnalyticsEvents.PerfTick(0.1, 0.2, 0.3, 4),
             };
             foreach (var e in all)
             {

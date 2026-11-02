@@ -30,8 +30,14 @@ namespace HeroCat.Runtime.Save
         /// <summary>Informational lines, e.g. an unknown Rng stream dropped (02 section 6.3).</summary>
         public List<string> Log { get; } = new List<string>();
 
-        /// <summary>P16 found a dungeon run in the save and abandoned it. TODO(#172): the caller emits DungeonAbandoned.</summary>
+        /// <summary>P16 found a dungeon run in the save and abandoned it.</summary>
         public bool DungeonAbandoned { get; internal set; }
+
+        /// <summary>
+        /// The run P16 abandoned, as the sim's DungeonAbandoned event (06 section 13 `dungeon_run` outcome abandoned); null when
+        /// P16 did not fire, or fired on a Dungeon mode with no run. TODO(#146): the boot flow forwards it to analytics.
+        /// </summary>
+        public HeroCat.Sim.Events.DungeonAbandoned AbandonedRun { get; internal set; }
     }
 
     /// <summary>
@@ -246,8 +252,7 @@ namespace HeroCat.Runtime.Save
                     Hit("P8");
                 }
                 if (CleanSlots(l.Skills, s.Skills, db.Skills)) Hit("P8");
-                // TODO(#161): companion content (unknown or wrong-kind ids); ownership and duplicates are checked now.
-                if (CleanSlots<object>(l.Companions, s.Companions, null)) Hit("P8");
+                if (CleanSlots(l.Companions, s.Companions, db.Companions)) Hit("P8");
                 // TODO(#227): rune content (P1).
                 if (CleanSlots<object>(l.Runes, s.Runes, null)) Hit("P8");
             }
@@ -311,8 +316,8 @@ namespace HeroCat.Runtime.Save
             void P9b()
             {
                 var f = s.Fish;
-                int cap = FishBoard.TankCap(s, db);                  // TODO(#167) lives there: the TANK_CAP Research term
-                int refillTicks = FishBoard.TankRefillTicks(s, db);  // TODO(#167) lives there: the TANK_REFILL Research term
+                int cap = FishBoard.TankCap(s, db);                  // with the TANK_CAP Research term (levels read clamped, P13)
+                int refillTicks = FishBoard.TankRefillTicks(s, db);  // with the TANK_REFILL Research term
                 int maxRelease = db.Tank.ReleaseLevel;  // TODO(#231): the content max of the P1 release-level upgrade
                 if (f.TankCount < 0) { f.TankCount = 0; Hit("P9b"); }
                 if (f.TankCount > cap) { f.TankCount = cap; Hit("P9b"); }
@@ -328,7 +333,7 @@ namespace HeroCat.Runtime.Save
             {
                 if (PruneItems(s.Weapons, db.Weapons)) Hit("P10");
                 if (PruneItems(s.Skills, db.Skills)) Hit("P10");
-                if (PruneItems<object>(s.Companions, null)) Hit("P10");   // TODO(#161): companion ids against content
+                if (PruneItems(s.Companions, db.Companions)) Hit("P10");
                 if (PruneItems<object>(s.Runes, null)) Hit("P10");        // TODO(#227): rune ids against content
             }
 
@@ -449,9 +454,11 @@ namespace HeroCat.Runtime.Save
             {
                 var c = s.Combat;
                 if (c.DungeonRun == null && c.Mode == CombatMode.Stage) return;
+                if (c.DungeonRun != null)
+                    Report.AbandonedRun = new HeroCat.Sim.Events.DungeonAbandoned(c.DungeonRun.Kind, c.DungeonRun.Floor, c.DungeonRun.GrantId ?? "");
                 c.Mode = CombatMode.Stage;
                 c.DungeonRun = null;
-                Report.DungeonAbandoned = true;   // TODO(#172): emit DungeonAbandoned once the dungeon events exist
+                Report.DungeonAbandoned = true;
                 Hit("P16");
             }
 

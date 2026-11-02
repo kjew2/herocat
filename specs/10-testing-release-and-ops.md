@@ -64,7 +64,7 @@ Integration tests run against real Postgres and Redis in containers; unit tests 
 | Group | Tests | What they assert |
 |---|---|---|
 | Summon algorithm vs Python model | 20 | 04's pull algorithm (08 keeps only the handler, issue #24) on `Fixtures/Summon/vectors.json`; a 1,000,000-pull Monte Carlo per banner level compared to `tools/gacha_model.py` output within 0.3 pp per rarity and within 0.05 pp on L+ (the Python model is the oracle, run in CI from the same content); pity state is per banner and per player; 10-pull guarantee; the audit row count equals pulls; `rateTableHash` in the published rates endpoint equals the hash of `banner_levels` rows for that level. |
-| Idempotency replay | 14 | 00 section 8 item 13: the same `requestId` twice returns the stored response and performs no second write (summon, inbox claim, save PUT, dungeon seed); a different body with the same `requestId` -> `409 IDEMPOTENCY_IN_FLIGHT` or `400 VALIDATION`; the key expires after `IDEMPOTENCY_TTL_H`. |
+| Idempotency replay | 14 | 00 section 8 item 13: the same `requestId` twice returns the stored response and performs no second write (summon, inbox claim, save PUT, dungeon seed); a different body with the same `requestId` -> `400 VALIDATION` (`details.reason = REQUEST_ID_REUSED`); a concurrent request with the same id -> `409 IDEMPOTENCY_IN_FLIGHT`; the key expires after `IDEMPOTENCY_TTL_H`. The replay half is one shared helper, `IdempotencyReplay` in `HeroCat.Server.Tests`, that each endpoint's tests call (issue #194). |
 | Receipt validation stubs | 18 | 08 section 5 with recorded App Store Server API and Google Developer API responses: valid, already-consumed, refunded, sandbox-on-prod, expired JWS, malformed; grant lands in `inbox_items` exactly once; refund flips the row and queues a `REFUND` wallet delta; restore purchases re-grants nothing already granted. |
 | Plausibility checks | 24 | 08 section 7, one test per named check: stage vs elapsed time vs re-simulated DPS bound, currency delta bounds, duplicate `requestId`, clock skew above `CLOCK_MAX_SKEW_ACCEPT_S`, save blob over `SAVE_BLOB_MAX_BYTES`; the action matrix (log / soft flag / rollback / ban) chosen per severity; a flagged save never silently overwrites the previous good one. |
 | Auth | 16 | guest device id -> JWT, refresh, link Apple / Google, link conflict, multi-device, token revoke, `CLIENT_TOO_OLD` on every route except the allow list. |
@@ -333,11 +333,11 @@ Measured on the four devices of section 1.5; the budget column is the low-end de
 | Metric | Budget | How measured | Where enforced |
 |---|---|---|---|
 | Frame time on `SCR_MAIN` with board full and six skills casting | <= 33.3 ms p95 (30 fps floor, 00 section 3) | Unity Profiler recorder in PlayMode test 1; device-farm trace | release candidate gate |
-| Sim tick cost | <= 0.5 ms per tick on the low-end device; <= 8 ms per frame for catch-up bursts (`TICK_BUDGET_MS`, 01) | `Stopwatch` around `SessionRunner.Tick` logged to analytics `perf_tick` | nightly dashboard |
+| Sim tick cost | <= 0.5 ms per tick on the low-end device; <= 8 ms per frame for catch-up bursts (`TICK_BUDGET_MS`, 01) | `Stopwatch` around `SessionRunner.Tick` logged to analytics `perf_tick` (02 section 14.3: p50/p95/max sampled per session) | nightly dashboard |
 | GC alloc per tick | 0 B steady state; <= 128 B per kill with the default event mask | `HeroCat.Sim.Tests` perf group (`GC.GetAllocatedBytesForCurrentThread`) | every PR |
 | Memory | <= 450 MB total on the 2 GB device at `SCR_MAIN`; <= 600 MB with `SCR_SUMMON_RESULT` 10x reveal | device-farm peak RSS | release candidate gate |
-| Cold boot to interactive `SCR_MAIN` | <= 4.0 s on mid device, <= 6.0 s low-end (content load <= 300 ms of it, 01) | `boot_ms` analytics event with phase breakdown | nightly dashboard, release gate |
-| Warm resume | <= 1.0 s to first frame | `resume_ms` event | nightly |
+| Cold boot to interactive `SCR_MAIN` | <= 4.0 s on mid device, <= 6.0 s low-end (content load <= 300 ms of it, 01) | `boot_ms` analytics event with phase breakdown (02 section 14.3) | nightly dashboard, release gate |
+| Warm resume | <= 1.0 s to first frame | `resume_ms` event (02 section 14.3) | nightly |
 | APK / AAB download size | <= 150 MB; IPA <= 200 MB (MVP asset list, 07) | `build-android.yml` artifact size step | every build |
 | Addressables remote download at first launch | 0 MB (everything MVP ships in the bundle; remote is for P1 content) | | |
 | Damage number labels | pool of `UI_DAMAGE_LABEL_POOL`, never instantiate at runtime | EditMode test over the prefab | PR |
@@ -411,13 +411,15 @@ python3 tools/fish_model.py --quiet --out $CHECK_OUT_DIR/fish                   
 dotnet run -c Release --no-build --project src/HeroCat.Bots -- fish-check --model $CHECK_OUT_DIR/fish/fish_attentive.json   # 05 AC14 (issue #105)
 python3 tools/gacha_model.py --check                                              # oracle: content/, vectors.json and the C# stream golden (issues #14, #24)
 python3 tools/power_curve_model.py --check --quiet                                # 03 section 8.6; report-only until the balance call
+python3 tools/fish_model.py --quiet --research-schedule tools/out/power_curve_7.json --dungeon-curves   # 06 6.3 (a) per curve; informational (issue #165)
+python3 tools/gacha_model.py --cadence --quiet                                    # 04 section 14 cadence and S-constant checks (issue #164)
 timeout 400 dotnet run -c Release --no-build --project src/HeroCat.Bots -- acceptance --tier M0 --seeds 1-20 --days 30 --time-budget-s 240 --table --verbose
 dotnet run -c Release --no-build --project src/HeroCat.Bots -- acceptance --tier M0 --days 14 --time-budget-s 240   # M0 exit criterion
 dotnet run -c Release --no-build --project src/HeroCat.Bots -- report --layer-shares --seeds 1-20 --days 30 > $CHECK_OUT_DIR/shares.txt
 dotnet run -c Release --no-build --project src/HeroCat.Bots -- golden --check
 ```
 
-During the M0 rewrite both `acceptance` runs are report-only (`REWRITE_REPORT_ONLY=1` in `check.sh`, until the balance decision #249 and issue #136), and so is `power_curve_model.py --check`; the PR comment says so. Not yet in `--content`: the exporter's `--previous`, `--strict-warnings` and `--ui-keys` (09 issues #122, #123, #128) and `stage-bound --check` (issue #60, needs the whale bot).
+During the M0 rewrite both `acceptance` runs are report-only (`REWRITE_REPORT_ONLY=1` in `check.sh`, until the balance decision #249 and issue #136), and so is `power_curve_model.py --check`; the PR comment says so. `gacha_model.py --cadence` is a hard gate except two report-only checks (04 section 14). Not yet in `--content`: the exporter's `--previous`, `--strict-warnings` and `--ui-keys` (09 issues #122, #123, #128) and `stage-bound --check` (issue #60, needs the whale bot).
 
 `.github/workflows/nightly-bots.yml` (02:00 UTC and manual dispatch) calls `./check.sh --nightly` on `ubuntu-latest`, and `./check.sh --nightly --replay-only` on `windows-latest` and `macos-14` (ARM64, under bash) for the cross-platform determinism check; each leg uploads `$CHECK_OUT_DIR` as an artifact:
 

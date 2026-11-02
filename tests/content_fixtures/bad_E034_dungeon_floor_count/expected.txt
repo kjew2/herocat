@@ -1,0 +1,2 @@
+CONTENT E060 dungeon_floors: floor for dungeon dungeon_fish must be exactly 1..3 in row order, got 1, 2
+CONTENT E034 dungeon_floors: dungeon_floors has 2 rows of dungeon_fish, expected 3 from dungeons[dungeon_fish].floors

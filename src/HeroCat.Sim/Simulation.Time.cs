@@ -62,6 +62,8 @@ namespace HeroCat.Sim
             var k = Db.Constants;
             int day = DayKeys.DayKey(now + RolloverOffsetSeconds, k.DaySeconds);
             if (day <= t.DayKey) return;
+            int skipped = t.DayKey < 0 ? 0 : day - t.DayKey - 1;   // a new profile (DayKey -1) skipped nothing
+            long sinceLastTick = System.Math.Max(0, now - t.LastTickServerTime);
             t.DayKey = day;
 
             // Daily resets (06 section 4.2 table). Each is a hook the owning MVP issue implements in its own file; until then
@@ -77,7 +79,7 @@ namespace HeroCat.Sim
                 ResetWeeklyQuests(week);
                 Emit(new WeekRolledOver(week));
             }
-            Emit(new DayRolledOver(day));
+            Emit(new DayRolledOver(day, skipped, sinceLastTick));
 
             if (t.LoginDayKey < day)   // the only payment of LOGIN_DIAMONDS (issue #20)
             {
