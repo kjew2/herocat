@@ -6,8 +6,10 @@ using HeroCat.Server.Infrastructure.Secrets;
 using HeroCat.Server.Pipeline;
 using HeroCat.Server.Tests.Idempotency;
 using HeroCat.Server.Tests.Pipeline;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 
 namespace HeroCat.Server.Tests.Auth;
@@ -24,6 +26,7 @@ public sealed class PostgresAuthTests
     ScratchDatabase _db = null!;
     FakeClock _clock = null!;
     InMemoryRateLimitStore _limits = null!;
+    CapturingLoggerProvider _logs = null!;
     WebApplicationFactory<Program> _factory = null!;
     HttpClient _client = null!;
     readonly ServerKeyRing _keys = ServerKeyRing.Ephemeral();
@@ -42,9 +45,11 @@ public sealed class PostgresAuthTests
     {
         _clock = new FakeClock(DateTimeOffset.FromUnixTimeSeconds(1_793_670_900));
         _limits = new InMemoryRateLimitStore();
+        _logs = new CapturingLoggerProvider();
         _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
         {
             b.UseSetting("HeroCat:Database:ConnectionString", _db.ConnectionString);
+            b.ConfigureLogging(l => l.AddProvider(_logs).AddFilter<CapturingLoggerProvider>(null, LogLevel.Trace));
             b.ConfigureServices(s =>
             {
                 s.AddSingleton<TimeProvider>(_clock);
@@ -340,6 +345,63 @@ public sealed class PostgresAuthTests
         using var other = await Devices(s, NewKey(), device: NewDevice());
         await AssertError(other, HttpStatusCode.Forbidden, ErrorCodes.FORBIDDEN);
         Assert.That((await Body(other)).GetProperty("details").GetProperty("reason").GetString(), Is.EqualTo("DEVICE_MISMATCH"));
+    }
+
+    [Test]
+    public async Task Devices_registration_is_idempotent_for_the_same_device_and_key()   // issue #150
+    {
+        var s = await Guest();
+        string id = NewId();
+        for (int i = 0; i < 2; i++)
+        {
+            using var again = await _client.SendAsync(Json(HttpMethod.Post, "/v1/devices",
+                new { deviceId = s.Device, deviceKey = s.Key, model = "Pixel 8", os = "Android 15", clientVersion = "1.5.0+1" }, s.Device, id, s.Access));
+            Assert.That(again.StatusCode, Is.EqualTo(HttpStatusCode.NoContent), $"replay {i}: " + await again.Content.ReadAsStringAsync());
+        }
+        using (var fresh = await Devices(s, s.Key)) Assert.That(fresh.StatusCode, Is.EqualTo(HttpStatusCode.NoContent), "a new request id, the same key");
+        Assert.That(await _db.CountAsync("select count(*) from devices where device_id = @d", ("d", Guid.Parse(s.Device))), Is.EqualTo(1));
+        Assert.That(await StoredKey(s.Device), Is.EqualTo(Convert.FromBase64String(s.Key)));
+    }
+
+    [Test]
+    public async Task The_device_key_never_reaches_the_logs()   // 02 section 10.1
+    {
+        var s = await Guest();
+        await Devices(s, s.Key);
+        string rotated = NewKey();
+        _clock.Advance(TimeSpan.FromHours(25));
+        var now = await Renew(s);
+        using (var refused = await Devices(now, rotated)) Assert.That(refused.StatusCode, Is.EqualTo(HttpStatusCode.Forbidden));
+        string shortKey = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(31));
+        using (var bad = await Devices(now, shortKey)) Assert.That(bad.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+        using (var bad = await _client.SendAsync(GuestRequest(NewDevice(), shortKey))) Assert.That(bad.StatusCode, Is.EqualTo(HttpStatusCode.BadRequest));
+
+        var lines = _logs.Lines;
+        Assert.That(lines, Is.Not.Empty, "the capture works");
+        foreach (string key in new[] { s.Key, rotated, shortKey })
+        {
+            string hex = Convert.ToHexString(Convert.FromBase64String(key));
+            Assert.That(lines.Where(l => l.Contains(key) || l.Contains(hex, StringComparison.OrdinalIgnoreCase)), Is.Empty);
+        }
+    }
+
+    /// <summary>Every log line (message and exception) of the api, at every level.</summary>
+    sealed class CapturingLoggerProvider : ILoggerProvider
+    {
+        readonly List<string> _lines = new();
+        public string[] Lines { get { lock (_lines) return _lines.ToArray(); } }
+        public ILogger CreateLogger(string category) => new Logger(this, category);
+        public void Dispose() { }
+
+        sealed class Logger(CapturingLoggerProvider p, string category) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+            public bool IsEnabled(LogLevel level) => true;
+            public void Log<TState>(LogLevel level, EventId id, TState state, Exception? e, Func<TState, Exception?, string> format)
+            {
+                lock (p._lines) p._lines.Add($"{category} {format(state, e)} {e}");
+            }
+        }
     }
 
     // ---- rate limits ----
