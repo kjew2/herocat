@@ -18,6 +18,8 @@
   <ItemGroup>
     <ProjectReference Include="../HeroCat.Server/HeroCat.Server.csproj" />
     <ProjectReference Include="../HeroCat.Sim/HeroCat.Sim.csproj" />
+    <!-- The client's RemoteInboxService drives the server's inbox in a test, so the wire shapes cannot drift apart. -->
+    <ProjectReference Include="../HeroCat.Remote/HeroCat.Remote.csproj" />
   </ItemGroup>
   <!-- Mirrors the server's target: the copied migration directory exists even while the set is empty. -->
   <Target Name="EnsureMigrationsDirectory" AfterTargets="Build">

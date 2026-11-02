@@ -166,17 +166,30 @@ Server steps, in order: (1) parse header, verify `len`/CRC (`SAVE_MALFORMED` 400
   "serverTime": 1793670900 }
 ```
 
-Unclaimed items only; expired items are excluded and purged nightly. Rows whose `available_at` is in the future (scheduled package portions, section 5.2; issue #51) are hidden, except the earliest future portion of each package, which is returned with `availableAt` set so the client can show the next delivery (07 shows at most one); claiming it early returns `INBOX_NOT_AVAILABLE` 409. Inbox items never contain diamonds that were not first written to `diamond_ledger` with `ref_type = inbox_item` at claim time (not at creation), so an unclaimed item is not a balance.
+Unclaimed items only; expired items are excluded and purged nightly. Rows whose `available_at` is in the future (scheduled package portions, section 5.2; issue #51) are hidden, except the earliest future portion of each package, which is returned with `availableAt` set so the client can show the next delivery (07 shows at most one); claiming it early returns `INBOX_NOT_AVAILABLE` 409. Inbox items never contain diamonds that were not first written to `diamond_ledger` with `ref_type = inbox_item` at claim time (not at creation), so an unclaimed item is not a balance. As built (issue #201): items are ordered oldest first (`available_at`, then `created_at`); a package is the rows sharing `kind` and `source_ref`; `availableAt` (unix seconds) is present only on such a future portion, and `expiresAt` is `null` for an item that never expires.
 
-**`POST /inbox/claim`** -- `jwt` -- idempotent -- 30/min. `{ "inboxItemId" }` ->
+**`POST /inbox/claim`** -- `jwt` -- idempotent -- 30/min.
 
 ```json
+{ "inboxItemId": "…" }
+// 200
 { "inboxItemId": "…", "grants": [ ... ], "balances": { "DIAMOND": 3640 }, "reason": "IAP", "serverTime": … }
 ```
 
-Writes `diamond_ledger` (`+amount`, reason `IAP`/`MAIL`/`ADMIN`, `ref_type = inbox_item`) and, for summon ticket grants, `ticket_ledger` with the same reason and ref (issue #49), sets `claimed_at`, in one transaction. Errors: `INBOX_NOT_FOUND` 404, `INBOX_NOT_AVAILABLE` 409 (`available_at` in the future), `INBOX_ALREADY_CLAIMED` 409 (the error body's `details` still carries the original `{ "inboxItemId", "grants", "reason" }` so the client can reconcile `Inbox.ClaimedIds`; issue #176), `INBOX_EXPIRED` 410. Item grants (`kind: item`) are returned for the client to apply through `ApplyInboxGrant`; the server also appends them to a per-player `granted_items` ledger used by `ITEM_WITHOUT_PULL` (section 7).
+Writes `diamond_ledger` (`+amount`, reason `IAP`/`MAIL`/`ADMIN`/`REFUND`, `ref_type = inbox_item`) and, for summon ticket grants, `ticket_ledger` with the same reason and ref (issue #49), sets `claimed_at`, in one transaction. Errors: `INBOX_NOT_FOUND` 404, `INBOX_NOT_AVAILABLE` 409 (`available_at` in the future), `INBOX_ALREADY_CLAIMED` 409 (the error body's `details` still carries the original `{ "inboxItemId", "grants", "reason" }` so the client can reconcile `Inbox.ClaimedIds`; issue #176), `INBOX_EXPIRED` 410. Item grants (`kind: item`) are returned for the client to apply through `ApplyInboxGrant`; the server also appends them to a per-player `granted_items` ledger used by `ITEM_WITHOUT_PULL` (section 7).
+
+As built (issue #201): `inboxItemId` is the row's UUID (`D` format); a value that is not a UUID is `INBOX_NOT_FOUND`. `reason` follows the item's `kind` as the client's does (06 section 9): `iap` and `package_daily` are `IAP`, `refund` is `REFUND`, `admin` is `ADMIN`, the rest `MAIL`. `balances` holds the ledger sums after the claim: `DIAMOND` always, plus each summon ticket the claim granted. Other currencies (Rock Candy, Fish Coins; 06 rule 9.4) have no server ledger and are only returned in `grants`. The claim checks, in order: already claimed, expired (`now >= expires_at`), not available, then the lines. Until issue #271 decides how the client applies item lines, an item with a `kind: item` line is refused `409 INBOX_ITEM_GRANT_UNSUPPORTED` and stays unclaimed (nothing is written, so `granted_items` has no inbox writer yet), and a line that is not a known currency with a positive whole amount is refused `409 INBOX_BAD_GRANT` and logged. Inbox ticket rows leave `ticket_ledger.request_id` null (its unique `(player_id, request_id)` index allows one row per request); the request id is on `inbox_items.claimed_request_id`. The ledger rows take the database clock for `created_at`, so they always land in a partition.
 
 **`POST /inbox/claim-all`** -- `jwt` -- idempotent -- 10/min. `{}` -> `{ "claimed": [ ...per-item results... ], "balances": {...} }`. Claims up to 50 items oldest-first; a partial failure (an item expiring between list and claim) is skipped and reported, not an error. Each `claimed` row is the claim response's item shape, `{ "inboxItemId", "grants", "reason" }`, or `{ "inboxItemId", "code" }` for a skipped row (`code` one of the claim errors above; issue #176).
+
+```json
+{}
+// 200
+{ "claimed": [ { "inboxItemId": "…", "grants": [ ... ], "reason": "MAIL" }, { "inboxItemId": "…", "code": "INBOX_EXPIRED" } ],
+  "balances": { "DIAMOND": 3940, "TICKET_SUMMON_WEAPON": 5 } }
+```
+
+As built (issue #201): the 50 are the player's unclaimed rows with `available_at <= now`, oldest first by `available_at`, then `created_at`, in one transaction; rows that expired at most one hour ago are among them and come back as `INBOX_EXPIRED` (so an item that expired between the client's list and its claim-all is reported, not silently missing), and an item- or bad-grant row comes back with that code. Skipped rows count toward the 50. The nightly purge (worker) deletes unclaimed rows that expired more than that hour ago; claimed rows stay. `balances` is the claim's rule over every row claimed.
 
 ### 3.3 Dungeon seed
 
