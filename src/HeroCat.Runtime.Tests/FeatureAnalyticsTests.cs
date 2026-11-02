@@ -148,6 +148,10 @@ namespace HeroCat.Runtime.Tests
                                            new[] { new AnalyticsEvents.SummonResultRow("w", Rarity.COMMON, true, 0, 1, 0, false) }, 0, false, "LOCAL", 1),
                 new AnalyticsEvents.ItemAcquired(Banner.WEAPON, "w", Rarity.COMMON, true, 1, 0, 1, "SUMMON", "r"),
                 new AnalyticsEvents.ItemEquipped(Banner.SKILL, 1, null, "s", false),
+                new AnalyticsEvents.FishRelease(1, 2, 1, 1, false),
+                new AnalyticsEvents.FishMerge(1, new[] { new AnalyticsEvents.FishLevelCount(2, 1) }, 1, new[] { 2 }, true, false),
+                new AnalyticsEvents.FishDiscovered(2, 1), new AnalyticsEvents.FishDiscard(1, 0.5, 3),
+                new AnalyticsEvents.FishBoardSnapshot(new[] { 1, 0 }, 3.85, 1.0385, 10, 6, 10, false, 1, 0, 1, 1, 60),
             };
             AssertCatalogue(all);
         }
@@ -163,6 +167,142 @@ namespace HeroCat.Runtime.Tests
                     Assert.That(AnalyticsEnvelope.Fields, Does.Not.Contain(k), e.Name + "." + k);
                 }
             }
+        }
+
+        // ------------------------------------------------------------------------------------------- 05 section 13
+
+        static List<MemoryAnalytics.Entry> Rows(TestSession s, int from, string name) =>
+            s.Analytics.Events.Skip(from).Where(e => e.Name == name).ToList();
+
+        static int Occupied(TestSession s) => s.Sim.State.Fish.Cells.Count(c => c != 0);
+
+        [Test]
+        public void ReleaseFish_IsOneRowPerTap_ReleaseMax_OneRowWithTheCount()
+        {
+            var s = TestSession.Open();
+            int stock = s.Sim.State.Fish.TankCount;
+            Assert.That(stock, Is.GreaterThan(2), "the tank starts full");
+            int from = s.Analytics.Events.Count;
+            s.Runner.Issue(new ReleaseFish());
+            AssertProps(Rows(s, from, "fish_release").Single(), new Dictionary<string, object>
+            {
+                ["count"] = 1, ["stockBefore"] = stock, ["stockAfter"] = stock - 1, ["boardOccupancyAfter"] = 1, ["viaButton"] = false,
+            });
+            from = s.Analytics.Events.Count;
+            s.Runner.Issue(new ReleaseMax());
+            AssertProps(Rows(s, from, "fish_release").Single(), new Dictionary<string, object>
+            {
+                ["count"] = stock - 1, ["stockBefore"] = stock - 1, ["stockAfter"] = 0, ["boardOccupancyAfter"] = Occupied(s), ["viaButton"] = true,
+            });
+            from = s.Analytics.Events.Count;
+            s.Runner.Issue(new ReleaseMax());   // the tank is empty: accepted, nothing released
+            Assert.That(Rows(s, from, "fish_release"), Is.Empty);
+        }
+
+        [Test]
+        public void MergeAll_IsOneRowWithTheHistogram_MergeFish_OneRowPerMerge()   // 05 section 13, issue #168 AC 1
+        {
+            var s = TestSession.Open();
+            s.Sim.State.Fish.TankCount = 20;
+            s.Runner.Issue(new ReleaseMax());
+            s.Runner.PublishDrained();   // the release's own discovery (level 1) goes out with this drain
+            int from = s.Analytics.Events.Count;
+            var merged = new List<FishMerged>();
+            using (s.Bus.Subscribe<FishMerged>(merged.Add))
+            {
+                s.Runner.Issue(new MergeAll());
+                s.Runner.PublishDrained();
+            }
+            Assert.That(merged.Count, Is.GreaterThan(1));
+            var row = Rows(s, from, "fish_merge").Single().Props;
+            Assert.That(row.Keys, Is.EquivalentTo(new[] { "count", "levelsCreated", "coins", "discoveries", "viaButton", "duringBoss" }));
+            Assert.That(row["count"], Is.EqualTo(merged.Count));
+            var hist = ((List<Dictionary<string, object>>)row["levelsCreated"]).Select(d => ((int)d["level"], (int)d["count"])).ToList();
+            Assert.That(hist, Is.EqualTo(merged.GroupBy(m => m.NewLevel).OrderBy(g => g.Key).Select(g => (g.Key, g.Count()))));
+            Assert.That(row["coins"], Is.EqualTo(merged.Sum(m => m.Coins)).Within(1e-9));
+            Assert.That(row["discoveries"], Is.EqualTo(merged.Where(m => m.Discovered).Select(m => m.NewLevel)));
+            Assert.That((row["viaButton"], row["duringBoss"]), Is.EqualTo((true, false)));
+            Assert.That(Rows(s, from, "fish_discovered").Select(e => (int)e.Props["level"]),
+                        Is.EqualTo(merged.Where(m => m.Discovered).Select(m => m.NewLevel)), "one fish_discovered per FishDiscovered");
+
+            // one manual merge: a pair of equal fish
+            var cells = s.Sim.State.Fish.Cells;
+            s.Sim.State.Fish.TankCount = 2;
+            s.Runner.Issue(new ReleaseMax());
+            var pair = Enumerable.Range(0, cells.Length).Where(i => cells[i] != 0).GroupBy(i => cells[i]).First(g => g.Count() >= 2).Take(2).ToArray();
+            from = s.Analytics.Events.Count;
+            Assert.That(s.Runner.Issue(new MergeFish(pair[0], pair[1])).Ok, Is.True);
+            var manual = Rows(s, from, "fish_merge").Single().Props;
+            Assert.That((manual["count"], manual["viaButton"]), Is.EqualTo((1, false)));
+        }
+
+        [Test]
+        public void FishMerge_DuringABossFight_SaysSo()
+        {
+            var h = new Harness(TestContent.Db);
+            h.State.Combat.Fight = new FightState { EnemyIsBoss = true };
+            h.Applied(new MergeFish(0, 1), new FishMerged(0, 1, 3, 12.5, 1.0, true), new FishDiscovered(3, 12.5));
+            AssertProps(h.Single("fish_merge"), new Dictionary<string, object>
+            {
+                ["count"] = 1, ["levelsCreated"] = new List<Dictionary<string, object>> { new Dictionary<string, object> { ["level"] = 3, ["count"] = 1 } },
+                ["coins"] = 12.5, ["discoveries"] = new List<int> { 3 }, ["viaButton"] = false, ["duringBoss"] = true,
+            });
+            AssertProps(h.Single("fish_discovered"), new Dictionary<string, object> { ["level"] = 3, ["coins"] = 12.5 });
+        }
+
+        [Test]
+        public void DiscardFish_IsOneRow_WithTheOccupancyBefore()
+        {
+            var s = TestSession.Open();
+            s.Runner.Issue(new ReleaseMax());
+            int occupied = Occupied(s);
+            var cells = s.Sim.State.Fish.Cells;
+            int cell = Array.FindIndex(cells, c => c != 0);
+            int level = cells[cell];
+            double coins = TestContent.Db.Constants.FishDiscardCoinsPct * TestContent.Db.FishLevels[level - 1].DiscoveryCoins;
+            int from = s.Analytics.Events.Count;
+            s.Runner.Issue(new DiscardFish(cell));
+            AssertProps(Rows(s, from, "fish_discard").Single(), new Dictionary<string, object>
+            {
+                ["level"] = level, ["coins"] = coins, ["boardOccupancyBefore"] = occupied,
+            });
+        }
+
+        [Test]
+        public void TheBoardSnapshot_FiresOnceAtSessionEnd_WithTheBoardAndTheSessionTotals()   // issue #168 AC 2
+        {
+            var s = TestSession.Open();
+            s.Runner.Issue(new ReleaseMax());
+            s.Runner.Issue(new MergeAll());
+            s.Play(30);
+            var st = s.Sim.State;
+            long released = st.Stats.FishReleased, merges = st.Stats.Merges;
+            Assert.That(s.Analytics.Count("fish_board_snapshot"), Is.Zero);
+            s.Runner.OnPause();
+            s.Runner.OnQuit();
+            Assert.That(s.Analytics.Count("fish_board_snapshot"), Is.EqualTo(1), "a quit after a pause sends no second snapshot");
+            var e = s.Analytics.Events.Single(x => x.Name == "fish_board_snapshot");
+            Assert.That(e.Props.Keys, Is.EquivalentTo(new[]
+            {
+                "cells", "fishBoardDpsPct", "fishMult", "tankCap", "tankRefillS", "fishMaxLvl", "autoMerge",
+                "releases", "merges", "discoveries", "coinsEarned", "activeSec",
+            }));
+            var db = TestContent.Db;
+            double dps = HeroCat.Sim.Fish.FishBoard.BoardDpsPct(st, db);
+            Assert.That(e.Props["cells"], Is.EqualTo(st.Fish.Cells));
+            Assert.That((e.Props["fishBoardDpsPct"], e.Props["fishMult"]), Is.EqualTo((dps, 1 + dps / 100)));
+            Assert.That((e.Props["tankCap"], e.Props["fishMaxLvl"], e.Props["autoMerge"]),
+                        Is.EqualTo((HeroCat.Sim.Fish.FishBoard.TankCap(st, db), HeroCat.Sim.Fish.FishBoard.FishMaxLvl(st, db), false)));
+            Assert.That(e.Props["tankRefillS"], Is.EqualTo(HeroCat.Sim.Fish.FishBoard.TankRefillSeconds(st, db)));
+            Assert.That((e.Props["releases"], e.Props["merges"]), Is.EqualTo((released, merges)), "a new profile's whole history is this session");
+            Assert.That(e.Props["discoveries"], Is.EqualTo((long)st.Fish.DiscoveredLevels.Count));
+            Assert.That((double)e.Props["coinsEarned"], Is.EqualTo(st.Wallet.Get(Currency.FISH_COIN)).Within(1e-9), "every Fish Coin came from the board");
+            Assert.That(e.Props["activeSec"], Is.EqualTo(st.Stats.ActiveSeconds));
+
+            s.Runner.OnResume();   // a new session counts from zero
+            s.Runner.OnPause();
+            var second = s.Analytics.Events.Last(x => x.Name == "fish_board_snapshot");
+            Assert.That((second.Props["releases"], second.Props["merges"], second.Props["activeSec"]), Is.EqualTo((0L, 0L, 0L)));
         }
 
         // ------------------------------------------------------------------------------------------- through a session
