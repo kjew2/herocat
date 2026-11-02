@@ -19,9 +19,11 @@ namespace HeroCat.Client.Screens
         RectTransform _grid;
         int _cardsVersion = -1;
 
-        // Splash (07 section 4.11, 00 decision 108): an L+ companion flipping on its own fills the overlay for SplashSec.
+        // Splash (07 section 4.11, 00 decision 108): an L+ companion flipping on its own fills the whole screen for SplashSec.
         const double SplashSec = 1.5;
+        const int SplashSortingOrder = 65;   // above the overlay layer (60), below toasts (70) and errors (80)
         Image _splash;
+        RectTransform _splashFrame;
         GameObject _splashRoot;
         double _splashUntil;
 
@@ -59,16 +61,28 @@ namespace HeroCat.Client.Screens
             UiKit.Place(close.GetComponent<RectTransform>(), 680, 1200, 320, 136);
             UiKit.LabelOf(close).text = Vm.Localizer.Text(UiKeys.Close);
 
-            var splashBg = UiKit.Panel("Splash", Root, Palette.Background, 0.96f, raycast: true);
-            UiKit.Fill(splashBg.rectTransform);
+            // The splash lives on the root canvas, not in the overlay layer, so it covers the whole screen: the HUD band and
+            // the notch bands included. It has its own sorting and is cleaned up with this overlay (OnHidden, OnDestroy).
+            var splashBg = UiKit.Panel("Splash", Ui.transform, Palette.Background, 1f, raycast: true);
+            _splashFrame = UiKit.Fill(splashBg.rectTransform);
+            var splashCanvas = splashBg.gameObject.AddComponent<Canvas>();
+            splashCanvas.overrideSorting = true;
+            splashCanvas.sortingOrder = SplashSortingOrder;
+            splashBg.gameObject.AddComponent<GraphicRaycaster>();
             splashBg.gameObject.AddComponent<Button>().onClick.AddListener(HideSplash);
             var splashRt = UiKit.Rect("Art", splashBg.transform);
-            UiKit.Fill(splashRt);
+            splashRt.anchorMin = splashRt.anchorMax = splashRt.pivot = new Vector2(0.5f, 0.5f);
             _splash = splashRt.gameObject.AddComponent<Image>();
-            _splash.preserveAspect = true;
             _splash.raycastTarget = false;
             _splashRoot = splashBg.gameObject;
             _splashRoot.SetActive(false);
+        }
+
+        public override void OnHidden() => HideSplash();
+
+        void OnDestroy()
+        {
+            if (_splashRoot != null) Destroy(_splashRoot);
         }
 
         void HideSplash()
@@ -81,6 +95,14 @@ namespace HeroCat.Client.Screens
             _splash.sprite = s;
             _splashRoot.SetActive(true);
             _splashRoot.transform.SetAsLastSibling();
+            // Cover, not fit: the 1080 x 1920 art fills the screen and the edges past it are cut off (taller phones lose a
+            // little left and right, wider screens a little top and bottom), so there are never bars (07 section 15.2).
+            var screen = _splashFrame.rect;
+            float aspect = s.rect.height > 0 ? s.rect.width / s.rect.height : 1f;
+            float w = screen.width, h = screen.height;
+            if (h > 0 && w / h > aspect) h = w / aspect;
+            else w = h * aspect;
+            _splash.rectTransform.sizeDelta = new Vector2(w, h);
             _splashUntil = now + SplashSec;
         }
 

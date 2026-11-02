@@ -434,7 +434,7 @@ Purpose: the reveal. Driven entirely by the already-applied `SummonResultPayload
 
 Reveal rules are in section 6. The `SummonResultPayload` of an "again" request replaces the cards in place.
 
-Splash (00 decision 108): when a Legendary or Mythic companion flips face up, its splash illustration `art_splash_<id>` fills the overlay for 1.5 s (tap to dismiss early, skipped by `Skip`) before the card grid returns. The address is derived from the companion id, not a content column; a missing splash falls back to the card. `SCR_ITEM_DETAIL` shows the splash in place of the portrait for those companions.
+Splash (00 decision 108): when a Legendary or Mythic companion flips face up, its splash illustration `art_splash_<id>` fills the whole screen for 1.5 s (tap to dismiss early, skipped by `Skip`) before the card grid returns. Full screen means over the HUD band and the safe-area insets too, scaled to cover: the art fills the screen and whatever extends past it is cut off, so there are never bars (section 15.2 sets the safe zone). The address is derived from the companion id, not a content column; a missing splash falls back to the card. `SCR_ITEM_DETAIL` shows the splash in place of the portrait for those companions.
 
 ### 4.12 `SCR_DUNGEONS` (Full, MVP)
 
@@ -936,7 +936,7 @@ Fish art is a fixed set of `UI_FISH_SPRITE_LEVELS` (12) sprites (issue #48). A l
 | Avatars | 12 squire portraits | 256 rp |
 | VFX | hit 3, crit 1, kill 2, missile 1 + trail, merge 1, discovery 1, level up 1, awaken 1, summon card flip 1, rarity flashes 3, coin burst 1, boss enter 1 = 17 systems | under 300 live particles total |
 | Summon cards | card back x 1, card frames x 5 rarities | 400 x 560 rp |
-| Companion splash | 8 illustrations, Legendary and Mythic companions only (00 decision 108), address `art_splash_<companion id>`, no baked-in text | 1080 x 1400 rp |
+| Companion splash | 8 illustrations, Legendary and Mythic companions only (00 decision 108), address `art_splash_<companion id>`, no baked-in text; full-screen character art, drawn to cover the screen (section 4.11), so keep the face and the key silhouette inside the centred 810 x 1440 rp safe zone (what survives from about 4:3 to 20:9 screens) | 1080 x 1920 rp |
 | Shop art | 3 package illustrations, 6 diamond pile sizes | 400 rp |
 | Illustrations | empty states x 4 (inbox, quests claimed, collection filter, dungeons locked), error x 1, offline welcome x 1 | 480 rp |
 | Key art / logo | title screen art, app icon, store screenshots template | per store spec |

@@ -43,13 +43,12 @@ The images in Unity are **stand-ins cut from the reference sheets** by `tools/ar
 |---|---|---|
 | Portrait `portrait_comp_*` (256 rp) | crop of the splash art | clean portrait |
 | Icon `icon_comp_*` (128 rp) | face crop | icon drawn for 88-128 rp |
-| Splash `art_splash_*` (1080 x 1400 rp) | splash without the baked-in text (Yuki: from her vertical splash) | clean illustration |
+| Splash `art_splash_*` (1080 x 1920 rp, full screen) | 9:16 window of the splash without the baked-in text (Yuki: from her vertical splash; the others are upscaled about 2x from the sheets, so they look soft) | clean full-screen illustration |
 | Battle chibi `spr_comp_*` (about 48 px native) | the reference chibi sampled on its own pixel grid, background and pedestal removed, 1 frame | idle 4 + cast 6 pixel frames |
 | VFX `vfx_comp_*` | none (the generic ring placeholder) | particle system |
 
 ### Splash pilot notes (Yuki)
 - **What arrived:** a 2:3 vertical splash (1024 x 1536) with the title, class and element chips baked into the top 265 px.
-- **What the game needs:** 1080 x 1400 rp (about 0.77:1) with no baked-in text (`specs/07` section 15.2). The UI draws name, rarity and role.
-- **Stand-in cut:** everything below the chips, x 24-1001 and y 270-1536, scaled up about 1.1x. It keeps the full figure from halo to boots, and loses about 2% of the parasol on the right and the hair ends on the left.
-- **Ask the artist for:** the same composition with no text, at 1080 x 1400 or larger, keeping the head and the halo inside the top 20%. Then nothing is lost to the crop and nothing is upscaled.
-
+- **What the game needs:** full-screen character art at 1080 x 1920 rp (9:16) with no baked-in text (`specs/07` section 15.2). The UI draws name, rarity and role. The reveal scales it to cover the screen, so taller phones trim the sides and wider screens trim the top and bottom. Keep the face and the key silhouette inside the centred 810 x 1440 rp safe zone.
+- **Stand-in cut:** x 204-916, y 270-1536 (everything below the chips), scaled up about 1.5x. The left hair ends and the outer half of the parasol canopy are lost.
+- **Ask the artist for:** 1080 x 1920 or larger, no text, with the character composed for 9:16 and inside the safe zone. Then nothing is cropped beyond the screen trim and nothing is upscaled.
