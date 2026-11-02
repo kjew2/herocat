@@ -141,10 +141,12 @@ namespace UnityEngine
         public static string version => "";
         public static string identifier => "";
         public static string buildGUID => "";
+        public static NetworkReachability internetReachability => NetworkReachability.NotReachable;
         public static void Quit() { }
         public static void OpenURL(string u) { }
         public static event Action lowMemory;
     }
+    public enum NetworkReachability { NotReachable, ReachableViaCarrierDataNetwork, ReachableViaLocalAreaNetwork }
     public static class Debug
     {
         public static void Log(object o) { }

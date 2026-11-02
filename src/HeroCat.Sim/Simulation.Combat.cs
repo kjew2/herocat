@@ -84,10 +84,18 @@ namespace HeroCat.Sim
         {
             _damageCount = 0;
             var c = State.Combat;
+            if (c.Mode == CombatMode.Dungeon && c.DungeonRun != null)
+            {
+                // 06 section 6.1 (issue #42): the floor's boss in this same loop; the frontier fight stays frozen.
+                RegenMp(c);                                                     // 1.
+                TickCooldowns(c);                                               // 2.
+                TickDungeonFight(c.DungeonRun);                                 // 3.-9., Simulation.Dungeons.cs
+                return;
+            }
             var f = EnsureFight();
-            // 1. MP regen: TODO(#156) companions and the MP pool (MVP).
+            RegenMp(c);                                                         // 1. MP regen (MVP)
             TickCooldowns(c);                                                   // 2.
-            if (c.Mode == CombatMode.Stage)                                     // TODO(#172): the dungeon fight (06) ticks here too
+            if (c.Mode == CombatMode.Stage)
             {
                 if (f.Phase == FightPhase.Spawning)
                 {
@@ -104,29 +112,47 @@ namespace HeroCat.Sim
 
         void FightTick(FightState f)
         {
-            var k = Db.Constants;
-            ApplyQueuedFishMissiles(f);                                         // 3.
-            if (f.EnemyHp <= 0) { Kill(f); return; }
-            ApplyDots(f);                                                       // 4. DOTs first, then at most one cast
-            if (f.EnemyHp <= 0) { Kill(f); return; }
-            AutoCastSkills(f);
-            // 5. companion abilities: TODO(#156) (MVP).
-            if (f.EnemyHp <= 0) { Kill(f); return; }
-            f.AttackProgress += Query.AttackGainUnits;                          // 6.
-            int interval = k.AttackIntervalTicks * k.AttackProgressUnit;
-            if (f.AttackProgress >= interval)
-            {
-                f.AttackProgress -= interval;
-                HeroHit(f);
-                if (f.EnemyHp <= 0) { Kill(f); return; }
-            }
-            ApplyTapZaps(f);                                                    // 7.
-            if (f.EnemyHp <= 0) { Kill(f); return; }
+            if (DamageSteps(f, null)) { Kill(f); return; }                      // 3.-7.
             if (f.EnemyIsBoss)                                                  // 8. timer last: a hit on the final tick counts
             {
                 f.BossTicksLeft -= 1;
                 if (f.BossTicksLeft <= 0) BossFail(f);
             }
+        }
+
+        /// <summary>
+        /// Steps 3-7 of 03 section 2.1, shared by the stage fight and a dungeon run (<paramref name="run"/> non-null). True as
+        /// soon as the enemy is dead. In a run step 3 (fish missiles) and step 7 (Tap Zap) do not apply: the board fires
+        /// nothing and no player input changes the outcome (03 section 2.1, 06 section 6.1), and the hero's crit draws come
+        /// from the run's `dungeon_run` stream.
+        /// </summary>
+        bool DamageSteps(FightState f, DungeonRunState run)
+        {
+            var k = Db.Constants;
+            if (run == null)
+            {
+                ApplyQueuedFishMissiles(f);                                     // 3.
+                if (f.EnemyHp <= 0) return true;
+            }
+            ApplyDots(f);                                                       // 4. DOTs first, then at most one cast
+            if (f.EnemyHp <= 0) return true;
+            AutoCastSkills(f);
+            CastCompanionAbilities(f);                                          // 5. at most one, MP-gated (in a run too, 03 section 2.1)
+            if (f.EnemyHp <= 0) return true;
+            f.AttackProgress += Query.AttackGainUnits;                          // 6.
+            int interval = k.AttackIntervalTicks * k.AttackProgressUnit;
+            if (f.AttackProgress >= interval)
+            {
+                f.AttackProgress -= interval;
+                HeroHit(f, run);
+                if (f.EnemyHp <= 0) return true;
+            }
+            if (run == null)
+            {
+                ApplyTapZaps(f);                                                // 7.
+                if (f.EnemyHp <= 0) return true;
+            }
+            return false;
         }
 
         void TickCooldowns(CombatState c)
@@ -139,9 +165,28 @@ namespace HeroCat.Sim
 
         static void TickBuffs(FightState f)
         {
-            if (f.AtkBuffTicksLeft <= 0) return;
-            f.AtkBuffTicksLeft -= 1;
-            if (f.AtkBuffTicksLeft == 0) f.AtkBuffPct = 0;
+            if (f.AtkBuffTicksLeft > 0)
+            {
+                f.AtkBuffTicksLeft -= 1;
+                if (f.AtkBuffTicksLeft == 0) f.AtkBuffPct = 0;
+            }
+            if (f.GoldBuffTicksLeft > 0)
+            {
+                f.GoldBuffTicksLeft -= 1;
+                if (f.GoldBuffTicksLeft == 0) f.GoldBuffPct = 0;
+            }
+        }
+
+        /// <summary>
+        /// 03 section 2.1 step 1: <c>Mp = min(MpPoolMax, Mp + MpRegenPerTick)</c>, both with their Research terms (cached in the
+        /// power breakdown). Only in a content tier with companions: the MP pool is MVP, and an M0 build keeps Mp at 0.
+        /// </summary>
+        void RegenMp(CombatState c)
+        {
+            if (Db.Companions.Count == 0) return;
+            var p = Query.Power;
+            double mp = c.Mp + p.MpRegenPerTick;
+            c.Mp = mp < p.MpPoolMax ? mp : p.MpPoolMax;
         }
 
         void AddDamage(double amount, bool crit)
@@ -151,13 +196,21 @@ namespace HeroCat.Sim
 
         // ================================================================================================ damage sources
 
-        /// <summary>03 section 2.2: exactly one `crit` draw per hero hit, always; the ATK buff applies here only.</summary>
-        void HeroHit(FightState f)
+        /// <summary>
+        /// 03 section 2.2: exactly one crit draw per hero hit, always; the ATK buff applies here only. The draw is from `crit`
+        /// (counted in Stats.HeroHits) in the stage fight, from the run's temporary `dungeon_run` stream in a dungeon run.
+        /// </summary>
+        void HeroHit(FightState f, DungeonRunState run = null)
         {
             var q = Query;
             double dmg = q.HeroHit * (1.0 + f.AtkBuffPct / Units.Percent);
-            double u = RngStreams.NextUnit(State.Rng[RngStreams.Crit]);
-            State.Stats.HeroHits += 1;
+            double u;
+            if (run != null) u = NextDungeonRunUnit(run);
+            else
+            {
+                u = RngStreams.NextUnit(State.Rng[RngStreams.Crit]);
+                State.Stats.HeroHits += 1;
+            }
             bool isCrit = u < q.CritRate;
             if (isCrit) dmg *= q.CritDmg;
             f.EnemyHp -= dmg;
@@ -232,6 +285,93 @@ namespace HeroCat.Sim
             }
         }
 
+        /// <summary>
+        /// 03 section 2.4: slot order is priority; locked, empty, unowned and unknown slots are skipped; a ready ability waits
+        /// while Mp is below its cost (its cooldown does not restart); at most one cast per tick; no `crit` draws.
+        /// </summary>
+        void CastCompanionAbilities(FightState f)
+        {
+            var slots = State.Loadout.Companions;
+            var cds = State.Combat.CompanionCooldowns;
+            if (slots == null || cds == null || Db.Companions.Count == 0) return;
+            int n = slots.Length < cds.Length ? slots.Length : cds.Length;
+            int open = -1;
+            for (int slot = 0; slot < n; slot++)
+            {
+                if (slots[slot] == null || cds[slot] > 0) continue;
+                if (open < 0) open = PowerFormula.OpenCompanionSlots(Db, State);
+                var def = PowerFormula.ActiveCompanion(Db, State, slot, open, out double lm);
+                if (def == null) continue;
+                var c = State.Combat;
+                if (c.Mp < def.MpCost) continue;
+                c.Mp -= def.MpCost;
+                ApplyCompanion(f, def, lm);
+                cds[slot] = def.CooldownTicks;
+                Emit(new CompanionAbilityUsed(slot, def.Id, c.Mp));
+                return;
+            }
+        }
+
+        /// <summary>
+        /// 03 section 2.4's Apply(c), magnitudes from 04 section 8.1 scaled by LevelMult: DAMAGE deals CompanionUnit *
+        /// DamagePctPerCast / 100; BUFF_ATK sets the shared ATK buff exactly as a BUFF skill (strongest wins); BUFF_GOLD sets
+        /// the gold-from-kills buff (its own slot, strongest wins, read by Kill); MP_REGEN restores MP up to MpPoolMax.
+        /// </summary>
+        void ApplyCompanion(FightState f, CompanionDef def, double levelMult)
+        {
+            double mag = def.Magnitude * levelMult;
+            int dur = def.DurationTicks.GetValueOrDefault();
+            switch (def.AbilityType)
+            {
+                case AbilityType.DAMAGE:
+                {
+                    double dmg = Query.CompanionUnit * mag / Units.Percent;
+                    f.EnemyHp -= dmg;
+                    AddDamage(dmg, false);
+                    return;
+                }
+                case AbilityType.BUFF_ATK:
+                {
+                    double pct = f.AtkBuffPct;
+                    int left = f.AtkBuffTicksLeft;
+                    ApplyBuff(ref pct, ref left, mag, dur);
+                    f.AtkBuffPct = pct; f.AtkBuffTicksLeft = left;
+                    return;
+                }
+                case AbilityType.BUFF_GOLD:
+                {
+                    double pct = f.GoldBuffPct;
+                    int left = f.GoldBuffTicksLeft;
+                    ApplyBuff(ref pct, ref left, mag, dur);
+                    f.GoldBuffPct = pct; f.GoldBuffTicksLeft = left;
+                    return;
+                }
+                case AbilityType.MP_REGEN:
+                {
+                    var c = State.Combat;
+                    double max = Query.Power.MpPoolMax;
+                    double mp = c.Mp + mag;
+                    c.Mp = mp < max ? mp : max;
+                    return;
+                }
+            }
+        }
+
+        /// <summary>Buffs do not stack: the strongest active one applies, and a weaker cast never shortens it (03 section 2.3, 04 AC10).</summary>
+        static void ApplyBuff(ref double activePct, ref int ticksLeft, double pct, int dur)
+        {
+            if (dur <= 0 || pct <= 0) return;
+            if (ticksLeft <= 0 || pct > activePct)
+            {
+                activePct = pct;
+                ticksLeft = dur;
+            }
+            else if (pct == activePct && dur > ticksLeft)
+            {
+                ticksLeft = dur;
+            }
+        }
+
         void CastSkill(FightState f, SkillDef def, double levelMult)
         {
             switch (def.CastType)
@@ -254,19 +394,10 @@ namespace HeroCat.Sim
                 }
                 case CastType.BUFF:
                 {
-                    // Buffs do not stack: the strongest active one applies, and a weaker cast never shortens it (04 AC10).
-                    double pct = def.BuffPct.GetValueOrDefault() * levelMult;
-                    int dur = def.DurationTicks.GetValueOrDefault();
-                    if (dur <= 0 || pct <= 0) return;
-                    if (f.AtkBuffTicksLeft <= 0 || pct > f.AtkBuffPct)
-                    {
-                        f.AtkBuffPct = pct;
-                        f.AtkBuffTicksLeft = dur;
-                    }
-                    else if (pct == f.AtkBuffPct && dur > f.AtkBuffTicksLeft)
-                    {
-                        f.AtkBuffTicksLeft = dur;
-                    }
+                    double pct = f.AtkBuffPct;
+                    int left = f.AtkBuffTicksLeft;
+                    ApplyBuff(ref pct, ref left, def.BuffPct.GetValueOrDefault() * levelMult, def.DurationTicks.GetValueOrDefault());
+                    f.AtkBuffPct = pct; f.AtkBuffTicksLeft = left;
                     return;
                 }
             }
@@ -300,6 +431,7 @@ namespace HeroCat.Sim
             bool isBoss = f.EnemyIsBoss;
             var q = Query;
             double gold = q.GoldPerKill(s) * q.GoldMult * (isBoss ? k.BossGoldMult : 1.0);
+            if (f.GoldBuffTicksLeft > 0) gold *= 1.0 + f.GoldBuffPct / Units.Percent;   // BUFF_GOLD companion (04 section 8.1)
             double exp = q.ExpPerKill(s) * q.ExpMult;
             var reason = isBoss ? CurrencyReason.BOSS : CurrencyReason.KILL;
             Ledger.Apply(State, new CurrencyDelta(Currency.GOLD, gold), reason, this);
@@ -401,6 +533,8 @@ namespace HeroCat.Sim
         internal ApplyResult HandleAttemptBoss()
         {
             var c = State.Combat;
+            if (c.Mode != CombatMode.Stage)   // the stage fields are frozen during a run (02 section 3.3)
+                return ApplyResult.Reject(RejectCode.NotAvailable, CombatRejectReasons.DUNGEON_RUN_IN_PROGRESS);
             if (c.Boss == BossPhase.Pending && c.Selected == null)
                 return ApplyResult.Reject(RejectCode.NotAvailable, CombatRejectReasons.BOSS_ALREADY_PENDING);
             if (!Db.Constants.IsBossStage(c.Stage) || c.Boss == BossPhase.None)
@@ -438,6 +572,8 @@ namespace HeroCat.Sim
         internal ApplyResult HandleTapZap(TapZap cmd)
         {
             if (cmd.Count < 0) return ApplyResult.Reject(RejectCode.BadArgument, CombatRejectReasons.INVALID_COUNT);
+            if (State.Combat.Mode != CombatMode.Stage)   // no Tap Zap in a dungeon run: no input changes its outcome (06 section 6.1)
+                return ApplyResult.Reject(RejectCode.NotAvailable, CombatRejectReasons.DUNGEON_RUN_IN_PROGRESS);
             var k = Db.Constants;
             var f = EnsureFight();
             long now = State.Time.Tick;

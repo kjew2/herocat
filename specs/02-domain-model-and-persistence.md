@@ -212,6 +212,8 @@ public sealed class FightState                              // in memory only; n
     public List<DotInstance> ActiveDots { get; init; } = new();   // max 6 (03 section 2.3)
     public double AtkBuffPct        { get; set; }          // strongest active BUFF, percentage points
     public int    AtkBuffTicksLeft  { get; set; }
+    public double GoldBuffPct       { get; set; }          // strongest active BUFF_GOLD companion, percentage points (04 section 8.1; issue #156)
+    public int    GoldBuffTicksLeft { get; set; }
     public int    PendingTaps       { get; set; }          // taps accepted since the last tick
     public int    TapsThisSecond    { get; set; }          // TAP_ZAP_MAX_PER_SEC guard
     public long   TapWindowTick     { get; set; }          // Time.Tick at which the current tap window opened
@@ -228,6 +230,7 @@ public sealed class DungeonRunState                        // a ticked run in th
     public string  GrantId     { get; init; } = "";        // server grant id (MVP) for plausibility correlation; "" in M0
     public int     EnemyIndex  { get; set; }               // position in the floor's enemy sequence; always 0 in MVP (one boss per floor)
     public int     TicksLeft   { get; set; }
+    public FightState Fight    { get; set; }               // transient (3.3): the floor's boss fight; never saved, a reload abandons the run (P16). Combat.Fight stays the frozen frontier fight (issue #172)
 }
 
 public sealed class ProgressState
@@ -255,8 +258,8 @@ public sealed class QuestProgress
 public sealed class DungeonState                             // daily counters reset off Time.DayKey (06)
 {
     public int[] BestFloor     { get; set; } = new int[3];   // per Dungeon ordinal; 0 = never cleared
-    public int[] EntriesToday  { get; set; } = new int[3];   // informational for the HUD; tickets are the real limiter
-    public int[] SweepsToday   { get; set; } = new int[3];
+    public int[] EntriesToday  { get; set; } = new int[3];   // cleared runs today, informational for the HUD; tickets are the real limiter; reset at rollover
+    public int[] SweepsToday   { get; set; } = new int[3];   // sweeps today; reset at rollover
     public List<DungeonRunRecord> RecentRuns { get; init; } = new();   // newest last, at most DUNGEON_RECENT_RUNS_MAX; never reset by rollover (issue #52)
 }
 
@@ -348,6 +351,7 @@ public sealed class LifetimeStats
 ### 3.3 Deliberately not saved
 
 - `Combat.Fight`: current enemy HP, spawn timer, boss timer, attack progress, DOTs, buffs and pending tap zaps. On load the player faces a fresh mob at `Combat.Stage`; a boss attempt in progress restarts (`Boss == Pending` respawns the boss with a full timer), and a `Walled` stage stays walled. Queued fish missiles are saved (`Combat.MissileQueue`).
+- `Combat.DungeonRun.Fight`: the dungeon boss's fight state. A run in a loaded save is abandoned anyway (P16), so nothing needs it.
 - The `Event` buffer and the `Snapshot`.
 - Derived values: DPS, kill time, board passive DPS%, weapon passive total, next training cost, `FISH_BOARD_DPS_PCT`, item and banner levels, and any live missile-DPS rolling average (view-model only, issue #15). All recomputed from `ContentDb`, so a retune reflows every save without a migration.
 - Client-only flags: collection NEW badges, coach marks, sort/filter/step prefs and settings toggles live in Runtime's `ClientPrefs` (8.4), not in `GameState` or `Profile` (issue #47).
@@ -384,7 +388,8 @@ public sealed record Profile(
     bool     IsGuest,                  // Links.Length == 0
     string   Region,                   // ISO 3166-1 alpha-2 from the store account or IP at creation; drives loot-box disclosure rules (08)
     int      AgeGate,                  // 0 unknown, 1 under-13 (COPPA mode), 2 adult; set once at first launch (08 compliance)
-    long     LastLoginServerTime);
+    long     LastLoginServerTime,
+    string   SupportCode);             // 08 section 2.1: base32(hmac(playerId, serverKey))[:12], computed by the server, never stored (issue #195)
 
 public sealed record LinkedPlatform(string Provider /* "apple" | "google_play" */, string ProviderUserIdHash, long LinkedServerTime);
 ```
@@ -534,7 +539,7 @@ Newtonsoft.Json 13.x (`com.unity.nuget.newtonsoft-json` in Unity; the NuGet pack
 | Encoding | UTF-8 without BOM | |
 | `TypeNameHandling` | `None` | Never emit `$type`. |
 | `ReferenceLoopHandling` | `Error` | The tree has no cycles; a cycle is a bug. |
-| `Combat.Fight` | Skipped (`ShouldSerializeFight() => false`, Json.NET's convention; no attribute) | Transient fight state (3.3); absent on read, so it loads as `null`. |
+| `Combat.Fight`, `Combat.DungeonRun.Fight` | Skipped (`ShouldSerializeFight() => false`, Json.NET's convention; no attribute) | Transient fight state (3.3); absent on read, so it loads as `null`. |
 
 IL2CPP: every record in section 3 is referenced from a `[Preserve]`d `SaveTypes.Touch()` method and `link.xml` preserves `HeroCat.Sim.State` so stripping cannot remove a setter.
 
@@ -933,7 +938,7 @@ public sealed class FakeClock : IClock
 }
 ```
 
-As built (issues #78, #149): `ServerClock.cs` holds both clocks. `SystemClock` is the device time floored at the loaded save's `LastSavedServerTime`, never authoritative; `ServerClock` reads it before the first observation. `IClockFloor.SetFloor` is called by `LocalSaveStore` after each load and the floor only rises. Local mode is `ServerClock(api: null)` (the composition root's default); Remote mode passes `HeroCat.Remote`'s `RemoteTimeApi` over `GET /time` until `ApiClient` (issue #143) also forwards every `X-Server-Time` to `Observe`. `IMonoClock` is the monotonic seam `SessionRunner` also uses. `IClockResync` (`Resynced`, `ResyncDue`, `SyncAsync`) is what `SessionRunner` sees, so a wrapper such as the client's debug `OffsetClock` forwards all three. `clock_anomaly{kind: resync, seconds, negative}` is tracked by `SessionRunner.OnClockSynced` from `Resynced`, not by the clock, so it is emitted once per sync whose result differs from the extrapolation by more than `CLOCK_JUMP_WARN_SEC`. This includes the first observation of an offline launch, whose extrapolation was the floored device clock.
+As built (issues #78, #149): `ServerClock.cs` holds both clocks. `SystemClock` is the device time floored at the loaded save's `LastSavedServerTime`, never authoritative; `ServerClock` reads it before the first observation. `IClockFloor.SetFloor` is called by `LocalSaveStore` after each load and the floor only rises. Local mode is `ServerClock(api: null)` (the composition root's default); Remote mode passes `HeroCat.Remote`'s `RemoteTimeApi` over `GET /time`, and its `ApiClient` (issue #143) forwards every response's `X-Server-Time` to `Observe` through the `IServerTimeObserver` seam that `ServerClock` implements, so any API call restarts the `CLOCK_RESYNC_SEC` cadence. `IMonoClock` is the monotonic seam `SessionRunner` also uses. `IClockResync` (`Resynced`, `ResyncDue`, `SyncAsync`) is what `SessionRunner` sees, so a wrapper such as the client's debug `OffsetClock` forwards all three. `clock_anomaly{kind: resync, seconds, negative}` is tracked by `SessionRunner.OnClockSynced` from `Resynced`, not by the clock, so it is emitted once per sync whose result differs from the extrapolation by more than `CLOCK_JUMP_WARN_SEC`. This includes the first observation of an offline launch, whose extrapolation was the floored device clock.
 
 ### 11.2 Rules
 
@@ -1232,6 +1237,8 @@ create table guild_chat (id bigserial primary key, guild_id uuid references guil
 
 **Partitions** (`0003`; issue #154): `ensure_partitions(p_parent regclass, p_grain text, p_from timestamptz, p_until timestamptz) returns integer` creates every missing partition whose range touches `[p_from, p_until]`: UTC month ranges named `<parent>_pYYYYMM` for `p_grain = 'month'`, UTC day ranges named `<parent>_pYYYYMMDD` for `'day'`; it returns how many it created and a rerun is harmless. The migration creates the current month plus 3 months for `diamond_ledger` and `summon_log` and today plus 14 days for `events`; the worker's partition job keeps that horizon ahead of now (issue #262). There is no default partition: a row outside every partition fails its insert, so a missing partition is loud, and a new range partition never collides with rows parked in a default one.
 
+**Idempotency rows** (as built, issue #194; 08 section 1.1): `status_code = 0` marks a row `in_flight`; any other value is the final HTTP status of the stored response. `response` is a jsonb object `{ "v": 1, "requestSha256", "contentType", "headers", "bodyBase64" }`: `requestSha256` fingerprints method, route and body (a reused id with another fingerprint is refused), and the body is base64 so the replay is byte-identical (jsonb would re-order a JSON body's keys and drop its whitespace); the `in_flight` row holds only `v` and `requestSha256`. `/auth/guest` has no player yet, so its rows use `player_id` = the first 16 bytes of `SHA-256("herocat/idempotency/device/" + lowercase deviceId)` with the RFC 9562 version-8 and variant bits set, which cannot equal a server-made (version 4) `playerId`; the 13.2 delete leaves those rows to the purge. A row older than `IDEMPOTENCY_TTL_H` counts as absent before the hourly purge deletes it.
+
 Redis structures (P1 leaderboards, MVP rate limits and sessions):
 
 | Key | Type | Content | TTL |
@@ -1304,7 +1311,7 @@ Added by the sink to every event: `ts` (server seconds), `sessionId` (GUID per p
 
 As built (`HeroCat.Runtime.Services.AnalyticsEnvelope`, issue #155): `playerIdHash` is lowercase hex `sha256(UTF8(salt + ":" + playerId))` with the playerId as a 36-character GUID, and `null` for an unlinked local guest (`PlayerId = Guid.Empty`; `deviceId` identifies it). `deviceId` is the install id (8.4), `schemaVersion` is `SAVE_SCHEMA_VERSION`, `contentVersion` the active `ContentDb.Version`. Every field is always present; `dayIndex` and `stage` are `null` for events tracked before the save loads (the save-health events of 8.3). Each queued event also carries `eventId` (32 hex, random), the server's per-event dedupe key. A queued line is `{"name", "eventId", <envelope fields>, "props": {<owner fields>}}`.
 
-Names snake_case; properties camelCase. The sink drops an event whose name is not snake_case and a property that is not camelCase, names an envelope field, or is a raw `playerId`; it never throws. `HeroCat.Runtime.Services.AnalyticsNames` holds every name in the 14.4 index (a test diffs it against the index) and `AnalyticsEvents` the typed events of 14.3 and 06's `currency_changed`. Economy events (those that carry a currency, purchase, summon, dungeon or inbox payload) go to the backend `events` table (00 section 3) as well as Firebase so they can be joined with `purchases` and `saves`. The `events` table and its nightly `currency_daily` materialized view (06 source/sink dashboards) are defined in section 12 (issue #34).
+Names snake_case; properties camelCase. The sink drops an event whose name is not snake_case and a property that is not camelCase, names an envelope field, or is a raw `playerId`; it never throws. `HeroCat.Runtime.Services.AnalyticsNames` holds every name in the 14.4 index (a test diffs it against the index) and `AnalyticsEvents` the typed events of 14.3 and of the owner sections (`currency_changed` and the rest of 06 section 13, 03's `awakened`, 04 and 05 section 13), so emitters cannot misspell a name or a field. Economy events (those that carry a currency, purchase, summon, dungeon or inbox payload) go to the backend `events` table (00 section 3) as well as Firebase so they can be joined with `purchases` and `saves`. The `events` table and its nightly `currency_daily` materialized view (06 source/sink dashboards) are defined in section 12 (issue #34).
 
 ### 14.2 Offline queue
 
@@ -1317,7 +1324,7 @@ As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
 3. An upload outcome is accepted (the events leave the queue), retry (offline, timeout, 5xx, 429, or the uploader threw: the flush stops and the next flush retries the same batch) or rejected (a non-retryable 4xx: the batch is dropped so it cannot block the queue). The remote uploader (Firebase for every event, the backend events route of issue #209 for the economy ones) waits on `ApiClient` (issue #143); a sink with no uploader keeps the events on disk.
 4. A Local build without a backend uses `NullAnalytics` and writes no queue file (01 section 1.2); bots and tests use `MemoryAnalytics` (no envelope, no files).
 
-### 14.3 Events owned here (session, save health, cloud, clock)
+### 14.3 Events owned here (session, save health, cloud, clock, client performance)
 
 | Event | Properties | Emitted by | Notes |
 |---|---|---|---|
@@ -1328,6 +1335,10 @@ As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
 | `save_fallback`, `save_corrupt{problems}`, `save_corrupt_all{supportId}`, `save_repaired{rule}`, `save_reject{file, reason}`, `save_write_failed{consecutive}`, `migration_applied{from, to}` | | Runtime | Save health. `save_corrupt_all` is a new profile replacing an unreadable save (8.3; issue #248). |
 | `clock_anomaly` | `kind` (backwards/gap/resync), `seconds` | Runtime | Section 11 and 01; also emitted with `kind = backwards` when 06's offline compute sees `ClockWentBackwards`. |
 | `player_deleted` | `playerIdHash` | Server | 13.2 step 5. |
+| `profile_created` | | Runtime (boot step 4, new profile) | The funnel step only; the `RngRoot` seed (3.4) is never sent (issue #261). |
+| `boot_ms` | `totalMs`, `contentMs`, `configMs`, `authMs`, `saveMs`, `catchUpMs`, `handoffMs` | Runtime, once per cold boot | 10 section 5's cold-boot metric with the 01 section 8.1 step breakdown (issue #261). |
+| `resume_ms` | `ms` | Runtime, once per warm resume | 10 section 5; emitted with issue #218. |
+| `perf_tick` | `p50Ms`, `p95Ms`, `maxMs`, `ticks` | Runtime, sampled once per session (not per tick) | 10 section 5's tick cost; emitted with issue #218. |
 
 ### 14.4 Event index
 
@@ -1338,7 +1349,7 @@ As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
 | `fish_release`, `fish_merge`, `fish_discovered`, `fish_discard`, `fish_board_snapshot` | 05 section 13 |
 | `currency_changed`, `quest_completed`, `quest_claimed`, `achievement_unlocked`, `dungeon_run`, `offline_catchup`, `offline_claimed`, `day_rollover`, `daily_gift_claimed`, `exchange`, `shop_view`, `iap_initiated`, `iap_completed`, `iap_failed`, `iap_status`, `inbox_claimed` | 06 section 13 |
 | `plausibility_flag` | 08 section 7.4 |
-| `session_start`, `session_end`, `cloud_save_uploaded`, `cloud_conflict`, `cloud_autoresolved`, `save_*`, `migration_applied`, `clock_anomaly`, `player_deleted` | 14.3 |
+| `session_start`, `session_end`, `cloud_save_uploaded`, `cloud_conflict`, `cloud_autoresolved`, `save_*`, `migration_applied`, `clock_anomaly`, `player_deleted`, `profile_created`, `boot_ms`, `resume_ms`, `perf_tick` | 14.3 |
 
 07 defines no events of its own; screen-driven events (`shop_view`) are owned by the feature spec of the screen. A new event is added to its owner's section and to this index in the same change.
 

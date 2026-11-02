@@ -1,0 +1,1 @@
+CONTENT E054 dungeon_floors[dungeon_fish,2].reward_kills_equiv: reward_kills_equiv must be empty when reward_amount = 100

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using HeroCat.Runtime.Save;
+using HeroCat.Runtime.Services;
 using HeroCat.Runtime.Session;
 using HeroCat.Sim.Commands;
 using HeroCat.Sim.Content;
@@ -140,7 +141,10 @@ namespace HeroCat.Runtime.Summons
 
         void Hit(SummonFlowPoint p) => Checkpoint?.Invoke(p);
 
-        /// <summary>The <c>summon</c> analytics event (04 section 13), once per request after ApplySummonResult.</summary>
+        /// <summary>
+        /// 04 section 13's <c>summon</c> row, once per request after ApplySummonResult, then one <c>item_acquired</c> per
+        /// result (acquireReason SUMMON). A replayed requestId returns before this, so it tracks nothing (04 AC 12).
+        /// </summary>
         void Track(SummonResultPayload p, int pityBefore, long expBefore, double latencyMs)
         {
             var analytics = _runner.Services.Analytics;
@@ -154,26 +158,21 @@ namespace HeroCat.Runtime.Summons
             }
             int lplus = 0;
             bool guarantee = false;
-            var results = new List<Dictionary<string, object>>(p.Pulls.Length);
+            var results = new List<AnalyticsEvents.SummonResultRow>(p.Pulls.Length);
             foreach (var r in p.Pulls)
             {
                 if (r.Rarity >= Rarity.LEGENDARY) lplus++;
                 guarantee |= r.GuaranteeApplied;
-                results.Add(new Dictionary<string, object>
-                {
-                    ["itemId"] = r.ItemId, ["rarity"] = r.Rarity.ToString(), ["isNew"] = r.IsNew, ["levelBefore"] = r.LevelBefore,
-                    ["levelAfter"] = r.LevelAfter, ["overflowRockCandy"] = r.OverflowRockCandy, ["guaranteeApplied"] = r.GuaranteeApplied,
-                });
+                results.Add(new AnalyticsEvents.SummonResultRow(r.ItemId, r.Rarity, r.IsNew, r.LevelBefore, r.LevelAfter, r.OverflowRockCandy,
+                                                                r.GuaranteeApplied));
             }
-            analytics.Track("summon", new Dictionary<string, object>
-            {
-                ["requestId"] = p.RequestId, ["banner"] = p.Banner.ToString(), ["count"] = p.Count,
-                ["payment"] = diamonds > 0 ? "DIAMOND" : "TICKET", ["diamondsSpent"] = diamonds, ["ticketsSpent"] = tickets,
-                ["pityBefore"] = pityBefore, ["pityAfter"] = p.PityAfter,
-                ["bannerLevelBefore"] = def.LevelFor(expBefore), ["bannerLevelAfter"] = def.LevelFor(p.BannerExpAfter),
-                ["results"] = results, ["lplusCount"] = lplus, ["guaranteeApplied"] = guarantee,
-                ["source"] = p.StreamCounterAfter.HasValue ? "LOCAL" : "SERVER", ["latencyMs"] = latencyMs,
-            });
+            analytics.Track(new AnalyticsEvents.Summon(
+                p.RequestId, p.Banner, p.Count, diamonds > 0 ? "DIAMOND" : "TICKET", diamonds, tickets, pityBefore, p.PityAfter,
+                def.LevelFor(expBefore), def.LevelFor(p.BannerExpAfter), results, lplus, guarantee,
+                p.StreamCounterAfter.HasValue ? AnalyticsEvents.Summon.LOCAL : AnalyticsEvents.Summon.SERVER, latencyMs));
+            foreach (var r in p.Pulls)
+                analytics.Track(new AnalyticsEvents.ItemAcquired(p.Banner, r.ItemId, r.Rarity, r.IsNew, r.CopiesAfter, r.LevelBefore, r.LevelAfter,
+                                                                 AnalyticsEvents.ItemAcquired.SUMMON, p.RequestId));
         }
     }
 }

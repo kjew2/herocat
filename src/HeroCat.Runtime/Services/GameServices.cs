@@ -48,16 +48,17 @@ namespace HeroCat.Runtime.Services
         /// </summary>
         public Func<IClock, IClock> WrapClock { get; set; }
 
-        /// <summary>The network transport. Local mode never calls it (08 AC 24); Remote's ApiClient sits on it (TODO(#143)).</summary>
+        /// <summary>The network door Local mode must never use (08 AC 24); Remote's ApiClient (HeroCat.Remote) has its own HttpClient.</summary>
         public INetTransport Network { get; set; }
 
         /// <summary>Debug builds: receipts are granted from this catalog into the local inbox (FakeReceiptValidator).</summary>
         public Func<string, GrantLine[]> DebugReceiptCatalog { get; set; }
 
         /// <summary>
-        /// Remote mode wiring, supplied by HeroCat.Remote (Runtime cannot reference it). TODO(#143): the ApiClient-based
-        /// clients of 01 section 1.2 (ServerClock(api), SummonClient, CloudSaveClient, InboxClient, ReceiptClient,
-        /// ConfigClient, DungeonSeedClient, AnalyticsSinks).
+        /// Remote mode wiring, supplied by HeroCat.Remote (Runtime cannot reference it): RemoteGameServices.Wire builds the
+        /// ApiClient (issue #143), ServerClock(api) and the cloud slots; the other ApiClient-based clients of 01 section 1.2
+        /// land with their issues (SummonClient #145, ConfigClient #144, DungeonSeedClient #146, receipts and inbox #147,
+        /// AuthClient #148, CloudSaveClient #152, analytics uploader #209).
         /// </summary>
         public Func<ServicesOptions, GameServices> Remote { get; set; }
     }
@@ -100,7 +101,7 @@ namespace HeroCat.Runtime.Services
             if (mode == BackendMode.Remote)
             {
                 if (options.Remote == null)
-                    throw new NotSupportedException("Remote backend not wired: pass ServicesOptions.Remote (TODO(#143))");
+                    throw new NotSupportedException("Remote backend not wired: pass ServicesOptions.Remote (HeroCat.Remote.Services.RemoteGameServices.Wire)");
                 var remote = options.Remote(options);
                 return remote with { Mode = BackendMode.Remote };
             }
@@ -114,7 +115,7 @@ namespace HeroCat.Runtime.Services
             var slots = options.Slots ?? (options.DataDir != null
                 ? new FileSaveStore(Path.Combine(options.DataDir, "saves"))
                 : (ISaveSlotStore)new MemorySaveStore());
-            var inbox = new LocalInboxService();
+            var inbox = new LocalInboxService(() => clock.NowServerSeconds);
             return new GameServices
             {
                 Mode = BackendMode.Local,

@@ -88,6 +88,8 @@ CatchUpTank(elapsedTicks):                    # closed form, no per-tick loop; p
   return (added, refillTickAfter)
 ```
 
+Research only raises `TankCap` and lowers `TankRefillTicks` (issue #167). After `RES_TANK_CAP` a full tank resumes refilling on the next tick. When `RES_TANK_REFILL` shortens the period below the current progress, `Research` clamps `Fish.TankRefillTick` to `TankRefillTicks - 1`, the same repair 02's P9b applies to a loaded save, so the fish lands on the next tick.
+
 A new profile starts with a full tank, `TankCount = TankCap` (`TANK_CAP0` at Research 0) and `TankRefillTick = 0`, set by `ProfileFactory` through the `TankCap` query, so the first session can release and merge at once (02 section 3.1; issue #246).
 
 The timer runs on sim ticks, not wall time, so it advances exactly as fast as combat does and offline catch-up can fill it with the same arithmetic 06 uses for gold (`elapsedTicks = creditedSeconds * TICK_HZ`, credited not full gap; issue #21). The effective offline cap (`OFFLINE_CAP_H` plus `RES_OFFLINE_CAP`) applies to the tank too: a player back after a weekend finds a full tank, not three days of fish. At Research 0 the tank is full one minute after it empties; with `RES_TANK_CAP` 10 and `RES_TANK_REFILL` 10 it holds 60 fish and refills in two minutes. Progress while the tank is full is discarded, which is the whole reason to release fish before closing the app.
@@ -391,6 +393,8 @@ This section owns these events' fields (issue #245); every event also carries 02
 | `fish_discard` | `level`, `coins`, `boardOccupancyBefore` | per `DiscardFish` |
 | `fish_board_snapshot` | `cells[]`, `fishBoardDpsPct`, `fishMult`, `tankCap`, `tankRefillS`, `fishMaxLvl`, `autoMerge`, and session totals `releases`, `merges`, `discoveries`, `coinsEarned`, `activeSec` | Runtime, at session end (replaces the former `fish_session`; throughput for `tools/fish_model.py`; issue #11) |
 | `currency_changed` | 06 section 13, reasons `FISH_DISCOVERY`, `FISH_MERGE` | per wallet delta |
+
+As built (`HeroCat.Runtime.Session.FeatureAnalytics`, issue #168): `fish_release`, `fish_merge` and `fish_discard` group the events of one accepted command (the runner's `CommandApplied` notice), so a `ReleaseMax` or `MergeAll` is one row and `viaButton` is true exactly for those two commands; a command that released or merged nothing sends no row. `levelsCreated` is a list of `{level, count}` objects in level order; `coins` sums `FishMerged.Coins` as paid (a discovering merge pays the discovery coins); `discoveries` lists the levels discovered by the merges; `duringBoss` is true while a boss is being fought (`Combat.Fight.EnemyIsBoss`). `fish_board_snapshot` goes out on the analytics flush of pause or quit, once per session (a quit right after a pause adds none); `fishMult` is the live passive `1 + FISH_BOARD_DPS_PCT / 100` (section 5), and the session totals count from boot or from the first command after the previous snapshot (`coinsEarned`: Fish Coin `currency_changed` deltas with reasons `FISH_MERGE` and `FISH_DISCOVERY`, discards included). Auto Merge (P1) runs inside ticks, not commands; it will need its own grouping when it lands.
 
 `MoveFish` has no analytics event: it is a cosmetic reposition (section 4.5) and `fish_board_snapshot` already records where fish end up.
 

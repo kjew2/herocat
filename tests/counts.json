@@ -2,9 +2,9 @@
   "description": "Executed tests per test project in the full ./check.sh --pr run (specs/10 section 1, acceptance criterion 2). tools/ci/test_counts.py fails a PR when a project drops below TEST_COUNT_MIN_RATIO x its count here. Update with: python3 tools/ci/test_counts.py --update --trx-dir build/check/trx (after ./check.sh --pr), in the PR that adds tests.",
   "projects": {
     "HeroCat.Bots.Tests": 52,
-    "HeroCat.Remote.Tests": 23,
-    "HeroCat.Runtime.Tests": 396,
-    "HeroCat.Server.Tests": 111,
-    "HeroCat.Sim.Tests": 290
+    "HeroCat.Remote.Tests": 44,
+    "HeroCat.Runtime.Tests": 425,
+    "HeroCat.Server.Tests": 137,
+    "HeroCat.Sim.Tests": 346
   }
 }

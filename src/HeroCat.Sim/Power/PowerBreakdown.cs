@@ -48,6 +48,10 @@ namespace HeroCat.Sim.Power
         public double GoldMult { get; internal set; }
         public double ExpMult { get; internal set; }
 
+        /// <summary>MpPoolMax and MpRegenPerTick with their Research terms (03 section 2.4), cached for the tick loop's step 1.</summary>
+        public double MpPoolMax { get; internal set; }
+        public double MpRegenPerTick { get; internal set; }
+
         // ------------------------------------------------------------------ realised units (03 7.1, issue #10)
 
         /// <summary>One non-crit, unbuffed hero hit: Base * Training * Hero * Weapons * live board * Research * Runes * Awakening.</summary>

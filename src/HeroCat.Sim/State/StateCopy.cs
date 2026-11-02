@@ -130,21 +130,24 @@ namespace HeroCat.Sim.State
                 c.DungeonRun = new DungeonRunState
                 {
                     Kind = d.Kind, Floor = d.Floor, Seed = d.Seed, StreamCounter = d.StreamCounter, GrantId = d.GrantId,
-                    EnemyIndex = d.EnemyIndex, TicksLeft = d.TicksLeft,
+                    EnemyIndex = d.EnemyIndex, TicksLeft = d.TicksLeft, Fight = Copy(d.Fight),
                 };
             }
-            if (s.Fight != null)
-            {
-                var f = s.Fight;
-                c.Fight = new FightState
-                {
-                    Phase = f.Phase, SpawnTimer = f.SpawnTimer, EnemyHp = f.EnemyHp, EnemyMaxHp = f.EnemyMaxHp, EnemyIsBoss = f.EnemyIsBoss,
-                    BossTicksLeft = f.BossTicksLeft, AttackProgress = f.AttackProgress, ActiveDots = new List<DotInstance>(f.ActiveDots),
-                    AtkBuffPct = f.AtkBuffPct, AtkBuffTicksLeft = f.AtkBuffTicksLeft, PendingTaps = f.PendingTaps,
-                    TapsThisSecond = f.TapsThisSecond, TapWindowTick = f.TapWindowTick,
-                };
-            }
+            c.Fight = Copy(s.Fight);
             return c;
+        }
+
+        static FightState Copy(FightState f)
+        {
+            if (f == null) return null;
+            return new FightState
+            {
+                Phase = f.Phase, SpawnTimer = f.SpawnTimer, EnemyHp = f.EnemyHp, EnemyMaxHp = f.EnemyMaxHp, EnemyIsBoss = f.EnemyIsBoss,
+                BossTicksLeft = f.BossTicksLeft, AttackProgress = f.AttackProgress, ActiveDots = new List<DotInstance>(f.ActiveDots),
+                AtkBuffPct = f.AtkBuffPct, AtkBuffTicksLeft = f.AtkBuffTicksLeft, GoldBuffPct = f.GoldBuffPct,
+                GoldBuffTicksLeft = f.GoldBuffTicksLeft, PendingTaps = f.PendingTaps,
+                TapsThisSecond = f.TapsThisSecond, TapWindowTick = f.TapWindowTick,
+            };
         }
 
         static LifetimeStats Copy(LifetimeStats s)

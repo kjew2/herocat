@@ -123,6 +123,10 @@ namespace HeroCat.Runtime.Session
         /// <summary>The kill-safe summon flow of 01 section 8.5.1 over this runner (issue #68).</summary>
         public SummonFlow Summons => _summons ??= new SummonFlow(this);
 
+        /// <summary>The inbox list / claim flow of 01 section 8.9 step 6 over this runner (issue #176).</summary>
+        public HeroCat.Runtime.Inbox.InboxFlow Inbox => _inbox ??= new HeroCat.Runtime.Inbox.InboxFlow(this);
+        HeroCat.Runtime.Inbox.InboxFlow _inbox;
+
         /// <summary>
         /// A manual tick switch (debug and tests): false runs no ticks and accumulates no time; commands, clock syncs,
         /// events and saves continue. The offline reward needs no toggle: see <see cref="TicksHeldForOfflineReward"/>.
@@ -163,14 +167,22 @@ namespace HeroCat.Runtime.Session
         /// <summary>
         /// Applies a command now (Runtime flows: SummonFlow, inbox claim, boot). Never from an EventBus handler: that would
         /// nest a mutation inside a drain (01 section 2.3, AC 12), so it throws; handlers use <see cref="Enqueue"/>.
-        /// A reject is published as <see cref="CommandRejected"/>.
+        /// A reject is published as <see cref="CommandRejected"/>, an accept as <see cref="CommandApplied"/>.
         /// </summary>
         public ApplyResult Issue(Command c)
         {
             if (c == null) throw new ArgumentNullException(nameof(c));
             if (_bus.IsPublishing) throw new InvalidOperationException("Issue called from an EventBus handler: use Enqueue (01 section 2.3)");
+            var buffered = _sim.BufferedEvents;
+            int mark = buffered.Count;
             var r = _sim.Apply(c);
-            if (r.Ok) _dirty = true;
+            if (r.Ok)
+            {
+                _dirty = true;
+                var emitted = new Event[Math.Max(0, buffered.Count - mark)];
+                for (int i = 0; i < emitted.Length; i++) emitted[i] = buffered[mark + i];
+                _bus.PublishSystem(new CommandApplied(c, emitted));
+            }
             else _bus.PublishReject(c, r);
             return r;
         }

@@ -622,17 +622,19 @@ Sketch values: a 12h 04m gap at the day-1 target stage 240 (00 section 6.6), a 3
 
 ### 4.19 `SCR_ITEM_DETAIL` (Modal, M0)
 
-Purpose: any collectible's full card: stats, level, next-level cost, source.
+Purpose: any collectible's full card: stats, level, next-level cost, limit breaks, source.
 
 ```
 +----------------------------------------------+
 | [E] Sardine Spear               Weapon [ X ] |
 |        ( big icon )                          |
 | Level 2   4 / 6 copies to level 3            |
+| Limit breaks 0 / 5                           |
 | Equipped ATK +48%  ->  +60% at level 3       |
 | Collection passive +4.8%  (4% x 1.2)         |
 | Max level 10: 2.8x base (DUPE_LVL_BONUS)     |
 | Source: Weapon banner (Epic 9%)              |
+| [ Limit break (40 Rock Candy) ]              |
 |                     [ Equip ]  [ Compare ]   |
 +----------------------------------------------+
 ```
@@ -646,8 +648,10 @@ Purpose: any collectible's full card: stats, level, next-level cost, source.
 | Source | `BannerCode`, `BaseRate` for its rarity |
 | Equip | `cmd EquipWeapon` / `EquipSkill(slot)` / `EquipCompanion(slot)`; for slotted kinds a slot picker row appears |
 | Compare (weapons) | toggles a side-by-side with the equipped weapon |
+| Limit breaks line (MVP) | `LimitBreaks` / `LIMIT_BREAK_RANKS` ("Limit breaks 2 / 5"); hidden when unowned |
+| Limit break (MVP) | `Limit break (N Rock Candy)` with N = `NextLimitBreakCost` (04 sections 5.2 and 11); sends `cmd LimitBreak(id)`; shown when owned; disabled with reason `LIMIT_BREAK_CAPPED` when `NextLimitBreakCost == 0` and `NOT_ENOUGH_ROCK_CANDY` when Rock Candy is short |
 
-States: unowned item shows "Not owned" and no Equip. Opened from `SCR_SUMMON_RESULT` it shows a "NEW" ribbon when `IsNew`.
+States: unowned item shows "Not owned" and no Equip or Limit break. Opened from `SCR_SUMMON_RESULT` it shows a "NEW" ribbon when `IsNew`.
 
 ### 4.20 `SCR_SETTINGS` (Full, MVP)
 

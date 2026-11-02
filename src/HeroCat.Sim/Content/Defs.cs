@@ -149,6 +149,55 @@ namespace HeroCat.Sim.Content
         public string Vfx { get; }
     }
 
+    /// <summary>
+    /// A companion (04 section 8.1, 09 section 5.11; issue #161). <see cref="Magnitude"/> is derived at build from
+    /// dps_pct by ability type, at level 1; the tick loop scales it by the item's LevelMult.
+    /// </summary>
+    public sealed class CompanionDef
+    {
+        internal CompanionDef(string id, Rarity rarity, AbilityType abilityType, double dpsPct, int mpCost, int cooldownTicks,
+                              int? durationTicks, double magnitude, Tier tier, string nameKey, string descKey, string icon,
+                              string sprite, string vfx)
+        {
+            Id = id; Rarity = rarity; AbilityType = abilityType; DpsPct = dpsPct; MpCost = mpCost; CooldownTicks = cooldownTicks;
+            DurationTicks = durationTicks; Magnitude = magnitude; Tier = tier; NameKey = nameKey; DescKey = descKey;
+            Icon = icon; Sprite = sprite; Vfx = vfx;
+        }
+
+        public string Id { get; }
+        public Rarity Rarity { get; }
+        public AbilityType AbilityType { get; }
+
+        /// <summary>Rated contribution at full MP uptime, level 1 (COMPANION_DPS_PCT[r]).</summary>
+        public double DpsPct { get; }
+
+        public int MpCost { get; }
+        public int CooldownTicks { get; }
+
+        /// <summary>BUFF_ATK and BUFF_GOLD only.</summary>
+        public int? DurationTicks { get; }
+
+        /// <summary>
+        /// 04 section 8.1, at level 1: DAMAGE <c>damagePctPerCast = dps_pct * cooldown / ATTACK_INTERVAL_TICKS</c> (% of one
+        /// CompanionUnit); BUFF_ATK <c>buff_pct = dps_pct * cooldown / duration</c>; BUFF_GOLD
+        /// <c>gold_buff_pct = 2 * dps_pct * cooldown / duration</c>; MP_REGEN <c>mp_restored = dps_pct / 4</c> (MP per cast).
+        /// </summary>
+        public double Magnitude { get; }
+
+        /// <summary>
+        /// The ability's dps_pct counts in companionMult: DAMAGE and BUFF_ATK. MP_REGEN counts 0 (04 section 8.1) and so does
+        /// BUFF_GOLD, which deals no damage (its dps_pct is a value proxy; tools/power_curve_model.py reads it the same way).
+        /// </summary>
+        public bool CountsInLayer => AbilityType == AbilityType.DAMAGE || AbilityType == AbilityType.BUFF_ATK;
+
+        public Tier Tier { get; }
+        public string NameKey { get; }
+        public string DescKey { get; }
+        public string Icon { get; }
+        public string Sprite { get; }
+        public string Vfx { get; }
+    }
+
     public sealed class BannerLevelDef
     {
         internal BannerLevelDef(int level, int expRequired, IReadOnlyDictionary<Rarity, double> rates)
@@ -485,5 +534,64 @@ namespace HeroCat.Sim.Content
         public Tier Tier { get; }
         public string NameKey { get; }
         public string Icon { get; }
+    }
+
+    /// <summary>
+    /// A dungeon (09 section 5.24, 06 section 6.1; issue #173): a ladder of <see cref="Floors"/> fixed boss fights, floor f
+    /// fought at stage-equivalent <c>f * FloorStageStep</c>. <see cref="Kind"/> and <see cref="TicketCurrency"/> are null only
+    /// for the P1 Tower row. The unlock is the feature_unlocks row DUNGEONS, not a column (issue #45).
+    /// </summary>
+    public sealed class DungeonDef
+    {
+        internal DungeonDef(string id, Dungeon? kind, Currency? ticketCurrency, int ticketsPerDay, int floorStageStep, int floors,
+                            bool sweepAllowed, Tier tier, string nameKey, string descKey, string icon, string background,
+                            IReadOnlyList<DungeonFloorDef> floorDefs)
+        {
+            Id = id; Kind = kind; TicketCurrency = ticketCurrency; TicketsPerDay = ticketsPerDay; FloorStageStep = floorStageStep;
+            Floors = floors; SweepAllowed = sweepAllowed; Tier = tier; NameKey = nameKey; DescKey = descKey; Icon = icon;
+            Background = background; FloorDefs = floorDefs;
+        }
+
+        public string Id { get; }
+        public Dungeon? Kind { get; }
+        public Currency? TicketCurrency { get; }
+        public int TicketsPerDay { get; }        // DUNGEON_TICKETS_PER_DAY
+        public int FloorStageStep { get; }       // DUNGEON_FLOOR_STAGE_STEP
+        public int Floors { get; }               // DUNGEON_FLOORS_MVP; == FloorDefs.Count (E034)
+        public bool SweepAllowed { get; }
+        public Tier Tier { get; }
+        public string NameKey { get; }
+        public string DescKey { get; }
+        public string Icon { get; }
+        public string Background { get; }
+
+        /// <summary>By floor: FloorDefs[f - 1] is floor f (E060).</summary>
+        public IReadOnlyList<DungeonFloorDef> FloorDefs { get; }
+
+        /// <summary>Floor <paramref name="floor"/>, or null outside 1..Floors.</summary>
+        public DungeonFloorDef Floor(int floor) => floor >= 1 && floor <= FloorDefs.Count ? FloorDefs[floor - 1] : null;
+    }
+
+    /// <summary>
+    /// One dungeon floor (09 section 5.25): its stage-equivalent and its reward. <see cref="RewardAmount"/> is resolved at build:
+    /// the fixed reward_amount, or for HERO_EXP rows reward_kills_equiv x ExpPerKill(StageEquiv) from curves[exp_per_kill]
+    /// (06 section 6.3, EXP_FLOOR before EXP_GAIN training).
+    /// </summary>
+    public sealed class DungeonFloorDef
+    {
+        internal DungeonFloorDef(int floor, int stageEquiv, Currency rewardCurrency, double rewardAmount, int? rewardKillsEquiv,
+                                 string boss, IReadOnlyList<Grant> firstClearBonus)
+        {
+            Floor = floor; StageEquiv = stageEquiv; RewardCurrency = rewardCurrency; RewardAmount = rewardAmount;
+            RewardKillsEquiv = rewardKillsEquiv; Boss = boss; FirstClearBonus = firstClearBonus;
+        }
+
+        public int Floor { get; }
+        public int StageEquiv { get; }
+        public Currency RewardCurrency { get; }
+        public double RewardAmount { get; }
+        public int? RewardKillsEquiv { get; }
+        public string Boss { get; }
+        public IReadOnlyList<Grant> FirstClearBonus { get; }
     }
 }

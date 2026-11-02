@@ -17,8 +17,8 @@ namespace HeroCat.Sim.Content
         //
         // Not here, by design: E07x (strings never reach the Sim), E09x (no previous build), the warnings, E039
         // (a budget check for the designer, not a sim guard), and the rules over tables the sim does not read
-        // (enemies/bosses E057, shop E031/E046/E059, inbox). TODO(#173): dungeons (E034, E048, E054, E059, E060) join
-        // when that table is built into ContentDb.
+        // (enemies/bosses E057, shop E031/E046/E059, inbox). The dungeon rules (E034, E043, E046, E048, E054, E059, E060)
+        // run here since dungeons are built into ContentDb (issue #173).
         sealed partial class Builder
         {
             // literal-ok-begin: validation bounds and tolerances 09 section 5 states (not balance), percent display
@@ -231,6 +231,16 @@ namespace HeroCat.Sim.Content
                 });
                 Add(t, "awakening_targets", d.AwakeningTargets, r => I(r.Rank), (r, x) => { x["rank"] = r.Rank; x["max_days_after_gate"] = r.MaxDaysAfterGate; });
                 Add(t, "plausibility_stage_bound", d.PlausibilityStageBound, r => I(r.Day), (r, x) => { x["day"] = r.Day; x["stage"] = r.Stage; });
+                Add(t, "dungeons", d.Dungeons, r => r.Id, (r, x) =>
+                {
+                    x["id"] = r.Id; x["kind"] = r.Kind; x["ticket_currency"] = r.TicketCurrency; x["tickets_per_day"] = r.TicketsPerDay;
+                    x["floor_stage_step"] = r.FloorStageStep; x["floors"] = r.Floors; x["sweep_allowed"] = r.SweepAllowed; x["tier"] = r.Tier;
+                });
+                Add(t, "dungeon_floors", d.DungeonFloors, r => r.Dungeon + "," + I(r.Floor), (r, x) =>
+                {
+                    x["dungeon"] = r.Dungeon; x["floor"] = r.Floor; x["reward_currency"] = r.RewardCurrency; x["reward_amount"] = r.RewardAmount;
+                    x["reward_kills_equiv"] = r.RewardKillsEquiv;
+                });
                 Add(t, "shop_exchange", d.ShopExchange, r => r.Id, (r, x) =>
                 {
                     x["id"] = r.Id; x["price_currency"] = r.PriceCurrency; x["price_amount"] = r.PriceAmount; x["grant_currency"] = r.GrantCurrency;
@@ -270,6 +280,8 @@ namespace HeroCat.Sim.Content
                 Unique("feature_unlocks", Rows(d.FeatureUnlocks), r => r.Feature);
                 Unique("awakening_targets", Rows(d.AwakeningTargets), r => I(r.Rank));
                 Unique("plausibility_stage_bound", Rows(d.PlausibilityStageBound), r => I(r.Day));
+                Unique("dungeons", Rows(d.Dungeons), r => r.Id);
+                Unique("dungeon_floors", Rows(d.DungeonFloors), r => r.Dungeon + "," + I(r.Floor));
                 Unique("shop_exchange", Rows(d.ShopExchange), r => r.Id);
             }
 
@@ -472,6 +484,14 @@ namespace HeroCat.Sim.Content
                     foreach (var g in r.Grants ?? Array.Empty<GrantDto>())
                         if (g.Currency == null && g.Kind != null && items.TryGetValue(g.Kind, out var have) && !have.Contains(g.Id ?? ""))
                             Err("E022", $"tutorial_steps[{r.Id}].grants", $"'{g.Id}' does not exist in {g.Kind.ToLowerInvariant()}s");
+                var dungeons = Ids(d.Dungeons, x => x.Id);
+                var bosses = Ids(d.Bosses, x => x.Id);
+                foreach (var r in Rows(d.DungeonFloors))
+                {
+                    string loc = $"dungeon_floors[{r.Dungeon},{I(r.Floor)}]";
+                    if (r.Dungeon != null && !dungeons.Contains(r.Dungeon)) Err("E022", loc + ".dungeon", $"'{r.Dungeon}' does not exist in dungeons");
+                    if (r.Boss != null && !bosses.Contains(r.Boss)) Err("E022", loc + ".boss", $"'{r.Boss}' does not exist in bosses");
+                }
             }
 
             static HashSet<string> Ids<TRow>(TRow[] rows, Func<TRow, string> id)
@@ -529,6 +549,10 @@ namespace HeroCat.Sim.Content
                     ExactlyOneToN("banner_levels", $"level for banner {g.Key}", Ints(g.Value, "level"));
                 foreach (var g in Groups(T("achievements"), "ladder"))
                     ExactlyOneToN("achievements", $"rung for ladder {g.Key}", Ints(g.Value, "rung"));
+                var floors = new Dictionary<string, int>(StringComparer.Ordinal);
+                foreach (var r in T("dungeons")) floors[r.S("id")] = (int)r["floors"];
+                foreach (var g in Groups(T("dungeon_floors"), "dungeon"))
+                    ExactlyOneToN("dungeon_floors", $"floor for dungeon {g.Key}", Ints(g.Value, "floor"), floors.TryGetValue(g.Key, out int n) ? n : (int?)null);
                 if (Has("awakening_targets"))
                     ExactlyOneToN("awakening_targets", "rank", Ints(T("awakening_targets"), "rank"), Has("awakening") ? T("awakening").Count : (int?)null);
             }
@@ -586,6 +610,8 @@ namespace HeroCat.Sim.Content
                     }
                 }
                 Rng("achievements", "reward_amount", ge1, ">= 1");
+                Rng("dungeons", "tickets_per_day", ge0, ">= 0");
+                Rng("dungeons", "floor_stage_step", ge1, ">= 1");
                 Rng("tutorial_steps", "expect_count", ge1, ">= 1");
                 Rng("progress_targets", "stage", ge1, ">= 1");
                 Rng("feature_unlocks", "threshold", ge1, ">= 1");
@@ -632,6 +658,7 @@ namespace HeroCat.Sim.Content
                 StrictlyIncreasing("E031", T("fish_levels"), "discovery_coins");
                 StrictlyIncreasing("E031", T("fish_levels"), "missile_pct");
                 foreach (var g in Groups(T("achievements"), "ladder")) StrictlyIncreasing("E031", g.Value, "target");
+                foreach (var g in Groups(T("dungeon_floors"), "dungeon")) NonDecreasing(g.Value, "reward_amount", "floor");
                 StrictlyIncreasing("E032", T("progress_targets"), "day");
                 NonDecreasing(T("progress_targets"), "stage", "day");
                 NonDecreasing(T("plausibility_stage_bound"), "stage", "day");
@@ -648,7 +675,7 @@ namespace HeroCat.Sim.Content
                 foreach (var b in T("banners"))
                 {
                     if (!PoolTables.TryGetValue(b.S("id"), out var table)) continue;
-                    // A banner whose pool table is not authored yet is skipped (TODO(#161): companions), as in the exporter.
+                    // A banner whose pool table is not authored yet (runes, P1) is skipped, as in the exporter.
                     if (!(bool)b["enabled"] || !TierLe(b) || !Has(table)) continue;
                     for (int i = 0; i < rarities.Length; i++)
                     {
@@ -658,6 +685,13 @@ namespace HeroCat.Sim.Content
                         if (want == null || n != (int)want)
                             Err("E034", table, $"{table} has {I(n)} rows of {rarities[i]}, expected {Fmt(want)} from {b.Loc}.{PoolCols[i]}");
                     }
+                }
+                var floorRows = Groups(T("dungeon_floors"), "dungeon");
+                foreach (var dg in T("dungeons"))
+                {
+                    int n = floorRows.TryGetValue(dg.S("id"), out var l) ? l.Count : 0;
+                    if (n != (int)dg["floors"])
+                        Err("E034", "dungeon_floors", $"dungeon_floors has {I(n)} rows of {dg.S("id")}, expected {Fmt(dg["floors"])} from {dg.Loc}.floors");
                 }
                 if (Has("awakening_targets") && Has("awakening") && T("awakening_targets").Count != T("awakening").Count)
                     Err("E034", "awakening_targets", $"awakening_targets has {I(T("awakening_targets").Count)} rows of rank, expected {I(T("awakening").Count)} from awakening");
@@ -729,6 +763,7 @@ namespace HeroCat.Sim.Content
                 UniqueCols(T("research"), "layout_row", "layout_col");
                 UniqueCols(T("quests_daily"), "sort_order");
                 UniqueCols(T("quests_weekly"), "sort_order");
+                UniqueCols(T("dungeons"), "kind");
                 UniqueCols(T("shop_exchange"), "sort_order");
             }
 
@@ -778,6 +813,10 @@ namespace HeroCat.Sim.Content
                         else if (filter != null && Array.IndexOf(System.Enum.GetNames(filterEnum), filter) < 0)
                             Err("E021", r.Loc + ".filter", $"'{filter}' is not a valid {filterEnum.Name} (allowed: {string.Join(", ", System.Enum.GetNames(filterEnum))})");
                     }
+                foreach (var r in T("dungeons")) Cond(r, "ticket_currency", r["kind"] != null, "kind", r["kind"]);
+                foreach (var r in T("dungeon_floors"))
+                    if ((r["reward_amount"] == null) == (r["reward_kills_equiv"] == null))
+                        Cond(r, "reward_kills_equiv", r["reward_amount"] == null, "reward_amount", r["reward_amount"]);
                 foreach (var r in T("tutorial_steps"))
                 {
                     Cond(r, "trigger_value", r.S("trigger") == "STAGE_REACHED" || r.S("trigger") == "SCREEN_OPENED", "trigger", r["trigger"]);
@@ -850,6 +889,12 @@ namespace HeroCat.Sim.Content
                     string want = "TICKET_SUMMON_" + b.S("id");
                     if (b.S("ticket_currency") != want)
                         Err("E059", b.Loc + ".ticket_currency", $"ticket_currency '{b.S("ticket_currency")}' is not an allowed currency here ({want} for banner {b.S("id")})");
+                }
+                foreach (var dg in T("dungeons"))
+                {
+                    string kind = dg.S("kind"), ticket = dg.S("ticket_currency");
+                    if (kind != null && ticket != null && ticket != "TICKET_" + kind)
+                        Err("E059", dg.Loc + ".ticket_currency", $"ticket_currency '{ticket}' is not an allowed currency here (TICKET_{kind} for kind {kind})");
                 }
                 foreach (var x in T("shop_exchange"))   // 06 sections 8.4-8.5: diamonds for dungeon tickets, nothing else
                 {

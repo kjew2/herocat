@@ -53,8 +53,9 @@ namespace HeroCat.Runtime.Services
 
     /// <summary>
     /// The remote side of the sink (02 section 14.2): Firebase for every event and the backend events route for the
-    /// economy ones (<see cref="AnalyticsNames.IsEconomy"/>; route per #209). Called on the thread pool. TODO(#143): the
-    /// ApiClient-based uploader; until then only <see cref="MemoryAnalyticsUploader"/> exists.
+    /// economy ones (<see cref="AnalyticsNames.IsEconomy"/>). Called on the thread pool. TODO(#209): the ApiClient-based
+    /// uploader (HeroCat.Remote, issue #143) waits on the backend events route; until then only
+    /// <see cref="MemoryAnalyticsUploader"/> exists.
     /// </summary>
     public interface IAnalyticsUploader
     {

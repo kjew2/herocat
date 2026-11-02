@@ -66,10 +66,9 @@ public interface IAccessTokenValidator
     ValueTask<AccessTokenResult> ValidateAsync(string token, CancellationToken ct);
 }
 
-/// <summary>Accepts no token: the api's default until the Auth feature registers the RS256 validator.</summary>
+/// <summary>Accepts no token: the fallback when no feature registers a validator (the Auth feature registers the RS256 one).</summary>
 public sealed class RejectingAccessTokenValidator : IAccessTokenValidator
 {
-    // TODO(#195): the Auth feature registers the RS256 IAccessTokenValidator with its signing keys.
     public ValueTask<AccessTokenResult> ValidateAsync(string token, CancellationToken ct) => ValueTask.FromResult(AccessTokenResult.Invalid);
 }
 

@@ -184,7 +184,7 @@ SCHEMA = {
     "companions": T("CompanionRowDto", [c("id", "id"), c("rarity", "enum(Rarity)"), c("ability_type", "enum(AbilityType)"),
                                         c("dps_pct", "double"), c("mp_cost", "int"), c("cooldown_ticks", "int"),
                                         c("duration_ticks", "int", True), TIER, NAME, DESC, c("icon", "asset"),
-                                        c("sprite", "asset"), c("vfx", "asset")], "id", required=False, todo=161),
+                                        c("sprite", "asset"), c("vfx", "asset")], "id", required=False),
     "runes": T("RuneRowDto", [c("id", "id"), c("rarity", "enum(Rarity)"), c("stat", "ref(stats)"),
                               c("stat_pct", "double"), c("slot_mask", "int"), TIER, NAME, DESC, c("icon", "asset")],
                "id", required=False),
@@ -231,13 +231,11 @@ SCHEMA = {
     "dungeons": T("DungeonRowDto", [c("id", "id"), c("kind", "enum(Dungeon)", True),
                                     c("ticket_currency", "enum(Currency)", True), c("tickets_per_day", "int"),
                                     c("floor_stage_step", "int"), c("floors", "int"), c("sweep_allowed", "bool"), TIER,
-                                    NAME, DESC, c("icon", "asset"), c("background", "asset")], "id",
-                  required=False, todo=173),
+                                    NAME, DESC, c("icon", "asset"), c("background", "asset")], "id"),
     "dungeon_floors": T("DungeonFloorRowDto", [c("dungeon", "ref(dungeons)"), c("floor", "int"),
                                                c("reward_currency", "enum(Currency)"), c("reward_amount", "long", True),
                                                c("reward_kills_equiv", "int", True), c("boss", "ref(bosses)", True),
-                                               c("first_clear_bonus", "grantlist", True)], ("dungeon", "floor"),
-                        required=False, todo=173),
+                                               c("first_clear_bonus", "grantlist", True)], ("dungeon", "floor")),
     "shop_products": T("ShopProductRowDto", [c("sku", "id"), c("apple_product_id", "string"),
                                              c("google_product_id", "string"), c("usd_tier", "int"), c("usd", "double"),
                                              c("grant_currency", "enum(Currency)"), c("base_amount", "long"),
@@ -608,7 +606,7 @@ def check_tutorial_events(tables, errs):
 # table the rule order below holds. ContentDb.Build (src/HeroCat.Sim/Content/ContentDb.Rules.cs) runs the loader-scope
 # rules in the same order with byte-identical messages (09 section 7.2, acceptance 20).
 # Rules over a table that is not authored yet (optional and absent: companions, research,
-# dungeons, enemies, bosses, shop) skip; each starts checking the day its table lands.
+# enemies, bosses, shop) skip; each starts checking the day its table lands.
 
 TABLE_ORDER = list(SCHEMA)
 RATE_COLS = ["rate_c", "rate_r", "rate_e", "rate_l", "rate_m"]
@@ -876,7 +874,7 @@ def rule_e034_counts(ctx):
     for b in ctx.rows("banners"):
         table = POOL_TABLES[b["id"]]
         if not b["enabled"] or not tier_le(b) or not ctx.has(table):
-            continue   # TODO(#161): companions; a banner whose pool table is not authored yet is skipped
+            continue   # a banner whose pool table is not authored yet (runes, P1) is skipped
         rows = [r for r in ctx.rows(table) if tier_le(r)]
         for rarity, col in zip(ENUMS["Rarity"], POOL_COLS):
             n = sum(1 for r in rows if r["rarity"] == rarity)

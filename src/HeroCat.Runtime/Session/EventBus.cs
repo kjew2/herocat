@@ -15,6 +15,14 @@ namespace HeroCat.Runtime.Session
     /// <summary>A command Apply refused (01 section 2.2 rule 1: a reject emits no sim event; the UI reports it, section 7).</summary>
     public sealed record CommandRejected(Command Command, ApplyResult Result) : RuntimeNotice;
 
+    /// <summary>
+    /// A command Apply accepted, with the events that command emitted, in order (a copy; the same events are published
+    /// again with the frame's drain). Published from SessionRunner.Issue right after the Apply, so a handler sees the
+    /// state just after that command. Analytics groups per-command rows with it (05 section 13's <c>fish_release</c> and
+    /// <c>fish_merge</c>, 06 section 13's <c>quest_claimed</c> bulk flag). Not a sim event; never logged.
+    /// </summary>
+    public sealed record CommandApplied(Command Command, IReadOnlyList<Event> Events) : RuntimeNotice;
+
     /// <summary>SAVE_FAIL_WARN_COUNT consecutive save failures (01 section 3.1).</summary>
     public sealed record SaveWriteFailed(int ConsecutiveFailures) : RuntimeNotice;
 

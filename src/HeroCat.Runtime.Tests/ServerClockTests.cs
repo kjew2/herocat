@@ -112,6 +112,20 @@ namespace HeroCat.Runtime.Tests
             Assert.That(seen, Is.EqualTo(new[] { (T0, T0 + 10), (T0 + 70, T0 + 470) }));
         }
 
+        [Test]
+        public void IServerTimeObserver_IsTheApiClientsHook_AndObservationsFromThePoolLandSafely()
+        {
+            var mono = new FakeMonoClock();
+            var clock = new ServerClock(device: new FakeClock(T0), mono: mono);
+            IServerTimeObserver observer = clock;   // what HeroCat.Remote's ApiClient holds (01 section 5.1)
+            int resynced = 0;
+            clock.Resynced += (e, s) => Interlocked.Increment(ref resynced);
+            Parallel.For(0, 64, i => observer.Observe(T0 + 500, 1000));
+            Assert.That(resynced, Is.EqualTo(64), "one Resynced per observation");
+            Assert.That(clock.IsAuthoritative, Is.True);
+            Assert.That(clock.NowServerSeconds, Is.EqualTo(T0 + 500), "half a 1 s round trip rounds down to whole seconds");
+        }
+
         // ------------------------------------------------------------------------------------------- SyncAsync
 
         [Test]
