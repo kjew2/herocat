@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "2026.11.02.4",
+  "content_version": "2026.11.02.5",
   "min_client_version": "0.1.0",
   "source_revision": "2026-11-01 m0 skeleton, spec 00 seed values (agent)",
   "hot_apply": false,
@@ -28,7 +28,7 @@
     "banners": {
       "file": "banners.json",
       "rows": 4,
-      "sha256": "baf7db65d02f94cbebb1d77c173f31bcb58307495252d7f5a1c5f265e2c5c29e"
+      "sha256": "a5ab006952d2b878ccbd091833062a58723ec767f3577dfb631c32b369fa3c77"
     },
     "chapters": {
       "file": "chapters.json",
@@ -38,7 +38,7 @@
     "companions": {
       "file": "companions.json",
       "rows": 50,
-      "sha256": "c94f0ea7c1f3e9425c2fe82f9523818bb5f5851667b4427c68ba0450cde69fbb"
+      "sha256": "4a4762cbaa38f1abbcaef675a83f8903d8d4208af56741fc3b1ba312db7eedef"
     },
     "constants": {
       "file": "constants.json",
@@ -68,7 +68,7 @@
     "feature_unlocks": {
       "file": "feature_unlocks.json",
       "rows": 5,
-      "sha256": "e42c21a9d1be334fd73ede0678646abec03223bccb6b9ea7455cbb430cac0573"
+      "sha256": "1f704b5238d81133f44eae49fea8530edbec5686f7fccdd976e51bb86a9ae73f"
     },
     "fish_levels": {
       "file": "fish_levels.json",
@@ -149,11 +149,11 @@
   "localization": {
     "en": {
       "file": "localization.en.json",
-      "rows": 680,
-      "sha256": "b8fc267113aceac7653af8233fae54bceb0085aac84528d9e2697872d5a9048c"
+      "rows": 691,
+      "sha256": "c9320bdc38ed9df87ecc16796a7652b19738d3bea71fa194bcf5afdb6314134b"
     }
   },
-  "content_hash": "73673744b03d7cdda35820aca672fcfadca8635e20a54e4277b7bdd5faf4b35d",
+  "content_hash": "deb55eb9471ebfe54b3f73452909da17b1365a27888bbe6d6b8f6c64857f9257",
   "s_constants": [
     "BASE_HP",
     "BOSS_ROCK_CANDY_P",

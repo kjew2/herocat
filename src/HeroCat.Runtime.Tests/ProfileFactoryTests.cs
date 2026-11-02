@@ -138,7 +138,7 @@ namespace HeroCat.Runtime.Tests
         public void EnabledBanners_HaveState()
         {
             var s = TestContent.NewState();
-            Assert.That(s.Banners.Keys, Is.EquivalentTo(new[] { Banner.WEAPON, Banner.SKILL }), "M0 build");
+            Assert.That(s.Banners.Keys, Is.EquivalentTo(new[] { Banner.WEAPON, Banner.SKILL, Banner.COMPANION }), "M0 build (companions are M0, 00 decision 107)");
         }
     }
 }

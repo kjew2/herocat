@@ -1,7 +1,7 @@
 {
   "SchemaVersion": 1,
-  "ContentVersion": "2026.11.02.4",
-  "ContentHash": "73673744b03d7cdda35820aca672fcfadca8635e20a54e4277b7bdd5faf4b35d",
+  "ContentVersion": "2026.11.02.5",
+  "ContentHash": "deb55eb9471ebfe54b3f73452909da17b1365a27888bbe6d6b8f6c64857f9257",
   "PlayerId": "00000007-0000-4000-8000-000000000001",
   "DeviceId": "b07b07b0-0000-4000-8000-000000000001",
   "RngRoot": "00000007-0000-4000-8000-000000000001",
@@ -183,6 +183,11 @@
     "AutoMergeEnabled": false
   },
   "Banners": {
+    "COMPANION": {
+      "Pity": 0,
+      "Exp": 0,
+      "TotalPulls": 0
+    },
     "SKILL": {
       "Pity": 0,
       "Exp": 0,
@@ -201,7 +206,7 @@
     "Boss": "Walled",
     "BossFailsOnStage": 1,
     "Selected": null,
-    "Mp": 0.0,
+    "Mp": 100.0,
     "SkillCooldowns": [
       0,
       0,

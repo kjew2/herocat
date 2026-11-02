@@ -164,7 +164,7 @@ namespace HeroCat.Sim.Power
 
         /// <summary>
         /// Sum over equipped companions of dps_pct * LevelMult (04 section 8.2), MP_REGEN and BUFF_GOLD counting 0 (04 section 8.1).
-        /// Locked slots, unowned and unknown ids count 0. 0 in M0 (no companion rows).
+        /// Locked slots, unowned and unknown ids count 0. 0 in a build without companion rows.
         /// </summary>
         public static double CompanionDpsPct(ContentDb db, GameState s)
         {
@@ -188,7 +188,7 @@ namespace HeroCat.Sim.Power
         /// The inclusive mpSufficiency (04 section 8.2, 03 section 7.1; issue #39, 00 decision 71):
         /// <c>supply = mpRegenPerSecond + sum MP_REGEN (mpRestored - mpCost) / cooldownSeconds</c>,
         /// <c>demand = sum other (mpCost / cooldownSeconds)</c>, <c>demand == 0 ? 1 : min(1, supply / demand)</c>, floored at
-        /// 0 (a net-draining loadout cannot make the layer negative). 1 in M0.
+        /// 0 (a net-draining loadout cannot make the layer negative). 1 in a build without companion rows.
         /// </summary>
         public static double MpSufficiency(ContentDb db, GameState s)
         {

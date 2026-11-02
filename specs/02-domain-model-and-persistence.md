@@ -191,7 +191,7 @@ public sealed class CombatState
     public BossPhase Boss           { get; set; }          // None/Pending/Walled, so a wall survives a reload (issue #7)
     public int    BossFailsOnStage  { get; set; }          // reset on advance (03)
     public int?   Selected          { get; set; }          // MVP SCR_STAGE_SELECT side-stage farm target <= HighestCleared; null = frontier. Stage, KillsInStage and Boss keep the frontier meanwhile (03; issue #35)
-    public double Mp                { get; set; }          // shared MP pool (04); regen per tick from Research; 0 on a new profile (companions are MVP; issue #246)
+    public double Mp                { get; set; }          // shared MP pool (04); regen per tick from Research; 0 on a new profile (issue #246)
     public int[]  SkillCooldowns    { get; set; } = new int[6];   // ticks left per skill slot
     public int[]  CompanionCooldowns { get; set; } = new int[4];  // ticks left per companion slot (03 section 2.4)
     public List<double> MissileQueue { get; init; } = new();      // queued fish-missile hit fractions, FIFO; persisted so a save mid-queue loses nothing (03, 05; issue #7)

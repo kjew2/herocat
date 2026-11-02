@@ -354,7 +354,7 @@ Example: `{"id": "skill_e_03", "rarity": "EPIC", "dps_pct": 40.0, "cast_type": "
 | `mp_cost` | int | `>= 1`. |
 | `cooldown_ticks` | int | `[20, 600]`. |
 | `duration_ticks` | int? | Required for `BUFF_*`, empty otherwise (`E054`); `<= cooldown_ticks` (`E058`). |
-| `tier` | enum(Tier) | `MVP` for all 50 (companions are MVP). |
+| `tier` | enum(Tier) | `M0` for all 50 (00 decision 107). |
 | `name_key`, `desc_key` | key | |
 | `icon`, `sprite`, `vfx` | asset | |
 
@@ -1378,7 +1378,7 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 ## Acceptance criteria
 
 1. **No balance literals.** A CI grep over `src/HeroCat.Sim/**/*.cs` for numeric literals, excluding `0`, `1`, `-1`, `2` (bit ops), array indices, `ATTACK_PROGRESS_UNIT` references and lines marked `// literal-ok: <reason>`, finds nothing.
-2. **Shipped content builds.** `ContentDb.Build(load("content"), Tier.MVP)` succeeds; `Version` and `ContentHash` equal the manifest; `Build(..., Tier.M0)` also succeeds and has exactly 2 enabled banners and 0 companions.
+2. **Shipped content builds.** `ContentDb.Build(load("content"), Tier.MVP)` succeeds; `Version` and `ContentHash` equal the manifest; `Build(..., Tier.M0)` also succeeds and has exactly 3 enabled banners (`WEAPON`, `SKILL`, `COMPANION`; 00 decision 107) and 50 companions.
 3. **Deterministic export.** `export_content.py build` twice from the same `content_src/` produces byte-identical `content/`; `check` exits 0 on the committed tree.
 4. **Constants pinned.** The set of `REQUIRED_CONSTANTS` keys in the exporter equals the set of `constants.json` keys equals the set of `Constants` properties (snake-cased), and every property is non-default after build.
 5. **Every 00 section 6 row is reachable.** For each row of the section 4 table, a unit test reads the named location from `ContentDb` and compares to the 00 value (`[Category("Golden")]`; updated in the same PR as 00).
@@ -1389,7 +1389,7 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 10. **Python tools unchanged by the switch.** `power_curve_model.py`, `gacha_model.py` and `fish_model.py` run with `--content content` print byte-identical tables to their pre-switch output for the same constants.
 11. **Pool index stability.** Appending `skill_c_15` to a fixture leaves `Pool(SKILL, COMMON)[0..13]` unchanged; inserting `skill_c_00` fails `E090` against the previous build.
 12. **Banner-level invariants.** For each enabled banner and each level, rates sum to 1 within 1e-9, `rate_l` and `rate_m` equal level 1 within 1e-12, and `BannerDef.LevelFor` returns 1, 1, 2, 9, 10, 10 for exp 0, 49, 50, 2999, 3000, 10000 (04 test 16).
-13. **Tier filter.** An M0 build with a `companions` row of tier `MVP` exposes `Companions.Count == 0` and `Banners[COMPANION].Enabled == false`.
+13. **Tier filter.** An M0 build of content whose `companions` rows and `COMPANION` banner are re-tagged `MVP` exposes `Companions.Count == 0` and `Banners[COMPANION].Enabled == false`.
 14. **Localization completeness.** With `ship_locales = en,ja`, a key missing `ja` fails `E073`; a `ja` string over `max_chars` fails `E074`; a `ui.*` key not in `--ui-keys` and not referenced by a row warns `W021`, and `--strict-warnings` turns it into exit 1.
 15. **Hot-apply classification.** A build whose only diff against `--previous` is in `localization.ja.json`, `shop_products`, `shop_packages` or `inbox_templates` sets `hot_apply: true`; adding one changed `skills` row flips it to `false`. A Sim test proves no `HeroCat.Sim` code path reads `ShopProducts`, `ShopPackages` or `InboxTemplates` (issue #54).
 16. **Update flow.** `ContentLoader` given a manifest whose `min_client_version` is above the client's logs `E903`, keeps the bundled content, and the sim's `ContentDb` instance identity is unchanged (01 acceptance 11).

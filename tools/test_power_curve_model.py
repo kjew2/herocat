@@ -32,7 +32,7 @@ class PowerCurveModelTests(unittest.TestCase):
             pcm.Params(content.DEFAULT_DIR, {"NO_SUCH_NAME": "1"}, m0=False)
 
     def test_m0_drops_mvp_layers(self):
-        self.assertEqual(self.m0.banner_ids, ["WEAPON", "SKILL"])
+        self.assertEqual(self.m0.banner_ids, ["WEAPON", "SKILL", "COMPANION"])   # companions are M0 (00 decision 107)
         self.assertEqual(self.m0.research, {})
         self.assertEqual(self.m0.awakening, [])   # awakening rows are tier MVP
         bot = pcm.Bot(self.m0, 7).run(2, 120, 2)

@@ -147,7 +147,7 @@ namespace HeroCat.Sim.Tests
             Assert.That(Rarities().Select(r => Db.Banners[Banner.SKILL].Pool[r].Count), Is.EqualTo(new[] { 14, 11, 8, 5, 2 }));
             Assert.That(w.Pool[Rarity.COMMON], Is.Ordered.Using((IComparer<string>)StringComparer.Ordinal));
             Assert.That(Db.Banners[Banner.RUNE].Enabled, Is.False);
-            Assert.That(Db.Banners[Banner.COMPANION].Enabled, Is.False, "MVP banner in an M0 build");
+            Assert.That(Db.Banners[Banner.COMPANION].Enabled, Is.True, "companions are M0 (00 decision 107)");
             Assert.That(TestContent.Mvp.Banners[Banner.COMPANION].Enabled, Is.True);
             var e03 = Db.Skills["skill_e_03"];
             Assert.That(e03.CastType, Is.EqualTo(CastType.INSTANT));

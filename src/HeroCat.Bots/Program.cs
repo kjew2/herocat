@@ -373,7 +373,7 @@ namespace HeroCat.Bots
             var sw = Stopwatch.StartNew();
             for (long done = 0; done < ticks; done += 1000) sim.Advance((int)Math.Min(1000, ticks - done));
             long ms = sw.ElapsedMilliseconds;
-            // TODO(#160): equip six skills and four companions (03 criterion 19) once companions land (MVP).
+            // TODO(#160): equip six skills and four companions (03 criterion 19).
 #if DEBUG
             Console.Out.Write($"bench: {ticks} ticks in {ms} ms ({ticks * 1000.0 / Math.Max(1, ms):0} ticks/s); Debug build, no budget verdict\n");
             return 0;

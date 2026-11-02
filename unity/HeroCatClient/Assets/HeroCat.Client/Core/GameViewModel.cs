@@ -64,6 +64,7 @@ namespace HeroCat.Client.Core
             Hero = new HeroVm(Context);
             Weapons = new WeaponsVm(Context);
             Skills = new SkillsVm(Context);
+            Companions = new CompanionsVm(Context);
             ItemDetail = new ItemDetailVm(Context);
             SummonResult = new SummonResultVm(Context);
             Summon = new SummonVm(Context, options.Summon ?? ((b, n, p) => _runner.SummonAsync(b, n, p)), SummonResult);
@@ -109,6 +110,7 @@ namespace HeroCat.Client.Core
         public HeroVm Hero { get; }
         public WeaponsVm Weapons { get; }
         public SkillsVm Skills { get; }
+        public CompanionsVm Companions { get; }
         public ItemDetailVm ItemDetail { get; }
         public SummonVm Summon { get; }
         public SummonResultVm SummonResult { get; }
@@ -158,6 +160,7 @@ namespace HeroCat.Client.Core
             if (top == ScreenIds.Hero) Hero.Refresh(_sim, s);
             else if (top == ScreenIds.Weapons) Weapons.Refresh(_sim);
             else if (top == ScreenIds.Skills) Skills.Refresh(_sim);
+            else if (top == ScreenIds.Companions) Companions.Refresh(_sim);
             else if (top == ScreenIds.Summon) Summon.Refresh(_sim);
             var modal = Router.Modal;
             if (modal != null && modal.Id == ScreenIds.ItemDetail && (_detailDirty || ItemDetail.Dirty))
@@ -196,6 +199,7 @@ namespace HeroCat.Client.Core
                     break;
                 case ScreenIds.Weapons: Weapons.Invalidate(); break;
                 case ScreenIds.Skills: Skills.Invalidate(); break;
+                case ScreenIds.Companions: Companions.Invalidate(); break;
             }
             if (e.Type == ScreenType.Full) Main.Board.Cancel();
         }
@@ -207,6 +211,7 @@ namespace HeroCat.Client.Core
             {
                 case ScreenIds.Weapons: Weapons.OnLeave(); break;
                 case ScreenIds.Skills: Skills.OnLeave(); break;
+                case ScreenIds.Companions: Companions.OnLeave(); break;
             }
         }
 
@@ -220,6 +225,7 @@ namespace HeroCat.Client.Core
             Hero.OnEvent(e);
             Weapons.OnEvent(e);
             Skills.OnEvent(e);
+            Companions.OnEvent(e);
             Summon.OnEvent(e);
             switch (e)
             {

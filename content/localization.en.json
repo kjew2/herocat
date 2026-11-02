@@ -1099,6 +1099,50 @@
       "text": "Need {0} more"
     },
     {
+      "key": "scr.companions.ability_buff_atk",
+      "text": "attack buff"
+    },
+    {
+      "key": "scr.companions.ability_buff_gold",
+      "text": "gold buff"
+    },
+    {
+      "key": "scr.companions.ability_damage",
+      "text": "damage"
+    },
+    {
+      "key": "scr.companions.ability_mp_regen",
+      "text": "MP regen"
+    },
+    {
+      "key": "scr.companions.budget",
+      "text": "Equipped cost {0} MP/s"
+    },
+    {
+      "key": "scr.companions.mp",
+      "text": "MP {0} / {1} · regen {2}/s"
+    },
+    {
+      "key": "scr.companions.slot_awaken",
+      "text": "Awakening {0}"
+    },
+    {
+      "key": "scr.companions.slot_locked",
+      "text": "Locked"
+    },
+    {
+      "key": "scr.companions.slots",
+      "text": "Slots (cast in order)"
+    },
+    {
+      "key": "scr.companions.stats",
+      "text": "{0} · DPS {1} · every {2}"
+    },
+    {
+      "key": "scr.companions.title",
+      "text": "Companions"
+    },
+    {
       "key": "scr.confirm.cancel",
       "text": "Cancel"
     },
@@ -2616,11 +2660,11 @@
     },
     {
       "key": "companion.l_01.desc",
-      "text": "A legendary damage companion."
+      "text": "Arcane caster. Her astrolabe staff calls starfall down on the enemy."
     },
     {
       "key": "companion.l_01.name",
-      "text": "Legendary Companion 1"
+      "text": "Lucy"
     },
     {
       "key": "companion.l_02.desc",
@@ -2640,11 +2684,11 @@
     },
     {
       "key": "companion.l_04.desc",
-      "text": "A legendary attack-buff companion."
+      "text": "Paladin. While her banner flies, every strike lands harder."
     },
     {
       "key": "companion.l_04.name",
-      "text": "Legendary Companion 4"
+      "text": "Valeria"
     },
     {
       "key": "companion.l_05.desc",
@@ -2664,11 +2708,11 @@
     },
     {
       "key": "companion.m_01.desc",
-      "text": "A mythic damage companion."
+      "text": "Death knight. Her soul-reaping scythe cuts through anything in her way."
     },
     {
       "key": "companion.m_01.name",
-      "text": "Mythic Companion 1"
+      "text": "Seraphine"
     },
     {
       "key": "companion.m_02.desc",

@@ -273,6 +273,17 @@ scr.common.back,Back,,,,18,false,07 M0 screens
 scr.common.close,Close,,,,18,false,07 M0 screens
 scr.common.coming_soon,Coming soon,,,,48,false,07 M0 screens
 scr.common.need_more,Need {0} more,,,,18,false,07 M0 screens
+scr.companions.ability_buff_atk,attack buff,,,,18,false,07 M0 screens
+scr.companions.ability_buff_gold,gold buff,,,,18,false,07 M0 screens
+scr.companions.ability_damage,damage,,,,18,false,07 M0 screens
+scr.companions.ability_mp_regen,MP regen,,,,18,false,07 M0 screens
+scr.companions.budget,Equipped cost {0} MP/s,,,,40,false,07 M0 screens
+scr.companions.mp,MP {0} / {1} · regen {2}/s,,,,48,false,07 M0 screens
+scr.companions.slot_awaken,Awakening {0},,,,18,false,07 M0 screens
+scr.companions.slot_locked,Locked,,,,18,false,07 M0 screens
+scr.companions.slots,Slots (cast in order),,,,28,false,07 M0 screens
+scr.companions.stats,{0} · DPS {1} · every {2},,,,60,false,07 M0 screens
+scr.companions.title,Companions,,,,28,false,07 M0 screens
 scr.confirm.cancel,Cancel,,,,18,false,07 M0 screens
 scr.confirm.cost,"{0}: {1}, balance after {2}",,,,60,false,07 M0 screens
 scr.confirm.exit_body,Press back again to quit.,,,,160,false,07 M0 screens
@@ -652,20 +663,20 @@ companion.e_09.desc,An epic mana companion.,,,,0,false,
 companion.e_09.name,Epic Companion 9,,,,24,false,
 companion.e_10.desc,An epic mana companion.,,,,0,false,
 companion.e_10.name,Epic Companion 10,,,,24,false,
-companion.l_01.desc,A legendary damage companion.,,,,0,false,
-companion.l_01.name,Legendary Companion 1,,,,24,false,
+companion.l_01.desc,"Arcane caster. Her astrolabe staff calls starfall down on the enemy.",,,,0,false,
+companion.l_01.name,Lucy,,,,24,false,
 companion.l_02.desc,A legendary damage companion.,,,,0,false,
 companion.l_02.name,Legendary Companion 2,,,,24,false,
 companion.l_03.desc,A legendary damage companion.,,,,0,false,
 companion.l_03.name,Legendary Companion 3,,,,24,false,
-companion.l_04.desc,A legendary attack-buff companion.,,,,0,false,
-companion.l_04.name,Legendary Companion 4,,,,24,false,
+companion.l_04.desc,"Paladin. While her banner flies, every strike lands harder.",,,,0,false,
+companion.l_04.name,Valeria,,,,24,false,
 companion.l_05.desc,A legendary gold-buff companion.,,,,0,false,
 companion.l_05.name,Legendary Companion 5,,,,24,false,
 companion.l_06.desc,A legendary mana companion.,,,,0,false,
 companion.l_06.name,Legendary Companion 6,,,,24,false,
-companion.m_01.desc,A mythic damage companion.,,,,0,false,
-companion.m_01.name,Mythic Companion 1,,,,24,false,
+companion.m_01.desc,"Death knight. Her soul-reaping scythe cuts through anything in her way.",,,,0,false,
+companion.m_01.name,Seraphine,,,,24,false,
 companion.m_02.desc,A mythic attack-buff companion.,,,,0,false,
 companion.m_02.name,Mythic Companion 2,,,,24,false,
 dungeon.dungeon_fish.name,Fish Coin Dungeon,,,,32,false,

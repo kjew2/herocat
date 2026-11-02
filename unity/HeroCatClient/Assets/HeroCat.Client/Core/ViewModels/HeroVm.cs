@@ -217,6 +217,7 @@ namespace HeroCat.Client.Core
             {
                 if (b == Banner.WEAPON) _c.Router?.Replace(ScreenIds.Weapons);
                 else if (b == Banner.SKILL) _c.Router?.Replace(ScreenIds.Skills);
+                else if (_c.Db.Companions.Count > 0) _c.Router?.Replace(ScreenIds.Companions);
                 else _c.LockedToast("COMPANIONS");
                 return;
             }
