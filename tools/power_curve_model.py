@@ -125,6 +125,8 @@ DIAMOND_SOURCES = ("TUTORIAL", "LOGIN", "QUEST_DAILY", "QUEST_WEEKLY", "FIRST_CL
 
 # ================================================================================================ parameters
 
+GACHA_OVERRIDES = ("PITY_SOFT_START", "PITY_SOFT_STEP", "PITY_HARD", "M_SHARE_OF_LPLUS", "BANNER_EXP_PER_PULL")
+
 class Params:
     """Every number the model uses, read from content (plus the flagged fallbacks), with --override applied."""
 
@@ -152,6 +154,7 @@ class Params:
         self.rarity = {r["id"]: r for r in db.table("rarities")}
         for r in RARITIES:
             c[f"LIMIT_BREAK_COST[{r}]"] = self.rarity[r]["limit_break_cost"]
+            c[f"WEAPON_PASSIVE_PCT[{r}]"] = self.rarity[r]["weapon_passive_pct"]
         self.awakening = sorted((r for r in db.table("awakening") if tier_ok(r)), key=lambda r: r["rank"])
         for r in self.awakening:
             c[f"AWAKEN_STAGES[{r['rank']}]"] = r["stage_gate"]
@@ -196,6 +199,8 @@ class Params:
 
         self.overrides = dict(overrides)
         for k, v in overrides.items():
+            if k in GACHA_OVERRIDES:
+                continue   # banner columns, not constants: applied to gacha_model.Banner below
             if k not in c:
                 sys.exit(f"--override: unknown name {k} (known: constants keys, HP_G, GOLD_G, EXP_G, HERO_LVL_MULT, "
                          f"TRAIN_PER_LVL[STAT], TRAIN_CAP[STAT], AWAKEN_COST_ROCK_CANDY[RANK], RES_COST0[id], ...)")
@@ -209,14 +214,18 @@ class Params:
         self.c = c
 
         # Banners: 04's exact pull algorithm from gacha_model (pity, banner level, guarantee), pools by tier.
-        gacha_over = {k: v for k, v in overrides.items()
-                      if k in ("PITY_SOFT_START", "PITY_SOFT_STEP", "PITY_HARD", "M_SHARE_OF_LPLUS", "BANNER_EXP_PER_PULL")}
+        gacha_over = {k: v for k, v in overrides.items() if k in GACHA_OVERRIDES}
         self.banner = {}
         for b in self.banner_ids:
             bn = gacha_model.Banner(content_dir, b, tier=self.tier, overrides=gacha_over)
             bn.pull_cost = c[f"PULL_COST[{b}]"]
             self.banner[b] = bn
-        self.weapons = {r["id"]: r for r in db.table("weapons") if tier_ok(r)}
+        self.weapons = {r["id"]: dict(r) for r in db.table("weapons") if tier_ok(r)}
+        for w in self.weapons.values():   # an override rescales the rarity's rows, keeping each row's flavour offset
+            r = w["rarity"]
+            base = self.rarity[r]["weapon_passive_pct"]
+            if c[f"WEAPON_PASSIVE_PCT[{r}]"] != base:
+                w["passive_pct"] = w["passive_pct"] * c[f"WEAPON_PASSIVE_PCT[{r}]"] / base
         self.skills = {r["id"]: r for r in db.table("skills") if tier_ok(r)}
         self.companions = {}
         if "COMPANION" in self.banner:
@@ -369,13 +378,18 @@ class Bot:
         cap = self.p.dupe_cum[-1]
         return self.p.level_mult(min(copies, cap), self.lb.get((banner, iid), 0) + extra_lb)
 
-    def weapon_mult(self, probe=None):
+    def weapon_parts(self, probe=None):
+        """(equippedWeaponPct, weaponPassivePct) of 04 section 6.1, best weapon equipped."""
         eq = passive = 0.0
         for iid, row in self.p.weapons.items():
             m = self.item_mult("WEAPON", iid, *(probe[1:] if probe and probe[0] == iid else (0, 0)))
             if m > 0:
                 eq = max(eq, row["atk_pct"] * m)
                 passive += row["passive_pct"] * m
+        return eq, passive
+
+    def weapon_mult(self, probe=None):
+        eq, passive = self.weapon_parts(probe)
         return 1.0 + (eq + passive) / 100.0
 
     def skill_pct(self, probe=None):
@@ -1101,7 +1115,7 @@ class Bot:
         shares = {k: (math.log(v) / total if total > 0 else 0.0) for k, v in L.items()}
         return {
             "day": self.day, "stage": self.stage, "highest_cleared": self.highest, "dps": dps,
-            "layers": L, "shares": shares, "training": dict(self.train), "hero_level": self.hero_level,
+            "layers": L, "shares": shares, "weapon_pct": dict(zip(("equipped", "passive"), self.weapon_parts())), "training": dict(self.train), "hero_level": self.hero_level,
             "awaken_rank": self.rank, "fish_cap": self.fish_cap(), "board_dps_pct": self._board_pct,
             "missile_dps_pct": self.missile_pct, "mp_sufficiency": self._mp_suff, "research": dict(self.research),
             "pulls": {b: self.econ["pulls_ticket"][b] + self.econ["pulls_diamond"][b] for b in self.p.banner_ids},
