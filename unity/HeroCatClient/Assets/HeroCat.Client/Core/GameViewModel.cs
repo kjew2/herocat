@@ -331,7 +331,7 @@ namespace HeroCat.Client.Core
         /// grant is logged, replayable and saved like any other (06 rule 9.4). Each call is a new grant id.
         /// </summary>
         public ApplyResult DebugGrant(Currency currency, long amount) =>
-            Send(new ApplyInboxGrant(new InboxGrantPayload("debug-" + Guid.NewGuid().ToString("N"),
+            Send(new ApplyInboxGrant(new InboxGrantPayload("debug-" + Guid.NewGuid(),
                 new[] { new GrantLine(Simulation.GrantKindCurrency, currency.ToString(), amount) }, HeroCat.Sim.Economy.CurrencyReason.ADMIN)));
         public void DebugRequestSave() => _saveRequested = true;
         public void DebugResetProfile() => ResetRequested = true;
