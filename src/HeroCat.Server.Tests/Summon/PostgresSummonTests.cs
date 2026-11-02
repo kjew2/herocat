@@ -52,8 +52,16 @@ public sealed class PostgresSummonTests
     static ContentDb Db => Content.Value.Active;
     static string Version => Db.Version;
 
+    static readonly DateTimeOffset T0 = DateTimeOffset.FromUnixTimeSeconds(1_793_670_900);
+
     [OneTimeSetUp]
-    public async Task CreateDatabase() => _db = await ScratchDatabase.CreateAsync("herocat_summon");
+    public async Task CreateDatabase()
+    {
+        _db = await ScratchDatabase.CreateAsync("herocat_summon");
+        // A pull's currency_changed row is stamped with the fake clock's day (specs/08 section 3.5), which may be outside
+        // the migration's partition horizon.
+        await _db.ExecAsync("select ensure_partitions('events', 'day', @t, @t)", ("t", T0));
+    }
 
     [OneTimeTearDown]
     public async Task DropDatabase()
@@ -64,7 +72,7 @@ public sealed class PostgresSummonTests
     [SetUp]
     public void StartApi()
     {
-        _clock = new FakeClock(DateTimeOffset.FromUnixTimeSeconds(1_793_670_900));
+        _clock = new FakeClock(T0);
         _config = new MutableSummonConfig();
         _uniforms = new SeededUniforms(Seed);
         _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
@@ -214,6 +222,12 @@ public sealed class PostgresSummonTests
         Assert.That(await _db.CountAsync("select exp from banner_pity where player_id = @p and banner = 'WEAPON'", ("p", p.Id)), Is.EqualTo(10));
         Assert.That(await _db.CountAsync("select total_pulls from banner_pity where player_id = @p and banner = 'WEAPON'", ("p", p.Id)), Is.EqualTo(10));
         Assert.That(await _db.CountAsync("select count(distinct batch_index) from summon_log where player_id = @p and payment = 'DIAMOND'", ("p", p.Id)), Is.EqualTo(10));
+        // The charge's server-side economy event (specs/08 section 3.5; issue #296), in the pull's transaction.
+        string rid = b.GetProperty("requestId").GetString()!;
+        Assert.That(await _db.CountAsync(
+            "select count(*) from events where name = 'currency_changed' and source = 'server' and props->>'refId' = @r and props->>'currency' = 'DIAMOND' " +
+            "and (props->>'delta')::int = -1000 and (props->>'balanceAfter')::int = 1500 and props->>'reason' = 'SUMMON' and ts = @t",
+            ("r", rid), ("t", T0)), Is.EqualTo(1));
 
         // A second pull continues from the server's own state: the collection (isNew, copies) and pity carry over.
         long counter2 = _uniforms.Counter;
@@ -247,6 +261,8 @@ public sealed class PostgresSummonTests
         Assert.That(await _db.CountAsync("select count(*) from diamond_ledger where player_id = @p and reason = 'SUMMON'", ("p", p.Id)), Is.EqualTo(1));
         Assert.That(await LogRows(p), Is.EqualTo(10));
         Assert.That(await _db.CountAsync("select count(*) from summon_log where request_id = @r", ("r", id)), Is.EqualTo(10));
+        Assert.That(await _db.CountAsync("select count(*) from events where source = 'server' and props->>'refId' = @r", ("r", id)), Is.EqualTo(1),
+                    "a replay writes no second event");
     }
 
     [Test]
@@ -298,6 +314,10 @@ public sealed class PostgresSummonTests
         Assert.That(b.GetProperty("balances").GetProperty("TICKET_SUMMON_WEAPON").GetInt64(), Is.Zero);
         Assert.That(b.GetProperty("balances").GetProperty("DIAMOND").GetInt64(), Is.EqualTo(5000));
         Assert.That(await _db.CountAsync("select count(*) from summon_log where player_id = @p and payment = 'TICKET'", ("p", p.Id)), Is.EqualTo(10));
+        Assert.That(await _db.CountAsync(
+            "select count(*) from events where source = 'server' and props->>'refId' = @r and props->>'currency' = 'TICKET_SUMMON_WEAPON' " +
+            "and (props->>'delta')::int = -10 and (props->>'balanceAfter')::int = 0 and props->>'reason' = 'SUMMON'",
+            ("r", b.GetProperty("requestId").GetString()!)), Is.EqualTo(1));
         await Ok(await Pull(p, count: 1, payment: "DIAMOND"));
         Assert.That(await Diamonds(p), Is.EqualTo(4900));
     }

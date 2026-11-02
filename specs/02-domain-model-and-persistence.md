@@ -966,7 +966,7 @@ As built (issues #78, #149): `ServerClock.cs` holds both clocks. `SystemClock` i
 
 All timestamps `timestamptz`, all ids `uuid` unless noted. Money is never stored as float: prices are `integer` minor units plus `char(3)` currency. Row-level comments give the owning API (08). This section owns every server table, including the server-only ones 08 reads and writes, so the GDPR delete job (13.2) can enumerate them from here (issue #53).
 
-**Migration tooling** (issue #33): the schema ships as plain versioned SQL files, `server/db/migrations/NNNN_<name>.sql` (`0001_init.sql` is the DDL below, verbatim; `0002_save_history_trim.sql` adds the 13.1 trim trigger and `0003_partitions.sql` the partitions, both described after the DDL; issue #154; a later file that changes the DDL is reproduced verbatim after it, like `0004_save_metadata.sql` and `0005_analytics_events.sql`), applied in order by a small in-house runner (`HeroCat.Server --migrate` in the deploy pipeline's pre-deploy job and in CI; `HeroCat:Database:MigrateOnStartup` also runs it at api startup, off by default; issue #192) that records applied files in a `schema_migrations` table. No EF Core migrations; queries use Npgsql/Dapper, or EF Core for queries only, never to change the schema. A migration file is immutable once merged. CI applies the set to an empty PostgreSQL 16 container (`postgres:16`, as in 10) and runs AC 16; `check.sh` runs the same job behind a "Postgres available" guard and reports it as skipped, not passed, where no Postgres or Docker exists (cloud sessions).
+**Migration tooling** (issue #33): the schema ships as plain versioned SQL files, `server/db/migrations/NNNN_<name>.sql` (`0001_init.sql` is the DDL below, verbatim; `0002_save_history_trim.sql` adds the 13.1 trim trigger and `0003_partitions.sql` the partitions, both described after the DDL; issue #154; a later file that changes the DDL is reproduced verbatim after it, like `0004_save_metadata.sql` through `0008_currency_daily_sources.sql`), applied in order by a small in-house runner (`HeroCat.Server --migrate` in the deploy pipeline's pre-deploy job and in CI; `HeroCat:Database:MigrateOnStartup` also runs it at api startup, off by default; issue #192) that records applied files in a `schema_migrations` table. No EF Core migrations; queries use Npgsql/Dapper, or EF Core for queries only, never to change the schema. A migration file is immutable once merged. CI applies the set to an empty PostgreSQL 16 container (`postgres:16`, as in 10) and runs AC 16; `check.sh` runs the same job behind a "Postgres available" guard and reports it as skipped, not passed, where no Postgres or Docker exists (cloud sessions).
 
 ```sql
 create table accounts (
@@ -1236,7 +1236,7 @@ create table guild_members (guild_id uuid references guilds on delete cascade, p
 create table guild_chat (id bigserial primary key, guild_id uuid references guilds on delete cascade, player_id uuid references accounts on delete set null, body text not null, created_at timestamptz not null default now());
 ```
 
-**Trim trigger** (`0002`): `save_history_trim`, after each insert into `save_history`, deletes the player's rows beyond the newest `SAVE_HISTORY_KEEP` (newest by `uploaded_at`, then `save_seq`).
+**Trim trigger** (`0002`): `save_history_trim`, after each insert into `save_history`, deletes the player's rows beyond the newest `SAVE_HISTORY_KEEP` (newest by `uploaded_at`, then `save_seq`, then `device_id`; `0007` replaced the function when the history key gained the device).
 
 **Partitions** (`0003`; issue #154): `ensure_partitions(p_parent regclass, p_grain text, p_from timestamptz, p_until timestamptz) returns integer` creates every missing partition whose range touches `[p_from, p_until]`: UTC month ranges named `<parent>_pYYYYMM` for `p_grain = 'month'`, UTC day ranges named `<parent>_pYYYYMMDD` for `'day'`; it returns how many it created and a rerun is harmless. The migration creates the current month plus 3 months for `diamond_ledger` and `summon_log` and today plus 14 days for `events`; the worker's partition job keeps that horizon ahead of now (issue #262). There is no default partition: a row outside every partition fails its insert, so a missing partition is loud, and a new range partition never collides with rows parked in a default one. As built (issue #262): the worker's `partitions` job (`HeroCat.Server.Worker.PartitionMaintenanceService`) runs at worker start and then daily, calls `ensure_partitions` with the same horizons (`PARTITION_AHEAD_MONTHS = 3` for `diamond_ledger` and `summon_log`, `PARTITION_AHEAD_DAYS = 14` for `events`; 08 constants), and publishes each table's horizon, the days from now to the end of its last partition, as `db_partition_horizon_days{table}` (08 section 9.4), which 10 section 10's DB alarm watches. It never drops a partition (retention, 13.1, is a separate job).
 
@@ -1273,6 +1273,63 @@ alter table events
   add column age_gate            smallint not null default 0,
   add column received_at         timestamptz not null default now();
 create unique index on events (event_id, ts);
+```
+
+**Ledger and lookup indexes** (`0006`; issue #294): `ticket_ledger`'s unique `(player_id, request_id)` index now covers only `ref_type = 'summon'`, the one ticket row a request writes at most once, so an inbox claim (several lines, or claim-all) and the `PUT /save` step 5a credit (one row per reason; 08 section 3.1) store their request id on every row. Restricting it was chosen over widening it to `(player_id, request_id, ticket, reason, ref_id)`, which would still refuse an inbox item with two lines of one ticket. The summon handler's charge insert has no `on conflict`, so nothing infers the index. `config_versions (env) where active` makes "at most one active row per environment" a constraint (activation, 08 section 6.2, clears the old row before setting the new one, under its advisory lock), and `summon_log (player_id, banner, item_id)` serves the summon handler's per-pull collection query (08 section 4.3). Shown verbatim, as its file:
+
+```sql
+-- 0006_ledger_indexes.sql (specs/02 section 12 "Ledger and lookup indexes"; issue #294). ticket_ledger's unique
+-- (player_id, request_id) index allowed one row per request, but an inbox claim with two ticket lines, claim-all and the
+-- PUT /save step 5a credit (one row per reason) write several; it now guards only the summon charge, the one row a request
+-- writes at most once. config_versions keeps at most one active row per env (activation clears the old row first, under
+-- its advisory lock), and summon_log gets the (player_id, banner, item_id) index the per-pull collection query reads.
+drop index ticket_ledger_player_id_request_id_idx;
+create unique index on ticket_ledger (player_id, request_id) where request_id is not null and ref_type = 'summon';
+create unique index on config_versions (env) where active;
+create index on summon_log (player_id, banner, item_id);
+```
+
+**Save history per device** (`0007`; issue #295): two devices of one player can upload the same `saveSeq` (an accepted `SEQ_REGRESSION`, 08 section 3.1 step 4), so the blob key is `saves/{player_id}/{save_seq}-{deviceId8}.sav` (the first 8 lowercase hex digits of the device id; the `0001` comment on `saves.blob_key` shows the earlier `{save_seq}.sav`) and the history key includes `device_id`; neither upload replaces the other. Reads use the stored `blob_key`, so a key written under the old scheme stays readable (only dev data had one). The trim function is replaced to tell rows apart by `(save_seq, device_id)`. Shown verbatim, as its file:
+
+```sql
+-- 0007_save_history_device.sql (specs/02 section 12 "Save history per device"; issue #295). Two devices of one player can
+-- upload the same saveSeq (an accepted SEQ_REGRESSION upload, specs/08 section 3.1 step 4), so a history entry is keyed by
+-- the device too, as its blob key is (saves/{playerId}/{saveSeq}-{deviceId8}.sav), and neither upload replaces the other.
+-- The trim still keeps SAVE_HISTORY_KEEP = 10 rows per player, now told apart by (save_seq, device_id).
+alter table save_history drop constraint save_history_pkey, add primary key (player_id, save_seq, device_id);
+
+create or replace function save_history_trim() returns trigger language plpgsql as $$
+begin
+  delete from save_history h
+  where h.player_id = new.player_id
+    and (h.save_seq, h.device_id) not in (
+      select k.save_seq, k.device_id from save_history k
+      where k.player_id = new.player_id
+      order by k.uploaded_at desc, k.save_seq desc, k.device_id desc
+      limit 10);
+  return null;
+end
+$$;
+```
+
+**Currency dashboard sources** (`0008`; issue #296): the server writes `currency_changed` rows for its own ledger writes (08 section 3.5) and the client reports the same changes, so `currency_daily` takes each `(currency, reason)` from one source: a server-ledger currency (`DIAMOND`, the four `TICKET_SUMMON_*`) with a server-originated reason (`IAP`, `MAIL`, `ADMIN`, `REFUND`, `SUMMON`; the reasons 08 section 3.1 step 5a excludes from client crediting) from `source = 'server'` rows, every other pair from `source = 'client'` rows. Shown verbatim, as its file:
+
+```sql
+-- 0008_currency_daily_sources.sql (specs/02 section 12 "Currency dashboard sources"; issue #296). The server writes its
+-- own currency_changed rows (source = 'server') for the ledgers it owns, and the client reports the same changes, so each
+-- (currency, reason) is counted from one source only: a server-ledger currency (DIAMOND and the four summon tickets) with a
+-- server-originated reason (IAP, MAIL, ADMIN, REFUND, SUMMON) from the server's rows, everything else from the client's.
+-- A change only the client sees, such as Rock Candy from MAIL or from a summon's overflow, stays a client row.
+drop materialized view currency_daily;
+create materialized view currency_daily as                 -- rebuilt nightly for 06's source/sink dashboards
+  select player_id_hash, day_index, props->>'currency' as currency, props->>'reason' as reason,
+         sum((props->>'delta')::double precision) as sum_delta
+  from events
+  where name = 'currency_changed'
+    and (source = 'server') = (props->>'currency' in ('DIAMOND', 'TICKET_SUMMON_WEAPON', 'TICKET_SUMMON_SKILL',
+                                                      'TICKET_SUMMON_COMPANION', 'TICKET_SUMMON_RUNE')
+                               and props->>'reason' in ('IAP', 'MAIL', 'ADMIN', 'REFUND', 'SUMMON'))
+  group by 1, 2, 3, 4;
 ```
 
 **Idempotency rows** (as built, issue #194; 08 section 1.1): `status_code = 0` marks a row `in_flight`; any other value is the final HTTP status of the stored response. `response` is a jsonb object `{ "v": 1, "requestSha256", "contentType", "headers", "bodyBase64" }`: `requestSha256` fingerprints method, route and body (a reused id with another fingerprint is refused), and the body is base64 so the replay is byte-identical (jsonb would re-order a JSON body's keys and drop its whitespace); the `in_flight` row holds only `v` and `requestSha256`. `/auth/guest` has no player yet, so its rows use `player_id` = the first 16 bytes of `SHA-256("herocat/idempotency/device/" + lowercase deviceId)` with the RFC 9562 version-8 and variant bits set, which cannot equal a server-made (version 4) `playerId`; the 13.2 delete leaves those rows to the purge. A row older than `IDEMPOTENCY_TTL_H` counts as absent before the hourly purge deletes it.

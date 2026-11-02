@@ -12,7 +12,7 @@ public sealed class InboxPurgeService : BackgroundService
 {
     public static readonly TimeSpan Interval = TimeSpan.FromHours(24);
 
-    readonly InboxStore _store;
+    readonly IDbConnectionFactory _db;
     readonly TimeProvider _clock;
     readonly ILogger<InboxPurgeService> _log;
     readonly bool _hasDatabase;
@@ -20,7 +20,7 @@ public sealed class InboxPurgeService : BackgroundService
     public InboxPurgeService(IDbConnectionFactory db, TimeProvider clock, ILoggerFactory logs, IOptions<ServerOptions>? options = null)
     {
         _hasDatabase = options == null || !string.IsNullOrWhiteSpace(options.Value.Database.ConnectionString);
-        _store = new InboxStore(db, logs.CreateLogger<InboxStore>());
+        _db = db;
         _clock = clock;
         _log = logs.CreateLogger<InboxPurgeService>();
     }
@@ -28,7 +28,7 @@ public sealed class InboxPurgeService : BackgroundService
     /// <summary>One pass. Returns how many rows it deleted.</summary>
     public async Task<int> PurgeOnceAsync(CancellationToken ct)
     {
-        int n = await _store.PurgeExpiredAsync(_clock.GetUtcNow(), ct).ConfigureAwait(false);
+        int n = await InboxStore.PurgeExpiredAsync(_db, _clock.GetUtcNow(), ct).ConfigureAwait(false);
         _log.LogInformation("inbox purge removed {Rows} expired items", n);
         return n;
     }

@@ -58,8 +58,13 @@ public sealed class SaveController : ControllerBase
     int MaxBytes => _options.Limits.SaveBlobMaxBytes > 0 ? _options.Limits.SaveBlobMaxBytes : 262_144;
     int HistoryKeep => _options.Limits.SaveHistoryKeep > 0 ? _options.Limits.SaveHistoryKeep : 10;
 
-    /// <summary>The S3 key of a save blob (specs/08 section 3.1 step 7): <c>saves/{playerId}/{saveSeq}.sav</c>.</summary>
-    public static string BlobKey(Guid playerId, long saveSeq) => $"saves/{playerId:D}/{saveSeq}.sav";
+    /// <summary>
+    /// The S3 key of a save blob (specs/08 section 3.1 step 7): <c>saves/{playerId}/{saveSeq}-{deviceId8}.sav</c>, where
+    /// <c>deviceId8</c> is the first 8 lowercase hex digits of the device id, so two devices' uploads of one
+    /// <c>saveSeq</c> (an accepted <c>SEQ_REGRESSION</c>) never overwrite each other (issue #295). Reads go through the
+    /// stored <c>blob_key</c>, never this function, so a key written under an older scheme stays readable.
+    /// </summary>
+    public static string BlobKey(Guid playerId, long saveSeq, Guid deviceId) => $"saves/{playerId:D}/{saveSeq}-{deviceId.ToString("N")[..8]}.sav";
 
     /// <summary><c>saves.blob_key</c>: <c>s3://{bucket}/{key}</c> (specs/02 section 12).</summary>
     public static string BlobUri(string bucket, string key) => $"s3://{bucket}/{key}";
@@ -189,7 +194,7 @@ public sealed class SaveController : ControllerBase
             flags.Add(new PlausibilityFlag(player, SaveFlags.CLOCK_AHEAD, PlausibilityFlag.Suspicious,
                                            new { lastSavedServerTime = env.LastSavedServerTime, serverTime = nowSec }));
 
-        string bucket = Bucket, key = BlobKey(player, env.SaveSeq);
+        string bucket = Bucket, key = BlobKey(player, env.SaveSeq, device);
         var row = new StoredSave(player, env.SaveSeq, device, env.SchemaVersion, env.ContentVersion, clientVersion, env.LastSavedServerTime,
                                  clockAuthoritative, file.Length, env.Sha256, env.HmacHex, hmacValid, BlobUri(bucket, key), NewEtag(env.SaveSeq),
                                  progress, summary.GetRawText(), Array.Empty<string>(), false, false, now);

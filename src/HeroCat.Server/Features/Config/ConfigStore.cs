@@ -18,7 +18,10 @@ public interface IConfigStore
     Task<bool> ActivateAsync(string env, int id, CancellationToken ct);
 }
 
-/// <summary>PostgreSQL. Activations of one env serialise on a transaction-scoped advisory lock, so two never leave two rows active.</summary>
+/// <summary>
+/// PostgreSQL. Activations of one env serialise on a transaction-scoped advisory lock, and the partial unique index
+/// <c>config_versions (env) where active</c> (migration 0006) makes two active rows impossible.
+/// </summary>
 public sealed class PostgresConfigStore : IConfigStore
 {
     const string Columns = "id, env, payload::text, active, created_at, created_by";
@@ -30,7 +33,7 @@ public sealed class PostgresConfigStore : IConfigStore
     public async Task<ConfigVersionRow?> GetActiveAsync(string env, CancellationToken ct)
     {
         await using var c = await _db.OpenAsync(ct).ConfigureAwait(false);
-        // Highest id wins should a row ever be left active beside another (activation keeps it to one).
+        // At most one row is active per env (the partial unique index of migration 0006).
         await using var cmd = c.Command($"select {Columns} from config_versions where env = @env and active order by id desc limit 1", null, ("env", env));
         return await ReadOneAsync(cmd, ct).ConfigureAwait(false);
     }
@@ -59,6 +62,10 @@ public sealed class PostgresConfigStore : IConfigStore
         await using var tx = await c.BeginTransactionAsync(ct).ConfigureAwait(false);
         await using (var lk = c.Command("select pg_advisory_xact_lock(hashtext('config_versions/' || @env))", tx, ("env", env)))
             await lk.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        // The old row goes inactive first: the partial unique index (env) where active (migration 0006, issue #294) is
+        // checked per statement, so turning the new row on first would collide with it.
+        await using (var off = c.Command("update config_versions set active = false where env = @env and active and id <> @id", tx, ("env", env), ("id", id)))
+            await off.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         await using (var on = c.Command("update config_versions set active = true where env = @env and id = @id", tx, ("env", env), ("id", id)))
         {
             if (await on.ExecuteNonQueryAsync(ct).ConfigureAwait(false) == 0)
@@ -67,8 +74,6 @@ public sealed class PostgresConfigStore : IConfigStore
                 return false;
             }
         }
-        await using (var off = c.Command("update config_versions set active = false where env = @env and active and id <> @id", tx, ("env", env), ("id", id)))
-            await off.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         await tx.CommitAsync(ct).ConfigureAwait(false);
         return true;
     }
