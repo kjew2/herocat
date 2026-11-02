@@ -5,7 +5,12 @@ Monte Carlo cross-check on a SplitMix64 that matches src/HeroCat.Sim/Rng/SplitMi
 Every rate, pity constant, pool and dupe threshold is read from the built content (content/*.json, specs/09); only the
 banner-level shift constants live here, because they exist only to regenerate the banner_levels rows (04 section 4).
 
-  gacha_model.py                         pity block, soft ramp, ten-row rate table with P(E+) and guarantee numbers
+  gacha_model.py                         pity block, soft ramp, ten-row rate table with P(E+) and guarantee numbers,
+                                         collection fill curve
+  gacha_model.py --cadence [--seeds 1-20] [--days 30] [--quiet]
+                                         the above plus the cadence block (pulls/day per banner from
+                                         power_curve_model.py's F2P bot, banner level days, first L+ / M, item levels on
+                                         days 7/30/90) and the 04 section 14 S-constant checks; exit 1 on a hard FAIL
   gacha_model.py --banner SKILL --level 4
   gacha_model.py --levels                the ten banner_levels rows regenerated from the shift constants
   gacha_model.py --vectors [--out PATH]  Fixtures/Summon/vectors.json (stdout unless --out); decision 46, issue #14
@@ -98,13 +103,13 @@ class Banner:
         self.id = banner_id
         self.pull_cost = row["pull_cost_diamonds"]
         self.ticket_currency = row["ticket_currency"]
-        self.pity_soft_start = int(overrides.get("PITY_SOFT_START", row["pity_soft_start"]))
+        self.pity_soft_start = int(float(overrides.get("PITY_SOFT_START", row["pity_soft_start"])))
         self.pity_soft_step = float(overrides.get("PITY_SOFT_STEP", row["pity_soft_step"]))
-        self.pity_hard = int(overrides.get("PITY_HARD", row["pity_hard"]))
+        self.pity_hard = int(float(overrides.get("PITY_HARD", row["pity_hard"])))
         self.m_share = float(overrides.get("M_SHARE_OF_LPLUS", row["m_share_of_lplus"]))
         self.guarantee_batch = row["guarantee_batch_size"]
         self.guarantee_min = RARITIES.index(row["guarantee_min_rarity"])
-        self.exp_per_pull = int(overrides.get("BANNER_EXP_PER_PULL", row["exp_per_pull"]))
+        self.exp_per_pull = int(float(overrides.get("BANNER_EXP_PER_PULL", row["exp_per_pull"])))
         self.pool_size = row["pool_size"]
         self.levels = sorted((r for r in load_table(content_dir, "banner_levels") if r["banner"] == banner_id),
                              key=lambda r: r["level"])
@@ -316,6 +321,258 @@ def print_levels(b, shifts):
     print("banner,level,exp_required,rate_c,rate_r,rate_e,rate_l,rate_m")
     for level, exp, r in regenerated_rows(b, shifts):
         print(f"{b.id},{level},{exp}," + ",".join(repr(round(r[x], 12)) for x in RARITIES))
+
+
+# ------------------------------------------------------------------------------------------------ collection fill (04 14.4)
+# Closed form over independent pulls: the rarity of a pull is drawn at the consolidated L+ / M rates (pity averaged out)
+# and the level's renormalised C/R/E split, the item uniformly inside its rarity's pool. The 10-pull guarantee is left
+# out (it only adds Epics, so the E numbers are slightly pessimistic for players who 10-pull).
+
+FILL_PULLS = (10, 30, 60, 100, 200, 300, 500)
+
+
+def pool_sizes(b):
+    return {r: len(b.pool[r]) or b.pool_size[r] for r in RARITIES}
+
+
+def rarity_rates(b, level, rates=None):
+    """Per-pull probability of each rarity at a banner level, pity averaged (consolidated L+ rate)."""
+    rates = rates or b.rates(level)
+    lplus = pity_numbers(b)["lplus"]
+    cre = rates["COMMON"] + rates["RARE"] + rates["EPIC"]
+    out = {r: (1 - lplus) * rates[r] / cre for r in ("COMMON", "RARE", "EPIC")}
+    out["LEGENDARY"] = lplus * (1 - b.m_share)
+    out["MYTHIC"] = lplus * b.m_share
+    return out
+
+
+def item_rate(b, rarity, level):
+    """Per-pull probability of one specific item of `rarity` at a banner level (memoised on the banner)."""
+    cache = b.__dict__.setdefault("_item_rate", {})
+    key = (rarity, level)
+    if key not in cache:
+        cache[key] = rarity_rates(b, level)[rarity] / pool_sizes(b)[rarity]
+    return cache[key]
+
+
+def pulls_to_complete(n, p):
+    """Expected pulls to own all n items of a rarity drawn at per-pull probability p (coupon collector)."""
+    return n / p * sum(1.0 / k for k in range(1, n + 1)) if n and p > 0 else float("inf")
+
+
+def fill_after(b, level, pulls):
+    """(expected distinct items owned, expected new items on the next pull) after `pulls` pulls held at `level`."""
+    rr, sizes = rarity_rates(b, level), pool_sizes(b)
+    owned = new = 0.0
+    for r in RARITIES:
+        if not sizes[r]:
+            continue
+        miss = (1 - rr[r] / sizes[r]) ** pulls
+        owned += sizes[r] * (1 - miss)
+        new += rr[r] * miss
+    return owned, new
+
+
+def print_fill(b):
+    sizes = pool_sizes(b)
+    top = len(b.levels)
+    print()
+    print("collection fill curve (independent pulls at the consolidated rates; the 10-pull guarantee only adds Epics)")
+    print("  expected pulls to own every item of a rarity, banner held at level 1 / level " + str(top))
+    for r in ("COMMON", "RARE", "EPIC"):
+        lo = pulls_to_complete(sizes[r], rarity_rates(b, 1)[r])
+        hi = pulls_to_complete(sizes[r], rarity_rates(b, top)[r])
+        print(f"    all {sizes[r]:>2} {CODE[r]}: {lo:7.0f} / {hi:7.0f}")
+    print(f"  pulls   owned (of {sum(sizes.values())}) L1 / L{top}   new items per pull L1 / L{top}")
+    for n in FILL_PULLS:
+        o1, n1 = fill_after(b, 1, n)
+        o10, n10 = fill_after(b, top, n)
+        print(f"  {n:>5}   {o1:6.1f} / {o10:6.1f}            {n1:.3f} / {n10:.3f}")
+
+
+# ------------------------------------------------------------------------------------------------ cadence (04 14.5)
+# The F2P pull cadence per banner is never hand-entered (issue #38): it comes from power_curve_model.py's bot, which
+# earns 06's diamonds and tickets and spends them with 03's policy, pulling with this file's algorithm. The cadence
+# block runs that bot over the seeds (MVP tier) and reads pulls and banner levels per day from it.
+
+CADENCE_ITEM_DAYS = (7, 30, 90)
+CADENCE_TAIL_DAYS = 15        # days past the run are extrapolated at the median pulls/day of its last 15 days
+WEAPON_L4_BAND = (20, 35)     # 00 decision 70, 04 section 4: 20-seed median day the F2P bot reaches weapon level 4
+EPLUS_L10_MAX = 0.20          # 04 section 14: level-10 P(E+), the paid E+ edge stays under 1.7x
+COMMON_L5_LEVEL, COMMON_L5_DAYS = 5, 30        # 04 section 14 / open question 8 (report-only, #249 item 11)
+LEGEND_L3_LEVEL, LEGEND_L3_DAYS = 3, 60        # 04 section 14
+PASSIVE_SHARE_BAND, PASSIVE_SHARE_DAYS = (0.10, 0.40), (7, 30)   # 04 sections 6.2, 14
+COMPANION_SHARE_MIN, COMPANION_SHARE_DAY = 0.05, 7               # 04 section 14 with 03 section 8.5
+
+
+def run_bots(content_dir, overrides, seeds, days):
+    """power_curve_model's greedy F2P bot (MVP tier, 120 active min in 2 sessions a day) for each seed."""
+    import power_curve_model as pc   # imports this module; deferred so gacha_model stays importable on its own
+    p = pc.Params(content_dir, overrides, False)
+    return p, {s: pc.Bot(p, s).run(days, 120, 2) for s in seeds}
+
+
+def median(xs):
+    xs = sorted(xs)
+    n = len(xs)
+    return xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2
+
+
+class Cadence:
+    """Per-banner median cumulative pulls by day over the bot runs, extrapolated past the last day."""
+
+    def __init__(self, p, runs, days):
+        self.days = days
+        self.seeds = sorted(runs)
+        self.banners = list(p.banner_ids)
+        self.cum = {b: [0.0] + [median(runs[s].daily[d - 1]["pulls"][b] for s in runs) for d in range(1, days + 1)]
+                    for b in self.banners}
+        tail = min(CADENCE_TAIL_DAYS, days)
+        self.tail_rate = {b: (self.cum[b][days] - self.cum[b][days - tail]) / tail for b in self.banners}
+        self.per_day = {b: median((runs[s].daily[days - 1]["pulls"][b]) / days for s in runs) for b in self.banners}
+        self.level_day = {b: {lv: median(runs[s].banner_level_day[b].get(lv, days + 1) for s in runs)
+                              for lv in range(2, len(p.banner[b].levels) + 1)} for b in self.banners}
+        self.level_missed = {b: {lv: sum(1 for s in runs if lv not in runs[s].banner_level_day[b])
+                                 for lv in range(2, len(p.banner[b].levels) + 1)} for b in self.banners}
+
+        def med_day(d, f):
+            return median(f(runs[s].daily[d - 1]) for s in runs) if d <= days else None
+        self.passive_share = {d: med_day(d, lambda r: r["weapon_pct"]["passive"]
+                                         / max(1e-9, r["weapon_pct"]["passive"] + r["weapon_pct"]["equipped"]))
+                              for d in PASSIVE_SHARE_DAYS}
+        self.companion_share = (med_day(COMPANION_SHARE_DAY, lambda r: r["shares"]["Companions"])
+                                if "COMPANION" in self.banners else None)
+
+    def pulls_by(self, b, day):
+        if day <= self.days:
+            return self.cum[b][max(0, day)]
+        return self.cum[b][self.days] + self.tail_rate[b] * (day - self.days)
+
+    def day_for(self, b, pulls, horizon=3650):
+        """First day whose median cumulative pulls reach `pulls` (extrapolated past the run), or None."""
+        for d in range(1, horizon + 1):
+            if self.pulls_by(b, d) >= pulls:
+                return d
+        return None
+
+
+def expected_copies(b, rarity, pulls):
+    """Expected copies of one specific item after `pulls` pulls on a banner from EXP 0, each at its banner level."""
+    n = int(pulls)
+    total = sum(item_rate(b, rarity, b.level_for(k * b.exp_per_pull)) for k in range(1, n + 1))
+    return total + (pulls - n) * item_rate(b, rarity, b.level_for((n + 1) * b.exp_per_pull))
+
+
+def item_level_day(b, cad, rarity, level, horizon=3650):
+    """First day the expected copies of a specific item reach `level`'s DUPE_LVL_CUM threshold, or None."""
+    need = b.dupe_cum[level - 1]
+    lo = cad.day_for(b.id, 0) or 1
+    copies, pulls_done = 0.0, 0
+    for d in range(lo, horizon + 1):
+        target = int(cad.pulls_by(b.id, d))
+        while pulls_done < target:
+            pulls_done += 1
+            copies += item_rate(b, rarity, b.level_for(pulls_done * b.exp_per_pull))
+        if copies >= need:
+            return d
+    return None
+
+
+def cadence_checks(p, cad, shifts):
+    """[(status, name, value, hard)] for the S constants 04 section 14 validates. status PASS/FAIL; hard=False marks
+    the report-only checks whose target is undecided or whose fix is the pending balance call (#249)."""
+    out = []
+
+    def add(ok, name, val, hard=True):
+        out.append(("PASS" if ok else "FAIL", name, val, hard))
+
+    w = p.banner["WEAPON"]
+    l4 = cad.level_day["WEAPON"].get(4)
+    add(l4 is not None and WEAPON_L4_BAND[0] <= l4 <= WEAPON_L4_BAND[1],
+        f"BANNER_LVL_EXP / BANNER_EXP_PER_PULL: median day the F2P bot reaches weapon banner level 4 in "
+        f"{WEAPON_L4_BAND[0]}..{WEAPON_L4_BAND[1]}",
+        f"day {l4:g} ({cad.level_missed['WEAPON'][4]}/{len(cad.seeds)} seeds not by day {cad.days}, counted as day "
+        f"{cad.days + 1})")
+
+    rows = regenerated_rows(w, shifts)
+    top = rows[-1][2]
+    pe = eplus(w, top)
+    add(pe <= EPLUS_L10_MAX + 1e-12, f"BANNER_LVL_*_SHIFT: level-{rows[-1][0]} P(E+) <= {EPLUS_L10_MAX}",
+        f"{pe:.3f} (x{pe / eplus(w, rows[0][2]):.2f} the level-1 rate)")
+
+    # TODO(#249): item 11 (04 open question 8) decides whether this target stays; report-only until then.
+    cd = item_level_day(w, cad, "COMMON", COMMON_L5_LEVEL)
+    add(cd is not None and cd <= COMMON_L5_DAYS,
+        f"weapon pool size: a specific Common reaches level {COMMON_L5_LEVEL} within {COMMON_L5_DAYS} days "
+        "(04 open question 8, report-only until #249 item 11)",
+        f"expected level {w.dupe_level(expected_copies(w, 'COMMON', cad.pulls_by('WEAPON', COMMON_L5_DAYS)))} on day "
+        f"{COMMON_L5_DAYS}; level {COMMON_L5_LEVEL} on day {cd if cd is not None else '> 3650'}", hard=False)
+
+    ld = item_level_day(w, cad, "LEGENDARY", LEGEND_L3_LEVEL)
+    add(ld is None or ld > LEGEND_L3_DAYS,
+        f"weapon pool size: a specific Legendary does not reach level {LEGEND_L3_LEVEL} within {LEGEND_L3_DAYS} days",
+        f"expected level {w.dupe_level(expected_copies(w, 'LEGENDARY', cad.pulls_by('WEAPON', LEGEND_L3_DAYS)))} on day "
+        f"{LEGEND_L3_DAYS}; level {LEGEND_L3_LEVEL} on day {ld if ld is not None else '> 3650'}")
+
+    for d in PASSIVE_SHARE_DAYS:
+        sh = cad.passive_share[d]
+        if sh is None:
+            continue
+        add(PASSIVE_SHARE_BAND[0] <= sh <= PASSIVE_SHARE_BAND[1],
+            f"WEAPON_PASSIVE_PCT: passive {PASSIVE_SHARE_BAND[0]:.0%}..{PASSIVE_SHARE_BAND[1]:.0%} of the weapon layer "
+            f"on day {d} (median)", f"{sh:.1%}")
+
+    if cad.companion_share is not None:
+        # TODO(#249): item 1 (layer floors). Misses under the current content, as power_curve_model.py's share check
+        # does; retuning companions is the pending balance call, so this stays report-only like that check.
+        add(cad.companion_share >= COMPANION_SHARE_MIN,
+            f"COMPANION_SLOTS / companion dps_pct: companion layer >= {COMPANION_SHARE_MIN:.0%} of ln(DPS) by day "
+            f"{COMPANION_SHARE_DAY} (median, report-only until #249 item 1)", f"{cad.companion_share:.1%}", hard=False)
+    return out
+
+
+def print_cadence(p, cad):
+    print()
+    print(f"cadence (F2P bot of power_curve_model.py, {len(cad.seeds)} seeds x {cad.days} days, MVP tier; medians; days "
+          f"past {cad.days} extrapolated at the last {min(CADENCE_TAIL_DAYS, cad.days)} days' pulls/day)")
+    for b in cad.banners:
+        bn = p.banner[b]
+        pn = pity_numbers(bn)
+        reached = [f"L{lv} d{d:g}" for lv, d in cad.level_day[b].items() if d <= cad.days]
+        print(f"  {b}: {cad.per_day[b]:.2f} pulls/day ({cad.pulls_by(b, cad.days):g} by day {cad.days}, then "
+              f"{cad.tail_rate[b]:.2f}/day); banner level on day: {', '.join(reached) or 'none past L1'}")
+
+        def when(pulls):
+            d = cad.day_for(b, pulls)
+            return f"day {d}" if d is not None else "never"
+        print(f"    first L+ expected {when(pn['expected'])}, P90 {when(pn['p90'])}; first M expected "
+              f"{when(1 / pn['mythic'])}")
+        parts = []
+        for r in ("COMMON", "RARE", "EPIC", "LEGENDARY"):
+            if not pool_sizes(bn)[r]:
+                continue
+            lv = [bn.dupe_level(expected_copies(bn, r, cad.pulls_by(b, d))) for d in CADENCE_ITEM_DAYS]
+            parts.append(f"{CODE[r]} " + "/".join(str(x) for x in lv))
+        print(f"    expected level of a specific item on days {'/'.join(str(d) for d in CADENCE_ITEM_DAYS)}: "
+              + ", ".join(parts))
+
+
+def run_cadence(content_dir, overrides, shifts, seeds, days, quiet):
+    p, runs = run_bots(content_dir, overrides, seeds, days)
+    cad = Cadence(p, runs, days)
+    if not quiet:
+        print_cadence(p, cad)
+    checks = cadence_checks(p, cad, shifts)
+    print()
+    print("S-constant checks (04 section 14)")
+    for st, name, val, hard in checks:
+        tag = st if hard or st == "PASS" else "WARN"
+        print(f"  {tag:<4}  {name}: {val}")
+    hard_fail = [c for c in checks if c[0] == "FAIL" and c[3]]
+    soft_fail = [c for c in checks if c[0] == "FAIL" and not c[3]]
+    if soft_fail:
+        print(f"  REPORT-ONLY: {len(soft_fail)} check(s) miss (balance decision #249 items 1 and 11 pending)")
+    return checks, (1 if hard_fail else 0)
 
 
 # ------------------------------------------------------------------------------------------------ Monte Carlo
@@ -626,13 +883,20 @@ def main(argv=None):
     ap.add_argument("--mc-vectors", type=int, default=200000,
                     help="Monte Carlo pulls whose exact counts go in the vectors file (vectors 13, 14; the C# test runs 1,000,000)")
     ap.add_argument("--check", action="store_true")
+    ap.add_argument("--cadence", action="store_true",
+                    help="also run power_curve_model.py's F2P bot for the cadence block and the S-constant checks of "
+                         "04 section 14; exits 1 when a hard check fails (run by check.sh)")
+    ap.add_argument("--seeds", default="1-20", help="bot seeds for --cadence (default 1-20)")
+    ap.add_argument("--days", type=int, default=30, help="bot days for --cadence (default 30; later days extrapolate)")
+    ap.add_argument("--quiet", action="store_true", help="with --cadence: print only the checks")
     a = ap.parse_args(argv)
 
     overrides = {}
     for o in a.override:
         k, _, val = o.partition("=")
-        overrides[k.strip()] = float(val)
+        overrides[k.strip()] = val.strip()
     shifts = {k: float(overrides.get(k, v)) for k, v in SHIFTS.items()}
+    bot_overrides = {k: v for k, v in overrides.items() if k not in SHIFTS}   # shifts only regenerate the rows
 
     if a.check:
         return check(a.content, a.mc_vectors)
@@ -652,8 +916,24 @@ def main(argv=None):
     if a.mc:
         print_mc(b, a.mc, a.seed, a.level)
         return 0
-    print_report(b, a.level)
+    if not (a.cadence and a.quiet):
+        print_report(b, a.level)
+        print_fill(b)
+    if a.cadence:
+        _, code = run_cadence(a.content, bot_overrides, shifts, parse_seeds(a.seeds), a.days, a.quiet)
+        return code
     return 0
+
+
+def parse_seeds(text):
+    out = []
+    for part in text.split(","):
+        if "-" in part:
+            lo, hi = part.split("-")
+            out += list(range(int(lo), int(hi) + 1))
+        elif part:
+            out.append(int(part))
+    return out
 
 
 if __name__ == "__main__":

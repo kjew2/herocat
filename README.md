@@ -23,7 +23,7 @@ Tools (Python 3.9+, stdlib only unless noted):
 | Tool | Status | Does |
 |---|---|---|
 | `tools/power_curve_model.py` | in repo (spec 03 section 8.6, issue #87); `--check` runs in full `check.sh`, report-only until the `S` bands pass | Greedy F2P bot across all power layers; prints the day table, layer shares and 06's economy tables (issue #178); validates the `S` constants 03 and 06 list |
-| `tools/gacha_model.py` | in repo (spec 04 section 14); `--check` run by `check.sh` (hard gate) | Exact pity distribution and consolidated rates per banner level; the oracle for the server summon test |
+| `tools/gacha_model.py` | in repo (spec 04 section 14); `--check` and `--cadence` run by `check.sh` (hard gates; two `--cadence` checks report-only, issue #164) | Exact pity distribution and consolidated rates per banner level, collection fill curve, F2P pull cadence per banner and the 04 section 14 `S`-constant checks; the oracle for the server summon test |
 | `tools/fish_model.py` | in repo (spec 05 section 9); run by `check.sh` (hard gate) | Tank and merge throughput, Fish Coin and DPS income per active minute for attentive and lazy policies |
 | `tools/export_content.py` | `build` / `check` / `gen-dtos` / `diff` / `pull`, table rules, versioning, localization checks and the translator verbs `translator-csv` / `import-translations` / `pseudo` landed (spec 09, issues #121-#123, #128, #132, #213) | Sheet -> `content_src/*.csv` -> validated `content/*.json` + `manifest.json` + the Sim's generated DTOs; translator CSV round trip; pseudo-localization |
 | `tools/content.py` | in repo (spec 09 section 11, issue #130); `power_curve_model.py` reads through it | Loader the three models use so they read the same JSON the game ships |

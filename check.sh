@@ -69,12 +69,14 @@ command -v python3 >/dev/null 2>&1 || PY=python
 # --------------------------------------------------------------------------------------------- Python checks
 
 POWER_CURVE_FAILED=0
+GACHA_SOFT_FAILED=0
 
 pr_python() {
   step "Content: exporter tests, and content_src builds to content/ (and the Sim DTOs) with no drift"
   $PY tools/test_export_content.py
   $PY tools/test_content.py
   $PY tools/test_power_curve_model.py
+  $PY tools/test_gacha_model.py
   $PY tools/export_content.py check
 
   step "Clock purity: no clock reads in HeroCat.Sim, only ServerClock.cs/SessionRunner.cs in HeroCat.Runtime (specs/02 AC 18)"
@@ -140,6 +142,15 @@ content_python() {
     if ! $PY tools/power_curve_model.py --check --quiet; then
       POWER_CURVE_FAILED=1
       printf '\nWARNING: report-only step failed (power_curve_model.py S-constant bands, balance call pending). Not a full pass.\n'
+    fi
+
+    # 04 section 14 (issue #164): the weapon level-4 day, level-10 P(E+), Legendary pace and passive share are hard; the
+    # Common level-5 pace (04 open question 8) and the companion day-7 floor wait on #249 items 11 and 1: report-only.
+    step "Tools: gacha_model.py --cadence, F2P pull cadence and 04 section 14 S-constant checks (two report-only)"
+    to_file gacha-cadence.txt $PY tools/gacha_model.py --cadence --quiet
+    if grep -q '^  REPORT-ONLY:' "$OUT_DIR/gacha-cadence.txt"; then
+      GACHA_SOFT_FAILED=1
+      printf '\nWARNING: report-only gacha_model.py checks missed (#249 items 1 and 11). Not a full pass.\n'
     fi
   fi
 }
@@ -330,6 +341,7 @@ if [ "$MODE_CONTENT" -eq 1 ]; then content_python; fi
 if [ "$DOTNET" -eq 0 ]; then
   printf '\nSkipped .NET checks (--no-dotnet). Not a full pass.\n'
   [ "$POWER_CURVE_FAILED" -eq 1 ] && printf 'Report-only: power_curve_model.py --check FAILED (balance call pending).\n'
+  [ "$GACHA_SOFT_FAILED" -eq 1 ] && printf 'Report-only: gacha_model.py --cadence checks missed (#249 items 1 and 11).\n'
   exit 0
 fi
 
@@ -342,9 +354,12 @@ if [ "$MODE_SERVER" -eq 1 ]; then server_dotnet; fi
 if [ "$POWER_CURVE_FAILED" -eq 1 ]; then
   printf '\nHard checks passed; report-only power_curve_model.py --check FAILED (03 section 8.6 bands, balance call pending). Not a full pass.\n'
 fi
+if [ "$GACHA_SOFT_FAILED" -eq 1 ]; then
+  printf '\nHard checks passed; report-only gacha_model.py --cadence checks missed (#249 items 1 and 11). Not a full pass.\n'
+fi
 if [ "$REPORT_ONLY_FAILED" -eq 1 ]; then
   printf '\nHard checks passed; the report-only acceptance sweep FAILED (until the balance decision #249, TODO(#136)). Not a full pass.\n'
-elif [ "$POWER_CURVE_FAILED" -eq 1 ]; then
+elif [ "$POWER_CURVE_FAILED" -eq 1 ] || [ "$GACHA_SOFT_FAILED" -eq 1 ]; then
   :
 elif [ "$REWRITE_REPORT_ONLY" -eq 1 ] && [ "$FAST" -eq 0 ] && [ "$MODE_CONTENT" -eq 1 ]; then
   printf '\nAll checks passed (the acceptance sweep is report-only until the balance decision #249).\n'
