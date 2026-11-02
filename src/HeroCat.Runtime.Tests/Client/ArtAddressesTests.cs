@@ -11,6 +11,8 @@ namespace HeroCat.Runtime.Tests
         [TestCase("portrait_comp_l_01", "Art/Portraits/portrait_comp_l_01")]
         [TestCase("art_splash_comp_m_01", "Art/Splash/art_splash_comp_m_01")]
         [TestCase("spr_comp_l_04", "Art/Pixel/spr_comp_l_04")]
+        [TestCase("icon_weapon_e_06", "Art/Icons/icon_weapon_e_06")]
+        [TestCase("spr_weapon_e_06", "Art/Pixel/spr_weapon_e_06")]
         [TestCase("vfx_comp_l_01", null)]
         [TestCase("", null)]
         [TestCase(null, null)]
@@ -41,6 +43,16 @@ namespace HeroCat.Runtime.Tests
             string res = System.IO.Path.Combine(TestContent.RepoRoot, "unity", "HeroCatClient", "Assets", "Resources");
             foreach (var id in new[] { "comp_l_01", "comp_l_04", "comp_m_01", "comp_l_02" })
                 foreach (var a in new[] { "icon_" + id, "spr_" + id, ArtAddresses.PortraitFor(id), "art_splash_" + id })
+                    Assert.That(System.IO.File.Exists(System.IO.Path.Combine(res, ArtAddresses.ResourcePath(a) + ".png")), a);
+        }
+
+        [Test]
+        public void EveryWeaponPilotAssetIsCommitted()   // issue #290: the weapon pilot's rows resolve to their icon and held sprite
+        {
+            string res = System.IO.Path.Combine(TestContent.RepoRoot, "unity", "HeroCatClient", "Assets", "Resources");
+            var db = TestContent.Db;
+            foreach (var id in new[] { "weapon_e_06" })
+                foreach (var a in new[] { db.Weapons[id].Icon, db.Weapons[id].Sprite })
                     Assert.That(System.IO.File.Exists(System.IO.Path.Combine(res, ArtAddresses.ResourcePath(a) + ".png")), a);
         }
     }

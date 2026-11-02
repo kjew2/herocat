@@ -1,5 +1,5 @@
 # herocat fish board vectors v1 (05 AC5; regenerate: dotnet run -c Release --project src/HeroCat.Bots -- fish-vectors --update)
-# content 2026.11.02.6 340240b3c9329f7149a1b476b10cee2e552875bd1dc44d832f7f7183ab3c3e52, seed 7, script seed 00000000f15b0a4d
+# content 2026.11.02.7 87d5552f4651a172776f721d427f40f7a1534e25e9b0f9bc575fa09672c8db8e, seed 7, script seed 00000000f15b0a4d
 # step | command | result | cells | tank refillTick | fish_spawn counter | fishCoin
 1 | {"tick":0,"type":"ComputeOfflineCatchup","nowServerSeconds":1767603611} | ok | 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 | 10 0 | 0 | 0
 2 | {"tick":0,"type":"DiscardFish","cell":12} | InvalidTarget:EMPTY_CELL | 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 | 10 0 | 0 | 0

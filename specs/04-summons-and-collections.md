@@ -257,6 +257,8 @@ weaponMult        = 1 + (equippedWeaponPct + weaponPassivePct) / 100
 
 A weapon's `weapons` table row (09): `id`, `rarity`, `name_key`, `icon`, `atk_pct` (defaults to the rarity value; a row may override for flavour within +/-10%), `passive_pct` (same), `element` (cosmetic in MVP).
 
+Names and look briefs are presentation only and live in `art/concepts/weapons.md` (issue #288). The weapon art pilot (issue #290) placed the artist's first weapon there: Twin Crystals, a dual katana, on `weapon_e_06` (E, DARK).
+
 ### 6.2 Why the passive exists and what it is worth
 
 The equipped pct is a step function of luck: the player's best weapon. The passive is a sum over everything they have ever pulled, so every weapon pull moves it. Worked numbers, by weapon pulls made (which day the F2P bot reaches each row comes from the computed cadence, issue #38: at the 20-seed median of 2.20 weapon pulls/day, 36 pulls is roughly days 15-20 and 94 pulls is past day 30):
