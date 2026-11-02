@@ -16,4 +16,8 @@
     <!-- Content loading (JSON) lives in Runtime's ContentLoader; the Sim itself never sees JSON (00 contract 1). -->
     <ProjectReference Include="../HeroCat.Runtime/HeroCat.Runtime.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- 03 criterion 19's fixture, shared with the bench verb so the Perf group and check.sh's bench measure one loadout (#160). -->
+    <Compile Include="../HeroCat.Bots/Measure/PerfFixture.cs" Link="Shared/PerfFixture.cs" />
+  </ItemGroup>
 </Project>

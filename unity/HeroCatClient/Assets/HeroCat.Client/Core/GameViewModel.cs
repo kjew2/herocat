@@ -80,7 +80,7 @@ namespace HeroCat.Client.Core
             Router.Shown = OnScreenShown;
             Router.Hidden = OnScreenHidden;
 
-            _sim.EmitHitLanded = true;   // damage numbers come from HitLanded (07 section 4.3); opt-in, never in bots
+            _sim.CombatEvents = CombatEventMask.All;   // damage numbers and cast VFX (07 section 4.3): HitLanded, SkillCast and CompanionAbilityUsed are opt-in, never in bots
             _subs.Add(runner.Bus.Subscribe<Event>(OnSimEvent));
             _subs.Add(runner.Bus.SubscribeNotice<CommandRejected>(OnRejected));
             _subs.Add(runner.Bus.SubscribeNotice<SaveWriteFailed>(_ => Toasts.Push(Localizer.Text(UiKeys.ToastSaveFailed), ToastStyle.Error, 3.0)));

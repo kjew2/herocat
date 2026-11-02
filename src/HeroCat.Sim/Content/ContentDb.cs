@@ -86,11 +86,10 @@ namespace HeroCat.Sim.Content
         public IReadOnlyDictionary<string, ResearchDef> Research { get; private set; }
 
         /// <summary>The node with <paramref name="effect"/> (one per effect, E046), or null.</summary>
-        public ResearchDef ResearchFor(ResearchEffect effect)
-        {
-            foreach (var r in Research.Values) if (r.Effect == effect) return r;
-            return null;
-        }
+        public ResearchDef ResearchFor(ResearchEffect effect) =>
+            _researchByEffect != null && (int)effect >= 0 && (int)effect < _researchByEffect.Length ? _researchByEffect[(int)effect] : null;   // no enumerator: read every tick (03 criterion 19)
+
+        ResearchDef[] _researchByEffect;
 
         /// <summary>quests_daily rows by SortOrder (09 section 5.21), bonus rows included. Empty in an M0 build (tier MVP rows).</summary>
         public IReadOnlyList<QuestDef> QuestsDaily { get; private set; }

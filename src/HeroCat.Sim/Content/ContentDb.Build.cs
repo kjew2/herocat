@@ -282,6 +282,9 @@ namespace HeroCat.Sim.Content
                                                       r.EffectFloor, r.MaxLevel, r.Cost0, r.CostG, r.UnlockAwakenRank,
                                                       Enum<Tier>(r.Tier, $"research[{r.Id}].tier"));
                 db.Research = new ReadOnlyDictionary<string, ResearchDef>(nodes);
+                var byEffect = new ResearchDef[System.Enum.GetValues(typeof(ResearchEffect)).Length];
+                foreach (var n in nodes.Values) byEffect[(int)n.Effect] ??= n;   // the first per effect, as a scan of Research finds it
+                db._researchByEffect = byEffect;
 
                 // daily and weekly quests (09 sections 5.21-5.22, issue #170): MVP rows, so an M0 build has none
                 db.QuestsDaily = BuildQuests("quests_daily", QuestKind.DAILY, d.QuestsDaily, out db._dailyById);
