@@ -1,7 +1,7 @@
 {
   "SchemaVersion": 1,
-  "ContentVersion": "2026.11.01.3",
-  "ContentHash": "8e2b3cc39003a8d3cf7dc0bd89c11bd7999887ebc64a5d1b0608ce3fe3930197",
+  "ContentVersion": "2026.11.02.1",
+  "ContentHash": "38ff4f73a497bcdb2e39cb4b659b741d37836a21ce0eb0610bbea3c5cde0dcd5",
   "PlayerId": "00000007-0000-4000-8000-000000000001",
   "DeviceId": "b07b07b0-0000-4000-8000-000000000001",
   "RngRoot": "00000007-0000-4000-8000-000000000001",

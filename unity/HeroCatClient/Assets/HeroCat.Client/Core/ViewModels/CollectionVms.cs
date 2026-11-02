@@ -241,6 +241,7 @@ namespace HeroCat.Client.Core
             {
                 case ItemAcquired a when a.Banner == Banner:
                 case ItemEquipped q when q.Banner == Banner:
+                case ItemLimitBroken lb when CollectionRules.IsKnown(C.Db, Banner, lb.ItemId):   // values after LevelMult
                     Invalidate();
                     break;
             }
@@ -395,11 +396,12 @@ namespace HeroCat.Client.Core
     /// <summary>
     /// SCR_ITEM_DETAIL (07 section 4.19; issue #116): any collectible's card: level and copies to next (DUPE_LVL_CUM),
     /// kind-specific stats with the next-level preview, source banner and base rate, Equip with a slot picker for skills,
-    /// weapon Compare, the NEW ribbon and the "Not owned" state.
+    /// weapon Compare, the NEW ribbon and the "Not owned" state; Limit break (04 sections 5.2 and 11; issue #255).
     /// </summary>
     public sealed class ItemDetailVm
     {
         public const string AnchorEquip = "detail.equip";
+        public const string AnchorLimitBreak = "detail.limit_break";
 
         readonly VmContext _c;
         Simulation _sim;
@@ -417,6 +419,8 @@ namespace HeroCat.Client.Core
             CompareLine = c.Label();
             Equip = c.Button();
             Equip.Label.Set(UiKeys.CollEquip);
+            LimitBreakLine = c.Label();
+            LimitBreak = c.Button();
         }
 
         public Banner Banner { get; private set; }
@@ -429,6 +433,15 @@ namespace HeroCat.Client.Core
         public readonly Flag Owned = new Flag();
         public readonly Flag CompareVisible = new Flag();
         public readonly ButtonState Equip;
+
+        /// <summary>"Limit breaks 2 / 5" under the level block; empty while unowned (04 section 5.2).</summary>
+        public readonly TextKeyLabel LimitBreakLine;
+
+        /// <summary>
+        /// "Limit break (N Rock Candy)" (04 section 11): visible when owned; disabled at LIMIT_BREAK_RANKS
+        /// (<c>NextLimitBreakCost == 0</c>) or when Rock Candy is short; sends <c>LimitBreak(id)</c>.
+        /// </summary>
+        public readonly ButtonState LimitBreak;
 
         /// <summary>Skills: the slot picker row (07 section 4.19).</summary>
         public readonly Flag SlotPickerVisible = new Flag();
@@ -520,6 +533,26 @@ namespace HeroCat.Client.Core
             Equip.Enabled.Set(can);
             Equip.Reason.Set(can ? null : it.Owned ? UiKeys.CollEquipped : UiKeys.CollNotOwned);
             SlotPickerVisible.Set(it.Owned && Banner == Banner.SKILL);
+
+            // Limit break (04 sections 5.2 and 11). TODO(#161): companions, once their content and detail stats land.
+            long cost = it.NextLimitBreakCost;
+            if (it.Owned) LimitBreakLine.Set(UiKeys.DetailLimitBreaks, it.LimitBreaks, _c.K.LimitBreakRanks);
+            else LimitBreakLine.Set(null);
+            bool capped = it.Owned && cost <= 0;
+            bool canBreak = it.Owned && !capped && sim.State.Wallet.RockCandy >= cost;
+            LimitBreak.Visible.Set(it.Owned);
+            if (capped) LimitBreak.Label.Set(UiKeys.RejectLimitBreakCapped);
+            else LimitBreak.Label.Set(UiKeys.DetailLimitBreak, cost);
+            LimitBreak.Enabled.Set(canBreak);
+            LimitBreak.Reason.Set(canBreak ? null : !it.Owned ? UiKeys.CollNotOwned
+                                  : capped ? UiKeys.RejectLimitBreakCapped : UiKeys.RejectNotEnoughRockCandy);
+        }
+
+        /// <summary><c>LimitBreak(id)</c> (04 section 5.2); the sim rejects (with feedback on the anchor) when it cannot.</summary>
+        public void OnLimitBreak()
+        {
+            if (ItemId == null || Item == null || !Item.Owned) return;
+            _c.Commands?.Send(new HeroCat.Sim.Commands.LimitBreak(ItemId), AnchorLimitBreak);
         }
 
         /// <summary>Weapons: EquipWeapon. Skills: EquipSkill into <paramref name="slot"/> (the picker; default the first empty).</summary>

@@ -1203,6 +1203,14 @@
       "text": "Level {0}   {1} / {2} copies"
     },
     {
+      "key": "scr.item_detail.limit_break",
+      "text": "Limit break ({0} Rock Candy)"
+    },
+    {
+      "key": "scr.item_detail.limit_breaks",
+      "text": "Limit breaks {0} / {1}"
+    },
+    {
       "key": "scr.item_detail.new",
       "text": "NEW"
     },

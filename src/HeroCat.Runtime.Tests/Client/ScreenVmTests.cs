@@ -194,6 +194,46 @@ namespace HeroCat.Runtime.Tests
         }
 
         [Test]
+        public void ItemDetail_LimitBreak_ShowsTheCost_SendsTheCommand_AndDisablesWhenShortOrCapped()   // 04 sections 5.2, 11; #255
+        {
+            var db = TestContent.Db;
+            string w = db.TutorialWeaponId;
+            long perRank = db.Rarities[db.Weapons[w].Rarity].LimitBreakCost;
+            int ranks = db.Constants.LimitBreakRanks;
+
+            var poor = ClientFixture.Open(s => s.Wallet.RockCandy = perRank - 1);   // test setup only
+            poor.Vm.ItemDetail.Open(Banner.WEAPON, w);
+            var lb = poor.Vm.ItemDetail.LimitBreak;
+            Assert.That(lb.Visible.Value, Is.True, "owned");
+            Assert.That(lb.Enabled.Value, Is.False);
+            Assert.That(lb.Reason.Key, Is.EqualTo(UiKeys.RejectNotEnoughRockCandy));
+            Assert.That((lb.Label.Key, lb.Label.Arg(0)), Is.EqualTo((UiKeys.DetailLimitBreak, LabelArg.Int(perRank))));
+            poor.Vm.ItemDetail.Close();
+            poor.Vm.ItemDetail.Open(Banner.WEAPON, db.Banners[Banner.WEAPON].Pool[Rarity.MYTHIC][0]);
+            Assert.That(poor.Vm.ItemDetail.LimitBreak.Visible.Value, Is.False, "unowned");
+
+            var f = ClientFixture.Open(s => s.Wallet.RockCandy = perRank * 15);   // exactly ranks 1..5: 1+2+3+4+5
+            var d = f.Vm.ItemDetail;
+            d.Open(Banner.WEAPON, w);
+            Assert.That(d.LimitBreakLine.Key, Is.EqualTo(UiKeys.DetailLimitBreaks));
+            Assert.That((d.LimitBreakLine.Arg(0), d.LimitBreakLine.Arg(1)), Is.EqualTo((LabelArg.Int(0), LabelArg.Int(ranks))));
+            for (int rank = 1; rank <= ranks; rank++)
+            {
+                Assert.That(d.LimitBreak.Enabled.Value, Is.True, "rank " + rank);
+                Assert.That(d.LimitBreak.Label.Arg(0), Is.EqualTo(LabelArg.Int(perRank * rank)));
+                d.OnLimitBreak();
+                f.Frame();
+                Assert.That(f.S.Sim.State.Weapons.Items[w].LimitBreaks, Is.EqualTo(rank));
+                Assert.That(d.LimitBreakLine.Arg(0), Is.EqualTo(LabelArg.Int(rank)), "the modal refreshes on ItemLimitBroken");
+            }
+            Assert.That(f.Logged<LimitBreak>(), Is.EqualTo(ranks));
+            Assert.That(f.S.Sim.State.Wallet.RockCandy, Is.EqualTo(0));
+            Assert.That(d.LimitBreak.Enabled.Value, Is.False);
+            Assert.That(d.LimitBreak.Reason.Key, Is.EqualTo(UiKeys.RejectLimitBreakCapped));
+            Assert.That(d.LimitBreak.Label.Key, Is.EqualTo(UiKeys.RejectLimitBreakCapped));
+        }
+
+        [Test]
         public void AC20_CollectionRefresh_IsChangeOnly()
         {
             var f = ClientFixture.Open();
