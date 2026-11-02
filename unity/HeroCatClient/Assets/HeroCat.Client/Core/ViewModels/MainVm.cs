@@ -321,11 +321,16 @@ namespace HeroCat.Client.Core
             Board = new FishBoardVm(c);
             for (int i = 0; i < TabBadges.Length; i++) TabBadges[i] = new BadgeDot();
             for (int i = 0; i < TabLocked.Length; i++) TabLocked[i] = new Flag();
+            for (int i = 0; i < TabDisabled.Length; i++) TabDisabled[i] = new Flag();
+            Maintenance = new MaintenanceBannerVm(c.Loc);
         }
 
         public readonly HudVm Hud;
         public readonly CombatVm Combat;
         public readonly FishBoardVm Board;
+
+        /// <summary>The maintenance banner over the combat band (01 section 8.12 step 4); fed by the GameViewModel.</summary>
+        public readonly MaintenanceBannerVm Maintenance;
 
         public readonly BadgeDot QuestsPill = new BadgeDot();
         public readonly BadgeDot DungeonsPill = new BadgeDot();
@@ -334,6 +339,10 @@ namespace HeroCat.Client.Core
         /// <summary>Per <see cref="MainTab"/>: the red dot and the lock glyph.</summary>
         public readonly BadgeDot[] TabBadges = new BadgeDot[6];
         public readonly Flag[] TabLocked = new Flag[6];
+
+        /// <summary>Per <see cref="MainTab"/>: the feature's kill switch is off (Shop: <c>shopEnabled</c>, Dungeons:
+        /// <c>dungeonsEnabled</c>; 01 section 8.12 step 1). The tab greys out and a tap toasts <see cref="UiKeys.FeatureDisabled"/>.</summary>
+        public readonly Flag[] TabDisabled = new Flag[6];
 
         /// <summary>The tab tinted <c>accent</c>, or -1 on SCR_MAIN.</summary>
         public readonly Bindable<int> ActiveTab = new Bindable<int>();
@@ -351,6 +360,9 @@ namespace HeroCat.Client.Core
             TabLocked[(int)MainTab.Dungeons].Set(!_c.Db.IsUnlocked("DUNGEONS", st));
             TabLocked[(int)MainTab.Quests].Set(!_c.Db.IsUnlocked("QUESTS", st));
             TabLocked[(int)MainTab.Shop].Set(false);   // never locked; the screen itself is MVP
+            var sw = _c.Switches;
+            TabDisabled[(int)MainTab.Dungeons].Set(!sw.DungeonsEnabled);
+            TabDisabled[(int)MainTab.Shop].Set(!sw.ShopEnabled);
             ActiveTab.Set(TabOf(_c.Router?.TopFull.Id));
         }
 
@@ -370,7 +382,11 @@ namespace HeroCat.Client.Core
             }
         }
 
-        /// <summary>A tab tap replaces the top Full screen (07 section 1 rule 2); an MVP tab shows the lock toast.</summary>
+        /// <summary>
+        /// A tab tap replaces the top Full screen (07 section 1 rule 2); an MVP tab shows the lock toast. A tab whose
+        /// feature is unlocked but kill-switched off toasts <see cref="UiKeys.FeatureDisabled"/> instead (read at the tap,
+        /// so a switch applies within one config refresh).
+        /// </summary>
         public void OnTab(MainTab tab)
         {
             switch (tab)
@@ -378,9 +394,15 @@ namespace HeroCat.Client.Core
                 case MainTab.Hero: _c.Router?.Replace(ScreenIds.Hero); break;
                 case MainTab.Collection: _c.Router?.Replace(ScreenIds.Weapons); break;
                 case MainTab.Summon: _c.Router?.Replace(ScreenIds.Summon); break;
-                case MainTab.Dungeons: _c.LockedToast("DUNGEONS"); break;
+                case MainTab.Dungeons:
+                    if (!TabLocked[(int)MainTab.Dungeons].Value && !_c.Switches.DungeonsEnabled) _c.Toast(UiKeys.FeatureDisabled, ToastStyle.Reject);
+                    else _c.LockedToast("DUNGEONS");   // SCR_DUNGEONS is MVP
+                    break;
                 case MainTab.Quests: _c.LockedToast("QUESTS"); break;
-                case MainTab.Shop: _c.LockedToast("SHOP"); break;
+                case MainTab.Shop:
+                    if (!_c.Switches.ShopEnabled) _c.Toast(UiKeys.FeatureDisabled, ToastStyle.Reject);
+                    else _c.LockedToast("SHOP");   // SCR_SHOP is MVP
+                    break;
             }
         }
 

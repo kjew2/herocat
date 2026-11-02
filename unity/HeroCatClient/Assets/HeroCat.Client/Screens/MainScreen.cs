@@ -139,6 +139,8 @@ namespace HeroCat.Client.Screens
             c.KillsPerStage.Bind(new ActionTextSink(_ => WriteKills()));
             c.Walled.Bind(new ActionFlagSink(on => { _killsText.color = UiKit.C(on ? Palette.Bad : Palette.Text); WriteKills(); }));
 
+            BuildMaintenanceBanner();
+
             _hero = UiKit.Panel("Hero", _combat, Palette.Accent).rectTransform;
             _hero.anchorMin = _hero.anchorMax = _hero.pivot = new Vector2(0.25f, 0.5f);
             _hero.sizeDelta = new Vector2(200, 200);
@@ -266,6 +268,24 @@ namespace HeroCat.Client.Screens
             Ui.Tweens.Pulse(_enemy, Vm.Now, 0.06f, 0.12);
         }
 
+        /// <summary>The maintenance banner under the stage label (01 section 8.12 step 4): countdown line, optional message.</summary>
+        void BuildMaintenanceBanner()
+        {
+            var mb = Vm.Main.Maintenance;
+            var panel = UiKit.Panel("MaintenanceBanner", _combat, Palette.PanelRaised, 0.92f);
+            var rt = panel.rectTransform;
+            UiKit.Place(rt, 16, 136, 1048, 96);
+            var line = UiKit.Text("Line", rt, UiKit.Body, Palette.Text, TextAlignmentOptions.MidlineLeft, bold: true);
+            UiKit.Place(line.rectTransform, 16, 4, 1016, 48);
+            mb.Line.Bind(line.Sink());
+            var msg = UiKit.Text("Message", rt, UiKit.Caption, Palette.Muted, TextAlignmentOptions.MidlineLeft);
+            UiKit.Place(msg.rectTransform, 16, 52, 1016, 40);
+            mb.Message.Bind(msg.Sink());
+            mb.MessageVisible.Bind(new ActiveSink(msg.gameObject));
+            mb.Active.Bind(new ActionFlagSink(on => line.color = UiKit.C(on ? Palette.Bad : Palette.Text)));
+            mb.Visible.Bind(new ActiveSink(panel.gameObject));
+        }
+
         // ------------------------------------------------------------------------------------------ action strip
 
         void BuildAction()
@@ -283,7 +303,7 @@ namespace HeroCat.Client.Screens
             Anchor(CombatVm.AnchorBoss, br);
 
             Pill("Quests", 640, m.QuestsPill, () => Vm.Context.LockedToast("QUESTS"));
-            Pill("Dungeons", 784, m.DungeonsPill, () => Vm.Context.LockedToast("DUNGEONS"));
+            Pill("Dungeons", 784, m.DungeonsPill, () => m.OnTab(MainTab.Dungeons));   // lock toast, or the kill switch's toast
             Pill("Inbox", 928, m.InboxPill, Vm.Hud.OnInbox);
         }
 
@@ -462,6 +482,7 @@ namespace HeroCat.Client.Screens
                 UiKit.Place(lockGlyph.rectTransform, 120, 8, 48, 40);
                 lockGlyph.text = "\u2298";   // ⊘ placeholder lock: the M0 font has no emoji (07 section 15.1)
                 m.TabLocked[i].Bind(new ActiveSink(lockGlyph.gameObject));
+                m.TabDisabled[i].Bind(new ActionFlagSink(off => { icon.color = UiKit.C(off ? Palette.Muted : Palette.Text); label.color = UiKit.C(off ? Palette.Muted : Palette.Text); }));
                 var dot = UiKit.CirclePanel("Dot", rt, UiKit.C(Palette.Bad));
                 UiKit.Place(dot.rectTransform, 116, 12, 28, 28);
                 m.TabBadges[i].Bind(new ActiveSink(dot.gameObject));
