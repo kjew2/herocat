@@ -687,7 +687,7 @@ Every toggle on this screen lives in `ClientPrefs` (issue #47): local to the dev
 | Delete account | `SCR_CONFIRM` with typed "DELETE" field (08 GDPR flow), then `Account.Delete()` and `SCR_TITLE` |
 | Version caption | `ClientVersion`, `ContentVersion`, `SaveSchemaVersion`, `BuildHash`; long-press copies diagnostics |
 
-States: offline shows account actions disabled with "Needs connection". Dev builds add a Debug section (01: grant currency, set stage, clock offset, run N hours, export/import save), compiled out of release.
+States: offline shows account actions disabled with "Needs connection". Dev builds add a Debug section (01: grant currency, set stage, clock offset, run N hours, export/import save; plus a splash viewer that steps through every committed L/M companion splash full screen, drawn as the reveal draws it), compiled out of release.
 
 ### 4.21 `SCR_PROFILE` (Modal, MVP)
 
