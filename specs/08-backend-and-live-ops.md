@@ -174,9 +174,9 @@ Unclaimed items only; expired items are excluded and purged nightly. Rows whose 
 { "inboxItemId": "…", "grants": [ ... ], "balances": { "DIAMOND": 3640 }, "reason": "IAP", "serverTime": … }
 ```
 
-Writes `diamond_ledger` (`+amount`, reason `IAP`/`MAIL`/`ADMIN`, `ref_type = inbox_item`) and, for summon ticket grants, `ticket_ledger` with the same reason and ref (issue #49), sets `claimed_at`, in one transaction. Errors: `INBOX_NOT_FOUND` 404, `INBOX_NOT_AVAILABLE` 409 (`available_at` in the future), `INBOX_ALREADY_CLAIMED` 409 (response still carries the original `grants` so the client can reconcile `Inbox.ClaimedIds`), `INBOX_EXPIRED` 410. Item grants (`kind: item`) are returned for the client to apply through `ApplyInboxGrant`; the server also appends them to a per-player `granted_items` ledger used by `ITEM_WITHOUT_PULL` (section 7).
+Writes `diamond_ledger` (`+amount`, reason `IAP`/`MAIL`/`ADMIN`, `ref_type = inbox_item`) and, for summon ticket grants, `ticket_ledger` with the same reason and ref (issue #49), sets `claimed_at`, in one transaction. Errors: `INBOX_NOT_FOUND` 404, `INBOX_NOT_AVAILABLE` 409 (`available_at` in the future), `INBOX_ALREADY_CLAIMED` 409 (the error body's `details` still carries the original `{ "inboxItemId", "grants", "reason" }` so the client can reconcile `Inbox.ClaimedIds`; issue #176), `INBOX_EXPIRED` 410. Item grants (`kind: item`) are returned for the client to apply through `ApplyInboxGrant`; the server also appends them to a per-player `granted_items` ledger used by `ITEM_WITHOUT_PULL` (section 7).
 
-**`POST /inbox/claim-all`** -- `jwt` -- idempotent -- 10/min. `{}` -> `{ "claimed": [ ...per-item results... ], "balances": {...} }`. Claims up to 50 items oldest-first; a partial failure (an item expiring between list and claim) is skipped and reported, not an error.
+**`POST /inbox/claim-all`** -- `jwt` -- idempotent -- 10/min. `{}` -> `{ "claimed": [ ...per-item results... ], "balances": {...} }`. Claims up to 50 items oldest-first; a partial failure (an item expiring between list and claim) is skipped and reported, not an error. Each `claimed` row is the claim response's item shape, `{ "inboxItemId", "grants", "reason" }`, or `{ "inboxItemId", "code" }` for a skipped row (`code` one of the claim errors above; issue #176).
 
 ### 3.3 Dungeon seed
 

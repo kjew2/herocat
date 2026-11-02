@@ -171,14 +171,14 @@ namespace HeroCat.Bots
 
         /// <summary>
         /// --diamonds flat: DIAMONDS_PER_DAY_F2P at day start through the logged ApplyInboxGrant (the only grant door).
-        /// TODO(#176): ApplyInboxGrant's body is MVP; until it lands the grant is rejected and the run stops with that reason.
+        /// A reject (a malformed grant, or a replayed day id) stops the run with that reason.
         /// </summary>
         static void GrantFlatDiamonds(BotContext ctx, int day)
         {
             var grant = new InboxGrantPayload("bot-flat-day" + day, new[] { new GrantLine("currency", Currency.DIAMOND.ToString(), ctx.Content.Constants.DiamondsPerDayF2p) },
                                               CurrencyReason.MAIL);
             var r = ctx.Apply(new ApplyInboxGrant(grant));
-            if (!r.Ok) throw new NotSupportedException("--diamonds flat needs ApplyInboxGrant, which the sim rejects (" + r + "; TODO(#176))");
+            if (!r.Ok) throw new InvalidOperationException("--diamonds flat: ApplyInboxGrant rejected the day grant (" + r + ")");
         }
 
         static DayRow Snapshot(int day, Simulation sim, BotEventSink sink, FakeClock clock)

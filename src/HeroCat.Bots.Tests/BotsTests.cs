@@ -13,6 +13,7 @@ using HeroCat.Bots.Report;
 using HeroCat.Runtime.Replay;
 using HeroCat.Sim.Commands;
 using HeroCat.Sim.Content;
+using HeroCat.Sim.Economy;
 using HeroCat.Sim.Events;
 using HeroCat.Sim.Fish;
 using HeroCat.Sim.State;
@@ -84,13 +85,15 @@ namespace HeroCat.Bots.Tests
         }
 
         [Test]
-        public void Diamonds_ContentIsTheDefault_FlatIsBlockedUntilInboxGrantsLand()
+        public void Diamonds_ContentIsTheDefault_FlatGrantsTheDailyAmountThroughTheInbox()   // issue #176
         {
             Assert.That(new BotRunner(Content.Db).Diamonds, Is.EqualTo(DiamondMode.Content));
             Assert.That(new BotRunner(Content.Db).Run(new GreedyF2PBot(), 7, 1).Diamonds, Is.EqualTo(DiamondMode.Content));
-            // TODO(#176): ApplyInboxGrant's body is MVP; --diamonds flat runs once it lands (then assert the daily grant here).
-            var e = Assert.Throws<NotSupportedException>(() => new BotRunner(Content.Db) { Diamonds = DiamondMode.Flat }.Run(new GreedyF2PBot(), 7, 1));
-            Assert.That(e.Message, Does.Contain("#176"));
+            var flat = new BotRunner(Content.Db) { Diamonds = DiamondMode.Flat }.Run(new GreedyF2PBot(), 7, 2);
+            Assert.That(flat.Diamonds, Is.EqualTo(DiamondMode.Flat));
+            foreach (int day in new[] { 1, 2 })
+                Assert.That(flat.DiamondsByReason.TryGetValue((day, CurrencyReason.MAIL), out long mail) ? mail : 0,
+                            Is.EqualTo(Content.Db.Constants.DiamondsPerDayF2p), "day " + day);
         }
 
         [Test]

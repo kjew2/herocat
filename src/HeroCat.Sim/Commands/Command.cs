@@ -86,10 +86,23 @@ namespace HeroCat.Sim.Commands
         internal override ApplyResult Execute(Simulation sim) => sim.HandleApplySummonResult(this);
     }
 
-    /// <summary>Server-granted items (01 section 2.5, 06 section 9). TODO(#176): the body.</summary>
+    /// <summary>A server-confirmed inbox claim (01 section 2.5, 06 section 9); the body is Simulation.Inbox.cs.</summary>
     public sealed record ApplyInboxGrant(InboxGrantPayload Grant) : Command
     {
-        internal override ApplyResult Execute(Simulation sim) => ApplyResult.Reject(RejectCode.NotAvailable, SimRejectReasons.NOT_IMPLEMENTED);
+        internal override ApplyResult Execute(Simulation sim) => sim.HandleApplyInboxGrant(this);
+    }
+
+    /// <summary>ApplyInboxGrant's reject reasons (issue #176).</summary>
+    public static class InboxRejectReasons
+    {
+        /// <summary>Malformed payload: no id, null lines, a non-inbox reason, an unknown currency or a non-positive amount.</summary>
+        public const string INBOX_BAD_GRANT = "INBOX_BAD_GRANT";
+
+        /// <summary>The payload carries an item line, which the sim cannot apply yet (TODO(#271)).</summary>
+        public const string INBOX_ITEM_GRANT_UNSUPPORTED = "INBOX_ITEM_GRANT_UNSUPPORTED";
+
+        /// <summary>The inbox item id is already in Inbox.ClaimedIds: a replay or a reconciled double claim.</summary>
+        public const string INBOX_ALREADY_APPLIED = "INBOX_ALREADY_APPLIED";
     }
 
     // ------------------------------------------------------------------------------------- service payloads (01 2.5)
@@ -114,6 +127,6 @@ namespace HeroCat.Sim.Commands
     /// <summary>Reason in {IAP, MAIL, REFUND, ADMIN}.</summary>
     public sealed record InboxGrantPayload(string InboxItemId, GrantLine[] Lines, CurrencyReason Reason);
 
-    /// <summary>Kind: "currency" | "item".</summary>
+    /// <summary>08 section 3.2's grant line. Kind: "currency" (Id is a Currency name) | "item" (TODO(#271)).</summary>
     public sealed record GrantLine(string Kind, string Id, long Amount);
 }
