@@ -325,6 +325,14 @@ namespace HeroCat.Client.Core
         }
 
         public void DebugSetTimeScale(double scale) => _runner.DebugTimeScale = scale;
+
+        /// <summary>
+        /// Credits <paramref name="amount"/> of <paramref name="currency"/> through the normal admin-grant command, so the
+        /// grant is logged, replayable and saved like any other (06 rule 9.4). Each call is a new grant id.
+        /// </summary>
+        public ApplyResult DebugGrant(Currency currency, long amount) =>
+            Send(new ApplyInboxGrant(new InboxGrantPayload("debug-" + Guid.NewGuid().ToString("N"),
+                new[] { new GrantLine(Simulation.GrantKindCurrency, currency.ToString(), amount) }, HeroCat.Sim.Economy.CurrencyReason.ADMIN)));
         public void DebugRequestSave() => _saveRequested = true;
         public void DebugResetProfile() => ResetRequested = true;
     }
