@@ -232,7 +232,7 @@ namespace HeroCat.Sim.Tests
             Assert.That(db.Banners.Keys, Is.EquivalentTo(Enum.GetValues(typeof(Banner)).Cast<Banner>()));
         }
 
-        [Test]
+        [Test, Category("Perf")]   // wall-clock budget: runs in the separate perf step (specs/10 section 1.1, #275)
         public void Build_IsFast()   // acceptance 17 (CONTENT_BUILD_MS_MAX = 30 warm)
         {
             var dtos = Runtime.Content.ContentLoader.LoadDtos(new Runtime.Content.FileContentSource(TestContent.Dir));
