@@ -69,7 +69,7 @@ TAP_WALL_SPEEDUP_MAX = 2.5
 BOSS_CANDY_SHARE_MAX = 0.20
 RESEARCH_ALL_NODES_BY_DAY, FISH_CAP_2_BY_DAY = 7, 10
 LIMIT_BREAK_DAILY_FROM_DAY, LIMIT_BREAK_CANDY_SHARE_MAX = 10, 0.60   # 04 section 5.2
-FISH_DUNGEON_SHARE_BAND, FISH_DUNGEON_DAYS = (0.25, 0.50), (1, 7, 30)  # 06 section 6.3 (a)
+FISH_DUNGEON_SHARE_BAND, FISH_DUNGEON_DAYS = (0.20, 0.50), (7, 30)  # 06 section 6.3 (a); #249 item 6, agreed
 
 # ---- MVP tables the M0 content does not ship yet. Each is the owning spec's row set, used only when content lacks it.
 RESEARCH_FALLBACK = [   # 03 section 6 / 09 section 5.18. Only for content without a research table (content/ ships it, #158).
@@ -88,7 +88,7 @@ RESEARCH_FALLBACK = [   # 03 section 6 / 09 section 5.18. Only for content witho
 COMPANION_FALLBACK = {"mix": [("DAMAGE", 0.50), ("BUFF_ATK", 0.20), ("BUFF_GOLD", 0.15), ("MP_REGEN", 0.15)],
                       "mp_cost": 10, "cooldown_ticks": 100}
 # 06 sections 6.1-6.3 / 09 sections 5.24-5.25: equal to content/dungeons.json and dungeon_floors.json today.
-# TODO(#165): read the per-floor rewards from dungeon_floors when the Fish Coin curve is settled.
+# The Fish Coin curve is settled at 50 * f (#165).
 DUNGEON_FALLBACK = {"tickets_per_day": 2, "floor_stage_step": 20, "floors": 40,
                     "FISH_COIN": 50.0, "ROCK_CANDY": 10.0, "EXP_KILLS": 300}
 # 06 section 1 / 00 decision 15: weeklies and achievements pay about 0.15 skill and 0.15 companion tickets a day.
@@ -1375,7 +1375,8 @@ def checks_for(p, bot):
                     tot = r["coins_board_today"] + r["coins_dungeon_today"]
                     sh = r["coins_dungeon_today"] / tot if tot else 0.0
                     add(FISH_DUNGEON_SHARE_BAND[0] <= sh <= FISH_DUNGEON_SHARE_BAND[1],
-                        f"FISH_COIN_FLOOR (06 6.3a): dungeon share of day-{d} Fish Coin income in 25%..50%", f"{sh:.1%}")
+                        f"FISH_COIN_FLOOR (06 6.3a): dungeon share of day-{d} Fish Coin income in "
+                        f"{FISH_DUNGEON_SHARE_BAND[0]:.0%}..{FISH_DUNGEON_SHARE_BAND[1]:.0%}", f"{sh:.1%}")
 
     # Tap Zap: per wall, idle active minutes over the minutes until the same boss is clearable with full tapping.
     ratios = sorted(w["active_min"] / max(1, w.get("tap_min") or w["active_min"]) for w in bot.walls if w["active_min"] > 0)
