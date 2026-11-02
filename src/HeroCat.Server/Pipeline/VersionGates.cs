@@ -1,10 +1,12 @@
 namespace HeroCat.Server.Pipeline;
 
 /// <summary>
-/// The version floors of the active config (specs/08 section 6.1): <c>minClientVersion</c> and
-/// <c>minContentVersionByClient</c>. A null or empty value gates nothing.
+/// What the gates read from the active config (specs/08 section 6.1): the version floors <c>minClientVersion</c> and
+/// <c>minContentVersionByClient</c> (a null or empty value gates nothing), and the <c>limits</c> overrides of the
+/// declared rate limits (<see cref="RemoteLimits"/>; null overrides nothing).
 /// </summary>
-public sealed record ClientGateConfig(string? MinClientVersion, IReadOnlyDictionary<string, string> MinContentVersionByClient)
+public sealed record ClientGateConfig(string? MinClientVersion, IReadOnlyDictionary<string, string> MinContentVersionByClient,
+                                      RemoteLimits? Limits = null)
 {
     public static readonly ClientGateConfig None = new(null, new Dictionary<string, string>());
 
@@ -28,16 +30,15 @@ public sealed record ClientGateConfig(string? MinClientVersion, IReadOnlyDiction
     }
 }
 
-/// <summary>Where the gates read the active config's version floors.</summary>
+/// <summary>Where the gates read the active config's version floors and limit overrides.</summary>
 public interface IClientGateConfigSource
 {
     ValueTask<ClientGateConfig> GetAsync(CancellationToken ct);
 }
 
-/// <summary>Gates nothing. The api's default until the Config feature serves the active <c>config_versions</c> payload.</summary>
+/// <summary>Gates nothing: the fallback when no feature registers a source (the Config feature registers the active-config one).</summary>
 public sealed class UngatedClientGateConfigSource : IClientGateConfigSource
 {
-    // TODO(#204): the Config feature registers an IClientGateConfigSource over the active config_versions payload.
     public ValueTask<ClientGateConfig> GetAsync(CancellationToken ct) => ValueTask.FromResult(ClientGateConfig.None);
 }
 

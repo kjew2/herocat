@@ -29,7 +29,6 @@ public sealed class OpenApiContractTests
         ("/summon/rates", 200), ("/summon/", 199),
         ("/inbox", 201),
         ("/shop/", 202), ("/iap/", 202),
-        ("/config", 204),
         ("/dungeon/", 205),
     };
 
