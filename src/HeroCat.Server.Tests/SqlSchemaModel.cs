@@ -22,8 +22,9 @@ sealed class SqlTable
 
 /// <summary>
 /// A small reader for the DDL subset the schema uses (specs/02 section 12 and server/db/migrations): create table,
-/// create [unique] index, create materialized view, create function and create trigger. Anything else that changes the
-/// schema (alter, drop, ...) throws, so a new kind of statement extends this reader instead of being ignored.
+/// create [unique] index, create materialized view, create function, create trigger and alter table ... add column (one
+/// column per statement). Anything else that changes the schema (other alters, drop, ...) throws, so a new kind of
+/// statement extends this reader instead of being ignored.
 /// It exists so tests can hold the migration set to the spec, statically and against a live database.
 /// </summary>
 sealed class SqlSchemaModel
@@ -54,6 +55,27 @@ sealed class SqlSchemaModel
         int b = spec.IndexOf("```sql\n", at, StringComparison.Ordinal) + "```sql\n".Length;
         int e = spec.IndexOf("```\n", b, StringComparison.Ordinal);
         return spec[b..e];
+    }
+
+    /// <summary>
+    /// Every ```sql block of specs/02 section 12, in order: the DDL (<see cref="SpecBlock"/>, 0001 verbatim) and then the
+    /// blocks that describe later migrations' schema changes (0004's columns), which together are the schema the
+    /// migration set must build.
+    /// </summary>
+    public static string[] SpecTexts()
+    {
+        string spec = File.ReadAllText(RepoPaths.Of("specs/02-domain-model-and-persistence.md"));
+        int at = spec.IndexOf("## 12. Server-side relational schema", StringComparison.Ordinal);
+        int end = spec.IndexOf("\n## 13.", at, StringComparison.Ordinal);
+        var blocks = new List<string>();
+        for (int b = spec.IndexOf("```sql\n", at, StringComparison.Ordinal); b >= 0 && b < end; b = spec.IndexOf("```sql\n", b, StringComparison.Ordinal))
+        {
+            b += "```sql\n".Length;
+            int e = spec.IndexOf("```\n", b, StringComparison.Ordinal);
+            blocks.Add(spec[b..e]);
+            b = e;
+        }
+        return blocks.ToArray();
     }
 
     public static string[] MigrationTexts() =>
@@ -128,6 +150,13 @@ sealed class SqlSchemaModel
         {
             string cols = string.Join(", ", x.Groups[3].Value.Split(',').Select(c => c.Trim()));
             Indexes.Add(new SqlIndex(x.Groups[2].Value, cols, x.Groups[1].Success, x.Groups[4].Success));
+        }
+        else if ((x = Regex.Match(low, @"^alter table (\w+) add column (.+)$")).Success)
+        {
+            if (!Tables.TryGetValue(x.Groups[1].Value, out var t)) throw new InvalidOperationException("alter of an unknown table: " + stmt);
+            if (x.Groups[2].Value.Contains(", add ", StringComparison.Ordinal))
+                throw new NotSupportedException("one column per alter table statement: " + stmt);
+            AddEntry(t, x.Groups[2].Value, new HashSet<string>());
         }
         else if ((x = Regex.Match(low, @"^create materialized view (\w+) as ")).Success) MaterializedViews.Add(x.Groups[1].Value);
         else if ((x = Regex.Match(low, @"^create function (\w+)\(")).Success) Functions.Add(x.Groups[1].Value);

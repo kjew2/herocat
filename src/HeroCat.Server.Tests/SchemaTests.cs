@@ -11,7 +11,7 @@ namespace HeroCat.Server.Tests;
 [TestFixture]
 public sealed class SchemaTests
 {
-    static readonly SqlSchemaModel Spec = SqlSchemaModel.Parse(SqlSchemaModel.SpecBlock());
+    static readonly SqlSchemaModel Spec = SqlSchemaModel.Parse(SqlSchemaModel.SpecTexts());
     static readonly SqlSchemaModel Set = SqlSchemaModel.Parse(SqlSchemaModel.MigrationTexts());
 
     static readonly string[] FinancialTables = { "purchases", "summon_log", "diamond_ledger" };
@@ -137,7 +137,9 @@ public sealed class SchemaTests
     [Test]
     public void The_reader_rejects_statements_it_does_not_model()
     {
-        Assert.Throws<NotSupportedException>(() => SqlSchemaModel.Parse("alter table accounts add column x int;"));
+        Assert.Throws<NotSupportedException>(() => SqlSchemaModel.Parse("create table accounts (a int);", "alter table accounts drop column a;"));
+        var added = SqlSchemaModel.Parse("create table accounts (a int);", "alter table accounts add column b text not null default '-';");
+        Assert.That(added.Tables["accounts"].Columns, Is.EqualTo(new[] { new SqlColumn("a", "int", false), new SqlColumn("b", "text", true) }));
         var m = SqlSchemaModel.Parse("create table t (a int primary key, -- it's a comment\n b text[] not null default '{}', c timestamptz, primary key (a));");
         Assert.That(m.Tables["t"].Columns, Is.EqualTo(new[]
         {
