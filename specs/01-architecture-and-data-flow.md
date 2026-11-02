@@ -794,10 +794,10 @@ sequenceDiagram
     F->>F: requestId; Pending.Dungeon = {requestId, kind, floor}; Save
     F->>API: {requestId, kind, floor, clientContentVersion}
     API-->>F: {seed, grantId, expiresAt}
-    F->>Sim: Apply(StartDungeon{kind, floor, seed, grantId})
+    F->>F: Pending = null
+    F->>Sim: Apply(StartDungeon{kind, floor, seed, grantId}); Save
     Sim->>Run: DungeonStarted; main-loop ticks run the fight on the temporary `dungeon_run` stream
     Sim->>F: DungeonCleared{kind, floor, rewards} (debits one ticket) or DungeonFailed (costs nothing)
-    F->>F: Pending = null; Save
     F->>API: (next save upload carries Dungeons.RecentRuns for seed correlation, 08)
 ```
 
@@ -807,6 +807,8 @@ sequenceDiagram
 4. The fight is one boss enemy per floor from `dungeon_floors` (09; `DungeonRun.EnemyIndex` is always 0 in MVP) run by the normal tick loop for at most `BOSS_TIME_TICKS`. Outcome `DungeonCleared` debits one ticket (`Wallet.Apply(-1, DUNGEON)`), grants the floor's reward table through `Wallet.Apply(..., DUNGEON)` and updates `Dungeons.BestFloor[kind]`; `DungeonFailed` grants nothing and costs nothing (00 decision 16). Either way the run is appended to `Dungeons.RecentRuns` (`{GrantId, Kind, Floor, Cleared}`, 02; issue #52) and `Combat.Mode = Stage` resumes at the same stage and kills.
 5. Sweep: `SweepDungeon(kind)` grants `RewardOf(kind, BestFloor)` instantly with no fight and debits one ticket; no seed needed (deterministic by content). Rejected `(NotAvailable, NOTHING_TO_SWEEP)` when `BestFloor == 0` (06). Works offline.
 6. Failure: seed request offline -> `NET_OFFLINE` banner, nothing spent. Seed request times out -> retry same `requestId`; the server replays the same seed. App dies mid-run -> on load `Combat.Mode == Dungeon` with a run in progress is abandoned (02 recovery rule P16): mode reset, nothing to refund because no ticket was spent. The server sees a seed issued with no matching `RecentRuns` entry and ignores it (expiry). Validation is correlation only in MVP (08 `DUNGEON_WITHOUT_SEED`; no replay, issue #52): the server matches `RecentRuns` clears to issued seeds, and soft-currency rewards stay bounded by 08's `GOLD_DELTA_BOUND` and `RESEARCH_WITHOUT_COINS` checks.
+
+As built (issue #146): `HeroCat.Runtime.Dungeons.DungeonFlow` (`SessionRunner.Dungeons`). `StartAsync(kind, floor)` refuses with the step 1 preconditions (`CheckStart`, the sim's own reasons, in the sim's order) and with `FEATURE_DISABLED` while `dungeonsEnabled` is off, before any intent or request. The intent is cleared together with `Apply(StartDungeon)`, not at the run's end: from then on the run is `Combat.DungeonRun` (P16 recovers a kill), and no save taken during a run carries Runtime bookkeeping that a command-log replay (08 section 7.3) cannot reproduce. A failure of the seed request that is retryable (offline, timeout, 5xx, `RATE_LIMITED`) keeps the intent and spends nothing; starting the same kind and floor again re-sends its `requestId`, so the server replays the same seed and a kill before the seed arrives cannot re-roll it. Another kind or floor replaces the intent, and P17 drops a stale one. A refusal (`DUNGEON_SEED_CAP`, `DUNGEON_LOCKED`, `CONTENT_TOO_OLD`, ...) drops the intent. A replayed grant whose `expiresAt` has passed is dropped and one fresh request is made. `Sweep(kind)` issues `SweepDungeon` and saves; it needs no service, so it works offline. The P16 abandon is tracked as `dungeon_run{outcome: abandoned}` by the save load. Remote mode uses `HeroCat.Remote.Services.DungeonSeedClient`.
 
 ### 8.9 IAP purchase -> receipt validation -> inbox -> claim
 

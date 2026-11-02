@@ -24,8 +24,9 @@ namespace HeroCat.Remote.Services
     /// ServicesOptions.Remote because HeroCat.Runtime cannot reference this assembly. Builds the process's one
     /// <see cref="ApiClient"/>, Runtime's ServerClock over <c>GET /time</c> (which also observes every response's
     /// X-Server-Time), the local-first cloud save, the ConfigClient (<see cref="RemoteConfigService"/>, #144) and the
-    /// analytics sink over <see cref="RemoteAnalyticsUploader"/> (#297); the other seams keep their local implementations
-    /// until their clients land: SummonClient #145, DungeonSeedClient #146, ReceiptClient #147 (the inbox is
+    /// analytics sink over <see cref="RemoteAnalyticsUploader"/> (#297) and the
+    /// <see cref="DungeonSeedClient"/> (#146); the other seams keep their local implementations
+    /// until their clients land: SummonClient #145, ReceiptClient #147 (the inbox is
     /// RemoteInboxService, #176; the AuthClient is GameServices.Account and the ApiClient credentials, #148), cloud-save
     /// metadata #152.
     /// </summary>
@@ -85,6 +86,8 @@ namespace HeroCat.Remote.Services
             };
             // The server inbox (issue #176). A debug receipt catalog grants into the local inbox, so that build keeps it.
             set = set with { Account = auth };   // boot step 3 and logout (issue #148)
+            // Server-issued dungeon seeds (issue #146); the sim never sees which service answered.
+            set = set with { Dungeons = new DungeonSeedClient(client, () => o.Content?.Version) };
             return o.DebugReceiptCatalog != null ? set : set with { Inbox = new RemoteInboxService(client) };
         }
 

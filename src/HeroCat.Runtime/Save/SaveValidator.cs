@@ -35,7 +35,7 @@ namespace HeroCat.Runtime.Save
 
         /// <summary>
         /// The run P16 abandoned, as the sim's DungeonAbandoned event (06 section 13 `dungeon_run` outcome abandoned); null when
-        /// P16 did not fire, or fired on a Dungeon mode with no run. TODO(#146): the boot flow forwards it to analytics.
+        /// P16 did not fire, or fired on a Dungeon mode with no run. LocalSaveStore's load tracks it as dungeon_run{abandoned}.
         /// </summary>
         public HeroCat.Sim.Events.DungeonAbandoned AbandonedRun { get; internal set; }
     }

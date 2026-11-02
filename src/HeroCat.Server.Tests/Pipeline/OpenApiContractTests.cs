@@ -27,7 +27,6 @@ public sealed class OpenApiContractTests
         ("/profile", 197), ("/account/", 197),
         ("/summon/rates", 200),
         ("/shop/", 202), ("/iap/", 202),
-        ("/dungeon/", 205),
     };
 
     static OpenApiDocument Document(IServiceProvider services) =>

@@ -137,6 +137,10 @@ namespace HeroCat.Runtime.Session
         public HeroCat.Runtime.Inbox.InboxFlow Inbox => _inbox ??= new HeroCat.Runtime.Inbox.InboxFlow(this);
         HeroCat.Runtime.Inbox.InboxFlow _inbox;
 
+        /// <summary>The dungeon start and sweep flow of 01 section 8.8 (issue #146).</summary>
+        public HeroCat.Runtime.Dungeons.DungeonFlow Dungeons => _dungeons ??= new HeroCat.Runtime.Dungeons.DungeonFlow(this);
+        HeroCat.Runtime.Dungeons.DungeonFlow _dungeons;
+
         /// <summary>
         /// The config cadence of 01 section 8.12 (issue #144), set by BootFlow: updated every frame and told about resumes.
         /// Null runs no refresh (tests that build a runner by hand).

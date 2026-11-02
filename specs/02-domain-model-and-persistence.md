@@ -1332,6 +1332,24 @@ create materialized view currency_daily as                 -- rebuilt nightly fo
   group by 1, 2, 3, 4;
 ```
 
+**Dungeon seed correlation** (`0009`; issue #205): `POST /dungeon/seed` checks a floor against the last uploaded save's `Dungeons.BestFloor`, and `PUT /save` compares each upload's `BestFloor` with the previous upload's (08 sections 3.3 and 7.3). `dungeon_progress` holds, per player and kind, the `BestFloor` of the last upload that carried `Dungeons` (the last upload wins, lower or not), so neither route reads a save blob; it is not rewound by a rollback (08 section 7.4), so after one the unlock check may tolerate up to the rolled-back best until the next upload. Shown verbatim, as its file:
+
+```sql
+-- 0009_dungeon_progress.sql (specs/02 section 12 "Dungeon seed correlation"; issue #205): POST /dungeon/seed checks the
+-- floor against the last uploaded save's Dungeons.BestFloor, and PUT /save compares each upload's BestFloor with the
+-- previous one (specs/08 sections 3.3, 7.3). dungeon_progress keeps, per player and kind, the BestFloor of the last upload
+-- that carried Dungeons, so neither reads a save blob. The index serves the daily cap's count and the correlation.
+create table dungeon_progress (
+  player_id  uuid not null references accounts on delete cascade,
+  kind       text not null,                                -- Dungeon name: FISH_COIN | ROCK_CANDY | EXP
+  best_floor integer not null default 0,
+  save_seq   bigint not null,                              -- the upload it came from
+  updated_at timestamptz not null default now(),
+  primary key (player_id, kind)
+);
+create index on dungeon_seeds (player_id, kind, day_key);
+```
+
 **Idempotency rows** (as built, issue #194; 08 section 1.1): `status_code = 0` marks a row `in_flight`; any other value is the final HTTP status of the stored response. `response` is a jsonb object `{ "v": 1, "requestSha256", "contentType", "headers", "bodyBase64" }`: `requestSha256` fingerprints method, route and body (a reused id with another fingerprint is refused), and the body is base64 so the replay is byte-identical (jsonb would re-order a JSON body's keys and drop its whitespace); the `in_flight` row holds only `v` and `requestSha256`. `/auth/guest` has no player yet, so its rows use `player_id` = the first 16 bytes of `SHA-256("herocat/idempotency/device/" + lowercase deviceId)` with the RFC 9562 version-8 and variant bits set, which cannot equal a server-made (version 4) `playerId`; the 13.2 delete leaves those rows to the purge. A row older than `IDEMPOTENCY_TTL_H` counts as absent before the hourly purge deletes it.
 
 Redis structures (P1 leaderboards, MVP rate limits and sessions):
@@ -1364,6 +1382,7 @@ As built (issue #154): `HeroCat.Server.Infrastructure.Redis.RedisKeys` holds the
 | `account_exports` | Row 30 days; export object 7 days | Daily purge; S3 lifecycle on the export prefix |
 | `purchases` + raw receipts | 7 years | Tax law in several launch regions |
 | `dungeon_seeds` | 30 days | Daily purge |
+| `dungeon_progress` | While account active | Deleted with the account (13.2) |
 | `refresh_tokens` | 60 days from issue or until revoked | |
 | Inactive accounts | Purged after `RETENTION_INACTIVE_DAYS = 730` with no login | Monthly job runs the delete flow below; players with any purchase are exempt from auto-purge (the receipts obligation) and instead have the save blob removed only |
 | Analytics raw events | 25 months in the warehouse, aggregated tables indefinitely | Warehouse policy |
@@ -1390,7 +1409,7 @@ Hard delete, in one transaction per account (issue #32). The three financial tab
 1. Delete S3 objects `saves/{playerId}/*` and `exports/{playerId}/*`.
 2. **Purchaser** (any `purchases` row for the player): insert a tombstone `accounts` row with `player_id = tombstone_id`, where `tombstone_id` is the UUID made of the first 16 bytes of `sha256(player_id || server_pepper)`, `status = 'deleted'`, `display_name = ''`, `avatar_id = 'avatar_default'`, `region = 'ZZ'`, `age_gate = 0` and every other nullable column null (`on conflict do nothing`, so a rerun is harmless). Then `update purchases, summon_log, diamond_ledger set player_id = tombstone_id where player_id = ?`. This keeps referential integrity and retains the financial records without a link to the person: the legal-obligation basis under GDPR art. 17(3)(b).
 3. **Non-purchaser**: delete the player's `summon_log` and `diamond_ledger` rows (open question 8 default).
-4. `delete from accounts where player_id = ?` cascades to `account_links`, `devices`, `refresh_tokens`, `saves`, `save_history`, `inbox_items`, `banner_pity`, `ticket_ledger`, `granted_items`, `dungeon_seeds`, `account_exports`, `guild_members`, `moderation_actions`, P1 `coupon_redemptions`; `delete from idempotency where player_id = ?` (no FK).
+4. `delete from accounts where player_id = ?` cascades to `account_links`, `devices`, `refresh_tokens`, `saves`, `save_history`, `inbox_items`, `banner_pity`, `ticket_ledger`, `granted_items`, `dungeon_seeds`, `dungeon_progress`, `account_exports`, `guild_members`, `moderation_actions`, P1 `coupon_redemptions`; `delete from idempotency where player_id = ?` (no FK).
 5. Analytics: publish `player_deleted{playerIdHash}` to the warehouse; the warehouse job removes raw `events` rows for that hash within 30 days.
 6. `guild_chat.player_id` is set null by the cascade; message bodies remain (they are the guild's record, and contain no identifier).
 

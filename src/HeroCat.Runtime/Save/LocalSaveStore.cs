@@ -209,6 +209,8 @@ namespace HeroCat.Runtime.Save
                         new SaveValidatorOptions { InstallId = InstallId, RemoteMode = RemoteMode });
                     foreach (var rule in report.Repairs)
                         _analytics.Track(new AnalyticsEvents.SaveRepaired(rule));
+                    if (report.AbandonedRun is HeroCat.Sim.Events.DungeonAbandoned ab)   // 06 section 13 dungeon_run abandoned (issue #146)
+                        _analytics.Track(new AnalyticsEvents.DungeonRun(ab.Dungeon, ab.Floor, "abandoned", 0, null, 0, ab.GrantId));
                     if (slot == SaveSlot.Backup)
                     {
                         if (primaryBad) Slots.Quarantine(SaveSlot.Primary, nowServerSec);
