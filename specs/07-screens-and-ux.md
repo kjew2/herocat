@@ -79,7 +79,7 @@ Reference resolution 1080 x 1920; `CanvasScaler` Scale With Screen Size, match w
 |                                              |
 | Combat viewport                       800 rp |  about 45% of the usable height
 |   stage label, enemy, HP bar, timer, DPS     |
-|   party line: 5 companions, MP bars, skills  |
+|   party: 5 companions in 2 rows, MP, skills  |
 +----------------------------------------------+
 | Action strip                          100 rp |  Boss button, quick toggles, red-dot shortcuts
 +----------------------------------------------+
@@ -97,7 +97,7 @@ Band budget: 120 + 800 + 100 + 640 + 160 = 1,820 rp. The remaining 100 rp of a 1
 |---|---|
 | Safe area | `SafeAreaFitter` on the root panel applies `Screen.safeArea` as padding on `Start` and on resolution change. Nothing is drawn outside it except the background. |
 | HUD wallet chips | Gold, Diamonds, Fish Coins (MVP adds Rock Candy). Each chip: icon 56 rp, value in 40 rp bold, tappable (gold opens `SCR_PARTY`, diamonds opens `SCR_SHOP`, Fish Coins opens `SCR_RESEARCH`, Rock Candy opens `SCR_PARTY` scrolled to the slot cards). Right side: avatar (opens `SCR_PROFILE`), inbox icon with badge, settings gear. |
-| Combat viewport | Full-width camera render texture or a world-space sorting layer; UI elements over it are the stage label (top-left, tappable: `SCR_STAGE_SELECT`), kill counter (top-right), enemy HP bar (under the enemy), boss timer bar (under HP bar, boss only), DPS readout (left, above the party line) and the party line (section 4.3). Reference split of the 800 rp: top row 72, enemy area 320 (sprite, HP bar, timer), DPS and damage-number line 40, party line 368 (companion cells 240, MP bars 24, skill icons 104). On short screens the enemy area shrinks first (to 240 rp); the party line never shrinks. Tap anywhere except a skill icon = `TapZap(count)`. |
+| Combat viewport | Full-width camera render texture or a world-space sorting layer; UI elements over it are the stage label (top-left, tappable: `SCR_STAGE_SELECT`), kill counter (top-right), enemy HP bar (under the enemy), boss timer bar (under HP bar, boss only), DPS readout (left, above the party line) and the party line (section 4.3). Reference split of the 800 rp: top row 72, enemy area 248 (sprite, HP bar, timer; the enemy sprite is bottom-anchored and may extend up behind the top row), DPS and damage-number line 40, party formation 440 (two rows, section 4.3). On short screens the enemy area shrinks first (to 200 rp); the party formation never shrinks. Tap anywhere except a skill icon = `TapZap(count)`. |
 | Action strip | Left: `[Boss]` button (visible only while walled, 06/03), `[Auto]` placeholder toggle (P1 Auto Merge). Right: shortcut pills with red dots for Quests claimable, Dungeon tickets unused, Inbox items; each opens its screen. |
 | Fish Board | Left column 160 rp: Magic Tank gauge (fill, `n / cap`, next-fish countdown), `[Release]` and `[Release max]` buttons, `[Merge all]`. Right: 5 x 4 grid, cell 176 rp with 8 rp gaps (5 x 176 + 4 x 8 = 912 rp wide), fish sprite 140 rp inside. A `[Research]` button (MVP) in the tank column bottom. |
 | Tab bar | Six tabs, 180 rp wide each, icon 64 rp over a 28 rp label. Red-dot badge at top-right of the icon. Active tab tinted `accent`. P1 adds a seventh "More" tab opening Guild / Ranking / Events. |
@@ -186,9 +186,10 @@ Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them
 |            HP |==========       | 1.2M       |
 |            T  |======           | 17s        |
 | DPS 3.72K  +12.3K  +9.8K crit!               |  damage numbers float here
-|  (c1)    (c2)    (c3)    (c4)    (c5)        |  party line: 5 companion sprites
-|  |===|   |== |   |====|  |=   |  |===|       |  MP bar per slot
-|  [sk1]   [sk2]   [sk3]   [ -- ]  [sk5]       |  skill per slot, cooldown ring
+|            (c4)[sk4]     (c5)[sk5]          |  back row: slots 4-5, behind
+|            |=== |        |==  |             |  MP bar inside each cell
+|    (c1)[sk1]     (c2)[sk2]     (c3)[ -- ]   |  front row: slots 1-3
+|    |=== |        |==  |        |====|       |  skill badge, cooldown ring
 +----------------------------------------------+
 | [ Boss: need ~2.3x ]        (Q*) (Dg*) (In)  |  action strip
 +----------------------------------------------+
@@ -217,7 +218,7 @@ Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them
 | WALL badge | `Combat.IsWalled` | |
 | Enemy sprite, HP bar | `Combat.EnemyId`, `EnemyIsBoss`, `EnemyHp`, `EnemyMaxHp` | HP bar text "1.2M / 1.7M" |
 | Boss timer bar | `Combat.Fight.BossTicksLeft / BOSS_TIME_TICKS` | boss only; turns `bad` under 5 s |
-| Party line | `Party.Slots[i]` x `PARTY_SLOTS` (5): `CompanionId` (battle sprite), `WeaponId` (held sprite), `AwakenRank` (aura), `IsEmpty` | five cells `UI_PARTY_CELL_W` x `UI_PARTY_CELL_H` (192 x 240 rp) with `UI_PARTY_GAP` (16 rp) gaps, 1,024 rp centred; slot 1 leftmost. Pixel-art battle sprites (00 decision 106, section 15.3) idle, play attack frames on that slot's `HitLanded` and cast frames on its `CompanionAbilityUsed`. An empty slot shows a dashed outline and does nothing; a companion with no weapon attacks unarmed (no held sprite) |
+| Party line | `Party.Slots[i]` x `PARTY_SLOTS` (5): `CompanionId` (battle sprite), `WeaponId` (held sprite), `AwakenRank` (aura), `IsEmpty` | two rows (decision 110): a front row of slots 1-3 (3 x 280 + 2 x 16 = 872 rp, centred) and a back row of slots 4-5 (576 rp, centred, so each back cell sits behind a front gap), cells `UI_PARTY_CELL_W` x `UI_PARTY_CELL_H` (280 x 280 rp) with `UI_PARTY_GAP` (16 rp) gaps; the back row is raised by `UI_PARTY_CELL_H - UI_PARTY_ROW_OVERLAP` (160 rp) and drawn behind the front row, so the formation is 440 rp tall. Each cell carries its slot's MP bar (160 x 16 rp) along its bottom edge and its skill as an 88 rp badge with a 112 rp hit rect at its lower-right corner. Front and back are presentation only; no rule reads them. Pixel-art battle sprites (00 decision 106, section 15.3) idle, play attack frames on that slot's `HitLanded` and cast frames on its `CompanionAbilityUsed`. An empty slot shows a dashed outline and does nothing; a companion with no weapon attacks unarmed (no held sprite) |
 | Damage numbers | from `HitLanded(slot, ...)` (one slot's auto-attack, crit flag), `SkillCast(slot, ...)`, `CompanionAbilityUsed(slot, ...)` and `FishMissileHit` events (issue #11) | pooled, section 13; slot numbers rise from that slot's cell, missile numbers from the enemy |
 | DPS readout | `Combat.Dps` | updates at most 2 Hz |
 | MP bar x5 | `Party.Slots[i].Mp / MpMax` (the slot's own pool, `Combat.Mp[slot]`; `MpMax` is party-wide) | 160 x 16 rp under each cell; set from `CompanionAbilityUsed.mpAfter`, otherwise from the snapshot; a full-pool glint when the ability is ready (`AbilityReadyPct` = 1); hidden for an empty slot |
@@ -497,9 +498,9 @@ Purpose: the fixed fight. Replaces the combat viewport region; the HUD stays. Th
 |            HP |======           | 40%        |
 |            T  |=====            | 14s        |
 | DPS 3.72K                                    |
-|  (c1)    (c2)    (c3)    (c4)    (c5)        |  party line as SCR_MAIN
-|  |===|   |== |   |====|  |=   |  |===|       |
-|                                              |
+|            (c4)          (c5)               |  party formation as SCR_MAIN
+|    (c1)          (c2)          (c3)         |
+|    |=== |        |==  |        |====|       |
 | Reward on clear: 250 Fish Coins              |
 |                               [ Skip fight ] |
 +----------------------------------------------+
@@ -924,7 +925,7 @@ No artist in M0. Everything is a coloured `Image` with a TMP label, so the slice
 
 | Thing | Placeholder |
 |---|---|
-| Party slot | five 176 x 224 rp rounded rects in the companion's rarity colour on the party line, label = pool index and slot (`C03 · 2`), the slot's awakening rank as a coloured outline, a small weapon chip (`W07`) when armed; an empty slot is a dashed outline |
+| Party slot | five 264 x 264 rp rounded rects in the companion's rarity colour in the two-row formation, label = pool index and slot (`C03 · 2`), the slot's awakening rank as a coloured outline, a small weapon chip (`W07`) when armed; an empty slot is a dashed outline |
 | Enemy / boss | 180 / 260 rp square, hue = `(chapter * 23) mod 360` at 60% saturation, label "s37" / "BOSS 40" |
 | Weapon / skill / companion icons | 96 rp circle in rarity colour with the rarity glyph and a pool index (`W07`, `S12`, `C03`) |
 | Fish | 140 rp circle, hue stepping 30 degrees per level, level number centred |
@@ -939,11 +940,11 @@ Fish art is a fixed set of `UI_FISH_SPRITE_LEVELS` (12) sprites (issue #48). A l
 
 | Category | Count | Spec |
 |---|---|---|
-| Awakening auras | 5, one per rank, pixel art drawn behind a slot's battle sprite (the rank belongs to the slot, 00 decision 109) | fits the 192 x 240 rp party cell |
+| Awakening auras | 5, one per rank, pixel art drawn behind a slot's battle sprite (the rank belongs to the slot, 00 decision 109) | fits the 280 x 280 rp party cell |
 | Weapon held sprites | 30 (one per weapon, pixel art drawn at the companion battle sprite's hand anchor, section 15.3; any weapon on any companion) | 80 rp (20 px native at 4 rp per pixel) |
 | Weapon icons | 30 | 128 rp, atlas `weapons_icons` |
 | Skill icons | 40 | 128 rp, atlas `skills_icons` |
-| Companions | 50 portraits + 50 icons (illustrated), 50 battle chibis with pixel frames idle 4 + attack 6 + cast 6 and a hand anchor point per frame for the held weapon (section 15.3). Addresses: icon = the row's `icon`, chibi = the row's `sprite` (`spr_comp_*`, the in-battle sprite as for weapons), portrait = `portrait_<id>` derived from the id like the splash (00 decision 108) | portrait 256 rp, icon 128 rp, chibi about 48 px native (the prototypes are 46-57 px), drawn at 4 rp per pixel to fit the 192 x 240 rp party cell (display scale confirmed by the art bible, issue #287) |
+| Companions | 50 portraits + 50 icons (illustrated), 50 battle chibis with pixel frames idle 4 + attack 6 + cast 6 and a hand anchor point per frame for the held weapon (section 15.3). Addresses: icon = the row's `icon`, chibi = the row's `sprite` (`spr_comp_*`, the in-battle sprite as for weapons), portrait = `portrait_<id>` derived from the id like the splash (00 decision 108) | portrait 256 rp, icon 128 rp, chibi about 48 px native (the prototypes are 46-57 px), drawn at 4 rp per pixel to fit the 280 x 280 rp party cell (at most 70 px, 00 decision 110) (display scale confirmed by the art bible, issue #287) |
 | Enemies | 8 chapter skins x 3 mob variants = 24 mobs, 8 bosses, each with idle + hurt + death (3 pixel frames each, section 15.3) | mobs 320 rp (40 px native), bosses 480 rp (60 px native) |
 | Backgrounds | 8 chapter backgrounds (static + 2 parallax layers) | 1080 x 900 rp |
 | Fish | 12 levels (`UI_FISH_SPRITE_LEVELS`) + tint/frame variants for levels above 12 + crown overlay + tank gauge art (issue #48) | 140 rp |
@@ -962,7 +963,7 @@ Fish art is a fixed set of `UI_FISH_SPRITE_LEVELS` (12) sprites (issue #48). A l
 
 Two art styles, after the artist's prototypes in `art/reference/` (00 decisions 104-106, issues #284-#286):
 
-- **Pixel art** for everything that moves in the combat viewport: the five companion battle chibis, their weapon held sprites and awakening auras, and enemies. Battle shows the companions; the squire is the player's avatar only and never appears there (00 decisions 104 as amended and 109). Enemies use 8 rp per sprite pixel (a 40 px mob is 320 rp); the party uses 4 rp per sprite pixel so five 48 px chibis fit the party line. This departs from 00 decision 106's single 8 rp scale and is pending the owner's call (issue #287). These are starting sizes; the art bible (issue #287) may revise them.
+- **Pixel art** for everything that moves in the combat viewport: the five companion battle chibis, their weapon held sprites and awakening auras, and enemies. Battle shows the companions; the squire is the player's avatar only and never appears there (00 decisions 104 as amended and 109). Enemies use 8 rp per sprite pixel (a 40 px mob is 320 rp); the party uses 4 rp per sprite pixel in a two-row formation (00 decision 110), so the current 46-69 px chibis fit a 280 rp cell. These are starting sizes; the art bible (issue #287) may revise them.
 - **Illustrated art** for everything else: portraits, icons, summon cards, splash art, backgrounds, key art and UI.
 
 Pixel sprites are animated frame by frame. There is no skeletal rig, because rotating parts breaks the pixel grid. Frame counts are in section 15.2. Rendering rules:
@@ -1172,7 +1173,7 @@ How each criterion runs (issue #23): **[core]** criteria test logic in `HeroCat.
 23. [core] `PartyVm` on a fresh profile shows five slot cards bound to `Party.Slots[0..4]` with the five starter companions and the starter weapon in slot 0; tapping slot 3's weapon pushes `SCR_WEAPONS` with `TargetSlot = 2`, and `[Equip]` there sends exactly one `EquipWeapon(2, id)` and pops back; `[Awaken]` on a slot confirms and sends `Awaken(slot)` for that slot only (vm and router unit test).
 24. [core] Slot picker and `[Move here]`: an owned weapon, skill or companion equipped in slot a shows "In slot a+1" on its tile; moving it to slot b sends exactly `Unequip<Kind>(a)` then `Equip<Kind>(b, id)`, and no screen shows a lock state on any party slot (vm unit test per collection screen).
 25. [core] `SCR_MAIN`'s party line vm: a `HitLanded(slot, ...)` raises its damage number from that slot's cell, `CompanionAbilityUsed(slot, id, mpAfter)` sets only that slot's MP bar to `mpAfter`, and an empty slot reports `IsEmpty` with no MP bar (vm unit test).
-26. [unity] The party line fits: five `UI_PARTY_CELL_W` cells and four `UI_PARTY_GAP` gaps lie inside the safe area at 1080 rp width on a 16:9 phone with 100 rp insets, do not overlap the enemy HP bar, and keep their size when the combat band shrinks (EditMode rect test).
+26. [unity] The party formation fits: the three-cell front row and the two-cell back row (`UI_PARTY_CELL_W`, `UI_PARTY_GAP`, `UI_PARTY_ROW_OVERLAP`) lie inside the safe area at 1080 rp width on a 16:9 phone with 100 rp insets, do not overlap the enemy HP bar, and keep their size when the combat band shrinks (EditMode rect test).
 
 ## Constants introduced
 
@@ -1187,7 +1188,7 @@ How each criterion runs (issue #23): **[core]** criteria test logic in `HeroCat.
 | `UI_RELEASE_MAX_ANIM_MS`, `UI_MERGE_ALL_ANIM_MS` | 60, 80 | S | Referenced by 05 section 6 |
 | `UI_DAMAGE_LABEL_POOL`, `UI_MAX_PARTICLES` | 32, 300 | S | Acceptance 13 |
 | `UI_SCREEN_CACHE` | 3 Full screens | S | Memory budget in section 13 |
-| `UI_PARTY_CELL_W`, `UI_PARTY_CELL_H`, `UI_PARTY_GAP` | 192, 240, 16 rp | S | Party line on `SCR_MAIN` and `SCR_DUNGEON_RUN` (5 x 192 + 4 x 16 = 1,024 rp); never shrinks; acceptance 26 |
+| `UI_PARTY_CELL_W`, `UI_PARTY_CELL_H`, `UI_PARTY_GAP`, `UI_PARTY_ROW_OVERLAP` | 280, 280, 16, 120 rp | S | Two-row party formation on `SCR_MAIN` and `SCR_DUNGEON_RUN`: front row 872 rp wide, formation 440 rp tall; never shrinks; acceptance 26 (decision 110) |
 | `UI_FISH_SPRITE_LEVELS` | 12 | S | Fish sprite and merge-sound count; levels above use tint variants; 09 warns when content exceeds it (issue #48) |
 | `UI_BACK_EXIT_WINDOW_SEC` | 2 | S | |
 | `UI_QUEST_EXPIRY_WARN_SEC` | 3600 | S | 06 Open question 2 |
