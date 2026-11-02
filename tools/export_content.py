@@ -1941,6 +1941,30 @@ def normalize_tab(rows):
     return out
 
 
+def lowercase_sheet_bools(table, rows):
+    """Google Sheets turns a typed `true`/`false` into its own boolean, displayed TRUE/FALSE. Bool cells (bool columns,
+    and `constants` values whose type is bool) are lowercased so they read as 3.2's `true`/`false`; other text in them
+    is left for build to report (E010)."""
+    schema = SCHEMA.get(table)
+    if schema is None or not rows:
+        return rows
+    header = rows[0]
+    cols = {i for i, h in enumerate(header) for name, typ, *_ in schema["columns"] if h == name and typ == "bool"}
+    type_col = header.index("type") if table == "constants" and "type" in header else None
+    value_col = header.index("value") if table == "constants" and "value" in header else None
+    out = [header]
+    for r in rows[1:]:
+        r = list(r)
+        bools = set(cols)
+        if type_col is not None and value_col is not None and r[type_col] == "bool":
+            bools.add(value_col)
+        for i in bools:
+            if i < len(r) and r[i] in ("TRUE", "FALSE"):
+                r[i] = r[i].lower()
+        out.append(r)
+    return out
+
+
 def csv_bytes(rows):
     """The one CSV form content_src/ is committed in: minimal quoting, LF line ends, UTF-8 without BOM."""
     buf = io.StringIO()
@@ -2068,7 +2092,7 @@ def pull(sheet, src, service_account=None, csv_export=False, service=None, get=N
                 os.remove(path)
                 removed.append(table)
             continue
-        data = csv_bytes(normalize_tab(tabs[table]))
+        data = csv_bytes(lowercase_sheet_bools(table, normalize_tab(tabs[table])))
         if read_bytes(path) != data:
             tmp = path + ".tmp"
             with open(tmp, "wb") as f:

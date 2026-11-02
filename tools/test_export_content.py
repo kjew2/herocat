@@ -519,6 +519,18 @@ class PullTests(unittest.TestCase):
         self.assertIn("pip install google-api-python-client", lines[0])
         self.assertFalse(os.path.exists(self.src), "nothing written")
 
+    def test_pull_lowercases_sheets_booleans_in_bool_cells_only(self):
+        header = ["key", "en", "ja", "ko", "zh_hans", "max_chars", "plural"]
+        rows = ex.lowercase_sheet_bools("localization", [header, ["k", "FALSE", "", "", "", "10", "FALSE"],
+                                                         ["k2", "x", "", "", "", "10", "TRUE"]])
+        self.assertEqual(rows[1], ["k", "FALSE", "", "", "", "10", "false"], "string columns keep their text")
+        self.assertEqual(rows[2][-1], "true")
+        consts = ex.lowercase_sheet_bools("constants", [["key", "type", "value", "kind"],
+                                                        ["A", "bool", "TRUE", "S"], ["B", "string", "TRUE", "S"]])
+        self.assertEqual([r[2] for r in consts[1:]], ["true", "TRUE"])
+        self.assertEqual(ex.lowercase_sheet_bools("stats", [["id", "trainable"], ["atk", "Yes"]])[1], ["atk", "Yes"],
+                         "anything else is left for build's E010")
+
     def test_pull_usage_errors_exit_2(self):
         self.assertEqual(fx.run_main(["pull", "--csv-export"])[0], 2)
         self.assertEqual(fx.run_main(["pull", "--sheet", "abc"])[0], 2)
