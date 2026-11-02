@@ -64,7 +64,9 @@ namespace HeroCat.Remote.Services
             var clock = new ServerClock(new RemoteTimeApi(client), o.Clock);   // device clock until the first observation
             api.ServerTime = clock;                                             // every X-Server-Time (01 section 5.1)
             if (syncNow) clock.SyncAsync().GetAwaiter().GetResult();          // false offline; SessionRunner syncs again at boot
-            var slots = new CloudSaveStore(o.Slots ?? new FileSaveStore(Path.Combine(o.DataDir, "saves")), client);
+            // uploads wait for the device registration (02 section 10.1)
+            var slots = new CloudSaveStore(o.Slots ?? new FileSaveStore(Path.Combine(o.DataDir, "saves")), client,
+                                           ct => auth.EnsureDeviceRegisteredAsync(ct));
             var set = GameServices.Build(BackendMode.Local, new ServicesOptions
             {
                 DataDir = o.DataDir, Content = o.Content, State = o.State, Analytics = o.Analytics, Network = o.Network,
@@ -124,10 +126,17 @@ namespace HeroCat.Remote.Services
             public string RequestId;
         }
 
-        public CloudSaveStore(ISaveSlotStore local, ApiClient client)
+        readonly Func<CancellationToken, Task> _beforeUpload;
+
+        /// <param name="beforeUpload">
+        /// Awaited before each upload; a throw keeps the copy queued. The remote wiring passes the AuthClient's device
+        /// registration (02 section 10.1): uploads wait until the server holds this install's HMAC key.
+        /// </param>
+        public CloudSaveStore(ISaveSlotStore local, ApiClient client, Func<CancellationToken, Task> beforeUpload = null)
         {
             _local = local ?? throw new ArgumentNullException(nameof(local));
             _client = client ?? throw new ArgumentNullException(nameof(client));
+            _beforeUpload = beforeUpload;
         }
 
         public ISaveSlotStore Local => _local;
@@ -170,6 +179,7 @@ namespace HeroCat.Remote.Services
             Pending p;
             lock (_lock) p = _pending;
             if (p == null) return;
+            if (_beforeUpload != null) await _beforeUpload(ct).ConfigureAwait(false);
             var req = ApiRequest.Mutation(HttpMethod.Put, RemoteRoutes.Save, p.Bytes, p.RequestId);
             (await _client.SendAsync<JToken>(req, ct).ConfigureAwait(false)).EnsureOk();
             lock (_lock)
