@@ -30,7 +30,7 @@ class DungeonCurveTests(unittest.TestCase):
         self.assertAlmostEqual(lin["share"], 1000 / 4000)
         self.assertAlmostEqual(rep[7]["curves"]["50*f^0.7"]["coins_dungeon"], 2 * 50 * 10 ** 0.7)
         k = rep[7]["linear_k_for_band"]
-        self.assertAlmostEqual(k["low"], 50.0)                     # 2 * 50 * 10 = 1000 = 25% of 4000
+        self.assertAlmostEqual(k["low"], 37.5)                     # 2 * 37.5 * 10 = 750 = 20% of 3750
         self.assertAlmostEqual(k["high"], 3000 / (2 * 10))         # dungeon == board at 50%
 
 

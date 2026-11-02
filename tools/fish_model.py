@@ -291,12 +291,12 @@ def act(b, level, fcap, discard):
 
 
 # ------------------------------------------------------------------------------------------------ dungeon curves (#165)
-# 06 section 6.3 (a): `2 * FISH_COIN_FLOOR(f)` at the day's best Fish Coin floor must be 25-50% of the day's Fish Coin
-# income at days 1, 7 and 30 (band and days under review in #249 item 6). This report compares candidate curves
+# 06 section 6.3 (a): `2 * FISH_COIN_FLOOR(f)` at the day's best Fish Coin floor must be 20-50% of the day's Fish Coin
+# income at days 7 and 30 (#249 item 6, agreed; day 1 is shown for information). This report compares candidate curves
 # against the attentive board run with 03's research schedule; it decides nothing and never fails the run.
 
 DUNGEON_DAYS = (1, 7, 30)
-DUNGEON_BAND = (0.25, 0.50)
+DUNGEON_BAND = (0.20, 0.50)
 DUNGEON_TICKETS_PER_DAY = 2          # 06 section 6.2 DUNGEON_TICKETS_PER_DAY (no dungeons table yet, TODO(#173))
 DUNGEON_CURVES_DEFAULT = "50*f,50*f^0.7"
 
@@ -356,7 +356,7 @@ def print_dungeon_report(report, curves, schedule_path):
     print(f"\nFish Coin Dungeon curves (06 section 6.3 (a), issue #165): {DUNGEON_TICKETS_PER_DAY} x reward(best floor) "
           f"against the attentive board with the research schedule from {schedule_path}; band {lo:.0%}..{hi:.0%}")
     print("day  floor   board coins (7-day mean)  " + "  ".join(f"{lab:>24}" for lab, _, _ in curves)
-          + "   linear K for 25% / 37.5% / 50%")
+          + f"   linear K for {lo:.0%} / {(lo + hi) / 2:.0%} / {hi:.0%}")
     for r in report:
         cells = []
         for lab, _, _ in curves:
@@ -368,7 +368,7 @@ def print_dungeon_report(report, curves, schedule_path):
         print(f"{r['day']:>3}  {r['best_floor']:>5}   {r['coins_board']:>11,.0f} ({r['coins_board_7d_mean']:>9,.0f})  "
               + "  ".join(f"{x:>24}" for x in cells) + f"   {ks}")
     print("  share = dungeon / (board + dungeon) on that day; (n%) uses the board's 7-day mean, since single-day board "
-          "income jumps with discoveries after each fish-cap raise. Report only: the curve is a balance call (#165, #249 item 6).")
+          "income jumps with discoveries after each fish-cap raise. Report only: the curve is settled at 50 * f (#165, #249 item 6).")
 
 
 # ------------------------------------------------------------------------------------------------ CLI
