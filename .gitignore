@@ -37,3 +37,6 @@ unity/HeroCatClient/Assets/StreamingAssets.meta
 
 # tools/*_model.py outputs
 tools/out/
+
+# local Python env for tools/export_content.py pull (specs/09 section 12.1)
+.venv/

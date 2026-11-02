@@ -802,7 +802,7 @@ Save compatibility (02 owns it, issue #56): the save stores `ContentVersion` and
 
 ## 7. The exporter: `tools/export_content.py`
 
-Python 3.9+, stdlib only for `build`, `check`, `diff`, `translator-csv`, `import-translations` and `pseudo`; `pull --service-account` needs `google-api-python-client` and is optional (the CSV path needs nothing). One file, about 600 lines, structured as:
+Python 3.9+, stdlib only for `build`, `check`, `diff`, `translator-csv`, `import-translations` and `pseudo`; `pull --adc` and `pull --service-account` need `google-api-python-client` and is optional (the CSV path needs nothing). One file, about 600 lines, structured as:
 
 - `SCHEMA`: dict `table -> TableSchema(columns, key, folds, required, tiered)`; columns carry `(type, nullable)`. The single machine-readable form of section 5; `tools/content.py` (section 11) imports it.
 - `ENUMS`, `REQUIRED_CONSTANTS`, `SCREEN_IDS`: mirrors of 3.3, 5.1 and 00 section 5.3.
@@ -815,7 +815,7 @@ Python 3.9+, stdlib only for `build`, `check`, `diff`, `translator-csv`, `import
 ### 7.1 Command line
 
 ```
-python3 tools/export_content.py pull  --sheet <id> [--service-account creds.json | --csv-export] [--src content_src]
+python3 tools/export_content.py pull  --sheet <id> [--adc | --service-account creds.json | --csv-export] [--src content_src]
 python3 tools/export_content.py build [--src content_src] [--out content] [--previous content] [--ui-keys unity/HeroCatClient/Assets/HeroCat.Client/ui_keys.txt] [--strict-warnings]
 python3 tools/export_content.py check [--src content_src] [--out content] [--dto-out src/HeroCat.Sim/Content/Dto/ContentDtos.g.cs]
 python3 tools/export_content.py gen-dtos [--dto-out ...]                       # C# DTOs of section 9.1 from SCHEMA
@@ -827,7 +827,7 @@ python3 tools/export_content.py pseudo --locale xx --out content_pseudo [--src c
 
 | Verb | Does | Exit codes |
 |---|---|---|
-| `pull` | `--service-account`: Sheets API v4 `spreadsheets.get` for the tab titles, then one `spreadsheets.values.batchGet` (`ROWS`, `FORMATTED_VALUE`) for every tab, written as CSV. `--csv-export`: the `gviz/tq?tqx=out:csv&headers=1&sheet=<tab>` URL per table name, which works for link-readable sheets without OAuth; gviz answers a missing tab with the first tab, so a response that repeats another tab's bytes, or an optional table whose header has none of its columns, counts as absent. One of the two flags is required. Either way the result is the committed `content_src/`: every tab named as a section 5 table or `meta` is written as `<tab>.csv` (other tabs are skipped and listed), the CSV of a known table the workbook no longer has is removed, other files are left alone. Cells are read as displayed text, so tabs are formatted as Plain text in the en-US workbook (gviz blanks cells whose type differs from the column's majority). The CSV form is fixed (minimal quoting, LF, UTF-8 without BOM, rows padded to the header width, trailing blank rows dropped) and a file is rewritten only when its bytes change, so pulling an unchanged sheet changes nothing in git. The optional Google client is imported only by `pull --service-account`; without it `pull` prints the install hint and exits 2. `--help` prints the section 12 workflow. | 0, 2 (usage, network, auth, missing dependency) |
+| `pull` | `--adc` or `--service-account`: Sheets API v4 `spreadsheets.get` for the tab titles, then one `spreadsheets.values.batchGet` (`ROWS`, `FORMATTED_VALUE`) for every tab, written as CSV. `--adc` signs in with Google Application Default Credentials (`gcloud auth application-default login --impersonate-service-account=<email>`), which needs no key file and is the default, because Google organizations block service-account key creation by default (`iam.disableServiceAccountKeyCreation`); `--service-account` takes a downloaded key file where keys are allowed. `--csv-export`: the `gviz/tq?tqx=out:csv&headers=1&sheet=<tab>` URL per table name, which works for link-readable sheets without OAuth; gviz answers a missing tab with the first tab, so a response that repeats another tab's bytes, or an optional table whose header has none of its columns, counts as absent. Exactly one of the three flags is required. Either way the result is the committed `content_src/`: every tab named as a section 5 table or `meta` is written as `<tab>.csv` (other tabs are skipped and listed), the CSV of a known table the workbook no longer has is removed, other files are left alone. Cells are read as displayed text, so tabs are formatted as Plain text in the en-US workbook (gviz blanks cells whose type differs from the column's majority). The CSV form is fixed (minimal quoting, LF, UTF-8 without BOM, rows padded to the header width, trailing blank rows dropped) and a file is rewritten only when its bytes change, so pulling an unchanged sheet changes nothing in git. The optional Google client is imported only by `pull --adc` / `pull --service-account`; without it `pull` prints the install hint and exits 2. `--help` prints the section 12 workflow. | 0, 2 (usage, network, auth, missing dependency) |
 | `build` | Parse, validate, emit. Lists every error, not the first. Prints `content_version`, `content_hash`, row count per table, pool sizes per rarity, the `S` constant list, and `hot_apply`. | 0, 1 (validation), 2 (usage/IO) |
 | `check` | Build to memory; exit 1 if the result differs byte-for-byte from `--out`, or the generated DTO file differs from `--dto-out`. CI's stale-JSON guard. Writes nothing. | 0, 1 |
 | `gen-dtos` | Writes the `HeroCat.Sim.Content.Dto` classes (section 9.1) from `SCHEMA`; `build` does it too. Field names are the PascalCase of the columns, so the Runtime loader maps them back with Newtonsoft's snake-case naming. | 0 |
@@ -1283,6 +1283,17 @@ Rules:
 5. Staged rollout is a config change (`rolloutPct`), not a re-publish; rollback is pointing `config.content.version` back to the previous version, which every client still has cached or bundled (10 runbook "bad content push").
 6. Publish is atomic: files first, `manifest.json` last; `deploy.yml` verifies every CDN file's sha256 after upload before flipping config.
 
+### 12.1 One-time setup for `pull --adc`
+
+Google organizations block service-account key files by default (`iam.disableServiceAccountKeyCreation`), so `pull` signs in as the engineer and impersonates a key-less service account. Once per project:
+
+1. Google Cloud console, the project selected: APIs & Services > Library > Google Sheets API > Enable.
+2. IAM & Admin > Service Accounts > Create service account (`content-pull`, no project roles). Note its email.
+3. Open that service account > Permissions (Principals with access) > Grant access: each engineer's Google account, role Service Account Token Creator.
+4. In the Sheet: Share > the service account's email > Viewer.
+
+Once per machine, in a terminal at the repo root: install the gcloud CLI, run `gcloud auth application-default login --impersonate-service-account=<email>` (a browser window asks for the Google sign-in), then `python3 -m venv .venv`, `source .venv/bin/activate`, `pip install google-api-python-client google-auth`. Then `python3 tools/export_content.py pull --sheet <id> --adc`. If CI ever pulls, it uses Workload Identity Federation with the same service account, not a key.
+
 ## 13. Localization pipeline
 
 ### 13.1 Extraction
@@ -1356,7 +1367,7 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 ## Open questions
 
 1. **Who owns the sheet.** Default: design owns values and row additions; engineering owns structure (columns, enums) through `SCHEMA` and the C# DTOs. Owner guess: design lead.
-2. **Service-account vs CSV pull.** The service account needs a Google Cloud project and a non-stdlib dependency; the CSV export URL needs the sheet to be link-readable, which exposes live tuning data to anyone with the link. Default: service account, credentials in CI secrets only; designers use the manual File > Download path locally. Owner guess: engineering.
+2. **Service-account vs CSV pull.** The service account needs a Google Cloud project and a non-stdlib dependency; the CSV export URL needs the sheet to be link-readable, which exposes live tuning data to anyone with the link. Decided: Sheets API through a service account, reached without a key file (`pull --adc` with gcloud impersonation locally; Workload Identity Federation if CI ever pulls), because key creation is blocked by default org policy. Key files (`--service-account`) remain supported where allowed. Owner guess: engineering.
 3. **Limit-break constants.** Resolved: `constants.LIMIT_BREAK_RANKS` (00's name) in `REQUIRED_CONSTANTS`, per-rarity `rarities.limit_break_cost` and `rarities.dupe_overflow_rock_candy` (issue #37).
 4. **`hero_levels` linear vs compounding.** Resolved: compounding `HERO_LVL_MULT` 1.02 (00 decision 9); `mult_per_level` is populated and `atk_pct_per_level` empty; the exporter still rejects both set or both empty.
 5. **`E039` daily diamond sum tolerance.** Resolved: 10%, recomputed from the quest rows plus `REF_DAILIES_DONE` and `REF_NEW_BOSSES` (issue #55).

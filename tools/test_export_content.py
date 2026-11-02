@@ -463,6 +463,62 @@ class PullTests(unittest.TestCase):
         self.assertIn("pip install google-api-python-client", lines[0])
         self.assertFalse(os.path.exists(self.src), "nothing written")
 
+    def test_adc_pull_signs_in_with_default_credentials_and_writes_identical_csvs(self):
+        import types
+        seen = {}
+        auth = types.ModuleType("google.auth")
+        auth.exceptions = types.ModuleType("google.auth.exceptions")
+        auth.exceptions.DefaultCredentialsError = type("DefaultCredentialsError", (Exception,), {})
+        auth.default = lambda scopes: (seen.setdefault("scopes", scopes) and "adc-creds", "proj")
+        discovery = types.ModuleType("googleapiclient.discovery")
+        discovery.build = lambda api, ver, credentials, cache_discovery: (
+            seen.setdefault("creds", credentials) and FakeSheets(self.recorded))
+        oauth2 = types.ModuleType("google.oauth2")
+        oauth2.service_account = types.ModuleType("google.oauth2.service_account")
+        fakes = {"google.auth": auth, "google.auth.exceptions": auth.exceptions, "google.oauth2": oauth2,
+                 "google.oauth2.service_account": oauth2.service_account,
+                 "googleapiclient": types.ModuleType("googleapiclient"), "googleapiclient.discovery": discovery}
+        google = sys.modules.get("google") or types.ModuleType("google")
+        fakes["google"] = google
+        saved = {m: sys.modules.get(m) for m in fakes}
+        saved_attrs = {a: getattr(google, a, None) for a in ("auth", "oauth2")}
+        sys.modules.update(fakes)
+        google.auth, google.oauth2 = auth, oauth2
+        try:
+            rc, lines = fx.run_main(["pull", "--sheet", fx.PULL_SHEET_ID, "--adc", "--src", self.src])
+        finally:
+            for m, v in saved.items():
+                if v is None:
+                    sys.modules.pop(m, None)
+                else:
+                    sys.modules[m] = v
+            for a, v in saved_attrs.items():
+                if v is None:
+                    delattr(google, a)
+                else:
+                    setattr(google, a, v)
+        self.assertEqual(rc, 0, lines)
+        self.assertEqual(seen, {"scopes": [ex.SHEETS_SCOPE], "creds": "adc-creds"})
+        for f, data in self.snapshot().items():
+            with open(os.path.join(fx.BASE, f), "rb") as fh:
+                self.assertEqual(data, fh.read(), f)
+
+    def test_adc_without_the_google_client_exits_2_with_an_install_hint(self):
+        saved = {m: sys.modules.get(m) for m in ("google.auth", "googleapiclient", "googleapiclient.discovery")}
+        for m in saved:
+            sys.modules[m] = None
+        try:
+            rc, lines = fx.run_main(["pull", "--sheet", "abc", "--adc", "--src", self.src])
+        finally:
+            for m, v in saved.items():
+                if v is None:
+                    sys.modules.pop(m, None)
+                else:
+                    sys.modules[m] = v
+        self.assertEqual(rc, 2)
+        self.assertIn("pip install google-api-python-client", lines[0])
+        self.assertFalse(os.path.exists(self.src), "nothing written")
+
     def test_pull_usage_errors_exit_2(self):
         self.assertEqual(fx.run_main(["pull", "--csv-export"])[0], 2)
         self.assertEqual(fx.run_main(["pull", "--sheet", "abc"])[0], 2)
