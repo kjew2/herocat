@@ -1,20 +1,29 @@
 namespace HeroCat.Sim.Commands
 {
-    // Collection commands (04 sections 6.3, 7.2 and 8.2; 00 section 5.1 vocabulary). Handlers in Simulation.Summons.cs.
+    // Collection commands (04 sections 6.3, 7.2 and 8.2; 00 section 5.1 vocabulary). Every equip names a party slot
+    // 0..PARTY_SLOTS-1 (00 decision 109). Rejects, in this order: BadArgument/BAD_SLOT, InvalidTarget/UNKNOWN_ITEM,
+    // NotOwned/ITEM_NOT_OWNED, InvalidTarget/ALREADY_EQUIPPED (already in this slot), InvalidTarget/<KIND>_IN_OTHER_SLOT
+    // (an item is in at most one slot; a screen sends Unequip then Equip to move it). Handlers in Simulation.Summons.cs.
 
-    /// <summary>Equips an owned weapon (04 section 6.3). There is no unequip command for weapons.</summary>
-    public sealed record EquipWeapon(string WeaponId) : Command
+    /// <summary>Puts an owned weapon in a party slot, replacing the occupant (04 section 6.3).</summary>
+    public sealed record EquipWeapon(int Slot, string WeaponId) : Command
     {
         internal override ApplyResult Execute(Simulation sim) => sim.HandleEquipWeapon(this);
     }
 
-    /// <summary>Equips the best owned weapon if strictly better than the current one (ranking: CollectionRules.RankOwned).</summary>
-    public sealed record AutoEquipBestWeapon : Command
+    /// <summary>Empties a slot's weapon; its companion attacks unarmed (04 section 6.3). An already empty slot is accepted, no event.</summary>
+    public sealed record UnequipWeapon(int Slot) : Command
     {
-        internal override ApplyResult Execute(Simulation sim) => sim.HandleAutoEquipBestWeapon(this);
+        internal override ApplyResult Execute(Simulation sim) => sim.HandleUnequipWeapon(this);
     }
 
-    /// <summary>Puts an owned skill in slot 0..SKILL_SLOTS-1, replacing the occupant (04 section 7.2).</summary>
+    /// <summary>Gives the occupied slots the best owned weapons, each where it adds the most rated DPS (04 section 6.3).</summary>
+    public sealed record AutoEquipBestWeapons : Command
+    {
+        internal override ApplyResult Execute(Simulation sim) => sim.HandleAutoEquipBestWeapons(this);
+    }
+
+    /// <summary>Puts an owned skill in a party slot, replacing the occupant (04 section 7.2).</summary>
     public sealed record EquipSkill(int Slot, string SkillId) : Command
     {
         internal override ApplyResult Execute(Simulation sim) => sim.HandleEquipSkill(this);
@@ -26,15 +35,15 @@ namespace HeroCat.Sim.Commands
         internal override ApplyResult Execute(Simulation sim) => sim.HandleUnequipSkill(this);
     }
 
-    /// <summary>Fills the skill slots with the SKILL_SLOTS best owned skills, best in slot 0 (04 section 7.2).</summary>
+    /// <summary>Gives the occupied slots the best owned skills, each where it adds the most rated DPS (04 section 7.2).</summary>
     public sealed record AutoEquipBestSkills : Command
     {
         internal override ApplyResult Execute(Simulation sim) => sim.HandleAutoEquipBestSkills(this);
     }
 
     /// <summary>
-    /// Puts an owned companion in slot 0..COMPANION_SLOTS-1, replacing the occupant (04 section 8.2). Slot 0 is open from
-    /// the start; slots 1-3 open at Awakening ranks 1-3 (03 section 5.3) and are rejected Locked until then.
+    /// Puts an owned companion in a party slot, replacing the occupant (04 section 8.2). Every slot is open; the slot keeps
+    /// its weapon, skill, Awakening rank and MP pool (00 decision 109).
     /// </summary>
     public sealed record EquipCompanion(int Slot, string CompanionId) : Command
     {
@@ -48,8 +57,8 @@ namespace HeroCat.Sim.Commands
     }
 
     /// <summary>
-    /// Fills the open companion slots with the best owned companions, reserving one for the best MP_REGEN companion when
-    /// the pure-damage loadout is MP-starved (04 section 8.2; CollectionRules.BestCompanions).
+    /// Fills every party slot with the best owned companions: damage and BUFF_ATK first, MP_REGEN swapped in while it
+    /// raises the rated DPS (04 section 8.2; CollectionRules.BestCompanions).
     /// </summary>
     public sealed record AutoEquipBestCompanions : Command
     {
@@ -71,13 +80,10 @@ namespace HeroCat.Sim.Commands
         public const string ITEM_NOT_OWNED = "ITEM_NOT_OWNED";
         public const string UNKNOWN_ITEM = "UNKNOWN_ITEM";
         public const string ALREADY_EQUIPPED = "ALREADY_EQUIPPED";
+        public const string WEAPON_IN_OTHER_SLOT = "WEAPON_IN_OTHER_SLOT";
         public const string SKILL_IN_OTHER_SLOT = "SKILL_IN_OTHER_SLOT";
         public const string COMPANION_IN_OTHER_SLOT = "COMPANION_IN_OTHER_SLOT";
-
-        /// <summary>EquipCompanion into a slot its Awakening rank has not opened yet (03 section 5.3), under Locked.</summary>
-        public const string COMPANION_SLOT_LOCKED = "COMPANION_SLOT_LOCKED";
         public const string BAD_SLOT = "BAD_SLOT";
-        public const string SLOT_EMPTY = "SLOT_EMPTY";
 
         public const string BANNER_CLOSED = "BANNER_CLOSED";
         public const string SUMMON_BAD_COUNT = "SUMMON_BAD_COUNT";

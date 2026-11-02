@@ -165,12 +165,24 @@ namespace HeroCat.Runtime.Save
 
         // ------------------------------------------------------------------------------------------------ materialize
 
+        /// <summary>The GameState root sections R3 requires in the body (02 section 6.4).</summary>
+        static readonly string[] RootSections =
+        {
+            "Time", "Party", "Training", "Wallet", "Weapons", "Skills", "Companions", "Runes", "Loadout", "Fish", "Banners", "Combat",
+            "Progress", "Quests", "Dungeons", "Shop", "Research", "Inbox", "Offline", "Pending", "Tutorial", "Rng", "Stats",
+        };
+
         /// <summary>Body at the CURRENT schema version (run SaveMigrations first) to a GameState. Throws SaveInvalidException.</summary>
         public static GameState Materialize(JObject body)
         {
             if (body == null) throw new SaveInvalidException("no body");
             if ((int?)body["SchemaVersion"] != SaveSchema.Current)
                 throw new SaveInvalidException($"Materialize expects schema v{SaveSchema.Current}; migrate first");
+            // R3 on the body (02 section 6.4): an absent root section is not silently defaulted, so a pre-party dev save
+            // (root Hero, no Party; 00 decision 109) is rejected rather than loaded as an empty party.
+            foreach (var name in RootSections)
+                if (body[name] == null || body[name].Type == JTokenType.Null)
+                    throw new SaveInvalidException($"R3: root section {name} is absent");
             try
             {
                 return body.ToObject<GameState>(Serializer) ?? throw new SaveInvalidException("body is null");

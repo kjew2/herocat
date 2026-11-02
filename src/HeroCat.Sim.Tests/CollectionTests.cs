@@ -35,57 +35,66 @@ namespace HeroCat.Sim.Tests
         // ------------------------------------------------------------------------------------------------ weapons (6.3)
 
         [Test]
-        public void NewProfile_OwnsAndEquipsTheTutorialWeapon()   // #93
+        public void NewProfile_OwnsTheTutorialWeapon_InSlotZero()   // #93, 00 decision 109
         {
             var s = TestContent.NewState();
             Assert.That(Db.TutorialWeaponId, Is.Not.Null);
-            Assert.That(s.Loadout.Weapon, Is.EqualTo(Db.TutorialWeaponId));
+            Assert.That(s.Party.Slots[0].Weapon, Is.EqualTo(Db.TutorialWeaponId));
+            Assert.That(s.Party.Slots.Skip(1).Select(x => x.Weapon), Is.All.Null, "slots 1-4 attack unarmed");
             Assert.That(CollectionRules.Owns(s.Weapons, Db.TutorialWeaponId), Is.True);
         }
 
         [Test]
-        public void EquipWeapon_RequiresOwnership_AndPublishesItemEquipped()   // #93, criterion 8 (no unequip)
+        public void EquipWeapon_PerSlot_Rejects_AndPublishesItemEquipped()   // #93, 04 section 6.3
         {
             var sim = Sim();
-            string tut = sim.State.Loadout.Weapon;
+            string tut = sim.State.Party.Slots[0].Weapon;
             string e = Db.Pool(Banner.WEAPON, Rarity.EPIC)[0];
-            AssertRejectIsPure(sim, new EquipWeapon(e), RejectCode.NotOwned, CollectionRejectReasons.ITEM_NOT_OWNED);
-            AssertRejectIsPure(sim, new EquipWeapon("no_such_weapon"), RejectCode.InvalidTarget, CollectionRejectReasons.UNKNOWN_ITEM);
-            AssertRejectIsPure(sim, new EquipWeapon(null), RejectCode.InvalidTarget, CollectionRejectReasons.UNKNOWN_ITEM);
-            AssertRejectIsPure(sim, new EquipWeapon(tut), RejectCode.InvalidTarget, CollectionRejectReasons.ALREADY_EQUIPPED);
+            AssertRejectIsPure(sim, new EquipWeapon(-1, e), RejectCode.BadArgument, CollectionRejectReasons.BAD_SLOT);
+            AssertRejectIsPure(sim, new EquipWeapon(Db.Constants.PartySlots, e), RejectCode.BadArgument, CollectionRejectReasons.BAD_SLOT);
+            AssertRejectIsPure(sim, new EquipWeapon(1, "no_such_weapon"), RejectCode.InvalidTarget, CollectionRejectReasons.UNKNOWN_ITEM);
+            AssertRejectIsPure(sim, new EquipWeapon(1, null), RejectCode.InvalidTarget, CollectionRejectReasons.UNKNOWN_ITEM);
+            AssertRejectIsPure(sim, new EquipWeapon(1, e), RejectCode.NotOwned, CollectionRejectReasons.ITEM_NOT_OWNED);
+            AssertRejectIsPure(sim, new EquipWeapon(0, tut), RejectCode.InvalidTarget, CollectionRejectReasons.ALREADY_EQUIPPED);
+            AssertRejectIsPure(sim, new EquipWeapon(1, tut), RejectCode.InvalidTarget, CollectionRejectReasons.WEAPON_IN_OTHER_SLOT);
 
             Own(sim.State.Weapons, e);
-            Assert.That(sim.Apply(new EquipWeapon(e)).Ok, Is.True);
-            Assert.That(sim.State.Loadout.Weapon, Is.EqualTo(e));
-            var ev = sim.DrainEvents().OfType<ItemEquipped>().Single();
-            Assert.That(ev, Is.EqualTo(new ItemEquipped(Banner.WEAPON, 0, e, tut, false)));
+            Assert.That(sim.Apply(new EquipWeapon(0, e)).Ok, Is.True);
+            Assert.That(sim.State.Party.Slots[0].Weapon, Is.EqualTo(e));
+            Assert.That(sim.DrainEvents().OfType<ItemEquipped>().Single(), Is.EqualTo(new ItemEquipped(Banner.WEAPON, 0, e, tut, false)));
 
-            Assert.That(typeof(Command).Assembly.GetTypes().Any(t => t.Name == "UnequipWeapon"), Is.False, "no weapon unequip (04 6.3)");
+            Assert.That(sim.Apply(new EquipWeapon(3, tut)).Ok, Is.True, "now free, the tutorial weapon fits any companion");
+            Assert.That(sim.Apply(new UnequipWeapon(3)).Ok, Is.True);
+            Assert.That(sim.DrainEvents().OfType<ItemEquipped>().Last(), Is.EqualTo(new ItemEquipped(Banner.WEAPON, 3, null, tut, false)));
+            Assert.That(sim.Apply(new UnequipWeapon(3)).Ok, Is.True, "an unarmed slot is accepted");
+            Assert.That(sim.DrainEvents(), Is.Empty, "with no event");
+            AssertRejectIsPure(sim, new UnequipWeapon(7), RejectCode.BadArgument, CollectionRejectReasons.BAD_SLOT);
         }
 
         [Test]
-        public void AutoEquipBestWeapon_PicksHighestRarityThenLevelThenId_AndOnlyIfStrictlyBetter()   // #93
+        public void AutoEquipBestWeapons_BestWeaponToTheHeaviestSlot_TiesById_EmptySlotsUnarmed()   // #93, 04 section 6.3
         {
             var sim = Sim();
             var rares = Db.Pool(Banner.WEAPON, Rarity.RARE);
             Assume.That(rares.Count, Is.GreaterThanOrEqualTo(2));
             Own(sim.State.Weapons, rares[1], copies: 1);
             Own(sim.State.Weapons, rares[0], copies: 1);
-            Assert.That(sim.Apply(new AutoEquipBestWeapon()).Ok, Is.True);
-            Assert.That(sim.State.Loadout.Weapon, Is.EqualTo(rares[0]), "rarity tie, level tie: id ordinal");
+            sim.State.Party.Slots[4].Companion = null;   // an empty slot gets no weapon
+            string sk = Db.Pool(Banner.SKILL, Rarity.EPIC)[0];
+            Own(sim.State.Skills, sk);
+            sim.State.Party.Slots[3].Skill = sk;         // a heavier slot (its skill factor) takes the best weapon
+            sim.State.Party.Slots[0].Weapon = null;      // and the tutorial weapon goes back into the ranking
+            sim.Query.MarkDirty();
+            Assert.That(sim.Apply(new AutoEquipBestWeapons()).Ok, Is.True);
+            var w = sim.State.Party.Slots.Select(x => x.Weapon).ToArray();
+            Assert.That(w[3], Is.EqualTo(rares[0]), "rarity tie, level tie: id ordinal; the heaviest slot first");
+            Assert.That(w[4], Is.Null);
+            Assert.That(w.Count(x => x != null), Is.EqualTo(3), "three owned weapons, four occupied slots: the lightest stays unarmed");
+            Assert.That(w.Distinct().Count(x => x != null), Is.EqualTo(3), "no weapon in two slots");
+            Assert.That(sim.DrainEvents().OfType<ItemEquipped>().All(x => !x.Auto), Is.True, "the command is the player's");
 
-            // same rarity, higher level wins
-            sim.State.Weapons.Items[rares[1]].Copies = Db.DupeLevels[2];   // level 3
-            sim.DrainEvents();
-            sim.Apply(new AutoEquipBestWeapon());
-            Assert.That(sim.State.Loadout.Weapon, Is.EqualTo(rares[1]));
-            Assert.That(sim.DrainEvents().OfType<ItemEquipped>().Single().Auto, Is.False, "the command is the player's");
-
-            // an equal-ranked weapon (same rarity and level, smaller id) does not replace the equipped one
-            sim.State.Weapons.Items[rares[0]].Copies = Db.DupeLevels[2];
-            sim.Apply(new AutoEquipBestWeapon());
-            Assert.That(sim.State.Loadout.Weapon, Is.EqualTo(rares[1]), "switches only to a strictly better weapon");
-            Assert.That(sim.DrainEvents().OfType<ItemEquipped>(), Is.Empty);
+            sim.Apply(new AutoEquipBestWeapons());
+            Assert.That(sim.DrainEvents().OfType<ItemEquipped>(), Is.Empty, "already best: no event");
         }
 
         [Test]
@@ -102,8 +111,9 @@ namespace HeroCat.Sim.Tests
             Assert.That(ev, Is.EqualTo(Db.Weapons[epic].AtkPct));
             Assert.That(rv, Is.EqualTo(Db.Weapons[rare].AtkPct * Db.LevelMult(Db.DupeLevels.Count)));
             Assume.That(rv, Is.GreaterThan(ev), "content: a level-10 Rare out-values a level-1 Epic");
-            sim.Apply(new AutoEquipBestWeapon());
-            Assert.That(sim.State.Loadout.Weapon, Is.EqualTo(rare));
+            Combat.Solo(sim);
+            sim.Apply(new AutoEquipBestWeapons());
+            Assert.That(sim.State.Party.Slots[0].Weapon, Is.EqualTo(rare));
             Assert.That(Db.LevelMult(Db.DupeLevels.Count), Is.EqualTo(2.8).Within(1e-12), "04 criterion 5: LevelMult 2.8 at level 10");
         }
 
@@ -115,18 +125,20 @@ namespace HeroCat.Sim.Tests
             double before = sim.Query.RatedDps;
             Own(sim.State.Weapons, e);   // a copy gain outside Apply does not reach the cache ...
             Assert.That(sim.Query.RatedDps, Is.EqualTo(before));
-            Assert.That(sim.Apply(new EquipWeapon(e)).Ok, Is.True);   // ... the equip marks it dirty
+            Assert.That(sim.Apply(new EquipWeapon(1, e)).Ok, Is.True);   // ... the equip marks it dirty
             double after = sim.Query.RatedDps;
             Assert.That(after, Is.GreaterThan(before));
-            Assert.That(sim.Query.Power.Weapons,
-                        Is.EqualTo(1 + (PowerFormula.EquippedWeaponPct(Db, sim.State) + PowerFormula.WeaponPassivePct(Db, sim.State)) / 100));
-            Assert.That(SummonQuery.LayerMult(Db, sim.State, Banner.WEAPON), Is.EqualTo(sim.Query.Power.Weapons));
+            Assert.That(sim.Query.Power.WeaponFactor(1),
+                        Is.EqualTo(1 + (PowerFormula.EquippedWeaponPct(Db, sim.State, 1) + PowerFormula.WeaponPassivePct(Db, sim.State)) / 100));
+            var p = sim.Query.Power;
+            double without = Enumerable.Range(0, 5).Sum(i => p.SlotDps(i) / p.WeaponFactor(i)) * p.PartyBuff;
+            Assert.That(SummonQuery.LayerMult(Db, sim.State, Banner.WEAPON), Is.EqualTo(p.AutoDps / without).Within(1e-12));
 
             string sk = Db.Pool(Banner.SKILL, Rarity.EPIC)[0];
             Own(sim.State.Skills, sk);
             Assert.That(sim.Apply(new EquipSkill(0, sk)).Ok, Is.True);
-            Assert.That(sim.Query.Power.Skills, Is.EqualTo(1 + Db.Skills[sk].DpsPct / 100));
-            Assert.That(SummonQuery.LayerMult(Db, sim.State, Banner.SKILL), Is.EqualTo(sim.Query.Power.Skills));
+            Assert.That(sim.Query.Power.SkillFactor(0), Is.EqualTo(1 + Db.Skills[sk].DpsPct / 100));
+            Assert.That(SummonQuery.LayerMult(Db, sim.State, Banner.SKILL), Is.GreaterThan(1.0));
         }
 
         // ------------------------------------------------------------------------------------------------ skills (7.2)
@@ -153,7 +165,7 @@ namespace HeroCat.Sim.Tests
             var sim = Sim();
             var skills = Db.Pool(Banner.SKILL, Rarity.COMMON);
             string a = skills[0], b = skills[1];
-            int slots = Db.Constants.SkillSlots;
+            int slots = Db.Constants.PartySlots;
             AssertRejectIsPure(sim, new EquipSkill(0, a), RejectCode.NotOwned, CollectionRejectReasons.ITEM_NOT_OWNED);
             Own(sim.State.Skills, a);
             Own(sim.State.Skills, b);
@@ -167,9 +179,9 @@ namespace HeroCat.Sim.Tests
             AssertRejectIsPure(sim, new EquipSkill(3, a), RejectCode.InvalidTarget, CollectionRejectReasons.SKILL_IN_OTHER_SLOT);
 
             Assert.That(sim.Apply(new EquipSkill(2, b)).Ok, Is.True);
-            Assert.That(sim.State.Loadout.Skills[2], Is.EqualTo(b));
+            Assert.That(sim.State.Party.Slots[2].Skill, Is.EqualTo(b));
             Assert.That(sim.DrainEvents().OfType<ItemEquipped>().Single().PreviousItemId, Is.EqualTo(a));
-            Assert.That(sim.State.Loadout.Skills.Length, Is.EqualTo(slots));
+            Assert.That(sim.State.Party.Slots.Length, Is.EqualTo(slots));
         }
 
         [Test]
@@ -178,17 +190,18 @@ namespace HeroCat.Sim.Tests
             var sim = Sim();
             string a = Db.Pool(Banner.SKILL, Rarity.COMMON)[0];
             Own(sim.State.Skills, a);
-            AssertRejectIsPure(sim, new UnequipSkill(0), RejectCode.InvalidTarget, CollectionRejectReasons.SLOT_EMPTY);
-            AssertRejectIsPure(sim, new UnequipSkill(Db.Constants.SkillSlots), RejectCode.BadArgument, CollectionRejectReasons.BAD_SLOT);
+            Assert.That(sim.Apply(new UnequipSkill(0)).Ok, Is.True, "an empty slot is accepted (04 section 7.2)");
+            Assert.That(sim.DrainEvents(), Is.Empty);
+            AssertRejectIsPure(sim, new UnequipSkill(Db.Constants.PartySlots), RejectCode.BadArgument, CollectionRejectReasons.BAD_SLOT);
             sim.Apply(new EquipSkill(0, a));
             sim.DrainEvents();
             Assert.That(sim.Apply(new UnequipSkill(0)).Ok, Is.True);
-            Assert.That(sim.State.Loadout.Skills[0], Is.Null);
+            Assert.That(sim.State.Party.Slots[0].Skill, Is.Null);
             Assert.That(sim.DrainEvents().OfType<ItemEquipped>().Single(), Is.EqualTo(new ItemEquipped(Banner.SKILL, 0, null, a, false)));
         }
 
         [Test]
-        public void AutoEquipBestSkills_BestInSlot0_DeterministicForTies()   // #94
+        public void AutoEquipBestSkills_BestSkillToTheHeaviestSlot_DeterministicForTies()   // #94
         {
             var sim = Sim();
             var commons = Db.Pool(Banner.SKILL, Rarity.COMMON).ToList();
@@ -197,11 +210,10 @@ namespace HeroCat.Sim.Tests
             foreach (var id in commons.AsEnumerable().Reverse()) Own(sim.State.Skills, id);
             Own(sim.State.Skills, epics[0]);
             Assert.That(sim.Apply(new AutoEquipBestSkills()).Ok, Is.True);
-            var slots = sim.State.Loadout.Skills;
-            Assert.That(slots[0], Is.EqualTo(epics[0]));
-            var expectedCommons = commons.OrderBy(x => x, System.StringComparer.Ordinal).Take(Db.Constants.SkillSlots - 1).ToList();
-            for (int i = 1; i < slots.Length; i++)
-                Assert.That(slots[i], Is.EqualTo(i - 1 < expectedCommons.Count ? expectedCommons[i - 1] : null));
+            var slots = sim.State.Party.Slots.Select(x => x.Skill).ToArray();
+            Assert.That(slots[0], Is.EqualTo(epics[0]), "slot 0 holds the starter weapon: the heaviest slot");
+            var expectedCommons = commons.OrderBy(x => x, System.StringComparer.Ordinal).Take(Db.Constants.PartySlots - 1).ToList();
+            Assert.That(slots.Skip(1), Is.EqualTo(expectedCommons), "the four equal slots by slot index, the commons by id");
 
             sim.DrainEvents();
             Assert.That(sim.Apply(new AutoEquipBestSkills()).Ok, Is.True);
@@ -247,7 +259,8 @@ namespace HeroCat.Sim.Tests
             Assert.That(item.ValueNextLevel, Is.EqualTo(def.AtkPct * Db.LevelMult(3)));
             Assert.That(item.PassiveNow, Is.EqualTo(def.PassivePct * Db.LevelMult(2)));
             Assert.That(vm.PassiveTotal, Is.EqualTo(PowerFormula.WeaponPassivePct(Db, sim.State)));
-            Assert.That(vm.LayerMult, Is.EqualTo(PowerFormula.Compute(Db, sim.State).Weapons));
+            Assert.That(vm.LayerMult, Is.EqualTo(SummonQuery.LayerMult(Db, sim.State, Banner.WEAPON)));
+            Assert.That(vm.LayerMult, Is.GreaterThan(1.0), "the starter weapon and the passive");
             Assert.That(vm.Items.All(i => !double.IsNaN(i.ValueNow) && !double.IsNaN(i.ValueNextLevel) && !double.IsNaN(i.PassiveNow)));
 
             var unowned = vm.Items.First(i => !i.Owned);

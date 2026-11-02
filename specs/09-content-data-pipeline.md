@@ -142,7 +142,7 @@ The exporter checks `constants` against this list (`E040` missing, `E042` unknow
 | `PITY_SOFT_START`, `PITY_SOFT_STEP`, `PITY_HARD`, `M_SHARE_OF_LPLUS` | `banners` | int, double, int, double |
 | 10-pull guarantee | `banners.guarantee_batch_size`, `.guarantee_min_rarity` | int, enum |
 | `BANNER_EXP_PER_PULL` | `banners.exp_per_pull` | int |
-| `PARTY_SLOTS`, `RUNE_SLOTS` | `constants` (`SKILL_SLOTS` and `COMPANION_SLOTS` are removed: one skill and one companion per party slot, 00 decision 109) | int |
+| `PARTY_SLOTS`, `RUNE_SLOTS` | `constants` (the separate skill and companion slot counts are removed: one skill and one companion per party slot, 00 decision 109) | int |
 | `DUPE_LVL_CUM` | `dupe_levels.cum_copies` | int per row |
 | `DUPE_LVL_BONUS` | `constants` | double |
 | `LIMIT_BREAK_RANKS` | `constants` (issue #37) | int |
@@ -544,7 +544,7 @@ Example: `{"id": "d_merge", "goal": "MERGE_FISH", "filter": null, "target": 15, 
 | `tier` | enum(Tier) | |
 | `name_key` | key | |
 
-The rows are 06 section 5.4's 54 rungs in nine ladders (ids `stage`, `party_level`, `weapons`, `skills`, `companions`, `merges`, `fish_level`, `awakening`, `summons`), all `DIAMOND`, `tier` `MVP`, summing to 6,260. They are the only home of the achievement rewards. `ClaimAllQuests(ACHIEVEMENT)` claims in the built order: ladders in the order their first row appears, rungs ascending.
+The rows are 06 section 5.4's 54 rungs in nine ladders (ids `stage`, `hero_level`, `weapons`, `skills`, `companions`, `merges`, `fish_level`, `awakening`, `summons`), all `DIAMOND`, `tier` `MVP`, summing to 6,260. The `hero_level` ladder and its `ach_hero_level_*` ids keep their shipped keys (E090 forbids removing them; 6.3) and track the Party Level (`REACH_PARTY_LEVEL`, 00 decision 109); only the display text says party. They are the only home of the achievement rewards. `ClaimAllQuests(ACHIEVEMENT)` claims in the built order: ladders in the order their first row appears, rungs ascending.
 
 Example: `{"id": "ach_merges_04", "ladder": "merges", "rung": 4, "goal": "LIFETIME_MERGES", "target": 1000, "reward_currency": "DIAMOND", "reward_amount": 80, "tier": "MVP", "name_key": "achievement.merges_04.name"}`.
 

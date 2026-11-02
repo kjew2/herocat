@@ -5,6 +5,7 @@ using HeroCat.Sim.Content;
 using HeroCat.Sim.Economy;
 using HeroCat.Sim.Events;
 using HeroCat.Sim.State;
+using HeroCat.Sim.Power;
 using HeroCat.Sim.Summons;
 
 namespace HeroCat.Sim
@@ -144,43 +145,92 @@ namespace HeroCat.Sim
         /// <summary>Equips and copy gains invalidate the Power layer's DPS cache (03 section 7.3).</summary>
         void SummonsMarkDpsDirty() => MarkDpsDirty();
 
+        // ================================================================================================ party slots (04 6.3, 7.2, 8.2)
+
+        /// <summary>
+        /// The state's party slots sized PARTY_SLOTS. ProfileFactory and the save validator size them; for a hand-built state
+        /// of another size this repairs the array in place (missing slots become empty), which changes no rated number.
+        /// </summary>
+        PartySlot[] PartySlots()
+        {
+            int n = Db.Constants.PartySlots;
+            var cur = State.Party.Slots;
+            if (cur != null && cur.Length == n && Array.TrueForAll(cur, x => x != null)) return cur;
+            var r = PartyState.NewSlots(n);
+            if (cur != null) for (int i = 0; i < n && i < cur.Length; i++) if (cur[i] != null) r[i] = cur[i];
+            State.Party.Slots = r;
+            return r;
+        }
+
+        /// <summary>The shared equip checks (04 sections 6.3, 7.2, 8.2): BAD_SLOT, UNKNOWN_ITEM, ITEM_NOT_OWNED, ALREADY_EQUIPPED, IN_OTHER_SLOT.</summary>
+        ApplyResult CheckEquip(int slot, string id, Banner kind, Func<PartySlot, string> field, string inOtherSlot)
+        {
+            int n = Db.Constants.PartySlots;
+            if (slot < 0 || slot >= n) return ApplyResult.Reject(RejectCode.BadArgument, CollectionRejectReasons.BAD_SLOT);
+            if (id == null || !CollectionRules.IsKnown(Db, kind, id))
+                return ApplyResult.Reject(RejectCode.InvalidTarget, CollectionRejectReasons.UNKNOWN_ITEM);
+            if (!CollectionRules.Owns(CollectionRules.For(State, kind), id))
+                return ApplyResult.Reject(RejectCode.NotOwned, CollectionRejectReasons.ITEM_NOT_OWNED);
+            var slots = PartySlots();
+            if (field(slots[slot]) == id) return ApplyResult.Reject(RejectCode.InvalidTarget, CollectionRejectReasons.ALREADY_EQUIPPED);
+            for (int i = 0; i < slots.Length; i++)
+                if (i != slot && field(slots[i]) == id) return ApplyResult.Reject(RejectCode.InvalidTarget, inOtherSlot);
+            return ApplyResult.Accepted;
+        }
+
+        bool BadSlot(int slot) => slot < 0 || slot >= Db.Constants.PartySlots;
+
         // ================================================================================================ weapons (04 6.3)
 
         internal ApplyResult HandleEquipWeapon(EquipWeapon c)
         {
-            if (c.WeaponId == null || !Db.Weapons.ContainsKey(c.WeaponId))
-                return ApplyResult.Reject(RejectCode.InvalidTarget, CollectionRejectReasons.UNKNOWN_ITEM);
-            if (!CollectionRules.Owns(State.Weapons, c.WeaponId))
-                return ApplyResult.Reject(RejectCode.NotOwned, CollectionRejectReasons.ITEM_NOT_OWNED);
-            if (State.Loadout.Weapon == c.WeaponId)
-                return ApplyResult.Reject(RejectCode.InvalidTarget, CollectionRejectReasons.ALREADY_EQUIPPED);
-            SetWeapon(c.WeaponId, auto: false);
+            var r = CheckEquip(c.Slot, c.WeaponId, Banner.WEAPON, x => x.Weapon, CollectionRejectReasons.WEAPON_IN_OTHER_SLOT);
+            if (!r.Ok) return r;
+            SetWeapon(c.Slot, c.WeaponId, auto: false);
             return ApplyResult.Accepted;
         }
 
-        internal ApplyResult HandleAutoEquipBestWeapon(AutoEquipBestWeapon c)
+        /// <summary>Rejects only BAD_SLOT; an already unarmed slot is accepted with no event (04 section 6.3).</summary>
+        internal ApplyResult HandleUnequipWeapon(UnequipWeapon c)
         {
-            AutoEquipWeapon(auto: false);
+            if (BadSlot(c.Slot)) return ApplyResult.Reject(RejectCode.BadArgument, CollectionRejectReasons.BAD_SLOT);
+            if (PartySlots()[c.Slot].Weapon != null) SetWeapon(c.Slot, null, auto: false);
             return ApplyResult.Accepted;
         }
 
-        /// <summary>Switches to the best owned weapon only when it is strictly better than the equipped one (04 section 6.3; ranking in CollectionRules.RankOwned).</summary>
+        internal ApplyResult HandleAutoEquipBestWeapons(AutoEquipBestWeapons c)
+        {
+            ApplyWeapons(CollectionRules.BestWeapons(Db, State), auto: false);
+            return ApplyResult.Accepted;
+        }
+
+        /// <summary>
+        /// After a weapon summon result (04 section 6.3): switches to AutoEquipBestWeapons' arrangement only when it rates
+        /// strictly higher than the current one, so a tie never reshuffles a player's manual choice.
+        /// </summary>
         void AutoEquipWeapon(bool auto)
         {
-            string best = CollectionRules.BestWeapon(Db, State);
-            if (best == null || best == State.Loadout.Weapon) return;
-            string cur = State.Loadout.Weapon;
-            if (cur != null && CollectionRules.Owns(State.Weapons, cur) && !CollectionRules.StrictlyBetter(Db, Banner.WEAPON, State.Weapons, best, cur))
-                return;
-            SetWeapon(best, auto);
+            var best = CollectionRules.BestWeapons(Db, State);
+            var probe = CollectionRules.WithField(PartySlots(), best, (x, id) => x.Weapon = id);
+            if (PowerFormula.Compute(Db, State, 0.0, probe).RatedDps > Query.RatedDps) ApplyWeapons(best, auto);
         }
 
-        void SetWeapon(string id, bool auto)
+        void ApplyWeapons(string[] best, bool auto)
         {
-            string prev = State.Loadout.Weapon;
-            State.Loadout.Weapon = id;
+            // One ItemEquipped per slot whose weapon changed (04 section 6.3); the command is atomic, so a weapon moving between
+            // two slots is never seen in both.
+            var slots = PartySlots();
+            for (int i = 0; i < slots.Length; i++)
+                if (slots[i].Weapon != best[i]) SetWeapon(i, best[i], auto);
+        }
+
+        void SetWeapon(int slot, string id, bool auto)
+        {
+            var x = PartySlots()[slot];
+            string prev = x.Weapon;
+            x.Weapon = id;
             SummonsMarkDpsDirty();
-            Emit(new ItemEquipped(Banner.WEAPON, 0, id, prev, auto));
+            Emit(new ItemEquipped(Banner.WEAPON, slot, id, prev, auto));
         }
 
         // ================================================================================================ limit breaks (04 5.2)
@@ -213,59 +263,33 @@ namespace HeroCat.Sim
 
         internal ApplyResult HandleEquipSkill(EquipSkill c)
         {
-            var slots = SkillSlots();
-            if (c.Slot < 0 || c.Slot >= slots.Length) return ApplyResult.Reject(RejectCode.BadArgument, CollectionRejectReasons.BAD_SLOT);
-            if (c.SkillId == null || !Db.Skills.ContainsKey(c.SkillId))
-                return ApplyResult.Reject(RejectCode.InvalidTarget, CollectionRejectReasons.UNKNOWN_ITEM);
-            if (!CollectionRules.Owns(State.Skills, c.SkillId))
-                return ApplyResult.Reject(RejectCode.NotOwned, CollectionRejectReasons.ITEM_NOT_OWNED);
-            if (slots[c.Slot] == c.SkillId) return ApplyResult.Reject(RejectCode.InvalidTarget, CollectionRejectReasons.ALREADY_EQUIPPED);
-            for (int i = 0; i < slots.Length; i++)
-                if (i != c.Slot && slots[i] == c.SkillId)
-                    return ApplyResult.Reject(RejectCode.InvalidTarget, CollectionRejectReasons.SKILL_IN_OTHER_SLOT);
-            SetSkill(slots, c.Slot, c.SkillId);
+            var r = CheckEquip(c.Slot, c.SkillId, Banner.SKILL, x => x.Skill, CollectionRejectReasons.SKILL_IN_OTHER_SLOT);
+            if (!r.Ok) return r;
+            SetSkill(c.Slot, c.SkillId);
             return ApplyResult.Accepted;
         }
 
+        /// <summary>Rejects only BAD_SLOT; an already empty slot is accepted with no event (04 section 7.2).</summary>
         internal ApplyResult HandleUnequipSkill(UnequipSkill c)
         {
-            var slots = SkillSlots();
-            if (c.Slot < 0 || c.Slot >= slots.Length) return ApplyResult.Reject(RejectCode.BadArgument, CollectionRejectReasons.BAD_SLOT);
-            if (slots[c.Slot] == null) return ApplyResult.Reject(RejectCode.InvalidTarget, CollectionRejectReasons.SLOT_EMPTY);
-            SetSkill(slots, c.Slot, null);
+            if (BadSlot(c.Slot)) return ApplyResult.Reject(RejectCode.BadArgument, CollectionRejectReasons.BAD_SLOT);
+            if (PartySlots()[c.Slot].Skill != null) SetSkill(c.Slot, null);
             return ApplyResult.Accepted;
         }
 
         internal ApplyResult HandleAutoEquipBestSkills(AutoEquipBestSkills c)
         {
-            var slots = SkillSlots();
             var best = CollectionRules.BestSkills(Db, State);
+            var slots = PartySlots();
             for (int i = 0; i < slots.Length; i++)
-            {
-                string id = i < best.Length ? best[i] : null;
-                if (slots[i] != id) SetSkill(slots, i, id);
-            }
+                if (slots[i].Skill != best[i]) SetSkill(i, best[i]);
             return ApplyResult.Accepted;
-        }
-
-        /// <summary>
-        /// Loadout.Skills sized SKILL_SLOTS. ProfileFactory sizes it; for a hand-built state of another size this is a
-        /// resized copy that only SetSkill stores, so a reject never changes the state.
-        /// </summary>
-        string[] SkillSlots()
-        {
-            int n = Db.Constants.SkillSlots;
-            var s = State.Loadout.Skills;
-            if (s != null && s.Length == n) return s;
-            var r = new string[n];
-            if (s != null) Array.Copy(s, r, Math.Min(s.Length, n));
-            return r;
         }
 
         /// <summary>
         /// A skill put into a slot starts on its full cooldown; an emptied slot has none (the integration track's decision
         /// for 04 section 7.2: re-slotting can never be used to skip a cooldown, and a fresh loadout bursts once the
-        /// cooldowns run out). Combat.SkillCooldowns is sized SKILL_SLOTS by ProfileFactory and the save validator.
+        /// cooldowns run out). Combat.SkillCooldowns is sized PARTY_SLOTS by ProfileFactory and the save validator.
         /// </summary>
         void StartSlotCooldown(int slot, string id)
         {
@@ -274,11 +298,11 @@ namespace HeroCat.Sim
             cds[slot] = id != null && Db.Skills.TryGetValue(id, out var def) ? def.CooldownTicks : 0;
         }
 
-        void SetSkill(string[] slots, int slot, string id)
+        void SetSkill(int slot, string id)
         {
-            string prev = slots[slot];
-            slots[slot] = id;
-            State.Loadout.Skills = slots;
+            var x = PartySlots()[slot];
+            string prev = x.Skill;
+            x.Skill = id;
             StartSlotCooldown(slot, id);
             SummonsMarkDpsDirty();
             Emit(new ItemEquipped(Banner.SKILL, slot, id, prev, false));
@@ -288,64 +312,39 @@ namespace HeroCat.Sim
 
         internal ApplyResult HandleEquipCompanion(EquipCompanion c)
         {
-            var slots = CompanionSlots();
-            if (c.Slot < 0 || c.Slot >= slots.Length) return ApplyResult.Reject(RejectCode.BadArgument, CollectionRejectReasons.BAD_SLOT);
-            if (c.Slot >= AwakeningRules.CompanionSlots(Db, State))
-                return ApplyResult.Reject(RejectCode.Locked, CollectionRejectReasons.COMPANION_SLOT_LOCKED);
-            if (c.CompanionId == null || !Db.Companions.ContainsKey(c.CompanionId))
-                return ApplyResult.Reject(RejectCode.InvalidTarget, CollectionRejectReasons.UNKNOWN_ITEM);
-            if (!CollectionRules.Owns(State.Companions, c.CompanionId))
-                return ApplyResult.Reject(RejectCode.NotOwned, CollectionRejectReasons.ITEM_NOT_OWNED);
-            if (slots[c.Slot] == c.CompanionId) return ApplyResult.Reject(RejectCode.InvalidTarget, CollectionRejectReasons.ALREADY_EQUIPPED);
-            for (int i = 0; i < slots.Length; i++)
-                if (i != c.Slot && slots[i] == c.CompanionId)
-                    return ApplyResult.Reject(RejectCode.InvalidTarget, CollectionRejectReasons.COMPANION_IN_OTHER_SLOT);
-            SetCompanion(slots, c.Slot, c.CompanionId, auto: false);
+            var r = CheckEquip(c.Slot, c.CompanionId, Banner.COMPANION, x => x.Companion, CollectionRejectReasons.COMPANION_IN_OTHER_SLOT);
+            if (!r.Ok) return r;
+            SetCompanion(c.Slot, c.CompanionId, auto: false);
             return ApplyResult.Accepted;
         }
 
-        /// <summary>Any slot in range may be emptied, a locked one included (a loaded save may hold one).</summary>
+        /// <summary>Rejects only BAD_SLOT; an already empty slot is accepted with no event (04 section 8.2).</summary>
         internal ApplyResult HandleUnequipCompanion(UnequipCompanion c)
         {
-            var slots = CompanionSlots();
-            if (c.Slot < 0 || c.Slot >= slots.Length) return ApplyResult.Reject(RejectCode.BadArgument, CollectionRejectReasons.BAD_SLOT);
-            if (slots[c.Slot] == null) return ApplyResult.Reject(RejectCode.InvalidTarget, CollectionRejectReasons.SLOT_EMPTY);
-            SetCompanion(slots, c.Slot, null, auto: false);
+            if (BadSlot(c.Slot)) return ApplyResult.Reject(RejectCode.BadArgument, CollectionRejectReasons.BAD_SLOT);
+            if (PartySlots()[c.Slot].Companion != null) SetCompanion(c.Slot, null, auto: false);
             return ApplyResult.Accepted;
         }
 
         internal ApplyResult HandleAutoEquipBestCompanions(AutoEquipBestCompanions c)
         {
-            var slots = CompanionSlots();
             var best = CollectionRules.BestCompanions(Db, State);
+            var slots = PartySlots();
             for (int i = 0; i < slots.Length; i++)
-            {
-                string id = i < best.Length ? best[i] : null;
-                if (slots[i] != id) SetCompanion(slots, i, id, auto: false);
-            }
+                if (slots[i].Companion != best[i]) SetCompanion(i, best[i], auto: false);
             return ApplyResult.Accepted;
         }
 
-        /// <summary>Loadout.Companions sized COMPANION_SLOTS, as <see cref="SkillSlots"/>: a resized copy only SetCompanion stores.</summary>
-        string[] CompanionSlots()
-        {
-            int n = Db.Constants.CompanionSlots;
-            var s = State.Loadout.Companions;
-            if (s != null && s.Length == n) return s;
-            var r = new string[n];
-            if (s != null) Array.Copy(s, r, Math.Min(s.Length, n));
-            return r;
-        }
-
         /// <summary>
-        /// As skills (<see cref="StartSlotCooldown"/>): a companion put into a slot starts on its full cooldown, an emptied
-        /// slot has none, so re-slotting never skips a cooldown.
+        /// As skills (<see cref="StartSlotCooldown"/>): a companion put into a slot starts its ability on its full cooldown,
+        /// an emptied slot has none, so re-slotting never skips a cooldown. The slot keeps its weapon, skill, Awakening rank,
+        /// MP pool and attack progress (00 decision 109, 04 section 8.2).
         /// </summary>
-        void SetCompanion(string[] slots, int slot, string id, bool auto)
+        void SetCompanion(int slot, string id, bool auto)
         {
-            string prev = slots[slot];
-            slots[slot] = id;
-            State.Loadout.Companions = slots;
+            var x = PartySlots()[slot];
+            string prev = x.Companion;
+            x.Companion = id;
             var cds = State.Combat.CompanionCooldowns;
             if (cds != null && slot < cds.Length)
                 cds[slot] = id != null && Db.Companions.TryGetValue(id, out var def) ? def.CooldownTicks : 0;

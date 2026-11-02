@@ -57,25 +57,25 @@ namespace HeroCat.Sim
         // ================================================================================================ Hero Level
 
         /// <summary>
-        /// 03 section 5.2, called by <see cref="Ledger.Apply"/> after every HERO_EXP delta (the only EXP path, so kills,
-        /// offline catch-up and the EXP Dungeon all level here). One LevelUp per level; stops at hero_levels.level_cap,
+        /// 03 section 5.2, called by <see cref="Ledger.Apply"/> after every PARTY_EXP delta (the only EXP path, so kills,
+        /// offline catch-up and the EXP Dungeon all level here). One LevelUp per level; stops at party_levels.level_cap,
         /// and an overflowing threshold (infinity) never loops.
         /// </summary>
-        internal void CheckHeroLevel()
+        internal void CheckPartyLevel()
         {
-            var h = State.Hero;
-            int cap = Db.HeroLevels.LevelCap;
+            var h = State.Party;
+            int cap = Db.PartyLevels.LevelCap;
             int from = h.Level;
             while (h.Level < cap)
             {
-                double need = Db.HeroLvlExp(h.Level);
+                double need = Db.PartyLvlExp(h.Level);
                 if (!(h.Exp >= need)) break;
                 h.Exp -= need;
                 h.Level += 1;
                 MarkDpsDirty();
                 Emit(new LevelUp(h.Level));
             }
-            if (h.Level > from) AchievementsSetMax(QuestGoal.REACH_HERO_LEVEL, h.Level);   // 06 section 5.4, after the LevelUps
+            if (h.Level > from) AchievementsSetMax(QuestGoal.REACH_PARTY_LEVEL, h.Level);   // 06 section 5.4, after the LevelUps
         }
     }
 }

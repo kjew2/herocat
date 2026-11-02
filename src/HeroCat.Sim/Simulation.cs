@@ -213,21 +213,31 @@ namespace HeroCat.Sim
                 BossTicksLeft = f != null ? f.BossTicksLeft : 0,
                 EnemyHp = f != null ? f.EnemyHp : 0,
                 EnemyHpMax = f != null ? f.EnemyMaxHp : 0,
-                HeroDps = Query.RatedDps,
+                PartyDps = Query.RatedDps,
                 Gold = s.Wallet.Gold,
                 Diamonds = s.Wallet.Diamond,
                 FishCoin = s.Wallet.FishCoin,
                 RockCandy = s.Wallet.RockCandy,
-                HeroExp = s.Hero.Exp,
-                HeroExpToNext = Db.HeroLvlExp(s.Hero.Level < 1 ? 1 : s.Hero.Level),
-                HeroLevel = s.Hero.Level,
-                AwakenRank = s.Hero.AwakenRank,
-                Mp = s.Combat.Mp,
+                PartyExp = s.Party.Exp,
+                PartyExpToNext = Db.PartyLvlExp(s.Party.Level < 1 ? 1 : s.Party.Level),
+                PartyLevel = s.Party.Level,
                 MpMax = ResearchRules.MpPoolMax(Db, s),
+                Slot0 = SlotSnap(0),
+                Slot1 = SlotSnap(1),
+                Slot2 = SlotSnap(2),
+                Slot3 = SlotSnap(3),   // literal-ok: the fixed Slot0..Slot4 fields
+                Slot4 = SlotSnap(4),   // literal-ok: the fixed Slot0..Slot4 fields
                 TankFish = s.Fish.TankCount,
                 TankCap = FishTankCap,
                 TankRefillTicksLeft = FishTankRefillTicks - s.Fish.TankRefillTick,
             };
+        }
+
+        SlotSnapshot SlotSnap(int i)
+        {
+            var p = Query.Power;
+            var mp = State.Combat.Mp;
+            return new SlotSnapshot(p.Occupied(i), AwakeningRules.Rank(Db, State, i), mp != null && i < mp.Length ? mp[i] : 0, p.SlotDps(i) * p.PartyBuff);
         }
     }
 }

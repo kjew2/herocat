@@ -190,9 +190,9 @@ namespace HeroCat.Sim.Content
                 Add(t, "awakening", d.Awakening, r => I(r.Rank), (r, x) =>
                 {
                     x["rank"] = r.Rank; x["stage_gate"] = r.StageGate; x["rock_candy_cost"] = r.RockCandyCost; x["mult"] = r.Mult;
-                    x["companion_slots_after"] = r.CompanionSlotsAfter; x["rune_slots_after"] = r.RuneSlotsAfter; x["tier"] = r.Tier;
+                    x["rune_slots_after"] = r.RuneSlotsAfter; x["tier"] = r.Tier;
                 });
-                Add(t, "hero_levels", d.HeroLevels, r => r.Id, (r, x) =>
+                Add(t, "party_levels", d.PartyLevels, r => r.Id, (r, x) =>
                 {
                     x["exp0"] = r.Exp0; x["exp_g"] = r.ExpG; x["atk_pct_per_level"] = r.AtkPctPerLevel; x["mult_per_level"] = r.MultPerLevel;
                     x["level_cap"] = r.LevelCap;
@@ -268,7 +268,7 @@ namespace HeroCat.Sim.Content
                 Unique("banner_levels", Rows(d.BannerLevels), r => r.Banner + "," + I(r.Level));
                 Unique("dupe_levels", Rows(d.DupeLevels), r => I(r.Level));
                 Unique("awakening", Rows(d.Awakening), r => I(r.Rank));
-                Unique("hero_levels", Rows(d.HeroLevels), r => r.Id);
+                Unique("party_levels", Rows(d.PartyLevels), r => r.Id);
                 Unique("research", Rows(d.Research), r => r.Id);
                 Unique("fish_levels", Rows(d.FishLevels), r => I(r.Level));
                 Unique("tank", Rows(d.Tank), r => r.Id);
@@ -521,7 +521,7 @@ namespace HeroCat.Sim.Content
 
             void RuleE045OneRowTables()
             {
-                foreach (var table in new[] { "hero_levels", "tank" })
+                foreach (var table in new[] { "party_levels", "tank" })
                     if (Has(table) && T(table).Count != 1) Err("E045", table, $"exactly one row required, found {I(T(table).Count)}");
             }
 
@@ -583,12 +583,11 @@ namespace HeroCat.Sim.Content
                 var level1 = T("banner_levels").FindAll(r => (int)r["level"] == 1);
                 Rng("banner_levels", "exp_required", v => v == 0, "level 1 must be 0", level1);
                 Rng("awakening", "mult", gt1, "> 1");
-                int? cs = KInt("COMPANION_SLOTS"), rs = KInt("RUNE_SLOTS");
-                Rng("awakening", "companion_slots_after", v => cs == null || v <= cs.Value, "<= COMPANION_SLOTS");
+                int? rs = KInt("RUNE_SLOTS");
                 Rng("awakening", "rune_slots_after", v => rs == null || v <= rs.Value, "<= RUNE_SLOTS");
-                Rng("hero_levels", "exp0", pos, "> 0");
-                Rng("hero_levels", "exp_g", gt1, "> 1");
-                Rng("hero_levels", "level_cap", ge1, ">= 1");
+                Rng("party_levels", "exp0", pos, "> 0");
+                Rng("party_levels", "exp_g", gt1, "> 1");
+                Rng("party_levels", "level_cap", ge1, ">= 1");
                 Rng("research", "effect_per_level", pos, "> 0");
                 Rng("research", "max_level", ge1, ">= 1");
                 Rng("research", "cost0", pos, "> 0");
@@ -653,7 +652,6 @@ namespace HeroCat.Sim.Content
                 StrictlyIncreasing("E031", T("dupe_levels"), "cum_copies");
                 StrictlyIncreasing("E032", T("awakening"), "stage_gate");
                 StrictlyIncreasing("E032", T("awakening"), "rock_candy_cost");
-                NonDecreasing(T("awakening"), "companion_slots_after", "rank");
                 NonDecreasing(T("awakening"), "rune_slots_after", "rank");
                 StrictlyIncreasing("E031", T("fish_levels"), "discovery_coins");
                 StrictlyIncreasing("E031", T("fish_levels"), "missile_pct");
@@ -798,7 +796,7 @@ namespace HeroCat.Sim.Content
                 }
                 foreach (var r in T("companions"))
                     Cond(r, "duration_ticks", (r.S("ability_type") ?? "").StartsWith("BUFF_", StringComparison.Ordinal), "ability_type", r["ability_type"]);
-                foreach (var r in T("hero_levels"))
+                foreach (var r in T("party_levels"))
                     if ((r["atk_pct_per_level"] == null) == (r["mult_per_level"] == null))
                         Cond(r, "mult_per_level", r["atk_pct_per_level"] == null, "atk_pct_per_level", r["atk_pct_per_level"]);
                 foreach (var r in T("research"))

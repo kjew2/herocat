@@ -39,7 +39,7 @@ namespace HeroCat.Runtime.Replay
             (typeof(MergeFish), "MergeFish"),
             (typeof(DiscardFish), "DiscardFish"),
             (typeof(AttemptBoss), "AttemptBoss"),
-            (typeof(AutoEquipBestWeapon), "AutoEquipBestWeapon"),
+            (typeof(AutoEquipBestWeapons), "AutoEquipBestWeapons"),
             (typeof(AutoEquipBestSkills), "AutoEquipBestSkills"),
             // The rest of the Fish Board commands (05 section 6; issue #103), pinned for the board vectors and the client log.
             (typeof(ReleaseFish), "ReleaseFish"),
@@ -57,6 +57,11 @@ namespace HeroCat.Runtime.Replay
             (typeof(EquipCompanion), "EquipCompanion"),
             (typeof(UnequipCompanion), "UnequipCompanion"),
             (typeof(AutoEquipBestCompanions), "AutoEquipBestCompanions"),
+            // Party slots (04 sections 6.3 and 7.2, 00 decision 109).
+            (typeof(EquipWeapon), "EquipWeapon"),
+            (typeof(UnequipWeapon), "UnequipWeapon"),
+            (typeof(EquipSkill), "EquipSkill"),
+            (typeof(UnequipSkill), "UnequipSkill"),
             // Research (03 section 6; issue #158).
             (typeof(Research), "Research"),
             // Shop: daily gift and exchange (06 sections 8.3-8.4; issue #174).

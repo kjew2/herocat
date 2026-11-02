@@ -6,7 +6,7 @@ namespace HeroCat.Sim.Content
     /// <c>Base * Growth^(x + XOffset)</c> (09 sections 5.2 and 9.2), the GeometricTable 03 refers to. Powers come from
     /// repeated multiplication only, never Math.Pow: 00 section 3 requires bit-identical results on x64, ARM64 and IL2CPP.
     ///
-    /// The power table is precomputed at build to <c>max(STAGE_CAP + BOSS_EVERY, hero_levels.level_cap) + 1</c> entries
+    /// The power table is precomputed at build to <c>max(STAGE_CAP + BOSS_EVERY, party_levels.level_cap) + 1</c> entries
     /// and is immutable afterwards, so one ContentDb is safe to share across threads (bot seeds) without pre-warming.
     /// An index past the table continues the same multiplication chain from its last entry, which yields the same bits a
     /// longer table would. This replaces 09 section 9.2's lazily grown cache (issue #125 note, decided there).

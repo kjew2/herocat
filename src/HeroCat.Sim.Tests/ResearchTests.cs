@@ -34,7 +34,7 @@ namespace HeroCat.Sim.Tests
         {
             var sim = new Simulation(TestContent.NewState(), db ?? Mvp);
             sim.Apply(new ApplyServerTime(TestContent.T0));
-            sim.State.Hero.AwakenRank = awakenRank;
+            sim.State.Party.Slots[0].AwakenRank = awakenRank;
             sim.State.Wallet.FishCoin = fishCoin;
             sim.Query.MarkDirty();
             sim.DrainEvents();
@@ -115,7 +115,7 @@ namespace HeroCat.Sim.Tests
             SetLevel(sim, "res_offline_cap", 6);   // a maxed node in an odd save is still Locked first
             AssertRejectIsPure(sim, "res_offline_cap", RejectCode.Locked, CombatRejectReasons.RESEARCH_LOCKED);
 
-            sim.State.Hero.AwakenRank = 1;
+            sim.State.Party.Slots[0].AwakenRank = 1;
             Assert.That(sim.Apply(new Research("res_atk")).Ok, Is.True);
         }
 
@@ -246,7 +246,7 @@ namespace HeroCat.Sim.Tests
         public void Replay_ThroughTheJsonlCodec_ReproducesTheStateHash()   // 01 section 2.2 rule 4, 2.6
         {
             var genesis = TestContent.NewState();
-            genesis.Hero.AwakenRank = 1;
+            genesis.Party.Slots[0].AwakenRank = 1;
             genesis.Wallet.FishCoin = 20_000;
             var sim = new Simulation(StateCopy.DeepClone(genesis), Mvp);
             var log = new ListCommandLog();

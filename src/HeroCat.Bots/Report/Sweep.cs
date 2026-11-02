@@ -72,7 +72,7 @@ namespace HeroCat.Bots.Report
             return new SweepResult { Bot = bot, SeedSpec = seedSpec, Days = days, Diamonds = diamonds, Runs = runs };
         }
 
-        public sealed record DayAggregate(int Day, int StageP10, int StageMed, int StageP90, int HeroLevelMed, double DpsMed,
+        public sealed record DayAggregate(int Day, int StageP10, int StageMed, int StageP90, int PartyLevelMed, double DpsMed,
                                           long DiamondsEarnedMed, int PullsMed, int FishLevelMed, double LongestWallHMed);
 
         public static IEnumerable<DayAggregate> Aggregate(SweepResult sw)
@@ -82,7 +82,7 @@ namespace HeroCat.Bots.Report
                 var rows = sw.Runs.Select(r => r.Rows[d]).ToList();
                 var stage = rows.Select(r => r.Stage).OrderBy(x => x).ToList();
                 yield return new DayAggregate(d + 1, Percentile(stage, 0.1), Percentile(stage, 0.5), Percentile(stage, 0.9),
-                                              Median(rows.Select(r => r.HeroLevel)), Median(rows.Select(r => r.Dps)),
+                                              Median(rows.Select(r => r.PartyLevel)), Median(rows.Select(r => r.Dps)),
                                               Median(rows.Select(r => r.DiamondsEarned)), Median(rows.Select(r => r.Pulls)),
                                               Median(rows.Select(r => r.FishMaxLevel)), Median(rows.Select(r => r.LongestWallHours)));
             }
@@ -96,10 +96,10 @@ namespace HeroCat.Bots.Report
             sb.Append("# herocat sweep v3\n");
             sb.Append(string.Format(Inv, "# bot={0} seeds={1} days={2} diamonds={3} content={4}\n", sw.Bot, sw.SeedSpec, sw.Days,
                                     sw.Diamonds.ToString().ToLowerInvariant(), contentTag));
-            sb.Append(string.Format(Inv, Fmt.Replace(":0.00e+00", "").Replace(":0.0", ""), "day", "stageP10", "stageMed", "stageP90", "heroLMed",
+            sb.Append(string.Format(Inv, Fmt.Replace(":0.00e+00", "").Replace(":0.0", ""), "day", "stageP10", "stageMed", "stageP90", "partyLMed",
                                     "dpsMed", "diaEarn", "pulls", "fishLvl", "longWallH")).Append('\n');
             foreach (var a in Aggregate(sw))
-                sb.Append(string.Format(Inv, Fmt, a.Day, a.StageP10, a.StageMed, a.StageP90, a.HeroLevelMed, a.DpsMed, a.DiamondsEarnedMed,
+                sb.Append(string.Format(Inv, Fmt, a.Day, a.StageP10, a.StageMed, a.StageP90, a.PartyLevelMed, a.DpsMed, a.DiamondsEarnedMed,
                                         a.PullsMed, a.FishLevelMed, a.LongestWallHMed)).Append('\n');
             return sb.ToString();
         }
@@ -109,7 +109,7 @@ namespace HeroCat.Bots.Report
             var sb = new StringBuilder("day,stageP10,stageMed,stageP90,heroLevelMed,dpsMed,diamondsEarnedMed,pullsMed,fishLevelMed,longestWallHMed\n");
             foreach (var a in Aggregate(sw))
                 sb.Append(string.Format(Inv, "{0},{1},{2},{3},{4},{5:R},{6},{7},{8},{9:R}\n", a.Day, a.StageP10, a.StageMed, a.StageP90,
-                                        a.HeroLevelMed, a.DpsMed, a.DiamondsEarnedMed, a.PullsMed, a.FishLevelMed, a.LongestWallHMed));
+                                        a.PartyLevelMed, a.DpsMed, a.DiamondsEarnedMed, a.PullsMed, a.FishLevelMed, a.LongestWallHMed));
             return sb.ToString();
         }
     }

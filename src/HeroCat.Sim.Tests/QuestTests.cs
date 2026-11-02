@@ -95,7 +95,8 @@ namespace HeroCat.Sim.Tests
             var events = sim.DrainEvents();
             Assert.That(St(sim, "d_login"), Is.EqualTo(QuestStatus.CLAIMED), "reward 0: straight to CLAIMED");
             Assert.That(Pr(sim, "w_login"), Is.EqualTo(1));
-            Assert.That(events.OfType<QuestCompleted>().Select(e => e.QuestId), Is.EqualTo(new[] { "d_login" }));
+            Assert.That(events.OfType<QuestCompleted>().Select(e => e.QuestId), Is.EqualTo(new[] { "ach_companions_01", "d_login" }),
+                        "the five starter companions complete the first OWN_COMPANIONS rung on load (00 decision 109)");
             Assert.That(events.OfType<CurrencyChanged>().Where(e => e.Reason == CurrencyReason.QUEST), Is.Empty);
             Assert.That(events.OfType<CurrencyChanged>().Count(e => e.Reason == CurrencyReason.LOGIN), Is.EqualTo(1));
             Assert.That(Pr(sim, "d_bonus_5"), Is.EqualTo(1), "d_login counts toward the bonus rows");
@@ -253,6 +254,8 @@ namespace HeroCat.Sim.Tests
         public void AC29_EveryQuestReject_HasItsCodeAndReason_ChangesNothing_EmitsNothing()
         {
             var sim = NewSim();
+            Assert.That(sim.Apply(new ClaimAllQuests(QuestKind.ACHIEVEMENT)).Ok, Is.True, "the starter party's OWN_COMPANIONS rung");
+            sim.DrainEvents();
             Progress(sim, QuestGoal.KILL_ENEMIES, 10);
             AssertRejectIsPure(sim, new ClaimQuest("no_such_quest"), RejectCode.InvalidTarget, QuestRejectReasons.UNKNOWN_ID);
             AssertRejectIsPure(sim, new ClaimQuest(null), RejectCode.InvalidTarget, QuestRejectReasons.UNKNOWN_ID);

@@ -11,7 +11,7 @@ using NUnit.Framework;
 
 namespace HeroCat.Runtime.Tests
 {
-    /// <summary>SCR_HERO (07 section 4.4; issue #115).</summary>
+    /// <summary>SCR_PARTY (07 section 4.4; issue #115).</summary>
     public class HeroScreenTests
     {
         static ClientFixture Rich(Action<GameState> more = null) => ClientFixture.Open(s =>
@@ -24,7 +24,7 @@ namespace HeroCat.Runtime.Tests
         public void HpAndDef_HaveNoTrainingRow_PerDecision10()
         {
             var f = Rich();
-            var stats = f.Vm.Hero.Rows.Select(r => r.Stat).ToList();
+            var stats = f.Vm.Party.Rows.Select(r => r.Stat).ToList();
             Assert.That(stats, Does.Not.Contain(Stat.HP));
             Assert.That(stats, Does.Not.Contain(Stat.DEF));
             Assert.That(stats, Does.Contain(Stat.ATK));
@@ -34,11 +34,11 @@ namespace HeroCat.Runtime.Tests
         public void Plus_SendsTrainStat_WithTheSelectedStepsCount()
         {
             var f = Rich();
-            f.Vm.Router.Replace(ScreenIds.Hero);
-            f.Vm.Hero.SelectStep(1);   // x10
+            f.Vm.Router.Replace(ScreenIds.Party);
+            f.Vm.Party.SelectStep(1);   // x10
             f.Vm.Refresh();
-            Assert.That(f.Vm.Hero.Row(Stat.ATK).Count.Value, Is.EqualTo(10));
-            f.Vm.Hero.OnTrain(Stat.ATK);
+            Assert.That(f.Vm.Party.Row(Stat.ATK).Count.Value, Is.EqualTo(10));
+            f.Vm.Party.OnTrain(Stat.ATK);
             var t = f.LoggedOf<TrainStat>().Single();
             Assert.That((t.Stat, t.Count), Is.EqualTo((Stat.ATK, 10)));
             Assert.That(f.Prefs.TrainStep, Is.EqualTo(1), "the step persists in ClientPrefs");
@@ -48,13 +48,13 @@ namespace HeroCat.Runtime.Tests
         public void MaxStep_LabelsTheLevelsItBuys()
         {
             var f = Rich();
-            f.Vm.Router.Replace(ScreenIds.Hero);
-            f.Vm.Hero.SelectStep(f.Vm.Hero.StepCount - 1);
+            f.Vm.Router.Replace(ScreenIds.Party);
+            f.Vm.Party.SelectStep(f.Vm.Party.StepCount - 1);
             f.Vm.Refresh();
-            var row = f.Vm.Hero.Row(Stat.ATK);
-            Assert.That(row.Buy.Label.Key, Is.EqualTo(UiKeys.HeroBuyLevels));
+            var row = f.Vm.Party.Row(Stat.ATK);
+            Assert.That(row.Buy.Label.Key, Is.EqualTo(UiKeys.PartyBuyLevels));
             Assert.That(row.Count.Value, Is.GreaterThan(1));
-            f.Vm.Hero.OnTrain(Stat.ATK);
+            f.Vm.Party.OnTrain(Stat.ATK);
             Assert.That(f.LoggedOf<TrainStat>().Single().Count, Is.EqualTo(row.Count.Value));
         }
 
@@ -62,21 +62,21 @@ namespace HeroCat.Runtime.Tests
         public void AStatAtItsCap_ShowsMax_AndADisabledButton()
         {
             var f = Rich(s => s.Training.Level[(int)Stat.CRIT_RATE] = TestContent.Db.Stat(Stat.CRIT_RATE).Cap.Value);
-            f.Vm.Router.Replace(ScreenIds.Hero);
+            f.Vm.Router.Replace(ScreenIds.Party);
             f.Vm.Refresh();
-            var row = f.Vm.Hero.Row(Stat.CRIT_RATE);
+            var row = f.Vm.Party.Row(Stat.CRIT_RATE);
             Assert.That(row.AtCap.Value, Is.True);
             Assert.That(row.Buy.Enabled.Value, Is.False);
-            Assert.That(row.Buy.Label.Key, Is.EqualTo(UiKeys.HeroMax));
+            Assert.That(row.Buy.Label.Key, Is.EqualTo(UiKeys.PartyMax));
         }
 
         [Test]
         public void Unaffordable_NamesTheShortfall()
         {
             var f = ClientFixture.Open();
-            f.Vm.Router.Replace(ScreenIds.Hero);
+            f.Vm.Router.Replace(ScreenIds.Party);
             f.Vm.Refresh();
-            var row = f.Vm.Hero.Row(Stat.ATK);
+            var row = f.Vm.Party.Row(Stat.ATK);
             Assert.That(row.Buy.Enabled.Value, Is.False);
             Assert.That(row.Buy.Reason.Key, Is.EqualTo(UiKeys.NeedMore));
         }
@@ -85,11 +85,11 @@ namespace HeroCat.Runtime.Tests
         public void AC20_HeroRefresh_IsChangeOnly()
         {
             var f = Rich();
-            f.Vm.Router.Replace(ScreenIds.Hero);
+            f.Vm.Router.Replace(ScreenIds.Party);
             f.Vm.Refresh();
             var counters = new List<Func<int>>();
-            SinkBinder.BindAll(f.Vm.Hero, counters);
-            foreach (var r in f.Vm.Hero.Rows) SinkBinder.BindAll(r, counters);
+            SinkBinder.BindAll(f.Vm.Party, counters);
+            foreach (var r in f.Vm.Party.Rows) SinkBinder.BindAll(r, counters);
             f.Vm.Refresh();
             int n = SinkBinder.Total(counters);
             f.Vm.Refresh();
@@ -169,9 +169,9 @@ namespace HeroCat.Runtime.Tests
             f.Vm.Router.Replace(ScreenIds.Companions);
             f.Vm.Refresh();
             Assert.That(c.Tiles.Count, Is.EqualTo(50));
-            Assert.That(c.SlotLocked[0].Value, Is.False, "slot 1 is open from the start (04 section 8.2)");
-            Assert.That(c.SlotLocked[1].Value, Is.True, "slots 2-4 wait for Awakening");
-            Assert.That(c.SlotLockText[1].Key, Is.EqualTo(UiKeys.CompanionsSlotLocked), "no Awakening rows in an M0 build");
+            Assert.That(c.Slots, Has.Length.EqualTo(5), "five always-open party slots (00 decision 109)");
+            Assert.That(c.Slots.All(x => !x.Value.IsEmpty), Is.True, "the starter party fills them");
+            Assert.That(c.SlotMp, Has.Length.EqualTo(5), "one MP pool per slot");
             Assert.That(c.MpLine.Key, Is.EqualTo(UiKeys.CompanionsMp));
             c.OnTile(lucy);
             Assert.That(c.SelectedStats.Key, Is.EqualTo(UiKeys.CompanionsStats));

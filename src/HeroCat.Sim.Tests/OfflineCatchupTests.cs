@@ -51,11 +51,11 @@ namespace HeroCat.Sim.Tests
             s.Fish.TankRefillTick = 0;
             var probe = StateCopy.DeepClone(s);
             var (added, after) = FishBoard.CatchUpTank(probe, Db, 45L * Db.Constants.TickHz);
-            double gold = s.Wallet.Gold, exp = s.Hero.Exp;
+            double gold = s.Wallet.Gold, exp = s.Party.Exp;
 
             Assert.That(sim.Apply(new ComputeOfflineCatchup(T0 + 45)).Ok, Is.True);
             Assert.That(s.Offline.Pending, Is.Null);
-            Assert.That((s.Wallet.Gold, s.Hero.Exp), Is.EqualTo((gold, exp)));
+            Assert.That((s.Wallet.Gold, s.Party.Exp), Is.EqualTo((gold, exp)));
             Assert.That((s.Fish.TankCount, s.Fish.TankRefillTick), Is.EqualTo((added, after)), "CatchUpTank over 450 ticks, applied directly");
             Assert.That(added, Is.GreaterThan(0));
             Assert.That(s.Time.LastTickServerTime, Is.EqualTo(T0 + 45));
@@ -243,7 +243,7 @@ namespace HeroCat.Sim.Tests
 
             var ev = sim.DrainEvents();
             var cc = ev.OfType<CurrencyChanged>().ToList();
-            Assert.That(cc.Select(c => (c.Currency, c.Reason)), Is.EquivalentTo(new[] { (Currency.GOLD, CurrencyReason.OFFLINE), (Currency.HERO_EXP, CurrencyReason.OFFLINE) }));
+            Assert.That(cc.Select(c => (c.Currency, c.Reason)), Is.EquivalentTo(new[] { (Currency.GOLD, CurrencyReason.OFFLINE), (Currency.PARTY_EXP, CurrencyReason.OFFLINE) }));
             Assert.That(ev.OfType<OfflineRewardClaimed>().Single().Reward, Is.EqualTo(p));
         }
 

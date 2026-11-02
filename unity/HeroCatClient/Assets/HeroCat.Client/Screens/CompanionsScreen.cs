@@ -41,10 +41,10 @@ namespace HeroCat.Client.Screens
                     art = look.IsEmpty ? null : SpriteLibrary.Overlay("Art", b.transform, SpriteLibrary.Get(look.IconId), 8);
                     label.text = (slot + 1) + (look.IsEmpty ? "" : art != null ? "" : ": " + Palette.ShapeGlyph(look.Rarity) + look.Level);
                 }));
-                var lockText = UiKit.Text("Lock", b.transform, UiKit.Micro, Palette.Muted, TextAlignmentOptions.Bottom);
-                UiKit.Fill(lockText.rectTransform, 4, 4, 4, 8);
-                c.SlotLockText[i].Bind(lockText.Sink());
-                c.SlotLocked[i].Bind(new ActionFlagSink(locked => group.alpha = locked ? Palette.DisabledAlpha : 1f));
+                var mpBar = UiKit.Bar("Mp", b.transform, Palette.Diamond, out var mpFill);   // the slot's own pool (03 section 2.4)
+                mpBar.anchorMin = new Vector2(0, 0); mpBar.anchorMax = new Vector2(1, 0); mpBar.pivot = new Vector2(0.5f, 0);
+                mpBar.sizeDelta = new Vector2(-16, 12); mpBar.anchoredPosition = new Vector2(0, 6);
+                c.SlotMp[i].Bind(mpFill.Sink());
             }
             BuildSortFilterAndGrid(584);
             BuildSelectedPanel();

@@ -47,7 +47,8 @@ namespace HeroCat.Runtime.Tests
             Assert.That(back.Pending.Summon, Is.EqualTo(s.Pending.Summon));
             Assert.That(back.Offline.Pending, Is.EqualTo(s.Offline.Pending));
             Assert.That(back.Combat.DungeonRun.Seed, Is.EqualTo(s.Combat.DungeonRun.Seed));
-            Assert.That(back.Loadout.Skills[1], Is.Null);
+            Assert.That(back.Party.Slots[1].Skill, Is.Null);
+            Assert.That(back.Party.Slots[0].Skill, Is.EqualTo(s.Party.Slots[0].Skill));
         }
 
         [Test]

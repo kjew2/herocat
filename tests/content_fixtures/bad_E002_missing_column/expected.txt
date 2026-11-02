@@ -1,1 +1,1 @@
-CONTENT E002 hero_levels: missing required column 'level_cap'
+CONTENT E002 party_levels: missing required column 'level_cap'

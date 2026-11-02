@@ -60,7 +60,7 @@ namespace HeroCat.Sim
             var r = State.Offline.Pending;
             if (r == null) return ApplyResult.Reject(RejectCode.NotAvailable, OfflineRejectReasons.NO_PENDING_OFFLINE_REWARD);
             Ledger.Apply(State, new CurrencyDelta(Currency.GOLD, r.Gold), CurrencyReason.OFFLINE, this);
-            Ledger.Apply(State, new CurrencyDelta(Currency.HERO_EXP, r.Exp), CurrencyReason.OFFLINE, this);   // runs CheckHeroLevel
+            Ledger.Apply(State, new CurrencyDelta(Currency.PARTY_EXP, r.Exp), CurrencyReason.OFFLINE, this);   // runs CheckPartyLevel
             // TankCount = min(TankCap, TankCount + TankFill) (05 section 7). The record holds no refill progress, so the live
             // TankRefillTick is kept (0 once the tank is full); ticks were held since compute, so it is the compute-time value.
             FishBoard.ApplyTankCatchUp(State, Db, r.TankFill, State.Fish.TankRefillTick);

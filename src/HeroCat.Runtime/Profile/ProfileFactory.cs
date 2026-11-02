@@ -49,16 +49,13 @@ namespace HeroCat.Runtime.Profile
                     AnchorTick = 0,
                 },
                 Fish = new FishBoardState { Cells = new int[k.FishBoardW * k.FishBoardH], TankReleaseLevel = db.Tank.ReleaseLevel },
-                Loadout = new LoadoutState
-                {
-                    Skills = new string[k.SkillSlots],
-                    Companions = new string[k.CompanionSlots],
-                    Runes = new string[k.RuneSlots],
-                },
+                Party = new PartyState { Slots = PartyState.NewSlots(k.PartySlots) },
+                Loadout = new LoadoutState { Runes = new string[k.RuneSlots] },
                 Combat = new CombatState
                 {
-                    SkillCooldowns = new int[k.SkillSlots],
-                    CompanionCooldowns = new int[k.CompanionSlots],
+                    Mp = new double[k.PartySlots],                 // every pool starts at 0 (00 decision 99)
+                    SkillCooldowns = new int[k.PartySlots],
+                    CompanionCooldowns = new int[k.PartySlots],
                 },
             };
             foreach (var b in db.Banners.Values)
@@ -66,7 +63,6 @@ namespace HeroCat.Runtime.Profile
             foreach (var name in RngStreams.All)
                 s.Rng[name] = new RngStreamState { Seed = RngStreams.SeedToHex(StreamSeed(root, name)), Counter = 0 };
             s.Fish.TankCount = FishBoard.TankCap(s, db);   // full, so the first session can release and merge at once
-            s.Combat.Mp = 0;
             var grant = new CollectingEmitter();
             ProfileGrants.ApplyWelcome(s, db, nowServerSeconds, grant);
             if (analytics != null)
@@ -80,16 +76,17 @@ namespace HeroCat.Runtime.Profile
 
         /// <summary>
         /// 04 section 13's <c>item_acquired</c> with acquireReason TUTORIAL for each item of the profile-created grant (the
-        /// starter weapon; ProfileGrants applies only weapons, TODO(#91)). The profile is new, so every item is new.
+        /// starter weapon and the five starter companions, 04 section 8.3). The profile is new, so every item is new.
         /// </summary>
         static void TrackItemGrants(GameState s, ContentDb db, IAnalytics analytics)
         {
             foreach (var g in db.ProfileCreatedGrants)
             {
-                if (g.Currency.HasValue || g.ItemKind != "WEAPON" || g.ItemId == null) continue;
-                if (!s.Weapons.Items.TryGetValue(g.ItemId, out var item) || item == null) continue;
-                var rarity = db.Weapons.TryGetValue(g.ItemId, out var w) ? w.Rarity : default;
-                analytics.Track(new AnalyticsEvents.ItemAcquired(Banner.WEAPON, g.ItemId, rarity, IsNew: true, item.Copies, LevelBefore: 0,
+                if (g.Currency.HasValue || g.ItemId == null) continue;
+                var kind = g.ItemKind == "WEAPON" ? Banner.WEAPON : g.ItemKind == "COMPANION" ? Banner.COMPANION : (Banner?)null;
+                if (kind == null || !CollectionRules.For(s, kind.Value).Items.TryGetValue(g.ItemId, out var item) || item == null) continue;
+                var rarity = CollectionRules.RarityOf(db, kind.Value, g.ItemId);
+                analytics.Track(new AnalyticsEvents.ItemAcquired(kind.Value, g.ItemId, rarity, IsNew: true, item.Copies, LevelBefore: 0,
                                                                  CollectionRules.EffectiveLevel(db, item), AnalyticsEvents.ItemAcquired.TUTORIAL,
                                                                  RequestId: null));
             }

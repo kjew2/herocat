@@ -3,13 +3,28 @@ using HeroCat.Sim.State;
 
 namespace HeroCat.Sim
 {
-    /// <summary>One damage number for the combat viewport (01 section 2.4). TODO(#113): filled by the combat loop (#81).</summary>
+    /// <summary>One damage number for the combat viewport (01 section 2.4): its party slot, or -1 for a fish missile or Tap Zap.</summary>
     public readonly struct DamageNumber
     {
-        public DamageNumber(double amount, bool crit) { Amount = amount; Crit = crit; }
+        public DamageNumber(double amount, bool crit, int slot) { Amount = amount; Crit = crit; Slot = slot; }
 
         public double Amount { get; }
         public bool Crit { get; }
+        public int Slot { get; }
+    }
+
+    /// <summary>One party slot as the HUD polls it (01 section 2.4, 00 decision 109).</summary>
+    public readonly struct SlotSnapshot
+    {
+        public SlotSnapshot(bool occupied, int awakenRank, double mp, double slotDps)
+        {
+            Occupied = occupied; AwakenRank = awakenRank; Mp = mp; SlotDps = slotDps;
+        }
+
+        public bool Occupied { get; }
+        public int AwakenRank { get; }
+        public double Mp { get; }
+        public double SlotDps { get; }
     }
 
     /// <summary>
@@ -46,19 +61,39 @@ namespace HeroCat.Sim
         public double EnemyHp { get; init; }
         public double EnemyHpMax { get; init; }
 
-        /// <summary>The 00 section 7 rated DPS. TODO(#85): 0 until the power formula lands.</summary>
-        public double HeroDps { get; init; }
+        /// <summary>The 00 section 7 rated party DPS.</summary>
+        public double PartyDps { get; init; }
 
         public double Gold { get; init; }
         public long Diamonds { get; init; }
         public double FishCoin { get; init; }
         public long RockCandy { get; init; }
-        public double HeroExp { get; init; }
-        public double HeroExpToNext { get; init; }
-        public int HeroLevel { get; init; }
-        public int AwakenRank { get; init; }
-        public double Mp { get; init; }
+        public double PartyExp { get; init; }
+        public double PartyExpToNext { get; init; }
+        public int PartyLevel { get; init; }
+        /// <summary>MpPoolMax, the same for every pool.</summary>
         public double MpMax { get; init; }
+
+        // Five fixed fields rather than an array, so the struct stays allocation-free (01 section 2.4).
+        public SlotSnapshot Slot0 { get; init; }
+        public SlotSnapshot Slot1 { get; init; }
+        public SlotSnapshot Slot2 { get; init; }
+        public SlotSnapshot Slot3 { get; init; }
+        public SlotSnapshot Slot4 { get; init; }
+
+        /// <summary>Party slot <paramref name="i"/> (0..4); default for any other index.</summary>
+        public SlotSnapshot Slot(int i)
+        {
+            switch (i)
+            {
+                case 0: return Slot0;
+                case 1: return Slot1;
+                case 2: return Slot2;
+                case 3: return Slot3;   // literal-ok: the fixed Slot0..Slot4 fields
+                case 4: return Slot4;   // literal-ok: the fixed Slot0..Slot4 fields
+                default: return default;
+            }
+        }
         public int TankFish { get; init; }
         public int TankCap { get; init; }
         public int TankRefillTicksLeft { get; init; }
@@ -83,17 +118,20 @@ namespace HeroCat.Sim
             BossTicksLeft = BossTicksLeft,
             EnemyHp = EnemyHp,
             EnemyHpMax = EnemyHpMax,
-            HeroDps = HeroDps,
+            PartyDps = PartyDps,
             Gold = Gold,
             Diamonds = Diamonds,
             FishCoin = FishCoin,
             RockCandy = RockCandy,
-            HeroExp = HeroExp,
-            HeroExpToNext = HeroExpToNext,
-            HeroLevel = HeroLevel,
-            AwakenRank = AwakenRank,
-            Mp = Mp,
+            PartyExp = PartyExp,
+            PartyExpToNext = PartyExpToNext,
+            PartyLevel = PartyLevel,
             MpMax = MpMax,
+            Slot0 = Slot0,
+            Slot1 = Slot1,
+            Slot2 = Slot2,
+            Slot3 = Slot3,
+            Slot4 = Slot4,
             TankFish = TankFish,
             TankCap = TankCap,
             TankRefillTicksLeft = TankRefillTicksLeft,

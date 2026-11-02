@@ -1,0 +1,1 @@
+CONTENT E066 tutorial_steps[tut_welcome].grants: the welcome step must grant exactly one M0 WEAPON

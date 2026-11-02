@@ -1,0 +1,10 @@
+{
+  "edits": [
+    [
+      "tutorial_steps",
+      "DIAMOND:1500;WEAPON:weapon_c_01:1",
+      "DIAMOND:1500"
+    ]
+  ],
+  "csharp": true
+}

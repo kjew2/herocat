@@ -68,7 +68,7 @@ namespace HeroCat.Runtime.Session
         void OnBatch(EnemyKilledBatch b)
         {
             if (b.KillGold != 0) Add(Currency.GOLD, CurrencyReason.KILL, b.KillGold, b.Tick);
-            if (b.KillExp != 0) Add(Currency.HERO_EXP, CurrencyReason.KILL, b.KillExp, b.Tick);
+            if (b.KillExp != 0) Add(Currency.PARTY_EXP, CurrencyReason.KILL, b.KillExp, b.Tick);
         }
 
         void Add(Currency c, CurrencyReason r, double delta, long tick)
@@ -101,7 +101,7 @@ namespace HeroCat.Runtime.Session
             var s = _state();
             foreach (var sum in _sums)
             {
-                double balance = s == null ? 0 : sum.Currency == Currency.HERO_EXP ? s.Hero.Exp : s.Wallet.Get(sum.Currency);
+                double balance = s == null ? 0 : sum.Currency == Currency.PARTY_EXP ? s.Party.Exp : s.Wallet.Get(sum.Currency);
                 Emit(new AnalyticsEvents.CurrencyChanged(sum.Currency, sum.Delta, balance, sum.Reason));
             }
             _sums.Clear();

@@ -17,12 +17,14 @@ namespace HeroCat.Runtime.Tests
         {
             var s = TestContent.NewState();
             Assert.That(s.SchemaVersion, Is.EqualTo(1));
-            Assert.That(s.Hero.Level, Is.EqualTo(1));
+            Assert.That(s.Party.Level, Is.EqualTo(1));
             Assert.That(s.Combat.Stage, Is.EqualTo(1));
             Assert.That(s.Training.Level, Has.Length.EqualTo(8));
             Assert.That(s.Fish.Cells, Has.Length.EqualTo(20));
-            Assert.That(s.Loadout.Skills, Has.Length.EqualTo(6));
-            Assert.That(s.Loadout.Companions, Has.Length.EqualTo(4));
+            Assert.That(s.Party.Slots, Has.Length.EqualTo(5));
+            Assert.That(s.Combat.Mp, Is.EqualTo(new double[5]), "every pool starts at 0 (00 decision 99)");
+            Assert.That(s.Combat.SkillCooldowns, Has.Length.EqualTo(5));
+            Assert.That(s.Combat.CompanionCooldowns, Has.Length.EqualTo(5));
             Assert.That(s.Loadout.Runes, Has.Length.EqualTo(6));
             Assert.That(s.Wallet.DungeonTicket, Has.Length.EqualTo(3));
             Assert.That(s.Wallet.SummonTicket, Has.Length.EqualTo(4));
@@ -60,7 +62,10 @@ namespace HeroCat.Runtime.Tests
             Assert.That(s.Tutorial.TutorialDiamondsGranted, Is.True);
             Assert.That(db.TutorialWeaponId, Is.EqualTo("weapon_c_01"));
             Assert.That(s.Weapons.Items[db.TutorialWeaponId].Copies, Is.EqualTo(1));
-            Assert.That(s.Loadout.Weapon, Is.EqualTo(db.TutorialWeaponId));
+            Assert.That(s.Party.Slots[0].Weapon, Is.EqualTo(db.TutorialWeaponId));
+            Assert.That(db.TutorialCompanionIds, Is.EqualTo(new[] { "comp_c_01", "comp_c_02", "comp_c_03", "comp_c_04", "comp_c_05" }));
+            Assert.That(s.Party.Slots.Select(x => x.Companion), Is.EqualTo(db.TutorialCompanionIds), "the starter party in slots 0-4 (00 decision 109)");
+            foreach (var id in db.TutorialCompanionIds) Assert.That(s.Companions.Items[id].Copies, Is.EqualTo(1));
             Assert.That(ProfileGrants.ApplyWelcome(s, db, TestContent.T0), Is.False, "a second call grants nothing");
             Assert.That(s.Wallet.Diamond, Is.EqualTo(1500));
         }
@@ -72,7 +77,7 @@ namespace HeroCat.Runtime.Tests
             Assert.That(s.Fish.TankCount, Is.EqualTo(HeroCat.Sim.Fish.FishBoard.TankCap(s, TestContent.Db)));
             Assert.That(s.Fish.TankCount, Is.EqualTo(TestContent.Db.Tank.Cap0), "TANK_CAP0 at Research 0");
             Assert.That(s.Fish.TankRefillTick, Is.EqualTo(0), "a full tank has no refill progress (02 P9b)");
-            Assert.That(s.Combat.Mp, Is.EqualTo(0));
+            Assert.That(s.Combat.Mp, Is.All.EqualTo(0.0), "every pool");
         }
 
         [Test]

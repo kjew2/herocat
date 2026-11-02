@@ -231,7 +231,7 @@ namespace HeroCat.Sim.Tests
             Assert.That(s.Tick, Is.EqualTo(10));
             Assert.That(s.Diamonds, Is.EqualTo(sim.State.Wallet.Diamond));
             Assert.That(s.Stage, Is.EqualTo(1));
-            Assert.That(s.HeroExpToNext, Is.EqualTo(TestContent.Db.HeroLvlExp(1)));
+            Assert.That(s.PartyExpToNext, Is.EqualTo(TestContent.Db.PartyLvlExp(1)));
             Assert.That(s.DamageNumbersThisTick.Length, Is.EqualTo(0));
             Assert.That(AllocatedBy(sim), Is.EqualTo(0));
             Assert.That(s.WithPendingInboxCount(3).PendingInboxCount, Is.EqualTo(3));

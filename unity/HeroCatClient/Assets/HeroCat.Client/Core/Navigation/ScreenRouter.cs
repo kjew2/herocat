@@ -9,7 +9,7 @@ namespace HeroCat.Client.Core
     /// <summary>00 section 5.3's screen ids, with each screen's type, tier and dismiss rules.</summary>
     public static class ScreenIds
     {
-        public const string Boot = "SCR_BOOT", Title = "SCR_TITLE", Main = "SCR_MAIN", Hero = "SCR_HERO", Weapons = "SCR_WEAPONS",
+        public const string Boot = "SCR_BOOT", Title = "SCR_TITLE", Main = "SCR_MAIN", Party = "SCR_PARTY", Weapons = "SCR_WEAPONS",
                             Skills = "SCR_SKILLS", Companions = "SCR_COMPANIONS", Runes = "SCR_RUNES", Research = "SCR_RESEARCH",
                             Summon = "SCR_SUMMON", SummonResult = "SCR_SUMMON_RESULT", Dungeons = "SCR_DUNGEONS", DungeonRun = "SCR_DUNGEON_RUN",
                             StageSelect = "SCR_STAGE_SELECT", Quests = "SCR_QUESTS", Shop = "SCR_SHOP", Inbox = "SCR_INBOX",
@@ -20,7 +20,7 @@ namespace HeroCat.Client.Core
         /// <summary>The screens this build implements (M0, 07 tiers). Others route to a locked toast.</summary>
         public static readonly IReadOnlyList<string> M0 = new[]
         {
-            Boot, Main, Hero, Weapons, Skills, Companions, Summon, SummonResult, OfflineReward, ItemDetail, Confirm, Error,
+            Boot, Main, Party, Weapons, Skills, Companions, Summon, SummonResult, OfflineReward, ItemDetail, Confirm, Error,
         };
 
         public static bool IsM0(string id)

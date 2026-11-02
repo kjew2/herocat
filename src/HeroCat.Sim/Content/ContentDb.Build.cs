@@ -79,7 +79,7 @@ namespace HeroCat.Sim.Content
                 Required("training_curves", d.TrainingCurves); Required("chapters", d.Chapters);
                 Required("rarities", d.Rarities); Required("weapons", d.Weapons); Required("skills", d.Skills);
                 Required("banners", d.Banners); Required("banner_levels", d.BannerLevels);
-                Required("dupe_levels", d.DupeLevels); Required("hero_levels", d.HeroLevels);
+                Required("dupe_levels", d.DupeLevels); Required("party_levels", d.PartyLevels);
                 Required("fish_levels", d.FishLevels); Required("tank", d.Tank);
                 Required("tutorial_steps", d.TutorialSteps); Required("progress_targets", d.ProgressTargets);
                 Required("feature_unlocks", d.FeatureUnlocks);
@@ -99,7 +99,7 @@ namespace HeroCat.Sim.Content
                 if (Errors.Count > 0) return null;
                 var k = db.Constants;
 
-                int heroCap = d.HeroLevels.Length > 0 ? d.HeroLevels[0].LevelCap : 0;
+                int heroCap = d.PartyLevels.Length > 0 ? d.PartyLevels[0].LevelCap : 0;
                 int precompute = Math.Max(k.StageCap + k.BossEvery, heroCap) + 1;
 
                 // curves
@@ -198,7 +198,7 @@ namespace HeroCat.Sim.Content
 
                 db.Banners = BuildBanners(d, weapons, skills, companions);
 
-                // dupes, awakening, hero levels
+                // dupes, awakening, party levels
                 var dupes = new List<int>();
                 foreach (var r in d.DupeLevels) dupes.Add(r.CumCopies);
                 db.DupeLevels = dupes.AsReadOnly();
@@ -206,16 +206,16 @@ namespace HeroCat.Sim.Content
                 var awakening = new List<AwakeningDef>();
                 foreach (var r in Rows(d.Awakening))
                     if (Keep("awakening", r.Rank.ToString(System.Globalization.CultureInfo.InvariantCulture), r.Tier))
-                        awakening.Add(new AwakeningDef(r.Rank, r.StageGate, r.RockCandyCost, r.Mult, r.CompanionSlotsAfter,
+                        awakening.Add(new AwakeningDef(r.Rank, r.StageGate, r.RockCandyCost, r.Mult,
                                                        r.RuneSlotsAfter, Enum<Tier>(r.Tier, $"awakening[{r.Rank}].tier"), r.NameKey, r.Icon));
                 db.Awakening = awakening.AsReadOnly();
 
-                if (d.HeroLevels.Length != 1) Err("E045", "hero_levels", $"exactly one row required, found {d.HeroLevels.Length}");
+                if (d.PartyLevels.Length != 1) Err("E045", "party_levels", $"exactly one row required, found {d.PartyLevels.Length}");
                 else
                 {
-                    var h = d.HeroLevels[0];
-                    var mult = h.MultPerLevel.HasValue ? new CurveDef("hero_mult", 1.0, h.MultPerLevel.Value, 0, precompute) : null;
-                    db.HeroLevels = new HeroLevelsDef(new CurveDef("hero_lvl_exp", h.Exp0, h.ExpG, 0, precompute), h.AtkPctPerLevel,
+                    var h = d.PartyLevels[0];
+                    var mult = h.MultPerLevel.HasValue ? new CurveDef("party_mult", 1.0, h.MultPerLevel.Value, 0, precompute) : null;
+                    db.PartyLevels = new PartyLevelsDef(new CurveDef("party_lvl_exp", h.Exp0, h.ExpG, 0, precompute), h.AtkPctPerLevel,
                                                       h.MultPerLevel, h.LevelCap, mult);
                 }
 
@@ -250,8 +250,26 @@ namespace HeroCat.Sim.Content
                     if (trig == TutorialTrigger.PROFILE_CREATED)
                     {
                         db.ProfileCreatedGrants = grants;
+                        var starters = new List<string>();
+                        int weaponGrants = 0;
                         foreach (var g in grants)
-                            if (g.ItemKind == "WEAPON" && db.TutorialWeaponId == null) db.TutorialWeaponId = g.ItemId;
+                        {
+                            if (g.ItemKind == "WEAPON") { weaponGrants++; if (db.TutorialWeaponId == null) db.TutorialWeaponId = g.ItemId; }
+                            if (g.ItemKind == "COMPANION") starters.Add(g.ItemId);
+                        }
+                        db.TutorialCompanionIds = starters.AsReadOnly();
+                        // E066 (09 section 5.29, 00 decision 109): PARTY_SLOTS distinct M0 Common companions of amount 1
+                        // and exactly one M0 weapon. Ids missing from this tier's pool are already E022; no companions table, no party.
+                        string gloc = $"tutorial_steps[{r.Id}].grants";
+                        bool amountsOk = true;
+                        foreach (var g in grants) if (g.ItemKind == "COMPANION" && g.Amount != 1) amountsOk = false;
+                        if (d.Companions != null && starters.Count != k.PartySlots || new HashSet<string>(starters, StringComparer.Ordinal).Count != starters.Count || !amountsOk)
+                            Err("E066", gloc, $"the starter party must be exactly {k.PartySlots} distinct COMPANION grants of amount 1, got {(starters.Count == 0 ? "none" : string.Join(", ", starters))}");
+                        foreach (var id in starters)
+                            if (companions.TryGetValue(id, out var cd) && (cd.Rarity != Rarity.COMMON || cd.Tier != Tier.M0))
+                                Err("E066", gloc, $"starter companion '{id}' must be COMMON and tier M0, is {cd.Rarity} {cd.Tier}");
+                        if (weaponGrants != 1 || (db.TutorialWeaponId != null && weapons.TryGetValue(db.TutorialWeaponId, out var wd) && wd.Tier != Tier.M0))
+                            Err("E066", gloc, "the welcome step must grant exactly one M0 WEAPON");
                     }
                 }
                 db.TutorialSteps = steps.AsReadOnly();
@@ -544,7 +562,7 @@ namespace HeroCat.Sim.Content
 
             /// <summary>
             /// dungeons and dungeon_floors (09 sections 5.24-5.25, issue #173): MVP rows, so an M0 build has none. Floors of a
-            /// dungeon filtered out by tier are dropped with it; a HERO_EXP floor's reward is resolved here from
+            /// dungeon filtered out by tier are dropped with it; a PARTY_EXP floor's reward is resolved here from
             /// curves[exp_per_kill] at the floor's stage-equivalent (06 section 6.3).
             /// </summary>
             void BuildDungeons(ContentDb db, ContentDtos d, Dictionary<string, WeaponDef> weapons, Dictionary<string, SkillDef> skills,

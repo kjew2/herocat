@@ -132,7 +132,7 @@ namespace HeroCat.Runtime.Tests
         public void Awakened_CarriesTheRanksCost_AndTheRockCandyBalanceAfterTheDebit()   // 03 section 11
         {
             var h = new Harness();
-            h.Publish(new CurrencyChanged(Currency.ROCK_CANDY, -100, 25, CurrencyReason.AWAKENING), new Awakened(1));
+            h.Publish(new CurrencyChanged(Currency.ROCK_CANDY, -100, 25, CurrencyReason.AWAKENING), new Awakened(2, 1));
             AssertProps(h.Single("awakened"), new Dictionary<string, object> { ["rank"] = 1, ["rockCandyCost"] = 100L, ["rockCandyAfter"] = 25.0 });
         }
 

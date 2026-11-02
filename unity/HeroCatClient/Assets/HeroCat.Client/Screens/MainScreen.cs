@@ -148,14 +148,12 @@ namespace HeroCat.Client.Screens
             _heroOutline = _hero.GetComponent<Image>();
             var heroLabel = UiKit.Text("Label", _hero, UiKit.Title, 0x121212, TextAlignmentOptions.Center, bold: true);
             UiKit.Fill(heroLabel.rectTransform);
-            heroLabel.text = "SQUIRE";   // placeholder art label (07 section 15.1), not player copy
+            heroLabel.text = "PARTY";   // placeholder art label (07 section 15.1), not player copy; the squire never fights (00 decision 109)
             var outline = _hero.gameObject.AddComponent<Outline>();
             outline.effectDistance = new Vector2(6, 6);
-            c.AwakenRank.Bind(new ActionSink<int>(r =>
-            {
-                outline.enabled = r > 0;
-                outline.effectColor = UiKit.C(Palette.Gold);
-            }));
+            outline.effectColor = UiKit.C(Palette.Gold);
+            for (int i = 0; i < c.AwakenRanks.Length; i++)
+                c.AwakenRanks[i].Bind(new ActionSink<int>(_ => outline.enabled = System.Array.Exists(c.AwakenRanks, r => r.Value > 0)));
 
             _enemyImg = UiKit.Panel("Enemy", _combat, Palette.Muted);
             _enemy = _enemyImg.rectTransform;
@@ -260,11 +258,17 @@ namespace HeroCat.Client.Screens
                     ccdRt.anchorMax = new Vector2(1, s.Cooldown01);
                 }));
             }
-            var mp = UiKit.Bar("Mp", _combat, Palette.Diamond, out var mpFill);
-            mp.anchorMin = mp.anchorMax = mp.pivot = new Vector2(0, 0);
-            mp.anchoredPosition = new Vector2(632, 140);
-            mp.sizeDelta = new Vector2(400, 24);
-            c.MpFill.Bind(mpFill.Sink());
+            // One MP bar per slot in the two-row formation (07 section 4.3, 00 decision 110): slots 1-3 in front, 4-5 behind.
+            for (int i = 0; i < c.SlotMp.Length; i++)
+            {
+                int row = CombatVm.RowOf(i), col = row == 0 ? i : i - 3;
+                float x = row == 0 ? 104 + col * 296 : 252 + col * 296;
+                var mp = UiKit.Bar("Mp" + i, _combat, Palette.Diamond, out var mpFill);
+                mp.anchorMin = mp.anchorMax = mp.pivot = new Vector2(0, 0);
+                mp.anchoredPosition = new Vector2(x, row == 0 ? 24 : 184);
+                mp.sizeDelta = new Vector2(160, 16);
+                c.SlotMp[i].Bind(mpFill.Sink());
+            }
 
             for (int i = 0; i < _damage.Length; i++)
             {
@@ -551,7 +555,7 @@ namespace HeroCat.Client.Screens
                 case CueKind.BossFailed: Ui.Tweens.Pulse(_enemy, now, 0.25f, 0.4); break;
                 case CueKind.LevelUpFloat:
                     _levelFloat.gameObject.SetActive(true);
-                    _levelFloat.text = Vm.Localizer.Format(UiKeys.HeroLevel, c.Level.ToString());
+                    _levelFloat.text = Vm.Localizer.Format(UiKeys.PartyLevel, c.Level.ToString());
                     _levelFloatUntil = now + 1.0;
                     Ui.Tweens.Float(_levelFloat.rectTransform, now, 60, 1.0);
                     break;

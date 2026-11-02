@@ -56,7 +56,7 @@ ENUMS = {
     "Rarity": ["COMMON", "RARE", "EPIC", "LEGENDARY", "MYTHIC"],
     "Stat": ["ATK", "HP", "DEF", "CRIT_RATE", "CRIT_DMG", "ATK_SPD", "GOLD_GAIN", "EXP_GAIN"],
     "Banner": ["WEAPON", "SKILL", "COMPANION", "RUNE"],
-    "Currency": ["GOLD", "DIAMOND", "FISH_COIN", "ROCK_CANDY", "HERO_EXP", "TICKET_FISH_COIN", "TICKET_ROCK_CANDY",
+    "Currency": ["GOLD", "DIAMOND", "FISH_COIN", "ROCK_CANDY", "PARTY_EXP", "TICKET_FISH_COIN", "TICKET_ROCK_CANDY",
                  "TICKET_EXP", "TICKET_SUMMON_WEAPON", "TICKET_SUMMON_SKILL", "TICKET_SUMMON_COMPANION", "GUILD_COIN",
                  "TICKET_SUMMON_RUNE"],
     "Dungeon": ["FISH_COIN", "ROCK_CANDY", "EXP"],
@@ -67,7 +67,7 @@ ENUMS = {
     "QuestKind": ["DAILY", "WEEKLY", "ACHIEVEMENT"],
     "QuestGoal": ["LOGIN", "LOGIN_DAYS", "KILL_ENEMIES", "ATTEMPT_BOSS", "CLEAR_STAGES", "SUMMON", "RELEASE_FISH",
                   "MERGE_FISH", "CLEAR_DUNGEON", "TRAIN_LEVELS", "DAILIES_COMPLETED", "WEEKLIES_COMPLETED",
-                  "REACH_STAGE", "REACH_HERO_LEVEL", "OWN_WEAPONS", "OWN_SKILLS", "OWN_COMPANIONS", "LIFETIME_MERGES",
+                  "REACH_STAGE", "REACH_PARTY_LEVEL", "OWN_WEAPONS", "OWN_SKILLS", "OWN_COMPANIONS", "LIFETIME_MERGES",
                   "FISH_LEVEL", "AWAKEN_RANK", "LIFETIME_SUMMONS", "WATCH_AD"],
     "Element": ["NONE", "FIRE", "WATER", "LEAF", "LIGHT", "DARK"],
     "PackageLimit": ["ONCE", "DAILY", "WEEKLY", "MONTHLY"],
@@ -83,7 +83,7 @@ ENUMS = {
 GRANT_ITEM_KINDS = {"WEAPON": "weapons", "SKILL": "skills", "COMPANION": "companions", "RUNE": "runes"}
 
 # 00 section 5.3, the screen ids `screen`-typed columns are checked against (E021).
-SCREEN_IDS = ["SCR_BOOT", "SCR_TITLE", "SCR_MAIN", "SCR_HERO", "SCR_WEAPONS", "SCR_SKILLS", "SCR_COMPANIONS",
+SCREEN_IDS = ["SCR_BOOT", "SCR_TITLE", "SCR_MAIN", "SCR_PARTY", "SCR_WEAPONS", "SCR_SKILLS", "SCR_COMPANIONS",
               "SCR_RUNES", "SCR_RESEARCH", "SCR_SUMMON", "SCR_SUMMON_RESULT", "SCR_DUNGEONS", "SCR_DUNGEON_RUN",
               "SCR_STAGE_SELECT", "SCR_QUESTS", "SCR_SHOP", "SCR_INBOX", "SCR_OFFLINE_REWARD", "SCR_ITEM_DETAIL",
               "SCR_SETTINGS", "SCR_PROFILE", "SCR_GUILD", "SCR_RANKING", "SCR_EVENTS", "SCR_TUTORIAL", "SCR_CONFIRM",
@@ -111,8 +111,8 @@ REQUIRED_CONSTANTS = {
     "BOSS_GOLD_MULT": ("double", "I"), "CHAPTER_WIDTH": ("int", "S"), "STAGE_CAP": ("int", "I"),
     "TAP_ZAP_DMG_PCT": ("double", "S"), "TAP_ZAP_MAX_PER_SEC": ("int", "S"), "TRAIN_BULK_STEPS": ("intlist", "I"),
     "DIAMONDS_PER_DAY_F2P": ("int", "S"), "DAY_SECONDS": ("int", "I"), "OFFLINE_RATE": ("double", "I"),
-    "OFFLINE_CAP_H": ("double", "S"), "OFFLINE_MIN_S": ("int", "S"), "SKILL_SLOTS": ("int", "I"),
-    "COMPANION_SLOTS": ("int", "S"), "RUNE_SLOTS": ("int", "S"), "DUPE_LVL_BONUS": ("double", "I"),
+    "OFFLINE_CAP_H": ("double", "S"), "OFFLINE_MIN_S": ("int", "S"), "PARTY_SLOTS": ("int", "I"),
+    "RUNE_SLOTS": ("int", "S"), "DUPE_LVL_BONUS": ("double", "I"),
     "FISH_BOARD_W": ("int", "S"), "FISH_BOARD_H": ("int", "S"), "FISH_MAX_LVL0": ("int", "S"),
     "FISH_MERGE_COINS_PCT": ("double", "S"), "FISH_BOARD_DPS_FACTOR": ("double", "S"),
     "FISH_DISCARD_COINS_PCT": ("double", "S"),
@@ -124,7 +124,7 @@ REQUIRED_CONSTANTS = {
 }
 
 POSITIVE = ["TICK_HZ", "ATTACK_INTERVAL_TICKS", "BOSS_TIME_TICKS", "KILLS_PER_STAGE", "BOSS_EVERY", "CHAPTER_WIDTH",
-            "STAGE_CAP", "TAP_ZAP_MAX_PER_SEC", "DAY_SECONDS", "OFFLINE_MIN_S", "SKILL_SLOTS", "COMPANION_SLOTS",
+            "STAGE_CAP", "TAP_ZAP_MAX_PER_SEC", "DAY_SECONDS", "OFFLINE_MIN_S", "PARTY_SLOTS",
             "RUNE_SLOTS", "FISH_BOARD_W", "FISH_BOARD_H", "FISH_MAX_LVL0", "ATTACK_PROGRESS_UNIT",
             "LIMIT_BREAK_RANKS", "BASE_ATK", "BASE_HP", "BOSS_HP_MULT", "BOSS_GOLD_MULT", "OFFLINE_CAP_H",
             "DUPE_LVL_BONUS", "MP_POOL0", "MP_REGEN0"]
@@ -203,9 +203,9 @@ SCHEMA = {
                        folds={"rates": (["rate_c", "rate_r", "rate_e", "rate_l", "rate_m"], "double")}),
     "dupe_levels": T("DupeLevelRowDto", [c("level", "int"), c("cum_copies", "int")], "level"),
     "awakening": T("AwakeningRowDto", [c("rank", "int"), c("stage_gate", "int"), c("rock_candy_cost", "long"),
-                                       c("mult", "double"), c("companion_slots_after", "int"),
+                                       c("mult", "double"),
                                        c("rune_slots_after", "int"), TIER, NAME, c("icon", "asset")], "rank"),
-    "hero_levels": T("HeroLevelsRowDto", [c("id", "id"), c("exp0", "double"), c("exp_g", "double"),
+    "party_levels": T("PartyLevelsRowDto", [c("id", "id"), c("exp0", "double"), c("exp_g", "double"),
                                           c("atk_pct_per_level", "double", True), c("mult_per_level", "double", True),
                                           c("level_cap", "int")], "id"),
     "research": T("ResearchRowDto", [c("id", "id"), c("effect", "enum(ResearchEffect)"),
@@ -726,7 +726,7 @@ def rule_e044_enum_tables_complete(ctx):
 
 @rule
 def rule_e045_one_row_tables(ctx):
-    for table in ("hero_levels", "tank"):
+    for table in ("party_levels", "tank"):
         if ctx.has(table) and len(ctx.rows(table)) != 1:
             ctx.err("E045", table, f"exactly one row required, found {len(ctx.rows(table))}")
 
@@ -783,11 +783,10 @@ def rule_e043_table_ranges(ctx):
     rng(ctx, "banner_levels", "exp_required", lambda v: v == 0, "level 1 must be 0",
         rows=[r for r in ctx.rows("banner_levels") if r["level"] == 1])
     rng(ctx, "awakening", "mult", gt1, "> 1")
-    rng(ctx, "awakening", "companion_slots_after", lambda v: v <= ctx.k.get("COMPANION_SLOTS", v), "<= COMPANION_SLOTS")
     rng(ctx, "awakening", "rune_slots_after", lambda v: v <= ctx.k.get("RUNE_SLOTS", v), "<= RUNE_SLOTS")
-    rng(ctx, "hero_levels", "exp0", pos, "> 0")
-    rng(ctx, "hero_levels", "exp_g", gt1, "> 1")
-    rng(ctx, "hero_levels", "level_cap", ge1, ">= 1")
+    rng(ctx, "party_levels", "exp0", pos, "> 0")
+    rng(ctx, "party_levels", "exp_g", gt1, "> 1")
+    rng(ctx, "party_levels", "level_cap", ge1, ">= 1")
     rng(ctx, "research", "effect_per_level", pos, "> 0")
     rng(ctx, "research", "max_level", ge1, ">= 1")
     rng(ctx, "research", "cost0", pos, "> 0")
@@ -853,7 +852,6 @@ def rule_monotonic_columns(ctx):
     strictly_increasing(ctx, "E031", ctx.rows("dupe_levels"), "cum_copies")
     strictly_increasing(ctx, "E032", ctx.rows("awakening"), "stage_gate")
     strictly_increasing(ctx, "E032", ctx.rows("awakening"), "rock_candy_cost")
-    non_decreasing(ctx, ctx.rows("awakening"), "companion_slots_after", "rank")
     non_decreasing(ctx, ctx.rows("awakening"), "rune_slots_after", "rank")
     strictly_increasing(ctx, "E031", ctx.rows("fish_levels"), "discovery_coins")
     strictly_increasing(ctx, "E031", ctx.rows("fish_levels"), "missile_pct")
@@ -987,7 +985,7 @@ def rule_e054_conditional_columns(ctx):
         cond(ctx, r, "buff_pct", r["cast_type"] == "BUFF", "cast_type", r["cast_type"])
     for r in ctx.rows("companions"):
         cond(ctx, r, "duration_ticks", r["ability_type"].startswith("BUFF_"), "ability_type", r["ability_type"])
-    for r in ctx.rows("hero_levels"):
+    for r in ctx.rows("party_levels"):
         if (r["atk_pct_per_level"] is None) == (r["mult_per_level"] is None):
             cond(ctx, r, "mult_per_level", r["atk_pct_per_level"] is None, "atk_pct_per_level", r["atk_pct_per_level"])
     for r in ctx.rows("research"):
@@ -1116,6 +1114,35 @@ def rule_e062_profile_created_step(ctx):
     pc = [r for r in ctx.rows("tutorial_steps") if r["trigger"] == "PROFILE_CREATED"]
     if len(pc) != 1 or pc[0]["order"] != 1:
         ctx.err("E062", "tutorial_steps", "exactly one PROFILE_CREATED step at order 1 required")
+
+
+@rule
+def rule_e066_starter_party(ctx):
+    """09 section 5.29 (00 decision 109): the PROFILE_CREATED step grants the starter party, PARTY_SLOTS distinct M0
+    Common companions with amount 1 in slot order, and exactly one M0 weapon. A content set with no companions table
+    (a loader fixture) has no party to check."""
+    if not ctx.has("tutorial_steps"):
+        return
+    pc = [r for r in ctx.rows("tutorial_steps") if r["trigger"] == "PROFILE_CREATED"]
+    if len(pc) != 1:
+        return   # E062
+    r, n = pc[0], ctx.k.get("PARTY_SLOTS")
+    grants = r["grants"] or []
+    loc = f"{r['_loc']}.grants"
+    comps = [g for g in grants if g.get("kind") == "COMPANION"]
+    weapons = [g for g in grants if g.get("kind") == "WEAPON"]
+    ids = [g["id"] for g in comps]
+    if ctx.has("companions") and n is not None and (len(comps) != n or len(set(ids)) != len(ids) or any(g["amount"] != 1 for g in comps)):
+        ctx.err("E066", loc, f"the starter party must be exactly {n} distinct COMPANION grants of amount 1, got "
+                f"{', '.join(ids) or 'none'}")
+    rows = {x["id"]: x for x in ctx.rows("companions")}
+    for cid in ids:
+        x = rows.get(cid)
+        if x is not None and (x["rarity"] != "COMMON" or x["tier"] != "M0"):
+            ctx.err("E066", loc, f"starter companion '{cid}' must be COMMON and tier M0, is {x['rarity']} {x['tier']}")
+    wrows = {x["id"]: x for x in ctx.rows("weapons")}
+    if len(weapons) != 1 or (weapons[0]["id"] in wrows and wrows[weapons[0]["id"]]["tier"] != "M0"):
+        ctx.err("E066", loc, "the welcome step must grant exactly one M0 WEAPON")
 
 
 @rule
