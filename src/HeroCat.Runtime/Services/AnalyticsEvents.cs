@@ -153,7 +153,7 @@ namespace HeroCat.Runtime.Services
     /// The event types this layer owns (issue #155): 06 section 13's <c>currency_changed</c> and 02 section 14.3's session,
     /// save-health, cloud and clock events. Feature emitters (#163, #168, #177) add their owners' events next to these.
     /// </summary>
-    public static class AnalyticsEvents
+    public static partial class AnalyticsEvents
     {
         /// <summary>06 section 13. RefId: the item, quest, offer or banner id when the apply has one, else omitted.</summary>
         public sealed record CurrencyChanged(Currency Currency, double Delta, double BalanceAfter, CurrencyReason Reason,

@@ -195,7 +195,7 @@ void EnsureDay(long now)
         State.Quests.ResetKind(QuestKind.WEEKLY);
         Sink.Emit(new WeekRolledOver(week));
     }
-    Sink.Emit(new DayRolledOver(day));
+    Sink.Emit(new DayRolledOver(day, skippedDays, secondsSinceLastTick));   // skippedDays = day - oldDayKey - 1 (0 for a new profile); now - LastTickServerTime
 
     // Login grant: once per day key, on the first tick of the day the player is present for. This auto-grant is the
     // only payment of LOGIN_DIAMONDS; d_login only counts (section 5.2, issue #20).
@@ -675,7 +675,7 @@ This section owns these events' fields (issue #245); every event also carries 02
 | `quest_claimed` | `questId`, `kind`, `rewardCurrency`, `rewardAmount`, `bulk` | `QuestClaimed` |
 | `achievement_unlocked` | `questId`, `rung` | achievement `QuestCompleted` |
 | `dungeon_run` | `kind`, `floor`, `outcome` (cleared/failed/swept/abandoned), `ticksUsed`, `rewards[]`, `grantId` | `DungeonCleared`, `DungeonFailed`, `DungeonSwept`, `DungeonAbandoned` |
-| `offline_catchup` | `elapsedSec`, `creditedSec`, `capped`, `gold`, `exp`, `tankFill`, `stage` (the pending record's) | `ComputeOfflineCatchup` that credits a gap of at least `OFFLINE_MIN_S` (section 7); a catch-up with no later `offline_claimed` is a reward cleared unclaimed (02 P18) |
+| `offline_catchup` | `elapsedSec`, `creditedSec`, `capped`, `gold`, `exp`, `tankFill`, `pendingStage` (the pending record's stage; the envelope's `stage` is the current one) | `ComputeOfflineCatchup` that credits a gap of at least `OFFLINE_MIN_S` (section 7); a catch-up with no later `offline_claimed` is a reward cleared unclaimed (02 P18) |
 | `offline_claimed` | `elapsedSec`, `creditedSec`, `capped`, `gold`, `exp`, `tankFill`, `x2` | `OfflineRewardClaimed` |
 | `day_rollover` | `dayKey`, `skippedDays`, `secondsSinceLastTick` | `DayRolledOver` |
 | `daily_gift_claimed` | | `DailyGiftClaimed` (`ClaimDailyGift`) |
@@ -688,6 +688,8 @@ This section owns these events' fields (issue #245); every event also carries 02
 `awakened` is 03 section 11's; `clock_anomaly` (with `kind = backwards` for `ClockWentBackwards`) is 02 section 14.3's.
 
 `currency_changed` as built (`HeroCat.Runtime.Session.CurrencyAnalytics`, attached by the boot flow to the session's `EventBus` whenever analytics is not `NullAnalytics`; issue #155): `KILL` and `BOSS` rows are summed per currency and reason, so one window yields at most one `KILL` and one `BOSS` row per currency. The window is `CURRENCY_AGG_SEC` of sim time (ticks), opened by the first `KILL`/`BOSS` apply; it closes when a later `CurrencyChanged` (or `EnemyKilledBatch`) arrives past its end and whenever the analytics sink flushes (pause, quit). `balanceAfter` of an aggregated row is the balance in the state when the row is emitted (`Hero.Exp` for `HERO_EXP`). Kills folded into `EnemyKilledBatch` (01 section 2.3) count through its `KillGold` and `KillExp`. Deltas are summed as `double`, so the rows' deltas equal the wallet delta up to floating-point summation order. `refId` is omitted until the emitter of the apply supplies one.
+
+The other rows as built (`HeroCat.Runtime.Session.FeatureAnalytics`, attached next to `CurrencyAnalytics`; issue #177): each maps one sim event to one row, except `quest_claimed`, which reads the runner's `CommandApplied` notice (the events of one accepted command) so `bulk` is true exactly for the rows of a `ClaimAllQuests`. `quest_completed` is sent for daily and weekly missions (a reward-0 row such as `d_login` included) and `achievement_unlocked` instead of it for an achievement rung. `offline_catchup` carries the pending record after the gap (the sum when a reward was already pending), so its `stage` is named `pendingStage`: 02 section 14.1's sink drops an owner field that reuses an envelope name. `offline_claimed.x2` is false until the P1 rewarded-ad doubling exists. `day_rollover`'s `skippedDays` and `secondsSinceLastTick` come from `DayRolledOver` (section 4.2). Not emitted yet: `dungeon_run` and `inbox_claimed` (their sim systems are not built), `shop_view` (the typed `AnalyticsEvents.ShopView` waits for `SCR_SHOP`) and the `iap_*` events (08's purchase flow).
 
 ## Open questions
 

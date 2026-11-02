@@ -73,6 +73,9 @@ namespace HeroCat.Runtime.Boot
         /// <summary>06 section 13's <c>currency_changed</c> rows from the bus; null when analytics is NullAnalytics.</summary>
         public CurrencyAnalytics CurrencyAnalytics { get; internal set; }
 
+        /// <summary>The feature specs' other analytics rows from the bus (03, 04, 05, 06 section 13); null when analytics is NullAnalytics.</summary>
+        public FeatureAnalytics FeatureAnalytics { get; internal set; }
+
         public LoadStatus LoadStatus { get; internal set; }
         public bool IsNewProfile { get; internal set; }
 
@@ -185,8 +188,11 @@ namespace HeroCat.Runtime.Boot
             r.Sim = new Simulation(state, r.Content);
             r.Bus = new EventBus();
             r.Runner = new SessionRunner(r.Sim, svc, r.Bus, o.CommandLog, o.Runner ?? new SessionRunnerOptions());
-            if (!(analytics is NullAnalytics))   // before Start, so the first rollover's LOGIN row is counted
+            if (!(analytics is NullAnalytics))   // before Start, so the first rollover's LOGIN row (and day_rollover) is counted
+            {
                 r.CurrencyAnalytics = new CurrencyAnalytics(r.Bus, analytics, () => r.Sim.State, r.Content.Constants.TickHz);
+                r.FeatureAnalytics = new FeatureAnalytics(r.Bus, analytics, r.Content, () => r.Sim.State);
+            }
             Done(BootStep.Save);
 
             // 5. Rollover first, then the catch-up compute (stores Offline.Pending, stamps LastTickServerTime), save now.

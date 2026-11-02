@@ -620,7 +620,7 @@ This section owns these events' fields (issue #245); every event also carries 02
 | `wall_broken` | `stage`, `wallSec`, `activeSecDuringWall`, `attempts`, `layersChangedDuringWall[]` | `StageCleared` of a boss stage that was `Walled` |
 | `training` | `stat`, `levelFrom`, `levelTo`, `goldCost` | `StatTrained`; one per command, not per level (01) |
 | `level_up` | `heroLevel` | `LevelUp` (5.2) |
-| `awakened` | `rank`, `stage`, `rockCandyCost`, `rockCandyAfter` | `Awakened` (5.3) |
+| `awakened` | `rank`, `rockCandyCost`, `rockCandyAfter` (the stage is the envelope's) | `Awakened` (5.3) |
 | `research_bought` | `researchId`, `level`, `fishCoinCost` | `ResearchLeveled` (6) |
 | `currency_changed` | 06 section 13, reasons `KILL`, `BOSS`, `FIRST_CLEAR`, `TRAINING`, `RESEARCH`, `AWAKENING` | per wallet delta |
 
