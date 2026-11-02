@@ -62,7 +62,7 @@ public sealed partial class Wallet
 | `HERO_EXP` | M0 | Kills (`KILL`), Offline Catch-up (`OFFLINE`), EXP Dungeon (`DUNGEON`) | Hero Level, consumed automatically by 03 | never spent manually |
 | `TICKET_FISH_COIN`, `TICKET_ROCK_CANDY`, `TICKET_EXP` | MVP | Daily reset to `DUNGEON_TICKETS_PER_DAY` (`DAILY_RESET`), exchange (`SHOP_EXCHANGE`), mail | Dungeon clear or sweep (`DUNGEON`) | 2 each, reset not stacked |
 | `TICKET_SUMMON_WEAPON` | MVP | Daily free gift (`DAILY_GIFT`), quests, weekly bonus, events, mail | One pull (`SUMMON`) | 1 per day from the gift |
-| `TICKET_SUMMON_SKILL`, `TICKET_SUMMON_COMPANION` | MVP | Weekly complete-all bonus, achievements, events, mail | One pull (`SUMMON`) | about 0.15 per day each |
+| `TICKET_SUMMON_SKILL`, `TICKET_SUMMON_COMPANION` | MVP | Weekly complete-all bonus (`w_bonus_all_*`, section 5.3), events, mail; achievements pay only diamonds (section 5.4) | One pull (`SUMMON`) | about 0.15 per day each (1 a week each from the bonus) |
 | `GUILD_COIN` | P1 | Guild activity | Guild shop | 0 before P1 |
 | `TICKET_SUMMON_RUNE` | P1 | Events, mail (P1) | One Rune banner pull (`SUMMON`) | 0 before P1 (issue #26) |
 
