@@ -77,6 +77,7 @@ pr_python() {
   $PY tools/test_content.py
   $PY tools/test_power_curve_model.py
   $PY tools/test_gacha_model.py
+  $PY tools/test_fish_model.py
   $PY tools/export_content.py check
 
   step "Clock purity: no clock reads in HeroCat.Sim, only ServerClock.cs/SessionRunner.cs in HeroCat.Runtime (specs/02 AC 18)"
@@ -143,6 +144,11 @@ content_python() {
       POWER_CURVE_FAILED=1
       printf '\nWARNING: report-only step failed (power_curve_model.py S-constant bands, balance call pending). Not a full pass.\n'
     fi
+
+    # Issue #165: the Fish Coin Dungeon curve report, on the research levels and floors of the seed-7 run above.
+    step "Tools: fish_model.py --dungeon-curves, Fish Coin Dungeon share for 50*f and 50*f^0.7 (06 6.3 (a); informational)"
+    $PY tools/fish_model.py --quiet --out "$OUT_DIR/fish" --research-schedule tools/out/power_curve_7.json --dungeon-curves \
+      | sed -n '/^Fish Coin Dungeon curves/,$p'
 
     # 04 section 14 (issue #164): the weapon level-4 day, level-10 P(E+), Legendary pace and passive share are hard; the
     # Common level-5 pace (04 open question 8) and the companion day-7 floor wait on #249 items 11 and 1: report-only.

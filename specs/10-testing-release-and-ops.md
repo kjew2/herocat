@@ -411,6 +411,7 @@ python3 tools/fish_model.py --quiet --out $CHECK_OUT_DIR/fish                   
 dotnet run -c Release --no-build --project src/HeroCat.Bots -- fish-check --model $CHECK_OUT_DIR/fish/fish_attentive.json   # 05 AC14 (issue #105)
 python3 tools/gacha_model.py --check                                              # oracle: content/, vectors.json and the C# stream golden (issues #14, #24)
 python3 tools/power_curve_model.py --check --quiet                                # 03 section 8.6; report-only until the balance call
+python3 tools/fish_model.py --quiet --research-schedule tools/out/power_curve_7.json --dungeon-curves   # 06 6.3 (a) per curve; informational (issue #165)
 python3 tools/gacha_model.py --cadence --quiet                                    # 04 section 14 cadence and S-constant checks (issue #164)
 timeout 400 dotnet run -c Release --no-build --project src/HeroCat.Bots -- acceptance --tier M0 --seeds 1-20 --days 30 --time-budget-s 240 --table --verbose
 dotnet run -c Release --no-build --project src/HeroCat.Bots -- acceptance --tier M0 --days 14 --time-budget-s 240   # M0 exit criterion
