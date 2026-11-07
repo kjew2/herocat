@@ -28,7 +28,7 @@ public sealed class ServerOptions
 
 /// <summary>
 /// The engineering constants of specs/08 "Constants introduced", keyed in appsettings by their spec names so a grep for
-/// the spec name finds the value. ServerConstantsTests checks appsettings.json against the spec table.
+/// Rate limits come with their endpoints (#193); alarm thresholds live in server/ops/alarms.json (#210).
 /// Rate limits and alarm thresholds come with their endpoints (#193, #210).
 /// </summary>
 public sealed class ServerLimits
