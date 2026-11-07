@@ -28,7 +28,7 @@ public sealed class SummonStore
     /// </summary>
     public static async Task<int?> LockAccountAsync(DbConnection c, DbTransaction tx, Guid player, CancellationToken ct)
     {
-        await using var cmd = c.Command("select age_gate from accounts where player_id = @p for no key update", tx, ("p", player));
+        await using var cmd = c.Command("summon.lock_account", "select age_gate from accounts where player_id = @p for no key update", tx, ("p", player));
         object? age = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
         return age is null or DBNull ? null : Convert.ToInt32(age);
     }
@@ -36,10 +36,10 @@ public sealed class SummonStore
     /// <summary>The banner's pity row, created with defaults when absent, locked <c>for update</c>.</summary>
     public static async Task<BannerPityRow> LockPityAsync(DbConnection c, DbTransaction tx, Guid player, Banner banner, CancellationToken ct)
     {
-        await using (var ins = c.Command("insert into banner_pity (player_id, banner) values (@p, @b) on conflict (player_id, banner) do nothing", tx,
+        await using (var ins = c.Command("summon.ensure_pity", "insert into banner_pity (player_id, banner) values (@p, @b) on conflict (player_id, banner) do nothing", tx,
                                          ("p", player), ("b", banner.ToString())))
             await ins.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-        await using var sel = c.Command("select pity, exp, total_pulls from banner_pity where player_id = @p and banner = @b for update", tx,
+        await using var sel = c.Command("summon.lock_pity", "select pity, exp, total_pulls from banner_pity where player_id = @p and banner = @b for update", tx,
                                         ("p", player), ("b", banner.ToString()));
         await using var r = await sel.ExecuteReaderAsync(ct).ConfigureAwait(false);
         if (!await r.ReadAsync(ct).ConfigureAwait(false)) throw new InvalidOperationException("banner_pity row vanished");
@@ -49,14 +49,14 @@ public sealed class SummonStore
     /// <summary>The diamond balance: the sum of the player's <c>diamond_ledger</c>.</summary>
     public static async Task<long> DiamondBalanceAsync(DbConnection c, DbTransaction? tx, Guid player, CancellationToken ct)
     {
-        await using var cmd = c.Command("select coalesce(sum(delta), 0)::bigint from diamond_ledger where player_id = @p", tx, ("p", player));
+        await using var cmd = c.Command("summon.diamond_balance", "select coalesce(sum(delta), 0)::bigint from diamond_ledger where player_id = @p", tx, ("p", player));
         return Convert.ToInt64(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false));
     }
 
     /// <summary>One ticket's balance: the sum of the player's <c>ticket_ledger</c> rows for it.</summary>
     public static async Task<long> TicketBalanceAsync(DbConnection c, DbTransaction? tx, Guid player, Currency ticket, CancellationToken ct)
     {
-        await using var cmd = c.Command("select coalesce(sum(delta), 0)::bigint from ticket_ledger where player_id = @p and ticket = @t", tx,
+        await using var cmd = c.Command("summon.ticket_balance", "select coalesce(sum(delta), 0)::bigint from ticket_ledger where player_id = @p and ticket = @t", tx,
                                         ("p", player), ("t", ticket.ToString()));
         return Convert.ToInt64(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false));
     }
@@ -74,7 +74,7 @@ public sealed class SummonStore
                 copies[g.ItemId] = copies.GetValueOrDefault(g.ItemId) + g.Amount;
 
         string[] pool = def.Pool.Values.SelectMany(x => x).ToArray();
-        await using var cmd = c.Command(
+        await using var cmd = c.Command("summon.collection", 
             "select item_id, sum(n)::bigint from (" +
             "  select item_id, count(*)::bigint as n from summon_log where player_id = @p and banner = @b group by item_id" +
             "  union all" +
@@ -120,7 +120,7 @@ public sealed class SummonStore
             args.Add(("ub" + i, a.U2));
             args.Add(("uc" + i, a.U3));
         }
-        await using var cmd = c.Command(sql.ToString(), tx, args.ToArray());
+        await using var cmd = c.Command("summon.insert_log", sql.ToString(), tx, args.ToArray());
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
@@ -129,16 +129,16 @@ public sealed class SummonStore
                                                CancellationToken ct)
     {
         await using var cmd = currency == Currency.DIAMOND
-            ? c.Command("insert into diamond_ledger (player_id, delta, reason, ref_type, ref_id, request_id) values (@p, @d, 'SUMMON', 'summon', @rid, @rid)",
+            ? c.Command("summon.charge_diamonds", "insert into diamond_ledger (player_id, delta, reason, ref_type, ref_id, request_id) values (@p, @d, 'SUMMON', 'summon', @rid, @rid)",
                         tx, ("p", player), ("d", checked((int)amount)), ("rid", requestId))
-            : c.Command("insert into ticket_ledger (player_id, ticket, delta, reason, ref_type, ref_id, request_id) values (@p, @t, @d, 'SUMMON', 'summon', @rid, @rid)",
+            : c.Command("summon.charge_tickets", "insert into ticket_ledger (player_id, ticket, delta, reason, ref_type, ref_id, request_id) values (@p, @t, @d, 'SUMMON', 'summon', @rid, @rid)",
                         tx, ("p", player), ("t", currency.ToString()), ("d", checked((int)amount)), ("rid", requestId));
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
     public static async Task UpdatePityAsync(DbConnection c, DbTransaction tx, Guid player, Banner banner, BannerState st, CancellationToken ct)
     {
-        await using var cmd = c.Command(
+        await using var cmd = c.Command("summon.update_pity", 
             "update banner_pity set pity = @pity, exp = @exp, total_pulls = @total, updated_at = now() where player_id = @p and banner = @b", tx,
             ("pity", (short)st.Pity), ("exp", st.Exp), ("total", st.TotalPulls), ("p", player), ("b", banner.ToString()));
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
@@ -148,7 +148,7 @@ public sealed class SummonStore
     public async Task<Dictionary<string, BannerPityRow>> StateAsync(Guid player, CancellationToken ct)
     {
         await using var c = await _db.OpenAsync(ct).ConfigureAwait(false);
-        await using var cmd = c.Command("select banner, pity, exp, total_pulls from banner_pity where player_id = @p", null, ("p", player));
+        await using var cmd = c.Command("summon.state", "select banner, pity, exp, total_pulls from banner_pity where player_id = @p", null, ("p", player));
         await using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
         var rows = new Dictionary<string, BannerPityRow>(StringComparer.Ordinal);
         while (await r.ReadAsync(ct).ConfigureAwait(false))
@@ -160,7 +160,7 @@ public sealed class SummonStore
     public async Task<SummonHistoryRowDto[]> HistoryAsync(Guid player, Banner? banner, int limit, CancellationToken ct)
     {
         await using var c = await _db.OpenAsync(ct).ConfigureAwait(false);
-        await using var cmd = c.Command(
+        await using var cmd = c.Command("summon.history", 
             "select request_id, banner, batch_index, item_id, rarity, pity_before, pity_after, banner_level, guarantee, payment, created_at " +
             "from summon_log where player_id = @p and (@b::text is null or banner = @b) order by created_at desc, id desc limit @n", null,
             ("p", player), ("b", banner?.ToString()), ("n", limit));

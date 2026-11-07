@@ -48,7 +48,7 @@ public static class MetricCatalog
         new(ModerationMetrics.ActionsTotal, MetricKind.Counter, new[] { "action" }, MetricSource.NoEmitterYet, "the action matrix, issue #206"),
         new(IdempotencyMetrics.ReplaysTotal, MetricKind.Counter, new[] { "route" }, MetricSource.Emitted),
         new(DbMetrics.PoolInUse, MetricKind.Gauge, Array.Empty<string>(), MetricSource.Emitted),
-        new(DbMetrics.QueryDurationSeconds, MetricKind.Histogram, new[] { "name" }, MetricSource.NoEmitterYet, "stores do not name their queries yet; TODO(#318)"),
+        new(DbMetrics.QueryDurationSeconds, MetricKind.Histogram, new[] { "name" }, MetricSource.Emitted),
         new(LockMetrics.WaitSeconds, MetricKind.Histogram, Array.Empty<string>(), MetricSource.Emitted),
         new(WorkerJobMetrics.DurationSeconds, MetricKind.Histogram, new[] { "job" }, MetricSource.Emitted),
         new(WorkerJobMetrics.FailuresTotal, MetricKind.Counter, new[] { "job" }, MetricSource.Emitted),
@@ -140,7 +140,7 @@ public static class IdempotencyMetrics
     public static void RecordReplay(string route) => Replays.Add(1, new KeyValuePair<string, object?>("route", route));
 }
 
-/// <summary><c>db_pool_in_use</c> (open pooled connections, tracked by the connection factory) and <c>db_query_duration_seconds{name}</c>.</summary>
+/// <summary><c>db_pool_in_use</c> (open pooled connections, tracked by the connection factory) and <c>db_query_duration_seconds{name}</c> (each execute of a named command).</summary>
 public static class DbMetrics
 {
     public const string PoolInUse = "db_pool_in_use";
@@ -173,7 +173,7 @@ public static class DbMetrics
         return c;
     }
 
-    // TODO(#318): stores call this once they name their queries.
+    /// <summary>One execute of a named command (<see cref="Infrastructure.Db.DbCommands.Command"/> records it).</summary>
     public static void RecordQuery(string name, TimeSpan elapsed) => Query.Record(elapsed.TotalSeconds, new KeyValuePair<string, object?>("name", name));
 }
 

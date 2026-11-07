@@ -99,7 +99,7 @@ public sealed class RateDriftJob : BackgroundService
     public async Task<List<RealisedPulls>> CountAsync(DateTimeOffset from, DateTimeOffset to, CancellationToken ct)
     {
         await using var c = await _db.OpenAsync(ct).ConfigureAwait(false);
-        await using var cmd = c.Command(
+        await using var cmd = c.Command("rate_drift.count_pulls", 
             "select banner, banner_level, rate_table_hash, pity_before, guarantee, rarity, count(*)::bigint from summon_log " +
             "where created_at >= @from and created_at < @to group by banner, banner_level, rate_table_hash, pity_before, guarantee, rarity", null,
             ("from", from.UtcDateTime), ("to", to.UtcDateTime));

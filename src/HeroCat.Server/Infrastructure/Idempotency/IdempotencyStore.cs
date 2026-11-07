@@ -137,7 +137,7 @@ public sealed class PostgresIdempotencyStore : IIdempotencyStore
         await using var c = await _db.OpenAsync(ct).ConfigureAwait(false);
         var liveSince = now - _ttl;
 
-        await using (var other = c.Command(
+        await using (var other = c.Command("idempotency.other_player", 
             "select exists(select 1 from idempotency where request_id = @r and player_id <> @p and created_at > @since)", null,
             ("r", requestId), ("p", key), ("since", liveSince)))
         {
@@ -145,11 +145,11 @@ public sealed class PostgresIdempotencyStore : IIdempotencyStore
         }
 
         // An expired row the purge has not reached yet no longer counts (00 decision 28).
-        await using (var expired = c.Command("delete from idempotency where player_id = @p and request_id = @r and created_at <= @since", null,
+        await using (var expired = c.Command("idempotency.delete_expired", "delete from idempotency where player_id = @p and request_id = @r and created_at <= @since", null,
             ("p", key), ("r", requestId), ("since", liveSince)))
             await expired.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
 
-        await using (var insert = c.Command(
+        await using (var insert = c.Command("idempotency.insert", 
             "insert into idempotency (player_id, request_id, route, status_code, response, created_at) " +
             "values (@p, @r, @route, 0, cast(@response as jsonb), @now) on conflict do nothing", null,
             ("p", key), ("r", requestId), ("route", route), ("response", StoredRow.InFlight(requestHash)), ("now", now)))
@@ -157,7 +157,7 @@ public sealed class PostgresIdempotencyStore : IIdempotencyStore
             if (await insert.ExecuteNonQueryAsync(ct).ConfigureAwait(false) == 1) return IdempotencyBegin.Started;
         }
 
-        await using var read = c.Command("select status_code, response::text from idempotency where player_id = @p and request_id = @r", null,
+        await using var read = c.Command("idempotency.read", "select status_code, response::text from idempotency where player_id = @p and request_id = @r", null,
             ("p", key), ("r", requestId));
         await using var rd = await read.ExecuteReaderAsync(ct).ConfigureAwait(false);
         if (!await rd.ReadAsync(ct).ConfigureAwait(false)) return IdempotencyBegin.InFlight; // deleted between the two statements; the client retries
@@ -170,7 +170,7 @@ public sealed class PostgresIdempotencyStore : IIdempotencyStore
     async Task CompleteOn(DbConnection c, DbTransaction? tx, Guid key, string requestId, StoredResponse response, CancellationToken ct)
     {
         // The row keeps the fingerprint its in_flight insert recorded.
-        await using var cmd = c.Command(
+        await using var cmd = c.Command("idempotency.complete", 
             "update idempotency set status_code = @s, " +
             "response = cast(@response as jsonb) || jsonb_build_object('requestSha256', response->'requestSha256') " +
             "where player_id = @p and request_id = @r and status_code = 0", tx,
@@ -191,7 +191,7 @@ public sealed class PostgresIdempotencyStore : IIdempotencyStore
     public async Task AbandonAsync(Guid key, string requestId, CancellationToken ct)
     {
         await using var c = await _db.OpenAsync(ct).ConfigureAwait(false);
-        await using var cmd = c.Command("delete from idempotency where player_id = @p and request_id = @r and status_code = 0", null,
+        await using var cmd = c.Command("idempotency.abandon", "delete from idempotency where player_id = @p and request_id = @r and status_code = 0", null,
             ("p", key), ("r", requestId));
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
@@ -199,7 +199,7 @@ public sealed class PostgresIdempotencyStore : IIdempotencyStore
     public async Task<int> PurgeAsync(DateTimeOffset cutoff, CancellationToken ct)
     {
         await using var c = await _db.OpenAsync(ct).ConfigureAwait(false);
-        await using var cmd = c.Command("delete from idempotency where created_at < @cutoff", null, ("cutoff", cutoff));
+        await using var cmd = c.Command("idempotency.purge", "delete from idempotency where created_at < @cutoff", null, ("cutoff", cutoff));
         return await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 }

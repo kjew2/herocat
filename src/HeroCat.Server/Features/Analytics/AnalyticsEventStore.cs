@@ -20,7 +20,7 @@ public sealed class AnalyticsEventStore
         var found = new HashSet<string>(StringComparer.Ordinal);
         if (names.Count == 0) return found;
         await using var c = await _db.OpenAsync(ct).ConfigureAwait(false);
-        await using var cmd = c.Command(
+        await using var cmd = c.Command("analytics.existing_partitions", 
             "select c.relname::text from pg_inherits i join pg_class c on c.oid = i.inhrelid " +
             "where i.inhparent = 'events'::regclass and c.relname = any(@names)", null, ("names", names.ToArray()));
         await using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -73,7 +73,7 @@ public sealed class AnalyticsEventStore
             args.Add(($"ag{i}", r.AgeGate));
         }
         sql.Append(" on conflict (event_id, ts) do nothing");
-        await using var cmd = c.Command(sql.ToString(), tx, args.ToArray());
+        await using var cmd = c.Command("analytics.insert_events", sql.ToString(), tx, args.ToArray());
         return await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 }
