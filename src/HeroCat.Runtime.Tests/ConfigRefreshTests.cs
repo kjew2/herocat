@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using HeroCat.Runtime.Boot;
 using HeroCat.Runtime.Content;
+using HeroCat.Runtime.Errors;
 using HeroCat.Runtime.Save;
 using HeroCat.Runtime.Services;
 using HeroCat.Runtime.Session;
@@ -238,6 +239,32 @@ namespace HeroCat.Runtime.Tests
             Assert.That(r.ContentUpdates.Check(r.Config).IsCompleted, Is.True);
             r.Runner.OnFrame();
             Assert.That(analytics.Count("content_update_failed"), Is.EqualTo(1), "a failed version is not retried, so not reported again");
+        }
+
+        [Test]
+        public void OfflineAtBoot_TracksNothing_AndTheNextRefreshStagesTheBundle()   // issue #316
+        {
+            const string newer = "2099.01.01";
+            var mono = new FakeMonoClock();
+            var svc = new ScriptedConfig(ScriptedConfig.Cfg(content: Bundles.Pointer(newer)));
+            var staging = new MemoryContentStaging { Fault = new ServiceException(ErrorClass.Offline, "NET_OFFLINE") };
+            staging.Cdn[newer] = Bundles.Make(newer);
+            var o = Boot(svc, mono);
+            o.Runner.Dispatcher = new MainThreadDispatcher();
+            o.ContentUpdates = db => new ContentUpdater(staging, db, Bundles.RunningManifest, null);
+            var r = BootFlow.Run(o);
+            Assert.That(r.ContentUpdates.Check(r.Config).Wait(10000), Is.True);
+            r.Runner.OnFrame();
+            var analytics = (MemoryAnalytics)r.Services.Analytics;
+            Assert.That(analytics.Count("content_update_failed"), Is.Zero, "a failed fetch is not a bad bundle");
+            Assert.That(r.ContentUpdates.State, Is.EqualTo(ContentUpdateState.Idle));
+
+            staging.Fault = null;
+            mono.Advance(RuntimeConfig.CONFIG_REFRESH_S);
+            r.Runner.OnFrame();   // the refresh lands and re-checks
+            Assert.That(r.ContentUpdates.Check(svc.Current).Wait(10000), Is.True);
+            Assert.That(r.ContentUpdates.UpdateReady, Is.True);
+            Assert.That(analytics.Count("content_update_failed"), Is.Zero);
         }
 
         [Test]

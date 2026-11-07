@@ -1505,7 +1505,7 @@ As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
 | `boot_ms` | `totalMs`, `contentMs`, `configMs`, `authMs`, `saveMs`, `catchUpMs`, `handoffMs` | Runtime, once per cold boot | 10 section 5's cold-boot metric with the 01 section 8.1 step breakdown (issue #261). |
 | `resume_ms` | `ms` | Runtime, once per warm resume | 10 section 5; emitted with issue #218. |
 | `perf_tick` | `p50Ms`, `p95Ms`, `maxMs`, `ticks` | Runtime, sampled once per session (not per tick) | 10 section 5's tick cost; emitted with issue #218. |
-| `content_update_failed` | `version` (the offered `content_version`), `code` (`E900`-`E903` or a 09 build rule), `location` (file or row) | Runtime, once per downloaded bundle ruled out (09 section 10.3 step 5) | `ContentUpdater.Failed` with the bundle's first error, raised on the thread pool after the staged copy is discarded; `BootFlow` posts it to the runner's `MainThreadDispatcher` and tracks it there (issue #298). A failed version is not re-downloaded in the session, so it is reported once. 10's client-health alarm reads it. |
+| `content_update_failed` | `version` (the offered `content_version`), `code` (`E900`-`E903` or a 09 build rule), `location` (file or row) | Runtime, once per downloaded bundle ruled out (09 section 10.3 step 5) | `ContentUpdater.Failed` with the bundle's first error, raised on the thread pool after the staged copy is discarded; `BootFlow` posts it to the runner's `MainThreadDispatcher` and tracks it there (issue #298). A failed version is not re-downloaded in the session, so it is reported once. A download that failed on the network (offline, timeout, 5xx) is not reported: the version is retried at the next config (issue #316). 10's client-health alarm reads it. |
 
 ### 14.4 Event index
 
