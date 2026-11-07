@@ -100,7 +100,8 @@ All of them are heroines (`specs/00` decision 104). Store art uses covered varia
 
 ### Yuki
 - **Hook:** a gothic shadow mage who never lowers her parasol; when she twirls it, the shade breaks into butterflies.
-- **Silhouette:** long black hair with a white streak, a heart-and-cross bow, a halo of thorns, a frilled black-and-white gothic dress and a frilled black parasol.
+- **Silhouette:** long straight black hair in a hime cut (blunt bangs, cheek-length side locks cut straight across) with a white streak in one side lock, a heart-and-cross bow, a halo of thorns, a frilled black-and-white jirai kei outfit and a frilled black parasol.
+- **Fashion:** jirai kei ("landmine" style) worn gothic: a frilled blouse with a big ribbon tie, a high-waisted skirt, a ribbon choker, heart motifs, platform Mary Janes, and soft red under-eye makeup for a sweet, slightly sad look. No bandages or self-harm motifs.
 - **Palette:** black, white and violet; silver chains and cross accents.
 - **Ability VFX (`vfx_comp_l_02`):** violet shadow butterflies swarm out of the parasol and burst on the enemy.
 - **Added after the pilot**, the same way: stand-ins cut by `tools/art/cut_pilot_assets.py`.
