@@ -365,6 +365,29 @@ public sealed class PostgresAuthTests
     }
 
     [Test]
+    public async Task Devices_leaves_a_released_device_alone_until_guest_rebinds_it()   // issue #335
+    {
+        var s = await Guest();
+        using (var logout = await _client.SendAsync(Json(HttpMethod.Post, "/v1/auth/logout", new { refreshToken = s.Refresh }, s.Device, NewId(), s.Access)))
+            Assert.That(logout.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+
+        // The logged-out player's access token is still unexpired; within 24 h of the guest call a new key would be allowed.
+        using (var same = await Devices(s, s.Key)) await AssertError(same, HttpStatusCode.Conflict, "DEVICE_ALREADY_BOUND");
+        using (var rotate = await Devices(s, NewKey())) await AssertError(rotate, HttpStatusCode.Conflict, "DEVICE_ALREADY_BOUND");
+        Assert.That(await StoredKey(s.Device), Is.EqualTo(Convert.FromBase64String(s.Key)), "the released row's key is unchanged");
+        Assert.That(await _db.CountAsync("select count(*) from devices where device_id = @d and player_id = @p and released_at is not null " +
+                                         "and push_token is null",
+                                         ("d", Guid.Parse(s.Device)), ("p", s.PlayerId)), Is.EqualTo(1), "nor its metadata, and it stays released");
+
+        var again = await Guest(s.Device);
+        Assert.That(again.PlayerId, Is.Not.EqualTo(s.PlayerId));
+        using (var mine = await Devices(again, again.Key)) Assert.That(mine.StatusCode, Is.EqualTo(HttpStatusCode.NoContent), await mine.Content.ReadAsStringAsync());
+        Assert.That(await _db.CountAsync("select count(*) from devices where device_id = @d and player_id = @p and released_at is null and push_token = 'push'",
+                                         ("d", Guid.Parse(s.Device)), ("p", again.PlayerId)), Is.EqualTo(1), "the rebound row takes /devices again");
+        using (var old = await Devices(s, s.Key)) await AssertError(old, HttpStatusCode.Conflict, "DEVICE_ALREADY_BOUND");
+    }
+
+    [Test]
     public async Task Devices_only_accepts_the_tokens_own_device()
     {
         var s = await Guest();

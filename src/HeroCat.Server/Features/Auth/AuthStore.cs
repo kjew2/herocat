@@ -200,7 +200,8 @@ public sealed class AuthStore
 
     /// <summary>
     /// Inserts the device for <paramref name="playerId"/>, or updates its metadata and (when <paramref name="newKeyEnc"/>
-    /// is set) its key. False when the device belongs to another player (a concurrent insert included).
+    /// is set) its key. False when the device belongs to another player (a concurrent insert included) or was released
+    /// by logout: a released row is read-only until <c>/auth/guest</c> rebinds it (specs/02 section 12, issue #335).
     /// </summary>
     public async Task<bool> UpsertDeviceAsync(Guid playerId, NewDevice device, byte[]? newKeyEnc, string? pushToken, DateTimeOffset now, CancellationToken ct)
     {
@@ -212,7 +213,7 @@ public sealed class AuthStore
             "hmac_key_enc = coalesce(@newk, devices.hmac_key_enc), model = coalesce(excluded.model, devices.model), " +
             "os = coalesce(excluded.os, devices.os), client_version = coalesce(excluded.client_version, devices.client_version), " +
             "push_token = coalesce(excluded.push_token, devices.push_token), last_seen_at = excluded.last_seen_at " +
-            "where devices.player_id = excluded.player_id", null,
+            "where devices.player_id = excluded.player_id and devices.released_at is null", null,
             ("d", device.DeviceId), ("p", playerId), ("k", device.HmacKeyEnc), ("newk", newKeyEnc), ("model", device.Model), ("os", device.Os),
             ("cv", device.ClientVersion), ("push", pushToken), ("now", now));
         if (newKeyEnc == null) ((NpgsqlParameter)cmd.Parameters["newk"]).NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Bytea;
