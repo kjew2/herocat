@@ -491,13 +491,13 @@ All of them are heroines (`specs/00` decision 104). Store art uses covered varia
 - **Ability VFX (`vfx_comp_c_18`):** Pages flutter out of her books and glow over the party, refilling their mana.
 
 ## Pilot asset status (issue #291)
-The images in Unity are **stand-ins cut from the reference sheets** by `tools/art/cut_pilot_assets.py`. They don't replace the artist's deliverables:
+The images in Unity are **stand-ins**. They don't replace the artist's deliverables. Since 2026-11-07 (owner approval), every companion's icon, portrait and, for Legendary and Mythic, splash is cut from the approved AI exploration by `tools/art/standins_from_exploration.py`. The battle chibis are still cut from the four artist sheets by `tools/art/cut_pilot_assets.py`; the other 46 companions have no chibi yet.
 
 | Asset | Stand-in | Final, from the artist |
 |---|---|---|
-| Portrait `portrait_comp_*` (256 rp) | crop of the splash art | clean portrait |
-| Icon `icon_comp_*` (128 rp) | face crop | icon drawn for 88-128 rp |
-| Splash `art_splash_*` (1080 x 1920 rp, full screen) | 9:16 window of the splash without the baked-in text (Yuki: from her vertical splash; the others are upscaled about 2x from the sheets, so they look soft) | clean full-screen illustration |
+| Portrait `portrait_comp_*` (256 rp) | head-and-shoulders crop of the approved exploration, all 50 | clean portrait |
+| Icon `icon_comp_*` (128 rp) | face crop of the approved exploration, all 50 | icon drawn for 88-128 rp |
+| Splash `art_splash_*` (1080 x 1920 rp, full screen) | centred 9:16 cover crop of the owner's splash pick, upscaled 1.25x from 2:3, all 8 Legendary and Mythic | clean full-screen illustration |
 | Battle chibi `spr_comp_*` (about 48 px native) | the reference chibi sampled on its own pixel grid, background and pedestal removed, 1 frame | idle 4 + cast 6 pixel frames |
 | VFX `vfx_comp_*` | none (the generic ring placeholder) | particle system |
 
