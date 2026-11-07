@@ -102,6 +102,7 @@ namespace HeroCat.Client.Core
                 else StepLabels[i].Set(UiKeys.PartyStepMax);
             }
             Slots = new PartySlotVm[c.K.PartySlots];
+            Research = new ResearchEntryVm(c, toastWhenLocked: false);
             for (int i = 0; i < Slots.Length; i++) Slots[i] = new PartySlotVm(c, i);
             int step = c.Prefs.TrainStep;
             SelectedStep.Set(step >= 0 && step <= _steps.Length ? step : 0);
@@ -117,6 +118,9 @@ namespace HeroCat.Client.Core
 
         /// <summary>The five slot cards, slot 1 first.</summary>
         public readonly PartySlotVm[] Slots;
+
+        /// <summary>[Research &gt;] (MVP): opens SCR_RESEARCH, which shows its Locked state before the gate.</summary>
+        public readonly ResearchEntryVm Research;
 
         /// <summary>Step labels "x1", "x10", "x100", "Max"; the last is Max.</summary>
         public readonly TextKeyLabel[] StepLabels;
@@ -154,6 +158,7 @@ namespace HeroCat.Client.Core
             ExpToNext.Set(s.PartyExpToNext);
             ExpFill.Set(s.PartyExp, s.PartyExpToNext);
             Dps.Set(s.PartyDps);
+            Research.Refresh(sim);
 
             var st = sim.State;
             var db = _c.Db;

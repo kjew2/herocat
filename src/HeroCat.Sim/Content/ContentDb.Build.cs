@@ -306,7 +306,8 @@ namespace HeroCat.Sim.Content
                     if (Keep("research", r.Id, r.Tier))
                         nodes[r.Id] = new ResearchDef(r.Id, Enum<ResearchEffect>(r.Effect, $"research[{r.Id}].effect"), r.EffectPerLevel,
                                                       r.EffectFloor, r.MaxLevel, r.Cost0, r.CostG, r.UnlockAwakenRank,
-                                                      Enum<Tier>(r.Tier, $"research[{r.Id}].tier"));
+                                                      Enum<Tier>(r.Tier, $"research[{r.Id}].tier"), r.LayoutRow, r.LayoutCol,
+                                                      r.NameKey, r.DescKey, r.Icon);
                 db.Research = new ReadOnlyDictionary<string, ResearchDef>(nodes);
                 var byEffect = new ResearchDef[System.Enum.GetValues(typeof(ResearchEffect)).Length];
                 foreach (var n in nodes.Values) byEffect[(int)n.Effect] ??= n;   // the first per effect, as a scan of Research finds it

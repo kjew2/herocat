@@ -88,6 +88,21 @@ namespace HeroCat.Client.Core
         public const string PartyBuyLevels = "scr.party.buy_levels";        // "Buy {0} levels for {1}"
         public const string PartyLoadout = "scr.party.loadout";
         public const string PartyAwakenGate = "scr.party.awaken_gate";   // "Reach stage {0}"
+        public const string PartyResearch = "scr.party.research";             // "Research >"
+
+        // SCR_RESEARCH (07 section 4.9; issue #181)
+        public const string ResearchTitle = "scr.research.title";
+        public const string ResearchFishCoins = "scr.research.fish_coins";     // "{0} Fish Coins"
+        public const string ResearchLevel = "scr.research.level";              // "Lv {0}/{1}"
+        public const string ResearchBuy = "scr.research.buy";
+        public const string ResearchMax = "scr.research.max";
+        public const string ResearchMaxLevel = "scr.research.max_level";       // a maxed row's disabled reason
+        public const string ResearchNodeLocked = "scr.research.node_locked";   // "Unlocks at Awakening {0}"
+        public const string ResearchPerSec = "scr.research.per_sec";           // "{0}/s"
+        public const string ResearchHours = "scr.research.hours";              // "{0}h"
+        public const string ResearchCoachTank = "scr.research.coach_tank";
+        public const string ResearchEntry = "scr.main.research";               // the Fish Board button
+        public const string CompanionsResearch = "scr.companions.research";    // "Research +"
 
         // collections
         public const string WeaponsTitle = "scr.weapons.title", SkillsTitle = "scr.skills.title";

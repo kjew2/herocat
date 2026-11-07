@@ -77,7 +77,8 @@ namespace HeroCat.Client.Core
 
         public void OnGoldChip() => _c.Router?.Replace(ScreenIds.Party);
         public void OnDiamondChip() => _c.LockedToast("SHOP");
-        public void OnFishCoinChip() => _c.LockedToast("RESEARCH");
+        /// <summary>Opens SCR_RESEARCH even before its gate (the screen shows its Locked state; 07 section 4.3).</summary>
+        public void OnFishCoinChip() => ResearchVm.Open(_c, toast: false);
         public void OnRockCandyChip()
         {
             if (RockCandyLock.Tap()) _c.Router?.Replace(ScreenIds.Party);
@@ -363,6 +364,7 @@ namespace HeroCat.Client.Core
             Board = new FishBoardVm(c);
             Badges = new BadgesVm(c);
             ResearchLock = new LockedVm(c);
+            Research = new ResearchEntryVm(c, toastWhenLocked: true);
             for (int i = 0; i < TabBadges.Length; i++) TabBadges[i] = new BadgeDot();
             for (int i = 0; i < TabLocks.Length; i++)
             {
@@ -374,6 +376,9 @@ namespace HeroCat.Client.Core
         public readonly HudVm Hud;
         public readonly CombatVm Combat;
         public readonly FishBoardVm Board;
+
+        /// <summary>The Fish Board's [Research] (MVP, 07 section 4.3): lock glyph and condition toast before the gate.</summary>
+        public readonly ResearchEntryVm Research;
 
         public readonly BadgeDot QuestsPill = new BadgeDot();
         public readonly BadgeDot DungeonsPill = new BadgeDot();
@@ -415,6 +420,7 @@ namespace HeroCat.Client.Core
             TabBadges[(int)MainTab.Dungeons].Set(Badges.DungeonTicketsUnused.Count);
             TabBadges[(int)MainTab.Quests].Set(Badges.QuestsClaimable.Count);
             TabBadges[(int)MainTab.Shop].Set(Badges.DailyGiftFree.Count);
+            Research.Refresh(sim);
             var st = sim.State;
             TabLocks[(int)MainTab.Dungeons].RefreshFeature("DUNGEONS", st);
             TabLocks[(int)MainTab.Quests].RefreshFeature("QUESTS", st);

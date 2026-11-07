@@ -360,6 +360,7 @@ namespace HeroCat.Client.Screens
             BoardButton("Release", 156, b.Release, b.OnRelease, FishBoardVm.AnchorRelease);
             BoardButton("ReleaseMax", 296, b.ReleaseMax, b.OnReleaseMax, FishBoardVm.AnchorReleaseMax);
             _mergeAllBtn = BoardButton("MergeAll", 436, b.MergeAll, b.OnMergeAll, FishBoardVm.AnchorMergeAll);
+            BuildResearchButton();
 
             // 5 x 4 grid, 176 rp cells with 8 rp gaps (912 rp wide).
             var gridImg = UiKit.Panel("Grid", _board, Palette.Panel, 1f, raycast: true);
@@ -430,7 +431,7 @@ namespace HeroCat.Client.Screens
             var btn = UiKit.Button("Research", _board, m.OnResearch, 0x37474F, UiKit.Micro);
             var rt = btn.GetComponent<RectTransform>();
             UiKit.Place(rt, 952, 520, 120, 112);
-            UiKit.LabelOf(btn).text = "Res";   // placeholder glyph (07 section 15.1)
+            UiKit.LabelOf(btn).text = Vm.Localizer.Text(UiKeys.ResearchEntry);
             LockedBinding.Bind(m.ResearchLock, rt, 72, 0);
             var dot = UiKit.CirclePanel("Dot", rt, UiKit.C(Palette.Bad));
             UiKit.Place(dot.rectTransform, 88, 4, 28, 28);
