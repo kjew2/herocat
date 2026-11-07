@@ -34,6 +34,7 @@ Presentation only: names, roles and look briefs for the rows in `content_src/com
 - **Palette:** black, white and violet; silver chains and cross accents.
 - **Ability VFX (`vfx_comp_l_02`):** violet shadow butterflies swarm out of the parasol and burst on the enemy.
 - **Added after the pilot**, the same way: stand-ins cut by `tools/art/cut_pilot_assets.py`.
+- **Style pilot:** Yuki is the character for the splash style pilot that picks the house illustration style (`splash-pilot.md`, issue #287).
 - **Splash pilot:** the first dedicated vertical splash (`splash/yuki_splash.png`, 1024 x 1536). The splash stand-in is cut from it, not from the sheet; icon, portrait and chibi still come from the sheet, whose face crop has more pixels.
 
 ## Pilot asset status (issue #291)
