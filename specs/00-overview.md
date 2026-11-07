@@ -443,6 +443,10 @@ Owner decisions on the hero model (#342), numbered after the specs/00 rewrite's 
 138. **Stat redistribution by focus preset.** Owner decision on #342: in MVP the player can change a hero's growth focus for gold, which re-places only the points earned from levels (03 section 1.3.2, DIV-09).
 139. **Refusals follow fixed visible rules.** Owner decision on #342: refusals and strikes (P1) follow deterministic rules shown before assignment, never a chance roll (03 section 4.8, DIV-20).
 
+Owner decision on the seal-trait fiction (#342), numbered after the hero model's agent defaults (section 12.4):
+
+147. **Seal traits come from the hero's own former life.** Owner decision on #342: a seal slot holds a trait from the hero's ordinary former life (a lineage, an upbringing, an old trade), never from another world (DIV-12, 03 section 2.4).
+
 ### 12.3 Decisions made in the specs/00 rewrite (#341)
 
 Agent defaults, open to the owner's veto in review (`CLAUDE.md` rule 1). Each is easy to change before the spec it touches is written.
