@@ -137,6 +137,7 @@ public sealed partial class IdempotencyMiddleware
                 if (stored.Protected)
                     stored = stored with { Body = Protector(ctx).Unprotect(stored.Body, Aad(key, requestId)), Protected = false };
                 await WriteReplayAsync(ctx, stored).ConfigureAwait(false);
+                Observability.IdempotencyMetrics.RecordReplay(route);
                 return;
             case IdempotencyOutcome.InFlight:
                 throw ApiException.Of(ErrorCodes.IDEMPOTENCY_IN_FLIGHT, retryAfterSec: 1);

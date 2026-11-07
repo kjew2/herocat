@@ -111,6 +111,7 @@ public static class ApiErrorWriter
     {
         var body = new ErrorBody(code, message ?? ErrorCodes.DefaultMessage(code), RequestContext.RequestId(ctx), retryAfterSec, details);
         ctx.Response.StatusCode = status;
+        RequestContext.SetErrorCode(ctx, code);
         if (retryAfterSec is int s) ctx.Response.Headers.RetryAfter = s.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return ctx.Response.WriteAsJsonAsync(body, Json, contentType: "application/json; charset=utf-8", ctx.RequestAborted);
     }

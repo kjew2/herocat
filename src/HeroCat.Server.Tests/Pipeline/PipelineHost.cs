@@ -37,7 +37,8 @@ sealed class PipelineHost : IDisposable
     readonly WebApplicationFactory<Program> _factory;
 
     /// <param name="settings">Configuration overrides (<c>HeroCat:Network:TrustedProxies:0</c>, ...).</param>
-    public PipelineHost(IReadOnlyDictionary<string, string?>? settings = null)
+    /// <param name="services">More service registrations, applied last (a log sink, a trace exporter).</param>
+    public PipelineHost(IReadOnlyDictionary<string, string?>? settings = null, Action<IServiceCollection>? services = null)
     {
         _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
         {
@@ -60,6 +61,7 @@ sealed class PipelineHost : IDisposable
                     foreach (var part in m.ApplicationParts.OfType<AssemblyPart>().ToList()) m.ApplicationParts.Remove(part);
                     m.ApplicationParts.Add(new AssemblyPart(typeof(FakeRoutesController).Assembly));
                 });
+                services?.Invoke(s);
             });
         });
     }

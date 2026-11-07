@@ -14,6 +14,7 @@ using HeroCat.Server.Infrastructure.Db.Migrations;
 using HeroCat.Server.Infrastructure.Idempotency;
 using HeroCat.Server.Infrastructure.Redis;
 using HeroCat.Server.Infrastructure.Secrets;
+using HeroCat.Server.Observability;
 using HeroCat.Server.Pipeline;
 using HeroCat.Server.Worker;
 using Microsoft.Extensions.Options;
@@ -72,6 +73,7 @@ public static class ServerHost
             .AddAdminFeature()
             .AddAnalyticsFeature();
         builder.Services.AddRequestPipeline();
+        builder.AddHeroCatTelemetry(ServerRole.Api);
 
         var app = builder.Build();
         app.UseRequestPipeline();
@@ -83,6 +85,7 @@ public static class ServerHost
     public static IHost BuildWorker(string[] args)
     {
         var builder = Host.CreateApplicationBuilder(args);
+        builder.AddHeroCatTelemetry(ServerRole.Worker);
         AddCore(builder.Services, builder.Configuration, ServerRole.Worker);
         builder.Services.AddHostedService<WorkerService>();
         builder.Services.AddHostedService<IdempotencyPurgeService>();
@@ -134,6 +137,7 @@ public static class ServerHost
     static async Task<int> MigrateAsync(string[] args)
     {
         var builder = Host.CreateApplicationBuilder(args);
+        builder.AddHeroCatTelemetry(ServerRole.Migrate);
         AddCore(builder.Services, builder.Configuration, ServerRole.Migrate);
         using var host = builder.Build();
         try

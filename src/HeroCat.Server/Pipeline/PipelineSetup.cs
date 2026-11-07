@@ -42,6 +42,7 @@ public static class PipelineSetup
                 var errors = ctx.ModelState
                     .Where(kv => kv.Value is { Errors.Count: > 0 })
                     .ToDictionary(kv => kv.Key, kv => kv.Value!.Errors.Select(e => e.ErrorMessage).ToArray());
+                RequestContext.SetErrorCode(ctx.HttpContext, ErrorCodes.VALIDATION);
                 var body = new ErrorBody(ErrorCodes.VALIDATION, ErrorCodes.DefaultMessage(ErrorCodes.VALIDATION),
                                          RequestContext.RequestId(ctx.HttpContext), null, new { errors });
                 return new ObjectResult(body) { StatusCode = StatusCodes.Status400BadRequest, ContentTypes = { "application/json" } };
@@ -56,7 +57,8 @@ public static class PipelineSetup
         !string.IsNullOrWhiteSpace(sp.GetRequiredService<IOptions<ServerOptions>>().Value.Redis.Configuration);
 
     /// <summary>
-    /// The pipeline's middleware, outermost first: the trusted proxy's forwarded client address (issue #263), request id /
+    /// The pipeline's middleware, outermost first: the trusted proxy's forwarded client address (issue #263), the request's
+    /// log scope, metrics and access line (specs/08 section 9.4, issue #210), request id /
     /// server time / error body, routing, the gates, the idempotency store (after the gates, so it knows the player and
     /// never stores a gate's refusal).
     /// Call before mapping endpoints.
@@ -64,6 +66,7 @@ public static class PipelineSetup
     public static WebApplication UseRequestPipeline(this WebApplication app)
     {
         app.UseForwardedHeaders();
+        app.UseMiddleware<Observability.RequestTelemetryMiddleware>();
         app.UseMiddleware<RequestContextMiddleware>();
         if (app.Environment.IsDevelopment())
             app.UseSwagger(o => o.RouteTemplate = "openapi/{documentName}.json");

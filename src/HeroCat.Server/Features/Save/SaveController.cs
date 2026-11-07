@@ -139,6 +139,7 @@ public sealed class SaveController : ControllerBase
 
         // (1) the file
         byte[] file = await ReadBodyAsync(MaxBytes, ct);
+        Observability.SaveMetrics.RecordUpload(file.Length);
         SaveEnvelope env;
         try { env = SaveEnvelope.Parse(file); }
         catch (SaveMalformedException e) { throw new ApiException(400, SaveErrors.SAVE_MALFORMED, "The save file is malformed: " + e.Message + "."); }
@@ -213,6 +214,7 @@ public sealed class SaveController : ControllerBase
 
         foreach (var f in flags)
         {
+            Observability.SaveMetrics.RecordFlag(f.Code, f.Severity);
             try { await _flags.RaiseAsync(f, CancellationToken.None); }
             catch (Exception e) { _log.LogError(e, "could not raise plausibility flag {Code}", f.Code); }
         }

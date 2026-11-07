@@ -17,10 +17,16 @@ public static class ApiHeaders
 public static class RequestContext
 {
     const string RequestIdItem = "HeroCat.RequestId";
+    const string ErrorCodeItem = "HeroCat.ErrorCode";
 
     /// <summary>The request's id: the client's <c>X-Request-Id</c> when it sent a usable one, else one the server made.</summary>
     public static string RequestId(HttpContext ctx) =>
         ctx.Items.TryGetValue(RequestIdItem, out var v) && v is string s ? s : ctx.TraceIdentifier;
+
+    /// <summary>The error body's <c>code</c> when this request answered with one (the log's <c>code</c>, specs/08 section 9.4).</summary>
+    public static string? ErrorCode(HttpContext ctx) => ctx.Items.TryGetValue(ErrorCodeItem, out var v) ? v as string : null;
+
+    internal static void SetErrorCode(HttpContext ctx, string code) => ctx.Items[ErrorCodeItem] = code;
 
     internal static void SetRequestId(HttpContext ctx, string id)
     {

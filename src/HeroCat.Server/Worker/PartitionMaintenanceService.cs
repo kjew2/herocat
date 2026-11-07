@@ -4,6 +4,7 @@ using System.Globalization;
 using HeroCat.Server.Hosting;
 using HeroCat.Server.Infrastructure;
 using HeroCat.Server.Infrastructure.Db;
+using HeroCat.Server.Observability;
 using Microsoft.Extensions.Options;
 
 namespace HeroCat.Server.Worker;
@@ -36,8 +37,10 @@ public sealed class PartitionMaintenanceService : BackgroundService
     // The end of each table's last partition; the gauge reads it against the wall clock on every collection, so the
     // horizon keeps shrinking (and the alarm fires) if the job stops running or keeps failing.
     static readonly ConcurrentDictionary<string, DateTimeOffset> Ends = new(StringComparer.Ordinal);
+    public const string HorizonMetric = "db_partition_horizon_days";
+
     static readonly ObservableGauge<double> HorizonGauge = ServerMetrics.Meter.CreateObservableGauge(
-        "db_partition_horizon_days",
+        HorizonMetric,
         () => Ends.Select(kv => new Measurement<double>((kv.Value - TimeProvider.System.GetUtcNow()).TotalDays,
                                                         new KeyValuePair<string, object?>("table", kv.Key))),
         unit: "d", description: "Days from now to the end of the table's last partition (specs/02 section 12).");
@@ -68,6 +71,9 @@ public sealed class PartitionMaintenanceService : BackgroundService
     /// the table's horizon (also when the create failed). Rerunning it creates nothing. A table that ends less than one
     /// period ahead is logged as an error; a failed create is rethrown after every table was tried.
     /// </summary>
+    /// <summary>Remembers where a table's last partition ends, for the <c>db_partition_horizon_days</c> gauge.</summary>
+    internal static void RecordHorizon(string table, DateTimeOffset end) => Ends[table] = end;
+
     public async Task<IReadOnlyList<PartitionHorizon>> EnsureOnceAsync(CancellationToken ct) => await PassAsync(create: true, ct).ConfigureAwait(false);
 
     /// <summary>Measures every table's horizon without creating anything.</summary>
@@ -105,7 +111,7 @@ public sealed class PartitionMaintenanceService : BackgroundService
                 last = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;
 
             var end = last == null ? null : PartitionEnd(t, last);
-            if (end is { } e2) Ends[t.Name] = e2;
+            if (end is { } e2) RecordHorizon(t.Name, e2);
             double horizon = end is { } e3 ? (e3 - now).TotalDays : 0;
             var onePeriod = (t.Grain == "month" ? now.AddMonths(1) : now.AddDays(1)) - now;
             bool below = end == null || end.Value - now < onePeriod;
@@ -133,7 +139,7 @@ public sealed class PartitionMaintenanceService : BackgroundService
         return t.Grain == "month" ? s.AddMonths(1) : s.AddDays(1);
     }
 
-    // TODO(#208): run under the worker's job registry and Redis leader lock, with worker_job_* metrics. Two workers racing
+    // TODO(#208): run under the worker's job registry and Redis leader lock. Two workers racing
     // on one new partition make one pass fail with "already exists"; the next pass (or the retry below) finds it made.
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -146,14 +152,14 @@ public sealed class PartitionMaintenanceService : BackgroundService
         using var timer = new PeriodicTimer(Interval, _clock);
         do
         {
-            try { await EnsureOnceAsync(stoppingToken).ConfigureAwait(false); }
+            try { await WorkerJobMetrics.TimeAsync("partitions", EnsureOnceAsync, stoppingToken).ConfigureAwait(false); }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
             catch (Exception e)
             {
                 _log.LogError(e, "partition job failed; retrying in an hour");
                 try { await Task.Delay(TimeSpan.FromHours(1), _clock, stoppingToken).ConfigureAwait(false); }
                 catch (OperationCanceledException) { return; }
-                try { await EnsureOnceAsync(stoppingToken).ConfigureAwait(false); }
+                try { await WorkerJobMetrics.TimeAsync("partitions", EnsureOnceAsync, stoppingToken).ConfigureAwait(false); }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
                 catch (Exception e2) { _log.LogError(e2, "partition job failed again; retrying tomorrow"); }
             }

@@ -44,7 +44,7 @@ public sealed class InboxPurgeService : BackgroundService
         using var timer = new PeriodicTimer(Interval, _clock);
         do
         {
-            try { await PurgeOnceAsync(stoppingToken).ConfigureAwait(false); }
+            try { await Observability.WorkerJobMetrics.TimeAsync("inbox_purge", PurgeOnceAsync, stoppingToken).ConfigureAwait(false); }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
             catch (Exception e) { _log.LogError(e, "inbox purge failed; retrying next night"); }
         }

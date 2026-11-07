@@ -61,6 +61,7 @@ public sealed class ActiveConfigCache : IActiveConfigSource, IClientGateConfigSo
                 var row = await _store.GetActiveAsync(_env, ct).ConfigureAwait(false);
                 var config = row == null ? null : new ActiveConfig(row.Id, row.Payload);
                 _snapshot = new Snapshot(config, _clock.GetUtcNow());
+                Observability.ConfigMetrics.Observe(config);
                 return config;
             }
             catch (Exception e) when (s != null && e is not OperationCanceledException)
