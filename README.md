@@ -19,6 +19,7 @@ Start with `specs/00-overview.md`. It fixes the tech stack, the authority split,
 | `specs/08-backend-and-live-ops.md` | Services, API contracts, auth, IAP, anti-cheat, config, compliance |
 | `specs/09-content-data-pipeline.md` | Table schemas, exporter, validation, `ContentDb`, localization |
 | `specs/10-testing-release-and-ops.md` | Test pyramid, bots, CI/CD, store release, KPIs, runbooks, roadmap |
+| `specs/11-source-divergences.md` | Pivot: every rule where the new game deliberately differs from the source mechanics in `docs/research/` |
 
 Tools (Python 3.9+, stdlib only unless noted):
 
