@@ -73,6 +73,8 @@ namespace HeroCat.Client.Core
             Summon = new SummonVm(Context, options.Summon ?? ((b, n, p) => _runner.SummonAsync(b, n, p)), SummonResult);
             SummonResult.Summon = Summon;
             OfflineReward = new OfflineRewardVm(Context);
+            Quests = new QuestsVm(Context);
+            StageSelect = new StageSelectVm(Context);
             Confirm = new ConfirmVm(Localizer, Router);
             Error = new ErrorVm(Localizer, Router);
 
@@ -118,6 +120,8 @@ namespace HeroCat.Client.Core
         public SummonVm Summon { get; }
         public SummonResultVm SummonResult { get; }
         public OfflineRewardVm OfflineReward { get; }
+        public QuestsVm Quests { get; }
+        public StageSelectVm StageSelect { get; }
         public ConfirmVm Confirm { get; }
         public ErrorVm Error { get; }
 
@@ -165,7 +169,9 @@ namespace HeroCat.Client.Core
             else if (top == ScreenIds.Skills) Skills.Refresh(_sim);
             else if (top == ScreenIds.Companions) Companions.Refresh(_sim);
             else if (top == ScreenIds.Summon) Summon.Refresh(_sim);
+            else if (top == ScreenIds.Quests) Quests.Refresh(_sim);
             var modal = Router.Modal;
+            if (modal != null && modal.Id == ScreenIds.StageSelect) StageSelect.Refresh(_sim, s);
             if (modal != null && modal.Id == ScreenIds.ItemDetail && (_detailDirty || ItemDetail.Dirty))
             {
                 _detailDirty = false;
@@ -203,6 +209,8 @@ namespace HeroCat.Client.Core
                 case ScreenIds.Weapons: Weapons.Invalidate(); break;
                 case ScreenIds.Skills: Skills.Invalidate(); break;
                 case ScreenIds.Companions: Companions.Invalidate(); break;
+                case ScreenIds.Quests: Quests.Invalidate(); break;
+                case ScreenIds.StageSelect: StageSelect.OnShown(); break;
             }
             if (e.Type == ScreenType.Full) Main.Board.Cancel();
         }
@@ -230,6 +238,7 @@ namespace HeroCat.Client.Core
             Skills.OnEvent(e);
             Companions.OnEvent(e);
             Summon.OnEvent(e);
+            Quests.OnEvent(e, Router.TopFull.Id == ScreenIds.Quests);
             switch (e)
             {
                 case ItemAcquired _:
