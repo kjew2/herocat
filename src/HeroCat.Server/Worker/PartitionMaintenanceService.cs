@@ -93,7 +93,7 @@ public sealed class PartitionMaintenanceService : BackgroundService
                 var until = t.Grain == "month" ? now.AddMonths(_aheadMonths) : now.AddDays(_aheadDays);
                 try
                 {
-                    await using var cmd = c.Command("select ensure_partitions(@t::regclass, @g, @from, @until)", null,
+                    await using var cmd = c.Command("partitions.ensure", "select ensure_partitions(@t::regclass, @g, @from, @until)", null,
                                                     ("t", t.Name), ("g", t.Grain), ("from", now.ToUniversalTime()), ("until", until.ToUniversalTime()));
                     created = Convert.ToInt32(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false), CultureInfo.InvariantCulture);
                 }
@@ -105,7 +105,7 @@ public sealed class PartitionMaintenanceService : BackgroundService
             }
 
             string? last;
-            await using (var cmd = c.Command(
+            await using (var cmd = c.Command("partitions.last", 
                 "select max(c.relname::text) from pg_inherits i join pg_class c on c.oid = i.inhrelid where i.inhparent = @t::regclass", null,
                 ("t", t.Name)))
                 last = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false) as string;

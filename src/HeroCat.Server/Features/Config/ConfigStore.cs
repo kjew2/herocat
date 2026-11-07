@@ -34,21 +34,21 @@ public sealed class PostgresConfigStore : IConfigStore
     {
         await using var c = await _db.OpenAsync(ct).ConfigureAwait(false);
         // At most one row is active per env (the partial unique index of migration 0006).
-        await using var cmd = c.Command($"select {Columns} from config_versions where env = @env and active order by id desc limit 1", null, ("env", env));
+        await using var cmd = c.Command("config.get_active", $"select {Columns} from config_versions where env = @env and active order by id desc limit 1", null, ("env", env));
         return await ReadOneAsync(cmd, ct).ConfigureAwait(false);
     }
 
     public async Task<ConfigVersionRow?> GetAsync(string env, int id, CancellationToken ct)
     {
         await using var c = await _db.OpenAsync(ct).ConfigureAwait(false);
-        await using var cmd = c.Command($"select {Columns} from config_versions where env = @env and id = @id", null, ("env", env), ("id", id));
+        await using var cmd = c.Command("config.get", $"select {Columns} from config_versions where env = @env and id = @id", null, ("env", env), ("id", id));
         return await ReadOneAsync(cmd, ct).ConfigureAwait(false);
     }
 
     public async Task<int> InsertAsync(string env, JsonObject payload, ConfigColumns columns, string createdBy, DateTimeOffset now, CancellationToken ct)
     {
         await using var c = await _db.OpenAsync(ct).ConfigureAwait(false);
-        await using var cmd = c.Command(
+        await using var cmd = c.Command("config.insert", 
             "insert into config_versions (env, payload, min_client_version, content_version, rollout_pct, active, created_at, created_by) " +
             "values (@env, @payload::jsonb, @minClient, @content, @pct, false, @now, @by) returning id", null,
             ("env", env), ("payload", payload.ToJsonString()), ("minClient", columns.MinClientVersion), ("content", columns.ContentVersion),
@@ -60,13 +60,13 @@ public sealed class PostgresConfigStore : IConfigStore
     {
         await using var c = await _db.OpenAsync(ct).ConfigureAwait(false);
         await using var tx = await c.BeginTransactionAsync(ct).ConfigureAwait(false);
-        await using (var lk = c.Command("select pg_advisory_xact_lock(hashtext('config_versions/' || @env))", tx, ("env", env)))
+        await using (var lk = c.Command("config.lock_env", "select pg_advisory_xact_lock(hashtext('config_versions/' || @env))", tx, ("env", env)))
             await lk.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         // The old row goes inactive first: the partial unique index (env) where active (migration 0006, issue #294) is
         // checked per statement, so turning the new row on first would collide with it.
-        await using (var off = c.Command("update config_versions set active = false where env = @env and active and id <> @id", tx, ("env", env), ("id", id)))
+        await using (var off = c.Command("config.deactivate", "update config_versions set active = false where env = @env and active and id <> @id", tx, ("env", env), ("id", id)))
             await off.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-        await using (var on = c.Command("update config_versions set active = true where env = @env and id = @id", tx, ("env", env), ("id", id)))
+        await using (var on = c.Command("config.activate", "update config_versions set active = true where env = @env and id = @id", tx, ("env", env), ("id", id)))
         {
             if (await on.ExecuteNonQueryAsync(ct).ConfigureAwait(false) == 0)
             {

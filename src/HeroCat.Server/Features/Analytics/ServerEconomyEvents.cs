@@ -35,8 +35,10 @@ public sealed class ServerEconomyEvents
     /// </summary>
     public static async Task<EconomyAccount?> AccountAsync(DbConnection c, DbTransaction tx, Guid player, CancellationToken ct, bool lockRow = false)
     {
-        await using var cmd = c.Command("select age_gate, created_at from accounts where player_id = @p" + (lockRow ? " for no key update" : ""),
-                                        tx, ("p", player));
+        const string Sql = "select age_gate, created_at from accounts where player_id = @p";
+        await using var cmd = lockRow
+            ? c.Command("economy.account_lock", Sql + " for no key update", tx, ("p", player))
+            : c.Command("economy.account", Sql, tx, ("p", player));
         await using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
         if (!await r.ReadAsync(ct).ConfigureAwait(false)) return null;
         return new EconomyAccount(r.GetInt16(0), r.GetFieldValue<DateTimeOffset>(1));

@@ -446,7 +446,7 @@ Outside `check.sh`, because it needs the Unity runner: a pseudo-localized client
 
 `.github/workflows/deploy.yml` (server and content):
 
-- Server: `docker build` -> ECR -> deploy to stage on every `main` merge; prod on tag. Blue/green: the new task set receives 0% then 10% then 100% of traffic over 15 minutes behind the ALB, with automatic rollback if the 5xx rate or `summon_latency_p99` alarm fires; the old task set stays warm for 1 hour. DB migrations (the SQL migration set, issue #33) run as a pre-deploy job and must be backward-compatible with the previous server version (expand/contract).
+- Server: `docker build` -> ECR -> deploy to stage on every `main` merge; prod on tag. Blue/green: the new task set receives no traffic until every task answers `GET /ready` with 200 (08 section 9.1: Postgres and Redis reachable; the ALB's liveness check stays `/health`), then 0% then 10% then 100% of traffic over 15 minutes behind the ALB, with automatic rollback if the 5xx rate or `summon_latency_p99` alarm fires; the old task set stays warm for 1 hour. DB migrations (the SQL migration set, issue #33) run as a pre-deploy job and must be backward-compatible with the previous server version (expand/contract).
 - Content: on tag `content-*`, upload every file to `cdn/content/{version}/`, verify sha256 of each uploaded object, upload `manifest.json` last, then set `config.content` on stage. Prod promotion is a manual approval step that sets `rolloutPct` 5, then 25, then 100 on a schedule the operator confirms (09 section 12).
 
 ### 6.3 Versioning and compatibility matrix

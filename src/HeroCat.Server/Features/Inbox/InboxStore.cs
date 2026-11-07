@@ -68,7 +68,7 @@ public sealed class InboxStore
     public async Task<List<InboxRow>> ListAsync(Guid player, DateTimeOffset now, CancellationToken ct)
     {
         await using var c = await _db.OpenAsync(ct).ConfigureAwait(false);
-        await using var cmd = c.Command(
+        await using var cmd = c.Command("inbox.list", 
             $"select {Columns} from inbox_items " +
             "where player_id = @p and claimed_at is null and (expires_at is null or expires_at > @now) and available_at <= @now " +
             $"union all select {Columns} from (" +
@@ -95,7 +95,7 @@ public sealed class InboxStore
 
         InboxRow? row = null;
         bool claimed = false;
-        await using (var sel = c.Command(
+        await using (var sel = c.Command("inbox.lock_item", 
             $"select {Columns}, claimed_at from inbox_items where inbox_item_id = @id and player_id = @p for update", tx,
             ("id", id), ("p", player)))
         await using (var r = await sel.ExecuteReaderAsync(ct).ConfigureAwait(false))
@@ -135,7 +135,7 @@ public sealed class InboxStore
         await using var tx = await c.BeginTransactionAsync(ct).ConfigureAwait(false);
 
         var rows = new List<InboxRow>();
-        await using (var sel = c.Command(
+        await using (var sel = c.Command("inbox.lock_all", 
             $"select {Columns} from inbox_items " +
             "where player_id = @p and claimed_at is null and available_at <= @now and (expires_at is null or expires_at > @oldest) " +
             "order by available_at, created_at, inbox_item_id limit @max for update", tx,
@@ -173,7 +173,7 @@ public sealed class InboxStore
     public static async Task<int> PurgeExpiredAsync(IDbConnectionFactory db, DateTimeOffset now, CancellationToken ct)
     {
         await using var c = await db.OpenAsync(ct).ConfigureAwait(false);
-        await using var cmd = c.Command("delete from inbox_items where claimed_at is null and expires_at is not null and expires_at <= @cutoff", null,
+        await using var cmd = c.Command("inbox.purge_expired", "delete from inbox_items where claimed_at is null and expires_at is not null and expires_at <= @cutoff", null,
             ("cutoff", now - ExpiredReportWindow));
         return await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
@@ -223,7 +223,7 @@ public sealed class InboxStore
     static async Task ClaimRowAsync(DbConnection c, DbTransaction tx, Guid player, InboxRow row, List<InboxGrantLine> lines, string reason,
                                     string requestId, DateTimeOffset now, ClaimWrites claim, CancellationToken ct)
     {
-        await using (var upd = c.Command(
+        await using (var upd = c.Command("inbox.mark_claimed", 
             "update inbox_items set claimed_at = @now, claimed_request_id = @rid where inbox_item_id = @id and claimed_at is null", tx,
             ("now", now), ("rid", requestId), ("id", row.Id)))
             if (await upd.ExecuteNonQueryAsync(ct).ConfigureAwait(false) != 1)
@@ -236,7 +236,7 @@ public sealed class InboxStore
             {
                 // The copies the client's ApplyInboxGrant adds (00 decision 116) go to granted_items, which ITEM_WITHOUT_PULL
                 // and the summon handler's CollectionState read (specs/08 sections 3.2 and 7). Two lines of one id add up.
-                await using var ins = c.Command(
+                await using var ins = c.Command("inbox.grant_item", 
                     "insert into granted_items (player_id, item_id, amount, source_ref) values (@p, @i, @n, @ref) " +
                     "on conflict (player_id, item_id, source_ref) do update set amount = granted_items.amount + excluded.amount", tx,
                     ("p", player), ("i", l.Id), ("n", (int)l.Amount), ("ref", refId));
@@ -245,7 +245,7 @@ public sealed class InboxStore
             else if (l.Id == nameof(Currency.DIAMOND))
             {
                 // created_at is the database's clock: the row must land in a partition (specs/02 section 12).
-                await using var ins = c.Command(
+                await using var ins = c.Command("inbox.grant_diamonds", 
                     "insert into diamond_ledger (player_id, delta, reason, ref_type, ref_id, request_id) values (@p, @d, @reason, @rt, @ref, @rid)", tx,
                     ("p", player), ("d", (int)l.Amount), ("reason", reason), ("rt", RefType), ("ref", refId), ("rid", requestId));
                 await ins.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
@@ -255,7 +255,7 @@ public sealed class InboxStore
             {
                 // ticket_ledger's unique (player_id, request_id) index covers only the summon charge (migration 0006, issue
                 // #294), so a claim's several ticket rows (two lines, or claim-all) all carry its request id.
-                await using var ins = c.Command(
+                await using var ins = c.Command("inbox.grant_tickets", 
                     "insert into ticket_ledger (player_id, ticket, delta, reason, ref_type, ref_id, request_id) values (@p, @t, @d, @reason, @rt, @ref, @rid)", tx,
                     ("p", player), ("t", l.Id), ("d", (int)l.Amount), ("reason", reason), ("rt", RefType), ("ref", refId), ("rid", requestId));
                 await ins.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
@@ -311,8 +311,8 @@ public sealed class InboxStore
     static async Task<long> BalanceAsync(DbConnection c, DbTransaction tx, Guid player, string currency, CancellationToken ct)
     {
         await using var cmd = currency == nameof(Currency.DIAMOND)
-            ? c.Command("select coalesce(sum(delta), 0) from diamond_ledger where player_id = @p", tx, ("p", player))
-            : c.Command("select coalesce(sum(delta), 0) from ticket_ledger where player_id = @p and ticket = @t", tx, ("p", player), ("t", currency));
+            ? c.Command("inbox.diamond_balance", "select coalesce(sum(delta), 0) from diamond_ledger where player_id = @p", tx, ("p", player))
+            : c.Command("inbox.ticket_balance", "select coalesce(sum(delta), 0) from ticket_ledger where player_id = @p and ticket = @t", tx, ("p", player), ("t", currency));
         return Convert.ToInt64(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false));
     }
 
