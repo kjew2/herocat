@@ -14,7 +14,7 @@ Start with `specs/00-overview.md`. It fixes the pitch and pillars, scope tiers, 
 | `specs/03-heroes-and-growth.md` | Hero sheet, stats, classes and roles, former lives and traits, statuses, inner life, the stat pipeline; levels, promotion, synthesis and conversion, skills and class change | New game |
 | `specs/04-summons-and-collections.md` | Becomes `04-summons-and-gear.md`: hero and gear banners, odds, pity, gear, crafting | HeroCat; rewrite #343, #345 |
 | `specs/05-fish-merge-minigame.md` | Becomes `05-tower-and-battle.md`: floors, auto-battle, missions, death and revival, side content | HeroCat (retired system); rewrite #346 |
-| `specs/06-economy-and-daily-loop.md` | Becomes `06-lobby-and-meta.md`: lobby, facilities, manager, research, parties, account level, quests, shop, idle time | HeroCat; rewrite #347 |
+| `specs/06-lobby-and-meta.md` | Lobby and facilities, the manager and tutorial, research, parties, account level and rankings, quests, idle time and offline catch-up, gems and shop, inbox; the P2 multi-master layer (scope only) | New game |
 | `specs/07-screens-and-ux.md` | Navigation map, every screen, states, UX and design rules, Unity client setup and device builds | HeroCat; rewrite #385 |
 | `specs/08-backend-and-live-ops.md` | Services, API contracts, auth, IAP, anti-cheat, config, compliance | HeroCat; update #386 |
 | `specs/09-content-data-pipeline.md` | Table schemas, exporter, validation, `ContentDb`, localization | HeroCat; update #387 |
@@ -22,6 +22,7 @@ Start with `specs/00-overview.md`. It fixes the pitch and pillars, scope tiers, 
 | `specs/11-source-divergences.md` | Every rule where the new game deliberately differs from the source mechanics in `docs/research/` | New game |
 | `specs/archive/00-overview-herocat.md` | HeroCat's overview, kept so existing citations resolve; not a spec | Archived |
 | `specs/archive/03-combat-and-progression-herocat.md` | HeroCat's combat and progression spec, kept so "03 section N" citations in code and tools resolve; not a spec | Archived |
+| `specs/archive/06-economy-and-daily-loop-herocat.md` | HeroCat's economy and daily loop spec, kept so "06 section N" citations in code and tools resolve; not a spec | Archived |
 
 Tools (Python 3.9+, stdlib only unless noted):
 
