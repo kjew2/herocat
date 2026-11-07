@@ -2,6 +2,8 @@
 
 Status: **catalog complete for webtoon chapters 1-93**, 2026-11-07. Research notes, not a spec. Epic: #353 (pivot). Spec issues this feeds: #342 hero model, #343 summoning, #344 growth, #345 equipment, #346 tower, floors, missions and stakes, #347 master meta. Decisions it informs: #339 core loop, #340 monetization, #354 premise.
 
+**What we changed:** this doc describes the source. For every rule the new game deliberately does differently, see `specs/11-source-divergences.md` (decision 129).
+
 **Mechanics only** (`specs/00` decision 121, #337 = B). This doc describes rules, systems and numbers. It names no characters, places, story events or named items from the work: those are replaced by generic terms ("the protagonist", "a mage hero", "the 7-star book"). Nothing here may go into the game as text or art.
 
 The first pass of this spike (merged in #333) mapped a few mechanics onto HeroCat. That mapping is superseded by the pivot (decision 122) and is dropped here; see git history for it.
