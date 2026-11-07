@@ -65,7 +65,7 @@ All of them are heroines (`specs/00` decision 104). Store art uses covered varia
 | `comp_e_09` | Epic | `MP_REGEN` | Iris | Cleric | WATER | none yet |
 | `comp_e_10` | Epic | `MP_REGEN` | Elowen | Sage | LEAF | none yet |
 | `comp_l_01` | Legendary | `DAMAGE` | Lucy | Arcane / Caster | LIGHT | `lucy.jpeg`, `lucy_special.jpeg` |
-| `comp_l_02` | Legendary | `DAMAGE` | Yuki | Mage / Shadow | DARK | `yuki.jpg`, `splash/yuki_splash.png` |
+| `comp_l_02` | Legendary | `DAMAGE` | Yuki | Mage / Shadow | DARK | `yuki.jpg`, `splash/yuki_splash.png`, `yuki_concept_parasol.png`, `yuki_concept_seated.jpg` |
 | `comp_l_03` | Legendary | `DAMAGE` | Carmine | Warrior | FIRE | none yet |
 | `comp_l_04` | Legendary | `BUFF_ATK` | Valeria | Tank / Paladin | LIGHT | `valeria.jpeg` |
 | `comp_l_05` | Legendary | `BUFF_GOLD` | Marisol | Merchant | WATER | none yet |
@@ -100,9 +100,19 @@ All of them are heroines (`specs/00` decision 104). Store art uses covered varia
 
 ### Yuki
 - **Hook:** a gothic shadow mage who never lowers her parasol; when she twirls it, the shade breaks into butterflies.
-- **Silhouette:** long straight black hair in a hime cut (blunt bangs, cheek-length side locks cut straight across) with a white streak in one side lock, a heart-and-cross bow, a halo of thorns, a frilled black-and-white jirai kei outfit and a frilled black parasol.
-- **Fashion:** jirai kei ("landmine" style) worn gothic: a frilled blouse with a big ribbon tie, a high-waisted skirt, a ribbon choker, heart motifs, platform Mary Janes, and soft red under-eye makeup for a sweet, slightly sad look. No bandages or self-harm motifs.
-- **Palette:** black, white and violet; silver chains and cross accents.
+- **Silhouette:** very long straight black hair in a hime cut (heavy blunt bangs, side locks cut straight at the jaw) with white panels in the side locks and white strands through the length; a heart-and-cross bow; a thin halo of silver thorns; oversized black off-shoulder sleeves; chunky platform shoes; and a frilled black-and-white parasol.
+- **Fashion:** jirai kei ("landmine" style) worn gothic:
+  - a white frilled blouse with a big black bow at the collar, pinned with a heart gem, and a lace choker;
+  - a black high-waisted corset belt with several buckled straps, over a short black frilled skirt with white lace layers;
+  - oversized black off-shoulder sleeves laced up with white ribbon, frilled arm cuffs and buckled arm straps;
+  - a buckled thigh strap with a frilled garter, white lace socks with frilled cuffs and bows;
+  - black patent platform Mary Janes with heart buckles.
+- **Signature prop:** a white plush bunny with stitched X eyes and a heart-gem bow, hanging from her belt or held. It shows up in every concept, so keep it.
+- **Face:** violet-grey eyes, half-lidded and languid, lips slightly parted; aloof and a little sad. Soft red under-eye makeup, a small beauty mark under one eye. Cross earrings and an ear chain.
+- **Motifs:** hearts, crosses, buckles and ribbons; floating crystal shards, ribbons and pale butterflies; white lilies; a mirror or a second, larger echo of her face behind her.
+- **Palette:** near-monochrome black, white and silver, with lavender and violet light. Violet stays the only colour accent.
+- **Leave out:** bandages, stitches or scars on the face or body, self-harm motifs, and the barcode and text graphics in the concepts (the game draws its own UI).
+- **References:** `yuki_concept_parasol.png` (standing with the parasol, low angle) and `yuki_concept_seated.jpg` (seated with the bunny, mirror echo) are the owner's concepts for her look (2026-11-07). They win over `yuki.jpg` where they differ.
 - **Ability VFX (`vfx_comp_l_02`):** violet shadow butterflies swarm out of the parasol and burst on the enemy.
 - **Added after the pilot**, the same way: stand-ins cut by `tools/art/cut_pilot_assets.py`.
 - **Style pilot:** Yuki is the character for the splash style pilot that picks the house illustration style (`splash-pilot.md`, issue #287).
