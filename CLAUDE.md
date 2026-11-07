@@ -52,3 +52,4 @@ This file is how lessons reach the next agent. When the user corrects you on som
 - The acceptance sweep is report-only until the balance decision #249 lands (`REWRITE_REPORT_ONLY=1`, agreed with the user); golden checks are hard again. Report the sweep's result honestly; never regenerate targets or thresholds to hide a regression.
 - When a task is blocked on a user decision, ask (or file the decision issue) and keep going with other unblocked work; do not sit idle waiting for the answer.
 - Generated test data is large and not for reading. Never open, grep through or hand-edit `golden/` files: regenerate them through the bot CLI, never edit by hand.
+- When you share art exploration images, add them to the design lookbook (https://claude.ai/artifact/LQzxNoeTbZjFCY7NSbLceR, linked on #321). Republish that page by its URL; don't create a new one.

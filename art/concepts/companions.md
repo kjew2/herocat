@@ -85,7 +85,18 @@ All of them are heroines (`specs/00` decision 104). Store art uses covered varia
 `comp_m_02`, Paladin, LIGHT.
 - **Hook:** a war goddess who stepped down from her constellation because mortals kept losing; when she raises her spear, the whole party fights as if blessed.
 - **Look:** Floor-length white-gold hair, a sunburst crown, a sculpted gilded bodice over a high-slit white war skirt, gilded gauntlets and greaves, a halo of six floating golden blades behind her, and a spear of light taller than she is.
+- **Hair:** floor-length white-gold hair in loose waves, with two thin braids woven with gold thread framing her face. It drifts as if underwater, a sign she is not quite mortal.
+- **Outfit:**
+  - a sunburst crown of tall gold rays;
+  - a sculpted gilded bodice engraved with a rising sun;
+  - one gilded pauldron with a short white feathered half-cape;
+  - a white war skirt with a high slit and gold hem plates;
+  - gilded gauntlets, and greaves that end in strapped sandals.
+- **Signature props:** a spear of solid light taller than she is, and a halo of six floating golden blades fanned behind her shoulders.
+- **Face:** gold eyes with tiny starburst pupils, a serene faint smile, gold-leaf marks at the outer corners of her eyes. She looks down at the viewer kindly, the way a goddess would.
+- **Motifs:** sun rays, constellation lines between stars, laurel, cracked white marble.
 - **Palette:** White, gold and sunrise orange; marble-and-gilt finish.
+- **Leave out:** real religious symbols and any real deity's likeness. She is our own goddess.
 - **Ability VFX (`vfx_comp_m_02`):** The six halo blades fan out over the party and stamp a golden sigil under each companion; light motes rise from them while the buff lasts.
 - **Splash:** `art_splash_comp_m_02` (decision 108).
 
@@ -122,6 +133,16 @@ All of them are heroines (`specs/00` decision 104). Store art uses covered varia
 `comp_l_03`, Warrior, FIRE.
 - **Hook:** a dragon-blooded duelist who fights in a cropped jacket because armour only slows her down.
 - **Look:** Swept-back dark red horns, a crimson bob with one long side braid, a scaled tail, a cropped black moto-style jacket over a fitted battle top, gold chain belts, thigh-high boots, and a serrated greatsword whose edge glows like cooling lava.
+- **Hair and horns:** an asymmetric crimson bob, shorter on one side, with one long side braid capped by gold rings. Dark red horns sweep back from her temples, with ember-orange cracks at the tips.
+- **Outfit:**
+  - a cropped black moto jacket with flame-orange lining, the collar popped and the sleeves pushed up;
+  - a fitted black battle crop top that bares her midriff;
+  - two gold chain belts slung low over black shorts;
+  - fingerless gloves, and thigh-high black boots with gold buckles.
+- **Tail:** a crimson scaled tail with an ember glow at the tip. It curls when she is pleased.
+- **Signature prop:** a serrated greatsword as tall as she is, rested on her shoulder. Its edge glows like cooling lava.
+- **Face:** amber eyes with slit pupils, a cocky grin showing one fang, small crimson scale patches on her cheekbones.
+- **Motifs:** embers, cracked magma, dragon scales, gold hardware.
 - **Palette:** Crimson, black and molten orange; gold hardware.
 - **Ability VFX (`vfx_comp_l_03`):** She drags the greatsword through a magma arc; the cut cracks open and erupts under the enemy.
 - **Splash:** `art_splash_comp_l_03` (decision 108).
@@ -144,7 +165,18 @@ All of them are heroines (`specs/00` decision 104). Store art uses covered varia
 `comp_l_06`, Sage, LEAF.
 - **Hook:** a nine-tailed fox spirit who keeps a mountain shrine and lends her foxfire to anyone polite enough to ask.
 - **Look:** Tall fox ears, nine fluffy tails fanned out behind her, long pink-silver hair with a red string ornament, a layered off-shoulder kimono worn loose under a wide obi bow, a kagura bell staff, and paper lanterns of foxfire orbiting her.
+- **Hair and ears:** long, flowing pink-silver hair with soft side tufts, tied loosely with red string and small gold bells. Tall fox ears with pale pink insides.
+- **Outfit:**
+  - a layered kimono worn off both shoulders: ivory outer layer, vermilion middle, plum inner collar;
+  - long split sleeves, with a hem cut short at the front and trailing at the back;
+  - a wide plum obi tied in a large bow at the back, with a red braided cord;
+  - white tabi, and tall black lacquered sandals.
+- **Tails:** nine fluffy tails, ivory with pink-silver tips, fanned out behind her like a halo. They are her silhouette.
+- **Signature props:** a kagura bell staff (a cluster of gold bells on a red-ribboned handle) and paper lanterns of pale green foxfire orbiting her.
+- **Face:** plum eyes with a red eyeliner flick, a gentle sly smile, a small vermilion mark on her forehead.
+- **Motifs:** a torii gate, a mountain shrine, mist, falling leaves, foxfire.
 - **Palette:** Vermilion, ivory and plum; foxfire in pale green.
+- **Leave out:** readable kanji or any other text on lanterns, charms or signs, and real shrine names.
 - **Ability VFX (`vfx_comp_l_06`):** Green foxfire wisps leave her lanterns and sink into each companion, refilling their mana with a soft bell chime.
 - **Splash:** `art_splash_comp_l_06` (decision 108).
 

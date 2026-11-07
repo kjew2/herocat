@@ -90,6 +90,10 @@ Score each candidate 1 to 5 on: **pull excitement, readability at small sizes, f
 - Drop the candidates in `art/exploration/splash_pilot/` as `yuki_<variant>_<n>.png` (for example `yuki_b_3.png`), with the tool and prompt used in a `prompts.txt` beside them. **Exploration only:** these never ship, and nothing in `Assets/` points at them.
 - AI images are fine for choosing a direction. The shipped splash is the artist's work: `specs/07` section 15.3 requires an artist pass on AI-assisted art and keeps layered sources under `art/source/`, because purely AI-generated images can't be registered for copyright in the US. Use only tools whose terms allow commercial use.
 
+## Result
+
+**Picked: A, clean cel** (owner, 2026-11-07, after round 1; round 2 was skipped). It is the house illustration style in `specs/07` section 15.3. The next step, clean-cel splashes for the other Legendary and Mythic companions, uses `splash-prompts.md`. Round 1 images and the lookbook link are on issue #321.
+
 ## 7. After the pick
 
 1. Record the winning variant, and anything borrowed from the runners-up, in issue #287.
