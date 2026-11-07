@@ -169,7 +169,8 @@ namespace HeroCat.Runtime.Content
         /// A landed config (boot, every refresh). Starts staging on the thread pool when the offered bundle is newer than the
         /// running one, this client may load it, and it is not already staged, pending or ruled out this session (a transient
         /// fetch failure does not rule it out). Returns the
-        /// staging task (completed when nothing starts); it never faults.
+        /// staging task (completed when nothing starts; for the version just ruled out, its task, which completes once
+        /// <see cref="Failed"/> has been raised); it never faults.
         /// </summary>
         public Task Check(ClientConfig config, CancellationToken ct = default)
         {
@@ -179,7 +180,9 @@ namespace HeroCat.Runtime.Content
             lock (_lock)
             {
                 if (_state == ContentUpdateState.Staging) return _task;
-                if (_failed.Contains(p.Version)) return Task.CompletedTask;   // a broken bundle is not re-downloaded every refresh
+                // A broken bundle is not re-downloaded every refresh. While its staging task is still raising Failed (the
+                // version is marked failed first), hand that task back so a caller awaiting Check sees the report raised.
+                if (_failed.Contains(p.Version)) return _version == p.Version ? _task : Task.CompletedTask;
                 if (_version != null && ContentVersion.Compare(p.Version, _version) <= 0 && _state != ContentUpdateState.NeedsClientUpdate)
                     return Task.CompletedTask;   // already have it (or newer) pending or hot
                 if (_clientVersion != null && !string.IsNullOrEmpty(p.MinClientVersion) &&

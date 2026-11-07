@@ -123,6 +123,28 @@ namespace HeroCat.Runtime.Tests
         }
 
         [Test]
+        public void ACheckDuringTheFailureReport_ReturnsTheStagingTask_NotACompletedOne()   // a race BootFlow's boot Check exposed
+        {
+            var staging = new MemoryContentStaging();
+            staging.Cdn[V] = Bundles.Make(V, corrupt: true, touch: "skills");
+            var u = Updater(staging);
+            using (var entered = new System.Threading.ManualResetEventSlim())
+            using (var gate = new System.Threading.ManualResetEventSlim())
+            {
+                u.Failed += (v, e) => { entered.Set(); gate.Wait(10000); };
+                var first = u.Check(Offer(V));
+                Assert.That(entered.Wait(10000), Is.True);
+                var second = u.Check(Offer(V));   // the version is already ruled out, its report not yet raised
+                Assert.That(second.IsCompleted, Is.False, "a caller awaiting Check must see the report done");
+                gate.Set();
+                Assert.That(second.Wait(10000), Is.True);
+                Assert.That(first.IsCompleted, Is.True);
+            }
+            Assert.That(u.Check(Offer(V)).IsCompleted, Is.True);
+            Assert.That(staging.Downloads, Is.EqualTo(1));
+        }
+
+        [Test]
         public void ADownloadFailure_LeavesTheRunningContent()
         {
             var staging = new MemoryContentStaging();   // the fake CDN has nothing
