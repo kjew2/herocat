@@ -1,0 +1,1 @@
+CONTENT E066 tutorial_steps[tut_welcome].grants: the starter weapons must be exactly 1 distinct WEAPON grants of amount 1, got none

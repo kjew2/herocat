@@ -73,12 +73,12 @@ namespace HeroCat.Sim.Power
         /// <summary>expMult = 1 + TRAIN_PER_LVL[EXP_GAIN] * n.</summary>
         public static double ExpMult(ContentDb db, GameState s) => 1.0 + PerLvl(db, Stat.EXP_GAIN) * Level(s, Stat.EXP_GAIN);
 
-        // ================================================================================================ Hero Level (03 5.2)
+        // ================================================================================================ Party Level (03 5.2)
 
-        /// <summary>HERO_LVL_MULT ^ heroLevel from the cached table (bit-identical to repeated multiplication).</summary>
-        public static double HeroMult(ContentDb db, GameState s) => db.HeroMult(s.Hero.Level < 0 ? 0 : s.Hero.Level);
+        /// <summary>PARTY_LVL_MULT ^ partyLevel from the cached table (bit-identical to repeated multiplication).</summary>
+        public static double PartyMult(ContentDb db, GameState s) => db.PartyMult(s.Party.Level < 0 ? 0 : s.Party.Level);
 
-        // ================================================================================================ Collections (04 5-7)
+        // ================================================================================================ Collections (04 5-8)
 
         /// <summary>LevelMult of an owned item: 1 + DUPE_LVL_BONUS * (Level(copies) + limitBreaks - 1); 0 when not owned.</summary>
         public static double ItemLevelMult(ContentDb db, OwnedItem item)
@@ -95,18 +95,23 @@ namespace HeroCat.Sim.Power
             return col.Items.TryGetValue(id, out var item) ? ItemLevelMult(db, item) : 0.0;
         }
 
-        /// <summary>equippedWeaponPct = WEAPON_ATK_PCT * LevelMult(equipped); 0 when nothing (owned) is equipped (04 section 6.1).</summary>
-        public static double EquippedWeaponPct(ContentDb db, GameState s)
+        /// <summary>The party slot array to read: <paramref name="slots"/> when given (a probe loadout), else the state's.</summary>
+        static PartySlot[] SlotsOf(GameState s, PartySlot[] slots) => slots ?? s.Party.Slots;
+
+        static PartySlot SlotAt(PartySlot[] slots, int i) => slots != null && i >= 0 && i < slots.Length ? slots[i] : null;
+
+        /// <summary>equippedWeaponPct(i) = WEAPON_ATK_PCT * LevelMult of slot i's weapon; 0 unarmed or unowned (04 section 6.1).</summary>
+        public static double EquippedWeaponPct(ContentDb db, GameState s, int slot, PartySlot[] slots = null)
         {
-            string id = s.Loadout.Weapon;
+            string id = SlotAt(SlotsOf(s, slots), slot)?.Weapon;
             if (id == null || !db.Weapons.TryGetValue(id, out var w)) return 0.0;
             return w.AtkPct * OwnedLevelMult(db, s.Weapons, id);
         }
 
         /// <summary>
-        /// Sum over owned weapons (equipped included) of WEAPON_PASSIVE_PCT * LevelMult (04 section 6.1). Summed in a fixed
-        /// order (rarity, then the weapon pool's ordinal id order), never dictionary order, so the bits do not depend on how
-        /// the collection was filled or loaded (00 contract 1).
+        /// Sum over owned weapons (equipped included) of WEAPON_PASSIVE_PCT * LevelMult (04 section 6.1), party-wide. Summed in
+        /// a fixed order (rarity, then the weapon pool's ordinal id order), never dictionary order, so the bits do not depend
+        /// on how the collection was filled or loaded (00 contract 1).
         /// </summary>
         public static double WeaponPassivePct(ContentDb db, GameState s)
         {
@@ -125,59 +130,29 @@ namespace HeroCat.Sim.Power
 
         static readonly Rarity[] Rarities = { Rarity.COMMON, Rarity.RARE, Rarity.EPIC, Rarity.LEGENDARY, Rarity.MYTHIC };
 
-        /// <summary>Sum over equipped skills of dps_pct * LevelMult (04 section 7.2); unowned or unknown ids count 0.</summary>
-        public static double SkillDpsPct(ContentDb db, GameState s)
+        /// <summary>skillDpsPct(i) = dps_pct * LevelMult of slot i's skill (04 section 7.2); 0 empty, unowned or unknown.</summary>
+        public static double SkillDpsPct(ContentDb db, GameState s, int slot, PartySlot[] slots = null)
         {
-            var slots = s.Loadout.Skills;
-            if (slots == null) return 0.0;
-            double sum = 0.0;
-            for (int i = 0; i < slots.Length; i++)
-            {
-                string id = slots[i];
-                if (id == null || !db.Skills.TryGetValue(id, out var def)) continue;
-                sum += def.DpsPct * OwnedLevelMult(db, s.Skills, id);
-            }
-            return sum;
+            string id = SlotAt(SlotsOf(s, slots), slot)?.Skill;
+            if (id == null || !db.Skills.TryGetValue(id, out var def)) return 0.0;
+            return def.DpsPct * OwnedLevelMult(db, s.Skills, id);
         }
 
-        /// <summary>LevelMult of the skill in <paramref name="slot"/>; scales its per-cast numbers (04 section 5.1).</summary>
+        /// <summary>LevelMult of an owned skill; scales its per-cast numbers (04 section 5.1). 0 when not owned.</summary>
         public static double SkillLevelMult(ContentDb db, GameState s, string skillId) => OwnedLevelMult(db, s.Skills, skillId);
 
         /// <summary>
-        /// The companion in loadout slot <paramref name="slot"/> when it counts: the slot is open at the current Awakening
-        /// rank (03 section 5.3), the id is a known companion and it is owned. Null otherwise; <paramref name="levelMult"/>
-        /// is its LevelMult (04 section 5.1). The tick loop and the rated formula both read slots through this.
+        /// The companion in party slot <paramref name="slot"/> when it counts: the id is a known companion and it is owned.
+        /// Null otherwise (the slot is empty and does nothing, 00 decision 109); <paramref name="levelMult"/> is its LevelMult
+        /// (04 section 5.1). The tick loop and the rated formula both read slots through this.
         /// </summary>
-        public static CompanionDef ActiveCompanion(ContentDb db, GameState s, int slot, int openSlots, out double levelMult)
+        public static CompanionDef ActiveCompanion(ContentDb db, GameState s, int slot, out double levelMult, PartySlot[] slots = null)
         {
             levelMult = 0.0;
-            var slots = s.Loadout.Companions;
-            if (slots == null || slot < 0 || slot >= slots.Length || slot >= openSlots) return null;
-            string id = slots[slot];
+            string id = SlotAt(SlotsOf(s, slots), slot)?.Companion;
             if (id == null || !db.Companions.TryGetValue(id, out var def)) return null;
             levelMult = OwnedLevelMult(db, s.Companions, id);
             return levelMult > 0 ? def : null;
-        }
-
-        /// <summary>Companion slots open now (COMPANION_SLOTS capped by Awakening, 04 section 8.2).</summary>
-        public static int OpenCompanionSlots(ContentDb db, GameState s) => AwakeningRules.CompanionSlots(db, s);
-
-        /// <summary>
-        /// Sum over equipped companions of dps_pct * LevelMult (04 section 8.2), MP_REGEN and BUFF_GOLD counting 0 (04 section 8.1).
-        /// Locked slots, unowned and unknown ids count 0. 0 in M0 (no companion rows).
-        /// </summary>
-        public static double CompanionDpsPct(ContentDb db, GameState s)
-        {
-            var slots = s.Loadout.Companions;
-            if (slots == null || db.Companions.Count == 0) return 0.0;
-            int open = OpenCompanionSlots(db, s);
-            double sum = 0.0;
-            for (int i = 0; i < slots.Length; i++)
-            {
-                var c = ActiveCompanion(db, s, i, open, out double lm);
-                if (c != null && c.CountsInLayer) sum += c.DpsPct * lm;
-            }
-            return sum;
         }
 
         /// <summary>MP restored by one cast of an MP_REGEN companion at <paramref name="levelMult"/>: mp_restored * LevelMult (04 section 8.1).</summary>
@@ -185,30 +160,35 @@ namespace HeroCat.Sim.Power
             c.AbilityType == AbilityType.MP_REGEN ? c.Magnitude * levelMult : 0.0;
 
         /// <summary>
-        /// The inclusive mpSufficiency (04 section 8.2, 03 section 7.1; issue #39, 00 decision 71):
-        /// <c>supply = mpRegenPerSecond + sum MP_REGEN (mpRestored - mpCost) / cooldownSeconds</c>,
-        /// <c>demand = sum other (mpCost / cooldownSeconds)</c>, <c>demand == 0 ? 1 : min(1, supply / demand)</c>, floored at
-        /// 0 (a net-draining loadout cannot make the layer negative). 1 in M0.
+        /// mpSufficiency_i for every slot's own pool (03 section 7.1; issue #39, 00 decisions 109, 110): the fraction of rated
+        /// ability uptime the pool sustains. <c>regen</c> is the pool's MP per second; every MP_REGEN companion j restores
+        /// <c>restored(j)</c> to every pool per cast at <c>uptime_j</c> (1 when its restore covers its own cost, else what its
+        /// own regen sustains); <c>mpSufficiency_i = min(1, (regen + restorePerSec) / demand_i)</c>, 1 for an empty slot or
+        /// a zero demand. Written into <paramref name="into"/> (length PARTY_SLOTS).
         /// </summary>
-        public static double MpSufficiency(ContentDb db, GameState s)
+        public static void MpSufficiency(ContentDb db, GameState s, double[] into, PartySlot[] slots = null)
         {
-            var slots = s.Loadout.Companions;
-            if (slots == null || db.Companions.Count == 0) return 1.0;
-            int open = OpenCompanionSlots(db, s);
             double hz = db.Constants.TickHz;
-            double supply = ResearchRules.MpRegenPerSecond(db, s), demand = 0.0;
-            for (int i = 0; i < slots.Length; i++)
+            double regen = ResearchRules.MpRegenPerSecond(db, s), restorePerSec = 0.0;
+            int n = into.Length;
+            for (int j = 0; j < n; j++)
             {
-                var c = ActiveCompanion(db, s, i, open, out double lm);
-                if (c == null || c.CooldownTicks <= 0) continue;
-                double perSec = hz / c.CooldownTicks;   // casts per second at full uptime
-                if (c.AbilityType == AbilityType.MP_REGEN) supply += (MpRestored(c, lm) - c.MpCost) * perSec;
-                else demand += c.MpCost * perSec;
+                var c = ActiveCompanion(db, s, j, out double lm, slots);
+                if (c == null || c.AbilityType != AbilityType.MP_REGEN || c.CooldownTicks <= 0) continue;
+                double cd = c.CooldownTicks / hz, restored = MpRestored(c, lm);
+                double uptime = restored >= c.MpCost ? 1.0 : Clamp01(regen / ((c.MpCost - restored) / cd));
+                restorePerSec += uptime * restored / cd;
             }
-            if (demand <= 0) return 1.0;
-            double r = supply / demand;
-            return r >= 1.0 ? 1.0 : r <= 0.0 ? 0.0 : r;
+            for (int i = 0; i < n; i++)
+            {
+                var c = ActiveCompanion(db, s, i, out _, slots);
+                if (c == null || c.CooldownTicks <= 0 || c.MpCost <= 0) { into[i] = 1.0; continue; }
+                double demand = c.MpCost * hz / c.CooldownTicks;
+                into[i] = Clamp01((regen + restorePerSec) / demand);
+            }
         }
+
+        static double Clamp01(double r) => r >= 1.0 ? 1.0 : r <= 0.0 ? 0.0 : r;
 
         // ================================================================================================ Fish Board (05 5)
 
@@ -236,7 +216,7 @@ namespace HeroCat.Sim.Power
         /// missileDpsPct = 100 * f * missileHitsPerFish(cap) / (60 * speedFactor), percentage points, for a player merging
         /// <paramref name="fishPerMinute"/> level-1 fish per minute (05 section 5.1). Rated-only (issue #15): the sim cannot
         /// know the merge rate, so <see cref="SimQuery.RatedDps"/> uses 0 and callers that model a rate (bots, tools,
-        /// SCR_HERO) pass it to <see cref="SimQuery.RatedDpsWithMissiles"/>.
+        /// SCR_PARTY) pass it to <see cref="SimQuery.RatedDpsWithMissiles"/>.
         /// </summary>
         public static double MissileDpsPct(ContentDb db, double fishPerMinute, int cap, double speedFactor) =>
             Units.Percent * fishPerMinute * MissileHitsPerFish(db, cap) / (Units.SecondsPerMinute * speedFactor);
@@ -249,16 +229,8 @@ namespace HeroCat.Sim.Power
         /// <summary>P1 (TODO(#227)). 0 until then.</summary>
         public static double RunePct(ContentDb db, GameState s) => 0.0;
 
-        /// <summary>AWAKEN_MULT ^ awakenRank: the product of the awakening rows' mult for ranks 1..AwakenRank (03 section 5.3).</summary>
-        public static double AwakenMult(ContentDb db, GameState s)
-        {
-            int rank = s.Hero.AwakenRank;
-            double m = 1.0;
-            var rows = db.Awakening;
-            for (int i = 0; i < rows.Count; i++)
-                if (rows[i].Rank <= rank) m *= rows[i].Mult;
-            return m;
-        }
+        /// <summary>AWAKEN_MULT ^ awakenRank(i) of party slot <paramref name="slot"/> (03 section 5.3, per slot).</summary>
+        public static double AwakenMult(ContentDb db, GameState s, int slot) => AwakeningRules.Mult(db, s, slot);
 
         /// <summary>
         /// The bought level of the content's node with <paramref name="effect"/>, clamped to 0..max_level; 0 when the content
@@ -307,24 +279,24 @@ namespace HeroCat.Sim.Power
 
         // ================================================================================================ the formula (03 7.1)
 
-        /// <summary>Every factor and unit for this state. <paramref name="missileDpsPct"/> is rated-only (issue #15).</summary>
-        public static PowerBreakdown Compute(ContentDb db, GameState s, double missileDpsPct = 0.0)
+        /// <summary>
+        /// Every factor and unit for this state (03 section 7.1, 00 decision 109): the party's damage is the sum of its occupied
+        /// slots. <paramref name="missileDpsPct"/> is rated-only (issue #15). <paramref name="slots"/> evaluates a probe
+        /// loadout instead of the state's (auto-equip); everything else is read from <paramref name="s"/>.
+        /// </summary>
+        public static PowerBreakdown Compute(ContentDb db, GameState s, double missileDpsPct = 0.0, PartySlot[] slots = null)
         {
-            var p = new PowerBreakdown
+            int n = db.Constants.PartySlots;
+            var p = new PowerBreakdown(n)
             {
                 Base = db.Constants.BaseAtk,
                 Training = TrainingMult(db, s),
-                Hero = HeroMult(db, s),
-                EquippedWeaponPct = EquippedWeaponPct(db, s),
+                Party = PartyMult(db, s),
                 WeaponPassivePct = WeaponPassivePct(db, s),
-                SkillDpsPct = SkillDpsPct(db, s),
-                CompanionDpsPct = CompanionDpsPct(db, s),
-                MpSufficiency = MpSufficiency(db, s),
                 FishBoardDpsPct = FishBoardDpsPct(db, s),
                 MissileDpsPct = missileDpsPct,
                 ResearchPct = ResearchPct(db, s),
                 RunePct = RunePct(db, s),
-                Awakening = AwakenMult(db, s),
                 CritRate = CritRate(db, s),
                 CritDmg = CritDmg(db, s),
                 Speed = SpeedFactor(db, s),
@@ -334,20 +306,49 @@ namespace HeroCat.Sim.Power
                 MpPoolMax = ResearchRules.MpPoolMax(db, s),
                 MpRegenPerTick = ResearchRules.MpRegenPerTick(db, s),
             };
-            p.Weapons = 1.0 + (p.EquippedWeaponPct + p.WeaponPassivePct) / Units.Percent;
-            p.Skills = 1.0 + p.SkillDpsPct / Units.Percent;
-            p.Companions = 1.0 + p.MpSufficiency * p.CompanionDpsPct / Units.Percent;
-            p.Fish = 1.0 + (p.FishBoardDpsPct + p.MissileDpsPct) / Units.Percent;
+            p.Fish = 1.0 + p.FishBoardDpsPct / Units.Percent;
             p.Research = 1.0 + p.ResearchPct;
             p.Runes = 1.0 + p.RunePct;
             p.Crit = CritFactor(p.CritRate, p.CritDmg);
+            MpSufficiency(db, s, p.MpSufficiencyArr, slots);
 
-            p.HeroHit = p.Base * p.Training * p.Hero * p.Weapons * (1.0 + p.FishBoardDpsPct / Units.Percent)
-                      * p.Research * p.Runes * p.Awakening;
-            p.SkillUnit = p.HeroHit * p.Crit * p.Speed;
-            p.CompanionUnit = p.SkillUnit * p.Skills;
-            p.RatedDps = p.Base * p.Training * p.Hero * p.Weapons * p.Skills * p.Companions * p.Fish * p.Research * p.Runes
-                       * p.Awakening * p.Crit * p.Speed;
+            double partyWide = p.Base * p.Training * p.Party * p.Fish * p.Research * p.Runes;   // the party-wide part of a slot hit
+            double partyHit = 0.0, sumSlotDps = 0.0, buffSum = 0.0;
+            for (int i = 0; i < n; i++)
+            {
+                p.EquippedWeaponPctArr[i] = EquippedWeaponPct(db, s, i, slots);
+                p.SkillDpsPctArr[i] = SkillDpsPct(db, s, i, slots);
+                p.AwakeningArr[i] = AwakenMult(db, s, i);
+                p.WeaponFactorArr[i] = 1.0 + (p.EquippedWeaponPctArr[i] + p.WeaponPassivePct) / Units.Percent;
+                p.SkillFactorArr[i] = 1.0 + p.SkillDpsPctArr[i] / Units.Percent;
+                var c = ActiveCompanion(db, s, i, out double lm, slots);
+                if (c == null)
+                {
+                    p.OwnFactorArr[i] = 1.0;
+                    continue;   // an empty slot does nothing (00 decision 109): zero units, out of every sum
+                }
+                p.OccupiedArr[i] = true;
+                p.OccupiedCount += 1;
+                double pct = c.CountsInLayer ? c.DpsPct * lm : 0.0;
+                if (c.AbilityType == AbilityType.DAMAGE) p.DamagePctArr[i] = pct;
+                else if (c.AbilityType == AbilityType.BUFF_ATK) p.BuffAtkPctArr[i] = pct;
+                p.OwnFactorArr[i] = 1.0 + p.MpSufficiencyArr[i] * p.DamagePctArr[i] / Units.Percent;
+                buffSum += p.MpSufficiencyArr[i] * p.BuffAtkPctArr[i];
+
+                p.CompanionAtkMultArr[i] = db.Rarities[c.Rarity].CompanionAtkMult;   // COMPANION_ATK_MULT[rarity], not level (00 decision 111)
+                double hit = partyWide * p.CompanionAtkMultArr[i] * p.WeaponFactorArr[i] * p.AwakeningArr[i];
+                p.SlotHitArr[i] = hit;
+                p.SlotUnitArr[i] = hit * p.Crit * p.Speed;
+                p.CompanionUnitArr[i] = p.SlotUnitArr[i] * p.SkillFactorArr[i];
+                p.SlotDpsArr[i] = p.CompanionUnitArr[i] * p.OwnFactorArr[i];
+                partyHit += hit;
+                sumSlotDps += p.SlotDpsArr[i];
+            }
+            p.PartyBuff = 1.0 + buffSum / Units.Percent;
+            p.PartyHit = partyHit;
+            p.AutoDps = sumSlotDps * p.PartyBuff;
+            p.MissileDps = partyHit * p.Speed * missileDpsPct / Units.Percent;
+            p.RatedDps = p.AutoDps + p.MissileDps;
             return p;
         }
     }

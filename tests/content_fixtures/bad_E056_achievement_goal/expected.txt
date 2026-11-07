@@ -1,1 +1,1 @@
-CONTENT E056 achievements[ach_stage_02].goal: goal must equal REACH_STAGE (same goal for every rung of ladder stage), got REACH_HERO_LEVEL
+CONTENT E056 achievements[ach_stage_02].goal: goal must equal REACH_STAGE (same goal for every rung of ladder stage), got REACH_PARTY_LEVEL

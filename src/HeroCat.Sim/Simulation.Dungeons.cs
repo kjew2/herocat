@@ -41,7 +41,7 @@ namespace HeroCat.Sim
         /// <summary>The last run that ended in this Simulation (null before any): its outcome and `dungeon_run` stream counter.</summary>
         public DungeonRunResult LastDungeonRun { get; private set; }
 
-        /// <summary>RewardOf(dungeon, floor) (06 section 6.3): the floor row's currency and amount (HERO_EXP resolved at build).</summary>
+        /// <summary>RewardOf(dungeon, floor) (06 section 6.3): the floor row's currency and amount (PARTY_EXP resolved at build).</summary>
         public static CurrencyDelta RewardOf(DungeonFloorDef floor) => new CurrencyDelta(floor.RewardCurrency, floor.RewardAmount);
 
         // ------------------------------------------------------------------------------------- rollover (06 section 4.2)

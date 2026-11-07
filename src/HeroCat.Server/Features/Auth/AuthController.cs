@@ -40,8 +40,8 @@ public sealed class AuthService
     public byte[] UnprotectDeviceKey(Guid deviceId, byte[] enc) => _protector.Unprotect(enc, DeviceAad(deviceId));
     static byte[] DeviceAad(Guid deviceId) => Encoding.UTF8.GetBytes("device/" + deviceId.ToString("D"));
 
-    /// <summary>02 section 4: <c>"Cat#"</c> + the last 4 characters of the player id.</summary>
-    public static string DefaultDisplayName(Guid playerId) => "Cat#" + playerId.ToString("N")[^4..].ToUpperInvariant();
+    /// <summary>02 section 4: <c>"Squire#"</c> + the last 4 characters of the player id.</summary>
+    public static string DefaultDisplayName(Guid playerId) => "Squire#" + playerId.ToString("N")[^4..].ToUpperInvariant();
 
     public static Guid ParseDeviceId(string? s, string field) =>
         Guid.TryParse(s, out var g) ? g : throw ApiException.Of(ErrorCodes.VALIDATION, $"{field} must be a GUID.", new { field });

@@ -75,7 +75,7 @@ namespace HeroCat.Sim.Tests
             foreach (Banner kind in CollectionRules.LimitBreakKinds)
                 foreach (Rarity r in Enum.GetValues(typeof(Rarity)))
                 {
-                    if (Db.Pool(kind, r).Count == 0) continue;   // companions are MVP: none in the M0 tier (CompanionTests covers them)
+                    if (Db.Pool(kind, r).Count == 0) continue;   // skip a rarity with no rows
                     var sim = Sim(rockCandy: 100_000);
                     string id = Db.Pool(kind, r)[0];
                     Own(CollectionRules.For(sim.State, kind), id);
@@ -108,25 +108,25 @@ namespace HeroCat.Sim.Tests
             string k = Db.Pool(Banner.SKILL, Rarity.LEGENDARY)[0];
             Own(sim.State.Weapons, w);   // level 1
             Own(sim.State.Skills, k, copies: Db.DupeLevels[2]);   // level 3
-            Assert.That(sim.Apply(new EquipWeapon(w)).Ok, Is.True);
+            Assert.That(sim.Apply(new EquipWeapon(0, w)).Ok, Is.True);
             Assert.That(sim.Apply(new EquipSkill(0, k)).Ok, Is.True);
             double bonus = Db.Constants.DupeLvlBonus;
             Assert.That(bonus, Is.EqualTo(0.20));
 
             for (int rank = 1; rank <= Db.Constants.LimitBreakRanks; rank++)
             {
-                double wBefore = PowerFormula.EquippedWeaponPct(Db, sim.State), pBefore = PowerFormula.WeaponPassivePct(Db, sim.State);
+                double wBefore = PowerFormula.EquippedWeaponPct(Db, sim.State, 0), pBefore = PowerFormula.WeaponPassivePct(Db, sim.State);
                 double dpsBefore = sim.Query.RatedDps;
                 double predicted = sim.Query.RatedDpsAfterLimitBreak(w);
                 Assert.That(sim.Apply(new LimitBreak(w)).Ok, Is.True);
-                Assert.That(PowerFormula.EquippedWeaponPct(Db, sim.State) - wBefore, Is.EqualTo(bonus * Db.Weapons[w].AtkPct).Within(1e-9));
+                Assert.That(PowerFormula.EquippedWeaponPct(Db, sim.State, 0) - wBefore, Is.EqualTo(bonus * Db.Weapons[w].AtkPct).Within(1e-9));
                 Assert.That(PowerFormula.WeaponPassivePct(Db, sim.State) - pBefore, Is.EqualTo(bonus * Db.Weapons[w].PassivePct).Within(1e-9));
                 Assert.That(sim.Query.RatedDps, Is.GreaterThan(dpsBefore), "MarkDpsDirty");
                 Assert.That(sim.Query.RatedDps, Is.EqualTo(predicted), "RatedDpsAfterLimitBreak predicts the command exactly");
 
-                double sBefore = PowerFormula.SkillDpsPct(Db, sim.State);
+                double sBefore = PowerFormula.SkillDpsPct(Db, sim.State, 0);
                 Assert.That(sim.Apply(new LimitBreak(k)).Ok, Is.True);
-                Assert.That(PowerFormula.SkillDpsPct(Db, sim.State) - sBefore, Is.EqualTo(bonus * Db.Skills[k].DpsPct).Within(1e-9));
+                Assert.That(PowerFormula.SkillDpsPct(Db, sim.State, 0) - sBefore, Is.EqualTo(bonus * Db.Skills[k].DpsPct).Within(1e-9));
                 Assert.That(CollectionRules.EffectiveLevel(Db, sim.State.Skills.Items[k]), Is.EqualTo(3 + rank));
             }
         }
@@ -159,7 +159,7 @@ namespace HeroCat.Sim.Tests
         public void Queries_DoNotMutate()
         {
             var sim = Sim(rockCandy: 50);
-            string w = sim.State.Loadout.Weapon;
+            string w = sim.State.Party.Slots[0].Weapon;
             string hash = sim.StateHash();
             double dps = sim.Query.RatedDps;
             Assert.That(sim.Query.RatedDpsAfterLimitBreak(w), Is.GreaterThan(dps));

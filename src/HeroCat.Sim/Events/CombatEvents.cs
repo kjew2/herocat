@@ -36,10 +36,10 @@ namespace HeroCat.Sim.Events
     public sealed record EnemySpawned(int Stage, bool IsBoss, double MaxHp) : Event;
 
     /// <summary>
-    /// One hero auto-attack (03 section 2.2). Opt-in (<see cref="Simulation.EmitHitLanded"/>, <see cref="CombatEventMask.HitLanded"/>), off by default, so the bot
+    /// One slot hit: party slot <see cref="Slot"/>'s auto-attack (03 section 2.2, 00 decision 109). Opt-in (<see cref="Simulation.EmitHitLanded"/>, <see cref="CombatEventMask.HitLanded"/>), off by default, so the bot
     /// and server ticks do not allocate one per hit.
     /// </summary>
-    public sealed record HitLanded(double Damage, bool IsCrit, double EnemyHpAfter) : Event;
+    public sealed record HitLanded(int Slot, double Damage, bool IsCrit, double EnemyHpAfter) : Event;
 
     /// <summary>The frontier moved from <see cref="From"/> to <see cref="To"/> (03 section 2.6).</summary>
     public sealed record StageCleared(int From, int To, bool ViaBoss) : Event;
@@ -82,8 +82,8 @@ namespace HeroCat.Sim.Events
     /// <summary>Hero Level rose to <see cref="Level"/> (03 section 5.2); one per level.</summary>
     public sealed record LevelUp(int Level) : Event;
 
-    /// <summary>Hero.AwakenRank rose to <see cref="Rank"/> through Awaken (03 section 5.3; issue #157).</summary>
-    public sealed record Awakened(int Rank) : Event;
+    /// <summary>Party slot <see cref="Slot"/>'s AwakenRank rose to <see cref="Rank"/> through Awaken(slot) (03 section 5.3; issue #157).</summary>
+    public sealed record Awakened(int Slot, int Rank) : Event;
 
     /// <summary>
     /// Research bought one level (03 section 6; analytics research_bought, 03 section 11). NewLevel is the level after;

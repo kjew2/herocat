@@ -40,7 +40,7 @@ namespace HeroCat.Runtime.Tests
             Assert.That(CommandCodec.TagFor(typeof(ApplyServerTime)), Is.EqualTo("ApplyServerTime"));
             // Every command the bots issue is pinned, not registered by type name on first use.
             foreach (var t in new[] { typeof(ClaimOfflineReward), typeof(TrainStat), typeof(ReleaseMax), typeof(MergeAll), typeof(MergeFish),
-                                      typeof(DiscardFish), typeof(AttemptBoss), typeof(AutoEquipBestWeapon), typeof(AutoEquipBestSkills),
+                                      typeof(DiscardFish), typeof(AttemptBoss), typeof(AutoEquipBestWeapons), typeof(AutoEquipBestSkills),
                                       typeof(ReleaseFish), typeof(MoveFish), typeof(LimitBreak), typeof(Awaken),
                                       typeof(ClaimQuest), typeof(ClaimAllQuests), typeof(Research),
                                       typeof(ClaimDailyGift), typeof(ExchangeItem),

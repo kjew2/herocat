@@ -23,8 +23,8 @@ namespace HeroCat.Runtime.Tests
             var m0 = ContentDb.Build(dtos, Tier.M0);
             Assert.That(mvp.Version, Is.EqualTo(dtos.Manifest.ContentVersion));
             Assert.That(mvp.ContentHash, Is.EqualTo(dtos.Manifest.ContentHash));
-            Assert.That(m0.Banners.Values.Count(b => b.Enabled), Is.EqualTo(2));
-            Assert.That(m0.Banners[Banner.COMPANION].Enabled, Is.False);
+            Assert.That(m0.Banners.Values.Count(b => b.Enabled), Is.EqualTo(3));
+            Assert.That(m0.Banners[Banner.COMPANION].Enabled, Is.True, "companions are M0 (00 decision 107)");
             Assert.That(mvp.Banners[Banner.COMPANION].Enabled, Is.True);
             Assert.That(m0.Awakening, Is.Empty, "awakening rows are MVP");
             Assert.That(mvp.Awakening, Has.Count.EqualTo(5));
@@ -60,8 +60,8 @@ namespace HeroCat.Runtime.Tests
             Assert.That(Codes(Assert.Throws<ContentBuildException>(() => ContentLoader.LoadDtos(src))), Is.EqualTo(new[] { "E901" }));
 
             var e = Assert.Throws<ContentBuildException>(() => ContentLoader.LoadDtos(Copy(), clientVersion: "0.0.9"));
-            Assert.That(e.Errors.Single().Message, Does.StartWith("content requires client >= 0.1.0, this client is 0.0.9"));
-            Assert.DoesNotThrow(() => ContentLoader.LoadDtos(Copy(), clientVersion: "0.1.0"));
+            Assert.That(e.Errors.Single().Message, Does.StartWith("content requires client >= 0.2.0, this client is 0.0.9"));
+            Assert.DoesNotThrow(() => ContentLoader.LoadDtos(Copy(), clientVersion: "0.2.0"));
         }
 
         [Test]

@@ -6,6 +6,8 @@ Tiers covered: **M0** (`content_src/` CSVs, exporter, validator, bundled content
 
 Depends on: 00 (sections 5, 6, 8), 01 (`ContentLoader`, boot flow 8.1, content hot update 8.12), 02 (`GameState.ContentVersion` and `ContentHash`, the load validator that reconciles saves against content), 03 (stats, Research, curve evaluation), 04 (collectible columns, banner levels), 05 (fish levels, tank), 06 (quests, dungeons, shop, inbox), 07 (locales, length budgets, ICU plurals), 08 (`GET /config`, CDN layout), 10 (CI gate).
 
+Party model (00 decision 109): the squire hero is replaced by a party of `PARTY_SLOTS` companions. This spec describes the agreed tables and rules (`party_levels`, `PARTY_EXP`, `PARTY_SLOTS`, per-slot `awakening`, the starter party and `E066`); the exporter, `ContentDb`, `content_src/` CSVs and `content/` do not match yet. That work is tracked in issue #309.
+
 ## 1. Principles
 
 1. **One source of truth.** The committed `content_src/*.csv`, one file per table, edited directly by people and agents (issue #278). A Google Sheet (one tab per table) is an optional one-off import through `pull`, not a second master: there is no repo-to-Sheet sync, so a stale Sheet pulled over newer CSVs would delete tables and rows. JSON, `ContentDb` and the Python models are derived. Nobody edits `content/*.json` by hand; CI rejects a commit whose JSON does not match what the exporter produces from the committed CSVs.
@@ -85,18 +87,18 @@ Enums are defined once in C# (`HeroCat.Sim.Content.Enums`) and mirrored in `tool
 | `Rarity` | `COMMON`, `RARE`, `EPIC`, `LEGENDARY`, `MYTHIC` | yes: `E+`, `L+` comparisons and rate renormalisation (04) |
 | `Stat` | `ATK`, `HP`, `DEF`, `CRIT_RATE`, `CRIT_DMG`, `ATK_SPD`, `GOLD_GAIN`, `EXP_GAIN` | yes: Training levels are stored by this index (02) |
 | `Banner` | `WEAPON`, `SKILL`, `COMPANION`, `RUNE` | yes: pity counters stored by index (02) |
-| `Currency` | `GOLD`, `DIAMOND`, `FISH_COIN`, `ROCK_CANDY`, `HERO_EXP`, `TICKET_FISH_COIN`, `TICKET_ROCK_CANDY`, `TICKET_EXP`, `TICKET_SUMMON_WEAPON`, `TICKET_SUMMON_SKILL`, `TICKET_SUMMON_COMPANION`, `GUILD_COIN`, `TICKET_SUMMON_RUNE` | yes: Wallet array index (02). `TICKET_SUMMON_RUNE` is appended last so earlier indices never move; unused until P1 (issue #26) |
+| `Currency` | `GOLD`, `DIAMOND`, `FISH_COIN`, `ROCK_CANDY`, `PARTY_EXP`, `TICKET_FISH_COIN`, `TICKET_ROCK_CANDY`, `TICKET_EXP`, `TICKET_SUMMON_WEAPON`, `TICKET_SUMMON_SKILL`, `TICKET_SUMMON_COMPANION`, `GUILD_COIN`, `TICKET_SUMMON_RUNE` | yes: Wallet array index (02). `TICKET_SUMMON_RUNE` is appended last so earlier indices never move; unused until P1 (issue #26). `PARTY_EXP` (was `HERO_EXP`, 00 decision 109) keeps index 4 |
 | `Dungeon` | `FISH_COIN`, `ROCK_CANDY`, `EXP` | yes |
 | `CastType` | `INSTANT`, `DOT`, `BUFF` | no |
 | `AbilityType` | `DAMAGE`, `BUFF_ATK`, `BUFF_GOLD`, `MP_REGEN` | no |
 | `ResearchEffect` | `RESEARCH_PCT`, `GOLD_MULT`, `MP_POOL`, `MP_REGEN`, `TANK_CAP`, `TANK_REFILL`, `FISH_CAP`, `OFFLINE_CAP` | no |
 | `QuestKind` | `DAILY`, `WEEKLY`, `ACHIEVEMENT` | no |
-| `QuestGoal` | 06 section 5.1 list: `LOGIN`, `LOGIN_DAYS`, `KILL_ENEMIES`, `ATTEMPT_BOSS`, `CLEAR_STAGES`, `SUMMON`, `RELEASE_FISH`, `MERGE_FISH`, `CLEAR_DUNGEON`, `TRAIN_LEVELS`, `DAILIES_COMPLETED`, `WEEKLIES_COMPLETED`, `REACH_STAGE`, `REACH_HERO_LEVEL`, `OWN_WEAPONS`, `OWN_SKILLS`, `OWN_COMPANIONS`, `LIFETIME_MERGES`, `FISH_LEVEL`, `AWAKEN_RANK`, `LIFETIME_SUMMONS`, `WATCH_AD` (P1) | no |
+| `QuestGoal` | 06 section 5.1 list: `LOGIN`, `LOGIN_DAYS`, `KILL_ENEMIES`, `ATTEMPT_BOSS`, `CLEAR_STAGES`, `SUMMON`, `RELEASE_FISH`, `MERGE_FISH`, `CLEAR_DUNGEON`, `TRAIN_LEVELS`, `DAILIES_COMPLETED`, `WEEKLIES_COMPLETED`, `REACH_STAGE`, `REACH_PARTY_LEVEL`, `OWN_WEAPONS`, `OWN_SKILLS`, `OWN_COMPANIONS`, `LIFETIME_MERGES`, `FISH_LEVEL`, `AWAKEN_RANK`, `LIFETIME_SUMMONS`, `WATCH_AD` (P1) | no |
 | `Element` | `NONE`, `FIRE`, `WATER`, `LEAF`, `LIGHT`, `DARK` | no (cosmetic in MVP) |
 | `PackageLimit` | `ONCE`, `DAILY`, `WEEKLY`, `MONTHLY` | no |
 | `InboxKind` | `IAP`, `MAIL`, `COMPENSATION`, `COUPON`, `SYSTEM` | no |
 | `TutorialTrigger` | `PROFILE_CREATED`, `STAGE_REACHED`, `FIRST_BOSS_FAILED`, `SCREEN_OPENED`, `PREVIOUS_DONE` | no |
-| `FeatureCondition` | `ALWAYS`, `STAGE_HIGHEST`, `AWAKEN_RANK` | no (section 5.34, issue #45) |
+| `FeatureCondition` | `ALWAYS`, `STAGE_HIGHEST`, `AWAKEN_RANK` (highest slot rank, 00 decision 109) | no (section 5.34, issue #45) |
 | `ConstantType` | `int`, `long`, `double`, `bool`, `intlist` | no |
 | `Tier` | `M0`, `MVP`, `P1`, `P2` | yes: a client built for tier T loads rows with `tier <= T` and hides the rest (section 9.5) |
 | `Locale` | `en`, `ja`, `ko`, `zh-Hans` | no; the MVP ship list is 07's. The exporter maps the enum value to the `snake_case` CSV column by a fixed rule (`zh-Hans` <-> `zh_hans`); file names use the enum form (`localization.zh-Hans.json`) (issue #57) |
@@ -115,7 +117,7 @@ The exporter checks `constants` against this list (`E040` missing, `E042` unknow
 | 00 entry | Lives in | Type |
 |---|---|---|
 | `TICK_HZ` | `constants` | int |
-| `BASE_ATK`, `BASE_HP` | `constants` | double |
+| `BASE_ATK` (per companion slot, 00 decision 109), `BASE_HP` | `constants` | double |
 | `ATTACK_INTERVAL_TICKS` | `constants` | int |
 | `HP0`, `HP_G` | `curves[enemy_hp].base`, `.growth` | double |
 | `KILLS_PER_STAGE` | `constants` | int |
@@ -134,12 +136,14 @@ The exporter checks `constants` against this list (`E040` missing, `E042` unknow
 | `DAY_SECONDS` | `constants` | int |
 | `OFFLINE_RATE`, `OFFLINE_CAP_H`, `OFFLINE_MIN_S` | `constants` | double, double, int |
 | `TUTORIAL_DIAMONDS` | `tutorial_steps[tut_welcome].grants` | grantlist |
+| `TUTORIAL_COMPANION_IDS` (5 ids, 00 decision 109) | `tutorial_steps[tut_welcome].grants`, its `COMPANION` item grants in slot order (`E066`) | grantlist |
+| `TUTORIAL_WEAPON_IDS` (5 ids, 00 decision 111) | `tutorial_steps[tut_welcome].grants`, its `WEAPON` item grants in slot order (`E066`); `TUTORIAL_WEAPON_ID` is the first | grantlist |
 | `LOGIN_DIAMONDS` | `constants` (auto-granted by `EnsureDay` with reason `LOGIN`; `d_login` pays nothing, issue #20) | int |
 | Base rates C..M | `banner_levels` rows with `level = 1`, per banner | double x5 |
 | `PITY_SOFT_START`, `PITY_SOFT_STEP`, `PITY_HARD`, `M_SHARE_OF_LPLUS` | `banners` | int, double, int, double |
 | 10-pull guarantee | `banners.guarantee_batch_size`, `.guarantee_min_rarity` | int, enum |
 | `BANNER_EXP_PER_PULL` | `banners.exp_per_pull` | int |
-| `SKILL_SLOTS`, `COMPANION_SLOTS`, `RUNE_SLOTS` | `constants` | int |
+| `PARTY_SLOTS`, `RUNE_SLOTS` | `constants` (the separate skill and companion slot counts are removed: one skill and one companion per party slot, 00 decision 109) | int |
 | `DUPE_LVL_CUM` | `dupe_levels.cum_copies` | int per row |
 | `DUPE_LVL_BONUS` | `constants` | double |
 | `LIMIT_BREAK_RANKS` | `constants` (issue #37) | int |
@@ -154,8 +158,8 @@ The exporter checks `constants` against this list (`E040` missing, `E042` unknow
 | `FISH_MISSILE_PCT[n]` | `fish_levels.missile_pct` (sheet formula `5 * 1.5^(n-1)`) | double |
 | `FISH_BOARD_DPS_PCT` factor 0.77 | `constants.FISH_BOARD_DPS_FACTOR` *(named here)* | double |
 | `AWAKEN_STAGES`, `AWAKEN_COST_ROCK_CANDY`, `AWAKEN_MULT` | `awakening.stage_gate`, `.rock_candy_cost`, `.mult` | int, long, double |
-| `HERO_LVL_EXP(l) = 100 * 1.08^l` | `hero_levels.exp0`, `.exp_g` | double |
-| `HERO_LVL_MULT` | `hero_levels.mult_per_level` | double |
+| `PARTY_LVL_EXP(l) = 100 * 1.08^l` | `party_levels.exp0`, `.exp_g` | double |
+| `PARTY_LVL_MULT` | `party_levels.mult_per_level` | double |
 | Section 6.6 day/stage targets | `progress_targets` | int, int |
 | Feature unlock gates (Research, Companions, Quests, Dungeons, Shop) | `feature_unlocks` (issue #45) | enum, int |
 | Exchange offers (06 section 8.4: price, grant, daily limit) | `shop_exchange` (issue #174) | enum, long, int |
@@ -164,7 +168,7 @@ The exporter checks `constants` against this list (`E040` missing, `E042` unknow
 | 06 section 2 reference-day parameters | `constants.REF_DAILIES_DONE`, `.REF_NEW_BOSSES` *(named here, issue #55)* | int |
 | 01's `CLOCK_BACKWARDS_TOLERANCE_S` (backwards-clock jitter, issue #246) | `constants.CLOCK_BACKWARDS_TOLERANCE_S` | int |
 
-Constants other specs declare and this spec hosts (their owners' Constants introduced sections are the source): 03's `ATTACK_PROGRESS_UNIT`, `CRIT_DMG_BASE`, `MP_POOL0`, `MP_REGEN0`, `BOSS_ROCK_CANDY_P`, `TRAIN_CAP[*]` (in `stats.cap`), `RES_*` (in `research`); 05's `FISH_DISCARD_COINS_PCT` (05 section 16; a `constants` row); 04's `WEAPON_ATK_PCT[r]`, `SKILL_DPS_PCT[r]`, `COMPANION_DPS_PCT[r]`, `LIMIT_BREAK_COST[r]`, `DUPE_OVERFLOW_ROCK_CANDY[r]` (in `rarities`), `BANNER_LVL_EXP` (in `banner_levels.exp_required`), `TUTORIAL_WEAPON_ID` (in `tutorial_steps`); 06's `FIRST_CLEAR_DIAMONDS`, `DUNGEON_*`, `INBOX_EXPIRY_DAYS`, shop rows; 01's `CLOCK_BACKWARDS_TOLERANCE_S` (the sim reads it, issue #246). Quest diamond amounts live only in the quest rows' `reward_amount` (no `QUEST_*` reward constants, issues #55 and #244). `REQUIRED_CONSTANTS` in the exporter is the union; acceptance criterion 4 pins the C# `Constants` class to it.
+Constants other specs declare and this spec hosts (their owners' Constants introduced sections are the source): 03's `ATTACK_PROGRESS_UNIT`, `CRIT_DMG_BASE`, `MP_POOL0`, `MP_REGEN0`, `BOSS_ROCK_CANDY_P`, `TRAIN_CAP[*]` (in `stats.cap`), `RES_*` (in `research`); 05's `FISH_DISCARD_COINS_PCT` (05 section 16; a `constants` row); 04's `WEAPON_ATK_PCT[r]`, `SKILL_DPS_PCT[r]`, `COMPANION_DPS_PCT[r]`, `LIMIT_BREAK_COST[r]`, `DUPE_OVERFLOW_ROCK_CANDY[r]` (in `rarities`), `BANNER_LVL_EXP` (in `banner_levels.exp_required`), `TUTORIAL_WEAPON_ID` and `TUTORIAL_COMPANION_IDS` (in `tutorial_steps`); 06's `FIRST_CLEAR_DIAMONDS`, `DUNGEON_*`, `INBOX_EXPIRY_DAYS`, shop rows; 01's `CLOCK_BACKWARDS_TOLERANCE_S` (the sim reads it, issue #246). Quest diamond amounts live only in the quest rows' `reward_amount` (no `QUEST_*` reward constants, issues #55 and #244). `REQUIRED_CONSTANTS` in the exporter is the union; acceptance criterion 4 pins the C# `Constants` class to it.
 
 ## 5. Table schemas
 
@@ -188,8 +192,8 @@ BOSS_EVERY int I              BOSS_HP_MULT double I        BOSS_TIME_TICKS int S
 BOSS_GOLD_MULT double I       CHAPTER_WIDTH int S          STAGE_CAP int I
 TAP_ZAP_DMG_PCT double S      TAP_ZAP_MAX_PER_SEC int S    TRAIN_BULK_STEPS intlist I
 DIAMONDS_PER_DAY_F2P int S    DAY_SECONDS int I            OFFLINE_RATE double I
-OFFLINE_CAP_H double S        OFFLINE_MIN_S int S          SKILL_SLOTS int I
-COMPANION_SLOTS int S         RUNE_SLOTS int S             DUPE_LVL_BONUS double I
+OFFLINE_CAP_H double S        OFFLINE_MIN_S int S          PARTY_SLOTS int I
+RUNE_SLOTS int S              DUPE_LVL_BONUS double I
 FISH_BOARD_W int S            FISH_BOARD_H int S           FISH_MAX_LVL0 int S
 FISH_MERGE_COINS_PCT double S FISH_BOARD_DPS_FACTOR double S
 ATTACK_PROGRESS_UNIT int I    CRIT_DMG_BASE double S       MP_POOL0 double S
@@ -199,7 +203,7 @@ LIMIT_BREAK_RANKS int S       REF_DAILIES_DONE int S       REF_NEW_BOSSES int S
 FISH_DISCARD_COINS_PCT double S CLOCK_BACKWARDS_TOLERANCE_S int S
 ```
 
-`REF_DAILIES_DONE` (8) and `REF_NEW_BOSSES` (4) are 06 section 2's reference-day assumptions (paying daily missions completed, new boss stages first-cleared); only `E039` and the bots read them (issue #55). There are no `QUEST_DAILY_DIAMONDS`, `QUEST_DAILY_BONUS_5`, `QUEST_DAILY_BONUS_8` or `QUEST_WEEKLY_DIAMONDS` constants: the quest rows are the single source (issues #55, #244).
+`REF_DAILIES_DONE` (8) and `REF_NEW_BOSSES` (4) are 06 section 2's reference-day assumptions (paying daily missions completed, new boss stages first-cleared); only `E039` and the bots read them (issue #55). `PARTY_SLOTS` (5) is the number of companion slots and sizes every per-slot array (00 decision 109); `BASE_ATK` (2) is one companion's base auto-attack, not a party total. There are no `QUEST_DAILY_DIAMONDS`, `QUEST_DAILY_BONUS_5`, `QUEST_DAILY_BONUS_8` or `QUEST_WEEKLY_DIAMONDS` constants: the quest rows are the single source (issues #55, #244).
 
 Range rules: every `*_TICKS`, `TICK_HZ`, `KILLS_PER_STAGE`, `BOSS_EVERY`, `CHAPTER_WIDTH`, `STAGE_CAP`, `TAP_ZAP_MAX_PER_SEC`, `DAY_SECONDS`, `OFFLINE_MIN_S`, `*_SLOTS`, `FISH_BOARD_*`, `FISH_MAX_LVL0`, `ATTACK_PROGRESS_UNIT`, `LIMIT_BREAK_RANKS` are `> 0`; `SPAWN_DELAY_TICKS`, `REF_DAILIES_DONE`, `REF_NEW_BOSSES`, `CLOCK_BACKWARDS_TOLERANCE_S` are `>= 0`; `BASE_ATK`, `BASE_HP`, `BOSS_HP_MULT`, `BOSS_GOLD_MULT`, `OFFLINE_CAP_H`, `DUPE_LVL_BONUS`, `MP_POOL0`, `MP_REGEN0` are `> 0`; `TAP_ZAP_DMG_PCT`, `OFFLINE_RATE`, `FISH_MERGE_COINS_PCT`, `FISH_BOARD_DPS_FACTOR`, `FISH_DISCARD_COINS_PCT`, `BOSS_ROCK_CANDY_P` are `in [0, 1]`; `CRIT_DMG_BASE >= 1`; `TRAIN_BULK_STEPS` strictly increasing with first element 1; `FISH_BOARD_W * FISH_BOARD_H <= 64` (02 stores the board as a fixed array).
 
@@ -226,7 +230,7 @@ Example: `{"id": "enemy_hp", "base": 20.0, "growth": 1.04, "x_offset": 0}` (`HP0
 | `trainable` | bool | 03 section 4: `HP` and `DEF` are `false` in MVP. |
 | `per_lvl` | double? | `TRAIN_PER_LVL[stat]`. Required when `trainable`, empty otherwise (`E054`). `> 0`. |
 | `cap` | int? | `TRAIN_CAP[stat]` in levels; empty = uncapped. `>= 1`. |
-| `base` | double? | The level-0 value for stats that have one: `CRIT_DMG` -> `CRIT_DMG_BASE` 1.5, `ATK` -> `BASE_ATK`, `HP` -> `BASE_HP`. Empty for the rest. |
+| `base` | double? | The level-0 value for stats that have one: `CRIT_DMG` -> `CRIT_DMG_BASE` 1.5, `ATK` -> `BASE_ATK` (per companion slot), `HP` -> `BASE_HP` (party-wide). Empty for the rest. |
 | `tier` | enum(Tier) | |
 | `name_key`, `desc_key` | key | |
 | `icon` | asset | |
@@ -299,7 +303,8 @@ Per-rarity facts shared by every collectible kind. 04 section 6.1, 7.1 and 8.1 d
 | `weapon_atk_pct` | double | `WEAPON_ATK_PCT[r]`; non-decreasing in rarity (`E048`). |
 | `weapon_passive_pct` | double | `WEAPON_PASSIVE_PCT[r]`; non-decreasing. |
 | `skill_dps_pct` | double | `SKILL_DPS_PCT[r]`; non-decreasing. |
-| `companion_dps_pct` | double | `COMPANION_DPS_PCT[r]`; non-decreasing. |
+| `companion_dps_pct` | double | `COMPANION_DPS_PCT[r]`; non-decreasing (C 20 / R 40 / E 80 / L 160 / M 320, 00 decision 111). |
+| `companion_atk_mult` | double | `COMPANION_ATK_MULT[r]`, a companion's auto-attack multiplier by rarity (C 1.0 / R 1.1 / E 1.25 / L 1.5 / M 2.0, 00 decision 111); `> 0` (E043). |
 | `rune_stat_pct` | double | P1 default; present, non-decreasing. |
 | `limit_break_cost` | long | `LIMIT_BREAK_COST[r]`: Rock Candy for limit-break rank `k` is `limit_break_cost * k` (04 section 5.2); `>= 1`, non-decreasing (`E048`) (issue #37). |
 | `dupe_overflow_rock_candy` | long | `DUPE_OVERFLOW_ROCK_CANDY[r]`: Rock Candy granted per copy past the last `dupe_levels` threshold (04 section 5.3); `>= 0`, non-decreasing (issue #37). |
@@ -320,7 +325,7 @@ Example: `{"id": "EPIC", "code": "E", "color": "#9B59B6", "shape_icon": "icon_ra
 | `tier` | enum(Tier) | |
 | `name_key`, `desc_key` | key | |
 | `icon` | asset | |
-| `sprite` | asset | Held by the hero. |
+| `sprite` | asset | Unused since 00 decision 113: companions are drawn with their own weapons and no held weapon sprite is drawn in battle. The column stays (optional, may be empty) so content keeps its schema; dropping it is a later content-schema change. |
 
 Example: `{"id": "weapon_e_02", "rarity": "EPIC", "atk_pct": 125.0, "passive_pct": 4.0, "element": "FIRE", "tier": "M0", "name_key": "weapon.e_02.name", "desc_key": "weapon.e_02.desc", "icon": "icon_weapon_e_02", "sprite": "spr_weapon_e_02"}`.
 
@@ -354,7 +359,7 @@ Example: `{"id": "skill_e_03", "rarity": "EPIC", "dps_pct": 40.0, "cast_type": "
 | `mp_cost` | int | `>= 1`. |
 | `cooldown_ticks` | int | `[20, 600]`. |
 | `duration_ticks` | int? | Required for `BUFF_*`, empty otherwise (`E054`); `<= cooldown_ticks` (`E058`). |
-| `tier` | enum(Tier) | `MVP` for all 50 (companions are MVP). |
+| `tier` | enum(Tier) | `M0` for all 50 (00 decision 107). |
 | `name_key`, `desc_key` | key | |
 | `icon`, `sprite`, `vfx` | asset | |
 
@@ -428,34 +433,35 @@ Example row: `{"banner": "WEAPON", "level": 4, "exp_required": 300, "rates": {"C
 
 ### 5.16 `awakening` (5 rows)
 
+Per slot (00 decision 109): each of the `PARTY_SLOTS` slots has its own `AwakenRank` and climbs the same rows, so rank `k` costs `rock_candy_cost` and needs `stage_gate` once per slot. There is no per-slot column; values are unchanged until the balance pass (#249).
+
 | Column | Type | Constraint |
 |---|---|---|
 | `rank` | int | Key. Exactly `1..N` (`E060`). |
 | `stage_gate` | int | `AWAKEN_STAGES[rank]`; strictly increasing (`E032`). |
-| `rock_candy_cost` | long | `AWAKEN_COST_ROCK_CANDY[rank]`; strictly increasing. |
+| `rock_candy_cost` | long | `AWAKEN_COST_ROCK_CANDY[rank]`; strictly increasing (20, 60, 160, 400, 1000 per slot, 00 decision 111). |
 | `mult` | double | `AWAKEN_MULT`; `> 1`. Every MVP row carries `1.5`. |
-| `companion_slots_after` | int | Total companion slots unlocked after this rank; non-decreasing; `<= COMPANION_SLOTS` (`E048`). |
-| `rune_slots_after` | int | Same for runes; `<= RUNE_SLOTS`. |
+| `rune_slots_after` | int | Total rune slots unlocked once the highest slot rank reaches this rank (P1: ranks 4 and 5); non-decreasing (`E048`); `<= RUNE_SLOTS`. |
 | `tier` | enum(Tier) | |
-| `name_key` | key | Rank title shown on `SCR_HERO`. |
+| `name_key` | key | Rank title shown on the slot card on `SCR_PARTY`. |
 | `icon` | asset | |
 
-Example: `{"rank": 2, "stage_gate": 150, "rock_candy_cost": 300, "mult": 1.5, "companion_slots_after": 3, "rune_slots_after": 0, "tier": "MVP", "name_key": "awakening.rank_2.name", "icon": "icon_awaken_2"}`.
+Example: `{"rank": 2, "stage_gate": 150, "rock_candy_cost": 300, "mult": 1.5, "rune_slots_after": 0, "tier": "MVP", "name_key": "awakening.rank_2.name", "icon": "icon_awaken_2"}`.
 
-### 5.17 `hero_levels` (1 row)
+### 5.17 `party_levels` (1 row)
 
-A one-row rule table rather than a per-level table: hero level is unbounded and 03 evaluates the threshold curve from two parameters.
+Was `hero_levels` (00 decision 109). A one-row rule table rather than a per-level table: the Party Level (one, party-wide) is unbounded and 03 evaluates the threshold curve from two parameters.
 
 | Column | Type | Constraint |
 |---|---|---|
 | `id` | id | Key. Exactly one row, `default` (`E045`). |
-| `exp0` | double | `HERO_LVL_EXP` base, `100`; `> 0`. |
+| `exp0` | double | `PARTY_LVL_EXP` base, `100`; `> 0`. |
 | `exp_g` | double | `1.08`; `> 1`. |
 | `atk_pct_per_level` | double? | Retired linear term `HERO_LVL_ATK_PCT`; empty (00 decision 9). |
-| `mult_per_level` | double? | Compounding `HERO_LVL_MULT` (`1.02`, 00 section 6.5, decision 9); populated. Exactly one of the two columns set (`E054`). |
+| `mult_per_level` | double? | Compounding `PARTY_LVL_MULT` (`1.02`, 00 section 6.5, decision 9); populated. Exactly one of the two columns set (`E054`). |
 | `level_cap` | int | `>= 1`. Guard like `STAGE_CAP`; `9999`. |
 
-`ContentDb.HeroLvlExp` is a `CurveDef` built from `exp0`/`exp_g`.
+`ContentDb.PartyLevels.Exp` is a `CurveDef` built from `exp0`/`exp_g`.
 
 ### 5.18 `research` (8 rows in MVP)
 
@@ -468,7 +474,7 @@ A one-row rule table rather than a per-level table: hero level is unbounded and 
 | `max_level` | int | `>= 1`. |
 | `cost0` | double | `RES_COST0`; `> 0`. |
 | `cost_g` | double | `RES_COST_G`; `> 1`. |
-| `unlock_awaken_rank` | int | Per-node extra gate on top of `feature_unlocks[RESEARCH]` (the screen gate); `>= 0`; `1` for every MVP node (03: locked before rank 1). Must be `>= feature_unlocks[RESEARCH].threshold` (`E063`): a node never opens before the Research screen. |
+| `unlock_awaken_rank` | int | Per-node extra gate on top of `feature_unlocks[RESEARCH]` (the screen gate); `>= 0`; `1` for every MVP node (03: locked until any slot reaches rank 1). Must be `>= feature_unlocks[RESEARCH].threshold` (`E063`): a node never opens before the Research screen. |
 | `layout_row`, `layout_col` | int | Unique pair (`E046`); drawn by `SCR_RESEARCH`. |
 | `tier` | enum(Tier) | |
 | `name_key`, `desc_key` | key | |
@@ -540,7 +546,7 @@ Example: `{"id": "d_merge", "goal": "MERGE_FISH", "filter": null, "target": 15, 
 | `tier` | enum(Tier) | |
 | `name_key` | key | |
 
-The rows are 06 section 5.4's 54 rungs in nine ladders (ids `stage`, `hero_level`, `weapons`, `skills`, `companions`, `merges`, `fish_level`, `awakening`, `summons`), all `DIAMOND`, `tier` `MVP`, summing to 6,260. They are the only home of the achievement rewards. `ClaimAllQuests(ACHIEVEMENT)` claims in the built order: ladders in the order their first row appears, rungs ascending.
+The rows are 06 section 5.4's 54 rungs in nine ladders (ids `stage`, `hero_level`, `weapons`, `skills`, `companions`, `merges`, `fish_level`, `awakening`, `summons`), all `DIAMOND`, `tier` `MVP`, summing to 6,260. The `hero_level` ladder and its `ach_hero_level_*` ids keep their shipped keys (E090 forbids removing them; 6.3) and track the Party Level (`REACH_PARTY_LEVEL`, 00 decision 109); only the display text says party. They are the only home of the achievement rewards. `ClaimAllQuests(ACHIEVEMENT)` claims in the built order: ladders in the order their first row appears, rungs ascending.
 
 Example: `{"id": "ach_merges_04", "ladder": "merges", "rung": 4, "goal": "LIFETIME_MERGES", "target": 1000, "reward_currency": "DIAMOND", "reward_amount": 80, "tier": "MVP", "name_key": "achievement.merges_04.name"}`.
 
@@ -567,11 +573,11 @@ Example: `{"id": "ach_merges_04", "ladder": "merges", "rung": 4, "goal": "LIFETI
 | `floor` | int | Exactly `1..floors` per dungeon (`E060`). |
 | `reward_currency` | enum(Currency) | |
 | `reward_amount` | long? | Fixed reward (`FISH_COIN_FLOOR`, `ROCK_CANDY_FLOOR`); non-decreasing in floor (`E048`). |
-| `reward_kills_equiv` | int? | For `HERO_EXP`: reward = `reward_kills_equiv * ExpPerKill(floor * floor_stage_step)` evaluated from `curves[exp_per_kill]` at build. Exactly one of `reward_amount` / `reward_kills_equiv` set (`E054`). |
+| `reward_kills_equiv` | int? | For `PARTY_EXP`: reward = `reward_kills_equiv * ExpPerKill(floor * floor_stage_step)` evaluated from `curves[exp_per_kill]` at build. Exactly one of `reward_amount` / `reward_kills_equiv` set (`E054`). |
 | `boss` | ref(bosses)? | Skin for the floor fight; empty = chapter boss of the stage-equivalent. |
 | `first_clear_bonus` | grantlist? | One-time extra on first clear. |
 
-Example: `{"dungeon": "dungeon_exp", "floor": 12, "reward_currency": "HERO_EXP", "reward_amount": null, "reward_kills_equiv": 300, "boss": null, "first_clear_bonus": null}`.
+Example: `{"dungeon": "dungeon_exp", "floor": 12, "reward_currency": "PARTY_EXP", "reward_amount": null, "reward_kills_equiv": 300, "boss": null, "first_clear_bonus": null}`.
 
 ### 5.26 `shop_products` (6 rows)
 
@@ -637,11 +643,13 @@ Derived at build: `TotalAmount = base_amount + floor(base_amount * bonus_pct)`. 
 | `text_key` | key | |
 | `expect_event` | string? | Sim event name (00 section 5.1 event vocabulary, e.g. `FishMerged`, `EnemyKilled`) the overlay waits for, or a `\|`-separated list of them (`BossCleared\|BossFailed`), where an occurrence of any listed event counts; every name must be in the vocabulary (`E021` against the exporter's `SIM_EVENT_NAMES`); empty = tap to continue (issues #46, #246). |
 | `expect_count` | int? | How many `expect_event` occurrences (of any listed event, summed) complete the step; required with `expect_event`, empty otherwise (`E054`); `>= 1`. |
-| `grants` | grantlist? | `tut_welcome` carries `DIAMOND:1500` (`TUTORIAL_DIAMONDS`) and the starter weapon `WEAPON:weapon_c_01:1` (`TUTORIAL_WEAPON_ID`), so collection screens are never empty (issue #46). |
+| `grants` | grantlist? | `tut_welcome` carries `DIAMOND:1500` (`TUTORIAL_DIAMONDS`), the five starter weapons `WEAPON:weapon_c_01:1` .. `WEAPON:weapon_c_05:1` (`TUTORIAL_WEAPON_IDS`, equipped in slots 0-4 in grant order, 00 decision 111) and the starter party: `PARTY_SLOTS` `COMPANION:<id>:1` grants (`TUTORIAL_COMPANION_IDS`), equipped in slots 0-4 in grant order (00 decision 109; issue #46). Rule `E066`. |
 | `skippable` | bool | |
 | `tier` | enum(Tier) | |
 
 Rule `E062`: exactly one step has `trigger = PROFILE_CREATED` and it is `order = 1`. That step is `tier = M0` even though the tutorial overlay is MVP: M0 applies its grant at profile creation (06 section 1.2), so an M0 build must not filter it out.
+
+Rule `E066` (the starter party, 00 decision 109): the `PROFILE_CREATED` step's `grants` hold exactly `PARTY_SLOTS` `COMPANION` item grants with amount 1 and pairwise distinct ids, each resolving to a `companions` row (`E022`) with `rarity = COMMON` and `tier = M0`; and exactly `PARTY_SLOTS` `WEAPON` item grants with amount 1 and distinct ids, each a `weapons` row with `rarity = COMMON` and `tier = M0` (00 decision 111). A content set with no `companions` table (a loader fixture) has no party and skips the rule. Shipped cell: `DIAMOND:1500;WEAPON:weapon_c_01:1;WEAPON:weapon_c_02:1;WEAPON:weapon_c_03:1;WEAPON:weapon_c_04:1;WEAPON:weapon_c_05:1;COMPANION:comp_c_01:1;COMPANION:comp_c_02:1;COMPANION:comp_c_03:1;COMPANION:comp_c_04:1;COMPANION:comp_c_05:1`.
 
 ### 5.30 `localization`
 
@@ -668,7 +676,7 @@ Emitted per locale as `content/localization.<locale>.json` (section 6.1). Every 
 
 ### 5.32 Tier filtering
 
-Every table with a `tier` column is filtered at build: `ContentDb.Build(dtos, Tier buildTier)` keeps rows with `tier <= buildTier` and drops the rest, then re-runs the count rules against what is left. An M0 build therefore sees 2 banners, no companions, no quests, and `E034` is evaluated against `pool_size` only for enabled banners whose `tier <= buildTier`. The exporter validates the full MVP set; the per-tier re-validation happens in `Build`.
+Every table with a `tier` column is filtered at build: `ContentDb.Build(dtos, Tier buildTier)` keeps rows with `tier <= buildTier` and drops the rest, then re-runs the count rules against what is left. An M0 build therefore sees 3 banners (`WEAPON`, `SKILL`, `COMPANION`), all 50 companions (00 decision 107; the starter party needs them), no quests, and `E034` is evaluated against `pool_size` only for enabled banners whose `tier <= buildTier`. The exporter validates the full MVP set; the per-tier re-validation happens in `Build`.
 
 ### 5.33 `meta`
 
@@ -687,22 +695,22 @@ One gate per feature, read both by sim rejections (`RESEARCH_LOCKED`, `DUNGEON_L
 | Column | Type | Constraint |
 |---|---|---|
 | `feature` | string | Key, UPPER_SNAKE feature id matching `^[A-Z][A-Z0-9_]*$` (`E071`; the `id` type's lowercase pattern cannot hold it) (the form 06's `QUESTS_LOCKED` / `DUNGEON_LOCKED` checks name). MVP rows: `RESEARCH`, `COMPANIONS`, `QUESTS`, `DUNGEONS`, `SHOP`. |
-| `condition` | enum(FeatureCondition) | `STAGE_HIGHEST`: `Progress.HighestCleared >= threshold`; `AWAKEN_RANK`: `Hero.AwakenRank >= threshold`; `ALWAYS`: never locked. |
+| `condition` | enum(FeatureCondition) | `STAGE_HIGHEST`: `Progress.HighestCleared >= threshold`; `AWAKEN_RANK`: the highest `Party.Slots[i].AwakenRank >= threshold` (00 decision 109); `ALWAYS`: never locked. |
 | `threshold` | int? | Required for `STAGE_HIGHEST` and `AWAKEN_RANK` (`>= 1`), empty for `ALWAYS` (`E054`). |
 | `screen` | string | `SCR_*` id the gate locks (`E021` against `SCREEN_IDS`). |
 | `locked_text_key` | key? | "Unlocks at ..." text; empty for `ALWAYS`. |
 | `tier` | enum(Tier) | |
 
-MVP seed: `RESEARCH` `AWAKEN_RANK` 1 (00 decision 11), `COMPANIONS` `ALWAYS` (04: slot 1 open from the start), `QUESTS` `STAGE_HIGHEST` 10, `DUNGEONS` `STAGE_HIGHEST` 30 (all three dungeons; it replaces the former `DUNGEON_UNLOCK_STAGE` constant and `dungeons.unlock_stage` column), `SHOP` `ALWAYS` (the Shop is never locked). Rule `E063`: `feature_unlocks[SHOP].condition = ALWAYS`; every `research.unlock_awaken_rank >= feature_unlocks[RESEARCH].threshold`.
+MVP seed: `RESEARCH` `AWAKEN_RANK` 1 (00 decision 11), `COMPANIONS` `ALWAYS` (all `PARTY_SLOTS` slots open from the start at every tier; Awakening gates no companion slot, 00 decision 109), `QUESTS` `STAGE_HIGHEST` 10, `DUNGEONS` `STAGE_HIGHEST` 30 (all three dungeons; it replaces the former `DUNGEON_UNLOCK_STAGE` constant and `dungeons.unlock_stage` column), `SHOP` `ALWAYS` (the Shop is never locked). Rule `E063`: `feature_unlocks[SHOP].condition = ALWAYS`; every `research.unlock_awaken_rank >= feature_unlocks[RESEARCH].threshold`.
 
 ### 5.35 `awakening_targets`
 
-The Awakening cadence target as data, read by `power_curve_model.py` (03) and the bot acceptance sweep (06 AC 18, 10) instead of per-spec day numbers (issue #43).
+The Awakening cadence target as data, read by `power_curve_model.py` (03) and the bot acceptance sweep (06 AC 18, 10) instead of per-spec day numbers (issue #43). Like `awakening`, one row per rank serves every slot (00 decision 109).
 
 | Column | Type | Constraint |
 |---|---|---|
 | `rank` | int | Key. Exactly the `awakening` ranks `1..N` (`E060`, `E034` against `awakening`). |
-| `max_days_after_gate` | int | `>= 0`. Rank `k` must be affordable (Rock Candy) within this many days of the day the bot first reaches `awakening[k].stage_gate`. MVP: `2` for every rank. |
+| `max_days_after_gate` | int | `>= 0`. Rank `k` must be affordable (Rock Candy) within this many days of the day the bot first reaches `awakening[k].stage_gate`, for the first slot to reach rank `k` (the highest slot rank; later slots are not judged). MVP: `2` for every rank; stale under the party model until the balance pass (#249). |
 
 ### 5.36 `plausibility_stage_bound` (generated)
 
@@ -766,7 +774,7 @@ Localization file shape: `{"table": "localization", "locale": "ja", "rows": [{"k
     "awakening":       { "file": "awakening.json",       "rows": 5,   "sha256": "0b77..." },
     "banner_levels":   { "file": "banner_levels.json",   "rows": 30,  "sha256": "c2a0..." },
     "banners":         { "file": "banners.json",         "rows": 4,   "sha256": "5d1e..." },
-    "constants":       { "file": "constants.json",       "rows": 44,  "sha256": "a8e3..." }
+    "constants":       { "file": "constants.json",       "rows": 43,  "sha256": "a8e3..." }
   },
   "localization": {
     "en": { "file": "localization.en.json", "rows": 1412, "sha256": "..." },
@@ -896,7 +904,7 @@ CONTENT <code> <location>: <message>
 | `E038` | fish_levels vs research | `fish_levels has {n} rows but FISH_MAX_LVL0 + research cap needs {needed}` |
 | `E039` | quests_daily, quests_weekly | `reference-day diamond sum {sum} is outside 10% of DIAMONDS_PER_DAY_F2P {target}` |
 | `E044` | enum-keyed tables | `missing row for {enum} value '{value}'` |
-| `E045` | hero_levels, tank | `exactly one row required, found {n}` |
+| `E045` | party_levels, tank | `exactly one row required, found {n}` |
 | `E046` | sort_order / unique columns | `duplicate {column} {value} (also at {other_row})` |
 | `E048` | rarities, awakening, dungeon_floors, banner_levels, progress_targets, plausibility_stage_bound | `{column} must be non-decreasing in {order}; {row} has {value} < previous {prev}` |
 | `E051` | banners | `pity_hard ({hard}) must be greater than pity_soft_start ({soft})` |
@@ -913,6 +921,7 @@ CONTENT <code> <location>: <message>
 | `E063` | feature_unlocks vs research | `{table}[{id}] unlocks at {value}, before feature '{feature}' ({threshold})` / `feature 'SHOP' must be ALWAYS` |
 | `E064` | quests_daily | `missing or unreachable daily bonus rows ({detail})` |
 | `E065` | achievements | `{goal} target {target} must be below the pool size {pool} (pillar 4)` |
+| `E066` | tutorial_steps vs companions, weapons | `the starter party must be exactly {PARTY_SLOTS} distinct COMPANION grants of amount 1, got {ids}`; `the starter weapons must be exactly {PARTY_SLOTS} distinct WEAPON grants of amount 1, got {ids}`; `starter companion|weapon '{id}' must be COMMON and tier M0, is {rarity} {tier}` |
 
 ### 8.5 Versioning and manifest (`E09x`, `E9xx`)
 
@@ -940,7 +949,7 @@ Decided while implementing issues #122, #123 and #128; each is a default the des
 
 - **Order.** `validate` sorts its errors by table in `SCHEMA` order (acceptance 7). Within one table the rule order holds. `E020` comes first because the reader finds it before any rule runs.
 - **Tables not authored yet.** A rule whose table is optional and absent is skipped. That covers `E034` for a banner whose pool table is missing (`runes` until P1; `companions` ships since issue #161), `E039`/`E064` without `quests_daily`, `E065` for an `OWN_*` goal whose pool table is missing, `E057` without `enemies`/`bosses`, and the research halves of `E038`, `E056` and `E063` (the shipped content has the `research` rows since issue #158; the table stays optional so minimal fixtures need not carry it).
-- **Bounds that name no code** report as `E043` with the rule text. That includes `awakening.companion_slots_after <= COMPANION_SLOTS` and banner level 1's `exp_required = 0`. `E048` is kept for the ordering rules.
+- **Bounds that name no code** report as `E043` with the rule text. That includes `awakening.rune_slots_after <= RUNE_SLOTS` and banner level 1's `exp_required = 0`. `E048` is kept for the ordering rules.
 - **`E055` and `E022`.** When a `training_curves` row names a stat that does not exist, `E022` reports it and `E055` stays silent.
 - **`E059` on banners**: `ticket_currency` must be exactly `TICKET_SUMMON_<id>`.
 - **`E064`**: "the number of daily rows" counts every `quests_daily` row with `tier <= MVP`, the bonus rows included.
@@ -971,7 +980,7 @@ namespace HeroCat.Sim.Content.Dto
         public EnemyRowDto[] Enemies;        public BossRowDto[] Bosses;          public RarityRowDto[] Rarities;
         public WeaponRowDto[] Weapons;       public SkillRowDto[] Skills;         public CompanionRowDto[] Companions;
         public RuneRowDto[] Runes;           public BannerRowDto[] Banners;       public BannerLevelRowDto[] BannerLevels;
-        public DupeLevelRowDto[] DupeLevels; public AwakeningRowDto[] Awakening;  public HeroLevelsRowDto[] HeroLevels;
+        public DupeLevelRowDto[] DupeLevels; public AwakeningRowDto[] Awakening;  public PartyLevelsRowDto[] PartyLevels;
         public ResearchRowDto[] Research;    public FishLevelRowDto[] FishLevels; public TankRowDto[] Tank;
         public QuestRowDto[] QuestsDaily;    public QuestRowDto[] QuestsWeekly;   public AchievementRowDto[] Achievements;
         public DungeonRowDto[] Dungeons;     public DungeonFloorRowDto[] DungeonFloors;
@@ -1022,7 +1031,7 @@ namespace HeroCat.Sim.Content
 public sealed class Constants
 {
     public int    TickHz { get; }                 // TICK_HZ
-    public double BaseAtk { get; }                // BASE_ATK
+    public double BaseAtk { get; }                // BASE_ATK, per companion slot
     public double BaseHp { get; }                 // BASE_HP
     public int    AttackIntervalTicks { get; }    // ATTACK_INTERVAL_TICKS
     public int    KillsPerStage { get; }          // KILLS_PER_STAGE
@@ -1041,8 +1050,7 @@ public sealed class Constants
     public double OfflineRate { get; }            // OFFLINE_RATE
     public double OfflineCapH { get; }            // OFFLINE_CAP_H
     public int    OfflineMinS { get; }            // OFFLINE_MIN_S
-    public int    SkillSlots { get; }             // SKILL_SLOTS
-    public int    CompanionSlots { get; }         // COMPANION_SLOTS
+    public int    PartySlots { get; }             // PARTY_SLOTS (00 decision 109; replaces SkillSlots, CompanionSlots)
     public int    RuneSlots { get; }              // RUNE_SLOTS
     public double DupeLvlBonus { get; }           // DUPE_LVL_BONUS
     public int    FishBoardW { get; }             // FISH_BOARD_W
@@ -1075,7 +1083,7 @@ public sealed class Constants
 public sealed class CurveDef
 {
     public string Id { get; }  public double Base { get; }  public double Growth { get; }  public int XOffset { get; }
-    private readonly double[] _pow;    // _pow[k] = Growth^k, k < max(STAGE_CAP + BOSS_EVERY, hero_levels.level_cap) + 1
+    private readonly double[] _pow;    // _pow[k] = Growth^k, k < max(STAGE_CAP + BOSS_EVERY, party_levels.level_cap) + 1
 
     public double Power(int k)         // past the table: continue the same multiplication chain from its last entry
     {
@@ -1128,15 +1136,15 @@ public sealed class BannerDef
     public int LevelFor(int exp);                                         // count of Levels with ExpRequired <= exp, min 1
 }
 public sealed class BannerLevelDef { int Level; int ExpRequired; IReadOnlyDictionary<Rarity, double> Rates; }
-public sealed class AwakeningDef  { int Rank; int StageGate; long RockCandyCost; double Mult; int CompanionSlotsAfter, RuneSlotsAfter; Tier Tier; string NameKey, Icon; }
-public sealed class HeroLevelsDef { CurveDef Exp; double? AtkPctPerLevel; double? MultPerLevel; int LevelCap; }
+public sealed class AwakeningDef  { int Rank; int StageGate; long RockCandyCost; double Mult; int RuneSlotsAfter; Tier Tier; string NameKey, Icon; }   // per slot
+public sealed class PartyLevelsDef { CurveDef Exp; double? AtkPctPerLevel; double? MultPerLevel; int LevelCap; }
 public sealed class ResearchDef   { string Id; ResearchEffect Effect; double EffectPerLevel; double? EffectFloor; int MaxLevel; CurveDef Cost; int UnlockAwakenRank; int LayoutRow, LayoutCol; Tier Tier; ... }
 public sealed class FishLevelDef  { int Level; long DiscoveryCoins; double MissilePct; double MergeCoins; double BoardDpsPct; /* derived */ string Sprite, Tint, NameKey; }
 public sealed class TankDef       { int Cap0; double RefillS0; int RefillTicks0; int ReleaseLevel; double RefillFloorS; }
 public sealed class QuestDef      { string Id; QuestKind Kind; QuestGoal Goal; string Filter; long Target; Currency RewardCurrency; long RewardAmount; int SortOrder; Tier Tier; string NameKey, Icon;
                                     string Ladder; int Rung; }   // an achievements row is a QuestDef of Kind ACHIEVEMENT: Ladder and Rung set, Filter and Icon null (issue #171)
 public sealed class DungeonDef    { string Id; Dungeon? Kind; Currency? TicketCurrency; int TicketsPerDay, FloorStageStep, Floors; bool SweepAllowed; Tier Tier; IReadOnlyList<DungeonFloorDef> FloorDefs; DungeonFloorDef Floor(int f); ... }   // no unlock column: feature_unlocks DUNGEONS (issue #45); a tier-filtered dungeon drops its floors
-public sealed class DungeonFloorDef { int Floor; int StageEquiv; Currency RewardCurrency; double RewardAmount; /* resolved at build for HERO_EXP */ int? RewardKillsEquiv; string Boss; IReadOnlyList<Grant> FirstClearBonus; }
+public sealed class DungeonFloorDef { int Floor; int StageEquiv; Currency RewardCurrency; double RewardAmount; /* resolved at build for PARTY_EXP */ int? RewardKillsEquiv; string Boss; IReadOnlyList<Grant> FirstClearBonus; }
 public sealed class ShopProductDef{ string Sku, AppleProductId, GoogleProductId; int UsdTier; double Usd; long BaseAmount; double BonusPct; long TotalAmount; double FirstPurchaseMult; int SortOrder; bool Enabled; Tier Tier; ... }
 public sealed class ShopPackageDef{ ... IReadOnlyList<Grant> Grants; PackageLimit Limit; int LimitCount; IReadOnlyList<Grant> DailyDrip; int? DripDays; ... }
 public sealed class InboxTemplateDef { string Id; InboxKind Kind; string TitleKey, BodyKey; IReadOnlyList<Grant> Grants; int ExpiryDays; string Icon; Tier Tier; }
@@ -1177,8 +1185,8 @@ public sealed partial class ContentDb
     public int DupeLevel(int copies);                                             // count of thresholds <= copies, 0 if none
     public double LevelMult(int level) => 1.0 + Constants.DupeLvlBonus * (level - 1);
 
-    public IReadOnlyList<AwakeningDef> Awakening { get; }                         // by Rank
-    public HeroLevelsDef HeroLevels { get; }
+    public IReadOnlyList<AwakeningDef> Awakening { get; }                         // by Rank; the same rows for every slot
+    public PartyLevelsDef PartyLevels { get; }
     public IReadOnlyDictionary<string, ResearchDef> Research { get; }
     public ResearchDef ResearchFor(ResearchEffect e);
     public IReadOnlyList<FishLevelDef> FishLevels { get; }                        // [0] is level 1
@@ -1196,6 +1204,7 @@ public sealed partial class ContentDb
     public IReadOnlyList<ExchangeOfferDef> ExchangeOffers { get; }  public ExchangeOfferDef ExchangeOffer(string id);   // by SortOrder; null if unknown
     public IReadOnlyDictionary<string, InboxTemplateDef> InboxTemplates { get; }
     public IReadOnlyList<TutorialStepDef> TutorialSteps { get; }                  // by Order
+    public IReadOnlyList<string> TutorialCompanionIds { get; }                    // TUTORIAL_COMPANION_IDS: the PROFILE_CREATED step's COMPANION grants, slot order (E066)
     public IReadOnlyList<ProgressTargetDef> ProgressTargets { get; }              // by Day
     public IReadOnlyDictionary<string, FeatureUnlockDef> FeatureUnlocks { get; }
     public bool IsUnlocked(string feature, GameState s);                          // the one gate evaluator (section 5.34)
@@ -1208,7 +1217,7 @@ Sim code takes `ContentDb` through its constructor (`new Simulation(db, state, c
 
 ### 9.5 Performance
 
-`Build` on the full MVP set targets under 30 ms on a 2 GB Android device and allocates once (arrays sized from row counts). Lookups are dictionary or array index; nothing is searched linearly on the tick path. `CurveDef` power tables are precomputed in `Build` to `STAGE_CAP + BOSS_EVERY` (or the hero level cap, whichever is larger), so a tick never grows anything (a predictable tick budget, 01 section 3.2).
+`Build` on the full MVP set targets under 30 ms on a 2 GB Android device and allocates once (arrays sized from row counts). Lookups are dictionary or array index; nothing is searched linearly on the tick path. `CurveDef` power tables are precomputed in `Build` to `STAGE_CAP + BOSS_EVERY` (or the party level cap, whichever is larger), so a tick never grows anything (a predictable tick budget, 01 section 3.2).
 
 ## 10. Versioning and delivery
 
@@ -1370,7 +1379,7 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 1. **Who owns the sheet.** Default: design owns values and row additions; engineering owns structure (columns, enums) through `SCHEMA` and the C# DTOs. Owner guess: design lead.
 2. **Sheet or CSVs as the master copy.** Decided (issue #278): `content_src/*.csv` is the master and is edited directly, because agents edit it and nothing syncs repo changes back to a Sheet; a `push` verb with a drift guard is parked there. For a one-off pull: The service account needs a Google Cloud project and a non-stdlib dependency; the CSV export URL needs the sheet to be link-readable, which exposes live tuning data to anyone with the link. Decided: Sheets API through a service account, reached without a key file (`pull --adc` with gcloud impersonation locally; Workload Identity Federation if CI ever pulls), because key creation is blocked by default org policy. Key files (`--service-account`) remain supported where allowed. Owner guess: engineering.
 3. **Limit-break constants.** Resolved: `constants.LIMIT_BREAK_RANKS` (00's name) in `REQUIRED_CONSTANTS`, per-rarity `rarities.limit_break_cost` and `rarities.dupe_overflow_rock_candy` (issue #37).
-4. **`hero_levels` linear vs compounding.** Resolved: compounding `HERO_LVL_MULT` 1.02 (00 decision 9); `mult_per_level` is populated and `atk_pct_per_level` empty; the exporter still rejects both set or both empty.
+4. **`party_levels` (was `hero_levels`) linear vs compounding.** Resolved: compounding `PARTY_LVL_MULT` 1.02 (00 decision 9); `mult_per_level` is populated and `atk_pct_per_level` empty; the exporter still rejects both set or both empty.
 5. **`E039` daily diamond sum tolerance.** Resolved: 10%, recomputed from the quest rows plus `REF_DAILIES_DONE` and `REF_NEW_BOSSES` (issue #55).
 6. **Enemy skin draw on the `combat` stream.** Resolved: skin picks use a hash of `(stage, killIndex)` and consume no stream, since `combat` is reserved with `Counter == 0` in MVP (issue #8). Section 5.6 says so.
 7. **Rollout bucket.** Resolved: bucketed server-side by `GET /config` from the JWT; no client hash (issue #31, section 10.3).
@@ -1378,7 +1387,7 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 ## Acceptance criteria
 
 1. **No balance literals.** A CI grep over `src/HeroCat.Sim/**/*.cs` for numeric literals, excluding `0`, `1`, `-1`, `2` (bit ops), array indices, `ATTACK_PROGRESS_UNIT` references and lines marked `// literal-ok: <reason>`, finds nothing.
-2. **Shipped content builds.** `ContentDb.Build(load("content"), Tier.MVP)` succeeds; `Version` and `ContentHash` equal the manifest; `Build(..., Tier.M0)` also succeeds and has exactly 2 enabled banners and 0 companions.
+2. **Shipped content builds.** `ContentDb.Build(load("content"), Tier.MVP)` succeeds; `Version` and `ContentHash` equal the manifest; `Build(..., Tier.M0)` also succeeds and has exactly 3 enabled banners (`WEAPON`, `SKILL`, `COMPANION`; 00 decision 107) and 50 companions.
 3. **Deterministic export.** `export_content.py build` twice from the same `content_src/` produces byte-identical `content/`; `check` exits 0 on the committed tree.
 4. **Constants pinned.** The set of `REQUIRED_CONSTANTS` keys in the exporter equals the set of `constants.json` keys equals the set of `Constants` properties (snake-cased), and every property is non-default after build.
 5. **Every 00 section 6 row is reachable.** For each row of the section 4 table, a unit test reads the named location from `ContentDb` and compares to the 00 value (`[Category("Golden")]`; updated in the same PR as 00).
@@ -1389,7 +1398,7 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 10. **Python tools unchanged by the switch.** `power_curve_model.py`, `gacha_model.py` and `fish_model.py` run with `--content content` print byte-identical tables to their pre-switch output for the same constants.
 11. **Pool index stability.** Appending `skill_c_15` to a fixture leaves `Pool(SKILL, COMMON)[0..13]` unchanged; inserting `skill_c_00` fails `E090` against the previous build.
 12. **Banner-level invariants.** For each enabled banner and each level, rates sum to 1 within 1e-9, `rate_l` and `rate_m` equal level 1 within 1e-12, and `BannerDef.LevelFor` returns 1, 1, 2, 9, 10, 10 for exp 0, 49, 50, 2999, 3000, 10000 (04 test 16).
-13. **Tier filter.** An M0 build with a `companions` row of tier `MVP` exposes `Companions.Count == 0` and `Banners[COMPANION].Enabled == false`.
+13. **Tier filter.** An M0 build of content whose `companions` rows and `COMPANION` banner are re-tagged `MVP` exposes `Companions.Count == 0` and `Banners[COMPANION].Enabled == false`.
 14. **Localization completeness.** With `ship_locales = en,ja`, a key missing `ja` fails `E073`; a `ja` string over `max_chars` fails `E074`; a `ui.*` key not in `--ui-keys` and not referenced by a row warns `W021`, and `--strict-warnings` turns it into exit 1.
 15. **Hot-apply classification.** A build whose only diff against `--previous` is in `localization.ja.json`, `shop_products`, `shop_packages` or `inbox_templates` sets `hot_apply: true`; adding one changed `skills` row flips it to `false`. A Sim test proves no `HeroCat.Sim` code path reads `ShopProducts`, `ShopPackages` or `InboxTemplates` (issue #54).
 16. **Update flow.** `ContentLoader` given a manifest whose `min_client_version` is above the client's logs `E903`, keeps the bundled content, and the sim's `ContentDb` instance identity is unchanged (01 acceptance 11).
@@ -1397,7 +1406,7 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 18. **Culture invariance.** `Build` under `CultureInfo.CurrentCulture = de-DE` yields `EnemyHp.Growth == 1.04`.
 19. **Reconcile.** Covered by 02's load-validator tests (P10-P14, issue #56): a save that references `weapon_e_99` (not in content) loses that entry and keeps everything else; a level-12 fish under content with a lower reachable cap stays level 12 (issue #41).
 20. **Exporter parity on messages.** For every fixture in criterion 6, the Python and C# messages are string-equal, including the `repr` of doubles.
-21. **New-table rules.** Fixtures prove `E063` (Research node below the Research gate; `SHOP` not `ALWAYS`), `E064` (no `DAILIES_COMPLETED` row), `E065` (`OWN_WEAPONS` target equal to the weapon row count), and that the shipped `E039` sum equals 06 section 2's 400 within 10%.
+21. **New-table rules.** Fixtures prove `E063` (Research node below the Research gate; `SHOP` not `ALWAYS`), `E066` (four starter companions; a duplicated one; a `RARE` one), `E064` (no `DAILIES_COMPLETED` row), `E065` (`OWN_WEAPONS` target equal to the weapon row count), and that the shipped `E039` sum equals 06 section 2's 400 within 10%.
 
 ## Constants introduced
 
@@ -1412,9 +1421,10 @@ Worked check for `res_tank_refill`: refill at Research level `k` is `max(2.0, 6.
 | `REF_NEW_BOSSES` | 4 | S (named here; 06 section 2 reference day, issues #55, #244) | 5.1, 5.21 | `E039` |
 | `CLOCK_BACKWARDS_TOLERANCE_S` | 5 | S (01 section 3.2; issue #246) | 4, 5.1 | none; a re-anchor behind the virtual clock by at most this emits no `ClockWentBackwards` |
 | `awakening_targets.max_days_after_gate` | 2 per rank | S (03, 06; issue #43) | 5.35 | `power_curve_model.py`, bot sweep |
+| `E066` starter-party rule | `PARTY_SLOTS` distinct `COMMON` `M0` companions and `PARTY_SLOTS` distinct `COMMON` `M0` weapons in `tut_welcome` | - (00 decisions 109, 111) | 5.29 | none |
 | `content_version` format | `YYYY.MM.DD[.N]` | - | 6.3 | matches 02 and 08 examples (`2026.11.03`) |
-| Table set | 34 tables (adds `feature_unlocks`, `awakening_targets`, generated `plausibility_stage_bound`) + `localization.<locale>` + `meta` | - | 5 | - |
+| Table set | 34 tables (adds `feature_unlocks`, `awakening_targets`, generated `plausibility_stage_bound`; `hero_levels` renamed `party_levels`, 00 decision 109) + `localization.<locale>` + `meta` | - | 5 | - |
 | Enums added for content | `Element`, `PackageLimit`, `InboxKind`, `TutorialTrigger`, `FeatureCondition`, `ConstantType`, `Tier` as data | - | 3.3 | - |
-| Hosted from siblings (not mine; lift to 00) | 03: `ATTACK_PROGRESS_UNIT`, `CRIT_DMG_BASE`, `MP_POOL0`, `MP_REGEN0`, `BOSS_ROCK_CANDY_P`, `TRAIN_CAP[*]`, `RES_*`; 04: `WEAPON_ATK_PCT[r]`, `SKILL_DPS_PCT[r]`, `COMPANION_DPS_PCT[r]`, `BANNER_LVL_EXP`, `TUTORIAL_WEAPON_ID`, `LIMIT_BREAK_COST[r]`, `DUPE_OVERFLOW_ROCK_CANDY[r]`; 00: `LIMIT_BREAK_RANKS`; 06: `FIRST_CLEAR_DIAMONDS`, `DUNGEON_*`, `INBOX_EXPIRY_DAYS`, `DAILY_GIFT_WEAPON_TICKETS` | per owner | 4, 5.1 | per owner |
+| Hosted from siblings (not mine; lift to 00) | 03: `ATTACK_PROGRESS_UNIT`, `CRIT_DMG_BASE`, `MP_POOL0`, `MP_REGEN0`, `BOSS_ROCK_CANDY_P`, `TRAIN_CAP[*]`, `RES_*`; 04: `WEAPON_ATK_PCT[r]`, `SKILL_DPS_PCT[r]`, `COMPANION_DPS_PCT[r]`, `BANNER_LVL_EXP`, `TUTORIAL_WEAPON_ID`, `TUTORIAL_COMPANION_IDS`, `LIMIT_BREAK_COST[r]`, `DUPE_OVERFLOW_ROCK_CANDY[r]`; 00: `LIMIT_BREAK_RANKS`; 06: `FIRST_CLEAR_DIAMONDS`, `DUNGEON_*`, `INBOX_EXPIRY_DAYS`, `DAILY_GIFT_WEAPON_TICKETS` | per owner | 4, 5.1 | per owner |
 
 Used from 00 by name: every row of section 6.1 to 6.6.

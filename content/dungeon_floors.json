@@ -724,7 +724,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 1,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -733,7 +733,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 2,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -742,7 +742,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 3,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -751,7 +751,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 4,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -760,7 +760,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 5,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -769,7 +769,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 6,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -778,7 +778,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 7,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -787,7 +787,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 8,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -796,7 +796,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 9,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -805,7 +805,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 10,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -814,7 +814,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 11,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -823,7 +823,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 12,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -832,7 +832,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 13,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -841,7 +841,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 14,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -850,7 +850,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 15,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -859,7 +859,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 16,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -868,7 +868,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 17,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -877,7 +877,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 18,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -886,7 +886,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 19,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -895,7 +895,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 20,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -904,7 +904,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 21,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -913,7 +913,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 22,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -922,7 +922,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 23,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -931,7 +931,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 24,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -940,7 +940,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 25,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -949,7 +949,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 26,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -958,7 +958,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 27,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -967,7 +967,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 28,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -976,7 +976,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 29,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -985,7 +985,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 30,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -994,7 +994,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 31,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -1003,7 +1003,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 32,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -1012,7 +1012,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 33,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -1021,7 +1021,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 34,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -1030,7 +1030,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 35,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -1039,7 +1039,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 36,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -1048,7 +1048,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 37,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -1057,7 +1057,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 38,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -1066,7 +1066,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 39,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,
@@ -1075,7 +1075,7 @@
     {
       "dungeon": "dungeon_exp",
       "floor": 40,
-      "reward_currency": "HERO_EXP",
+      "reward_currency": "PARTY_EXP",
       "reward_amount": null,
       "reward_kills_equiv": 300,
       "boss": null,

@@ -5,6 +5,7 @@ using HeroCat.Sim.Commands;
 using HeroCat.Sim.Content;
 using HeroCat.Sim.Events;
 using HeroCat.Sim.Power;
+using HeroCat.Sim.State;
 
 namespace HeroCat.Client.Core
 {
@@ -25,7 +26,7 @@ namespace HeroCat.Client.Core
         public string NameKey { get; }
 
         /// <summary>The anchor id of this row's [+] (reject toast and shake).</summary>
-        public string Anchor => "hero.train." + Stat;
+        public string Anchor => "party.train." + Stat;
 
         public readonly TextKeyLabel Name;
         public readonly IntLabel Level = new IntLabel();
@@ -48,19 +49,44 @@ namespace HeroCat.Client.Core
         public int FlashSerial { get; internal set; }
     }
 
+    /// <summary>One party slot card on SCR_PARTY (07 section 4.4, 00 decision 109).</summary>
+    public sealed class PartySlotVm
+    {
+        public PartySlotVm(VmContext c, int slot)
+        {
+            Slot = slot;
+            Awaken = c.Button();
+        }
+
+        /// <summary>0-based slot index; players see Slot + 1.</summary>
+        public int Slot { get; }
+
+        public string AwakenAnchor => "party.awaken." + Slot;
+
+        public readonly Bindable<SlotLook> Companion = new Bindable<SlotLook>();
+        public readonly Bindable<SlotLook> Weapon = new Bindable<SlotLook>();
+        public readonly Bindable<SlotLook> Skill = new Bindable<SlotLook>();
+        public readonly IntLabel AwakenRank = new IntLabel();
+        public readonly BarFill Mp = new BarFill();
+        public readonly NumberLabel SlotDps = new NumberLabel();
+
+        /// <summary>Awaken this slot (MVP): visible when the tier has ranks, enabled when Awaken(slot) would be accepted.</summary>
+        public readonly ButtonState Awaken;
+    }
+
     /// <summary>
-    /// SCR_HERO (07 section 4.4; issue #115): level and EXP bar, DPS, the equipped loadout row, the bulk step selector
-    /// (TRAIN_BULK_STEPS plus Max, persisted in ClientPrefs) and one Training row per trainable stat. HP and DEF are not
-    /// trainable in MVP (00 decision 10), so they get no row. Awakening and the Research button are MVP rows: Awakening needs
-    /// the Awaken command (not in the M0 sim), so <see cref="AwakenVisible"/> stays false until it lands.
+    /// SCR_PARTY (07 section 4.4; issue #115, 00 decision 109): Party Level and EXP bar, party DPS, the five slot cards
+    /// (companion, weapon, skill, MP, Awakening), the bulk step selector (TRAIN_BULK_STEPS plus Max, persisted in
+    /// ClientPrefs) and one party-wide Training row per trainable stat. HP and DEF are not trainable in MVP (00 decision
+    /// 10), so they get no row.
     /// </summary>
-    public sealed class HeroVm
+    public sealed class PartyVm
     {
         readonly VmContext _c;
         readonly List<TrainingRowVm> _rows = new List<TrainingRowVm>();
         readonly int[] _steps;
 
-        public HeroVm(VmContext c)
+        public PartyVm(VmContext c)
         {
             _c = c;
             foreach (var def in c.Db.Stats)
@@ -72,11 +98,11 @@ namespace HeroCat.Client.Core
             for (int i = 0; i < StepLabels.Length; i++)
             {
                 StepLabels[i] = c.Label();
-                if (i < _steps.Length) StepLabels[i].Set(UiKeys.HeroStepN, _steps[i]);
-                else StepLabels[i].Set(UiKeys.HeroStepMax);
+                if (i < _steps.Length) StepLabels[i].Set(UiKeys.PartyStepN, _steps[i]);
+                else StepLabels[i].Set(UiKeys.PartyStepMax);
             }
-            Loadout = new Bindable<SlotLook>[1 + c.K.SkillSlots + c.K.CompanionSlots];
-            for (int i = 0; i < Loadout.Length; i++) Loadout[i] = new Bindable<SlotLook>();
+            Slots = new PartySlotVm[c.K.PartySlots];
+            for (int i = 0; i < Slots.Length; i++) Slots[i] = new PartySlotVm(c, i);
             int step = c.Prefs.TrainStep;
             SelectedStep.Set(step >= 0 && step <= _steps.Length ? step : 0);
         }
@@ -89,14 +115,13 @@ namespace HeroCat.Client.Core
         public readonly BarFill ExpFill = new BarFill();
         public readonly NumberLabel Dps = new NumberLabel();
 
-        /// <summary>Weapon (index 0), then the skill slots, then the companion slots.</summary>
-        public readonly Bindable<SlotLook>[] Loadout;
+        /// <summary>The five slot cards, slot 1 first.</summary>
+        public readonly PartySlotVm[] Slots;
 
         /// <summary>Step labels "x1", "x10", "x100", "Max"; the last is Max.</summary>
         public readonly TextKeyLabel[] StepLabels;
 
         public readonly Bindable<int> SelectedStep = new Bindable<int>();
-        public readonly Flag AwakenVisible = new Flag();
 
         public int StepCount => StepLabels.Length;
         public bool IsMaxStep => SelectedStep.Value >= _steps.Length;
@@ -114,38 +139,45 @@ namespace HeroCat.Client.Core
             _c.Prefs.TrainStep = index;
         }
 
+        static SlotLook Look<TDef>(string id, IReadOnlyDictionary<string, TDef> defs, CollectionState owned, ContentDb db,
+                                   Func<TDef, string> icon, Func<TDef, Rarity> rarity, float cooldown01 = 0)
+        {
+            if (id == null || !defs.TryGetValue(id, out var d)) return default;
+            owned.Items.TryGetValue(id, out var item);
+            return new SlotLook(id, icon(d), rarity(d), item != null ? db.DupeLevel(item.Copies) : 0, cooldown01);
+        }
+
         public void Refresh(Simulation sim, in Snapshot s)
         {
-            Level.Set(s.HeroLevel);
-            Exp.Set(s.HeroExp);
-            ExpToNext.Set(s.HeroExpToNext);
-            ExpFill.Set(s.HeroExp, s.HeroExpToNext);
-            Dps.Set(s.HeroDps);
-            AwakenVisible.Set(false);   // TODO(#36): the MVP Awaken command and SCR_CONFIRM flow
+            Level.Set(s.PartyLevel);
+            Exp.Set(s.PartyExp);
+            ExpToNext.Set(s.PartyExpToNext);
+            ExpFill.Set(s.PartyExp, s.PartyExpToNext);
+            Dps.Set(s.PartyDps);
 
             var st = sim.State;
             var db = _c.Db;
-            string w = st.Loadout.Weapon;
-            if (w != null && db.Weapons.TryGetValue(w, out var wd))
-            {
-                st.Weapons.Items.TryGetValue(w, out var owned);
-                Loadout[0].Set(new SlotLook(w, wd.Icon, wd.Rarity, owned != null ? db.DupeLevel(owned.Copies) : 0, 0));
-            }
-            else Loadout[0].Set(default);
-            var skills = st.Loadout.Skills;
-            for (int i = 0; i < _c.K.SkillSlots; i++)
-            {
-                string id = skills != null && i < skills.Length ? skills[i] : null;
-                if (id != null && db.Skills.TryGetValue(id, out var sd))
-                {
-                    st.Skills.Items.TryGetValue(id, out var owned);
-                    Loadout[1 + i].Set(new SlotLook(id, sd.Icon, sd.Rarity, owned != null ? db.DupeLevel(owned.Copies) : 0, 0));
-                }
-                else Loadout[1 + i].Set(default);
-            }
-            for (int i = 1 + _c.K.SkillSlots; i < Loadout.Length; i++) Loadout[i].Set(default);
-
             var q = sim.Query;
+            bool hasRanks = db.Awakening.Count > 0;
+            for (int i = 0; i < Slots.Length; i++)
+            {
+                var vm = Slots[i];
+                var x = i < st.Party.Slots.Length ? st.Party.Slots[i] : null;
+                vm.Companion.Set(Look(x?.Companion, db.Companions, st.Companions, db, d => d.Icon, d => d.Rarity));
+                vm.Weapon.Set(Look(x?.Weapon, db.Weapons, st.Weapons, db, d => d.Icon, d => d.Rarity));
+                vm.Skill.Set(Look(x?.Skill, db.Skills, st.Skills, db, d => d.Icon, d => d.Rarity));
+                var snap = s.Slot(i);
+                vm.AwakenRank.Set(snap.AwakenRank);
+                vm.Mp.Set(snap.Mp, s.MpMax);
+                vm.SlotDps.Set(snap.SlotDps);
+                vm.Awaken.Visible.Set(hasRanks && q.NextAwakenStageGate(i).HasValue);
+                bool can = q.CanAwaken(i);
+                vm.Awaken.Enabled.Set(can);
+                if (q.NextAwakenStageGate(i) is int gate && st.Progress.HighestCleared < gate) vm.Awaken.Reason.Set(UiKeys.PartyAwakenGate, gate);
+                else if (!can && hasRanks) vm.Awaken.Reason.Set(UiKeys.NeedMore, LabelArg.Num(q.NextAwakenCost(i) - st.Wallet.RockCandy));
+                else vm.Awaken.Reason.Set(null);
+            }
+
             bool max = IsMaxStep;
             int step = max ? 0 : _steps[SelectedStep.Value];
             foreach (var r in _rows)
@@ -171,13 +203,13 @@ namespace HeroCat.Client.Core
                 r.Buy.Enabled.Set(afford);
                 if (atCap)
                 {
-                    r.Buy.Label.Set(UiKeys.HeroMax);
-                    r.Buy.Reason.Set(UiKeys.HeroMax);
+                    r.Buy.Label.Set(UiKeys.PartyMax);
+                    r.Buy.Reason.Set(UiKeys.PartyMax);
                 }
                 else
                 {
-                    if (max) r.Buy.Label.Set(UiKeys.HeroBuyLevels, count, LabelArg.Num(cost));
-                    else r.Buy.Label.Set(UiKeys.HeroPlus);
+                    if (max) r.Buy.Label.Set(UiKeys.PartyBuyLevels, count, LabelArg.Num(cost));
+                    else r.Buy.Label.Set(UiKeys.PartyPlus);
                     if (afford) r.Buy.Reason.Set(null);
                     else r.Buy.Reason.Set(UiKeys.NeedMore, LabelArg.Num(cost - s.Gold));
                 }
@@ -207,20 +239,31 @@ namespace HeroCat.Client.Core
             _c.Commands?.Send(new TrainStat(stat, n), r.Anchor);
         }
 
-        /// <summary>Loadout slot tap: SCR_ITEM_DETAIL for an item, the matching collection screen for an empty slot.</summary>
-        public void OnLoadout(int index, ItemDetailVm detail)
+        /// <summary>
+        /// A slot card's companion, weapon or skill: the matching collection screen in slot mode for that slot (07 section 3).
+        /// </summary>
+        public void OnSlotItem(int slot, Banner kind)
         {
-            if (index < 0 || index >= Loadout.Length) return;
-            var v = Loadout[index].Value;
-            Banner b = index == 0 ? Banner.WEAPON : index <= _c.K.SkillSlots ? Banner.SKILL : Banner.COMPANION;
-            if (v.IsEmpty)
-            {
-                if (b == Banner.WEAPON) _c.Router?.Replace(ScreenIds.Weapons);
-                else if (b == Banner.SKILL) _c.Router?.Replace(ScreenIds.Skills);
-                else _c.LockedToast("COMPANIONS");
-                return;
-            }
-            detail?.Open(b, v.ItemId);
+            if (slot < 0 || slot >= Slots.Length) return;
+            _c.TargetSlot = slot;
+            if (kind == Banner.WEAPON) _c.Router?.Replace(ScreenIds.Weapons);
+            else if (kind == Banner.SKILL) _c.Router?.Replace(ScreenIds.Skills);
+            else _c.Router?.Replace(ScreenIds.Companions);
+        }
+
+        /// <summary>Awaken slot N: <c>Awaken(slot)</c>; a reject shakes the slot's button with its toast.</summary>
+        public void OnAwaken(int slot)
+        {
+            if (slot < 0 || slot >= Slots.Length) return;
+            _c.Commands?.Send(new Awaken(slot), Slots[slot].AwakenAnchor);
+        }
+
+        /// <summary>"Auto-equip all": the three AutoEquipBest* commands, companions first so weapons and skills follow them.</summary>
+        public void OnAutoEquipAll()
+        {
+            _c.Commands?.Send(new AutoEquipBestCompanions());
+            _c.Commands?.Send(new AutoEquipBestWeapons());
+            _c.Commands?.Send(new AutoEquipBestSkills());
         }
 
         public void OnEvent(Event e)
@@ -231,6 +274,7 @@ namespace HeroCat.Client.Core
                 if (r != null) r.FlashSerial++;
                 _c.Cues?.Feel(Haptic.None, Sounds.Upgrade);
             }
+            else if (e is Awakened) _c.Cues?.Feel(Haptic.Success, Sounds.Upgrade);
         }
     }
 }

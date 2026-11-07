@@ -26,18 +26,19 @@ namespace HeroCat.Sim.Tests
         }
     }
 
-    /// <summary>The fixture really is 03 criterion 19's loadout: every skill and companion slot casts, and enemies die.</summary>
+    /// <summary>The fixture really is 03 criterion 19's loadout: every party slot's skill and companion casts, and enemies die.</summary>
     public class PerfFixtureTests
     {
         [Test]
         public void FullLoadout_EverySlotCasts_AndEnemiesDie()
         {
             var sim = Stage300.New(CombatEventMask.All);
-            Assert.That(sim.State.Loadout.Skills.Count(id => id != null), Is.EqualTo(sim.Db.Constants.SkillSlots));
-            Assert.That(sim.State.Loadout.Companions.Count(id => id != null), Is.EqualTo(sim.Db.Constants.CompanionSlots));
+            Assert.That(sim.State.Party.Slots.Count(x => x.Skill != null), Is.EqualTo(sim.Db.Constants.PartySlots));
+            Assert.That(sim.State.Party.Slots.Count(x => x.Companion != null), Is.EqualTo(sim.Db.Constants.PartySlots));
+            Assert.That(sim.State.Party.Slots.Count(x => x.Weapon != null), Is.EqualTo(sim.Db.Constants.PartySlots));
             Assert.That(sim.State.Combat.Stage, Is.EqualTo(PerfFixture.Stage));
-            var skills = new bool[sim.State.Loadout.Skills.Length];
-            var companions = new bool[sim.State.Loadout.Companions.Length];
+            var skills = new bool[sim.State.Party.Slots.Length];
+            var companions = new bool[sim.State.Party.Slots.Length];
             long kills = sim.State.Stats.Kills;
             for (int i = 0; i < 20; i++)
             {
@@ -120,12 +121,12 @@ namespace HeroCat.Sim.Tests
             sim.Advance(2000);
             sim.DrainEvents();
             long kills = sim.State.Stats.Kills;
-            long hits = sim.State.Stats.HeroHits;
+            long hits = sim.State.Stats.PartyHits;
             long before = GC.GetAllocatedBytesForCurrentThread();
             sim.Advance(10_000);
             long bytes = GC.GetAllocatedBytesForCurrentThread() - before;
             Assume.That(sim.State.Stats.Kills, Is.EqualTo(kills), "no kill in the window");
-            Assert.That(sim.State.Stats.HeroHits, Is.GreaterThan(hits), "the hero fights in the window");
+            Assert.That(sim.State.Stats.PartyHits, Is.GreaterThan(hits), "the hero fights in the window");
             Assert.That(bytes, Is.EqualTo(0));
         }
 
@@ -134,7 +135,8 @@ namespace HeroCat.Sim.Tests
         {
             RequireRelease();
             var sim = Combat.NewSim(hits: false);
-            sim.State.Combat.Stage = 300;   // a fresh hero against stage 300: hits for a long time, no kill
+            sim.CombatEvents = CombatEventMask.Default;   // the opt-in cast events allocate by design; the starter party casts (00 decision 109)
+            sim.State.Combat.Stage = 300;   // a fresh party against stage 300: hits for a long time, no kill
             sim.Advance(2000);
             sim.DrainEvents();
             long kills = sim.State.Stats.Kills;

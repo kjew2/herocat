@@ -189,9 +189,10 @@ namespace HeroCat.Client.Screens
             var rt = UiKit.Rect(e.Id, parent);
             switch (e.Id)
             {
-                case ScreenIds.Hero: v = rt.gameObject.AddComponent<HeroScreen>(); break;
+                case ScreenIds.Party: v = rt.gameObject.AddComponent<PartyScreen>(); break;
                 case ScreenIds.Weapons: v = rt.gameObject.AddComponent<WeaponsScreen>(); break;
                 case ScreenIds.Skills: v = rt.gameObject.AddComponent<SkillsScreen>(); break;
+                case ScreenIds.Companions: v = rt.gameObject.AddComponent<CompanionsScreen>(); break;
                 case ScreenIds.Summon: v = rt.gameObject.AddComponent<SummonScreen>(); break;
                 case ScreenIds.SummonResult: v = rt.gameObject.AddComponent<SummonResultOverlay>(); break;
                 case ScreenIds.ItemDetail: v = rt.gameObject.AddComponent<ItemDetailModal>(); break;

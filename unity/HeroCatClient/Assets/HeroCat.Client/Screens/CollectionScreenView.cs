@@ -23,9 +23,9 @@ namespace HeroCat.Client.Screens
             UiKit.LabelOf(w).text = Vm.Localizer.Text(UiKeys.CollChipWeapons);
             var s = Btn("ChipSkills", 260, 8, 220, 112, () => c.OnChip(Banner.SKILL), c.Banner == Banner.SKILL ? Palette.Accent : Palette.PanelRaised, UiKit.Caption);
             UiKit.LabelOf(s).text = Vm.Localizer.Text(UiKeys.CollChipSkills);
-            var cp = Btn("ChipCompanions", 496, 8, 260, 112, () => c.OnChip(Banner.COMPANION), Palette.PanelRaised, UiKit.Caption);
+            var cp = Btn("ChipCompanions", 496, 8, 260, 112, () => c.OnChip(Banner.COMPANION), c.Banner == Banner.COMPANION ? Palette.Accent : Palette.PanelRaised, UiKit.Caption);
             UiKit.LabelOf(cp).text = Vm.Localizer.Text(UiKeys.CollChipCompanions);
-            cp.GetComponent<CanvasGroup>().alpha = Palette.DisabledAlpha;   // MVP: shows its lock toast
+            if (Vm.Context.Db.Companions.Count == 0) cp.GetComponent<CanvasGroup>().alpha = Palette.DisabledAlpha;   // a build without companions: lock toast
         }
 
         protected void BuildSortFilterAndGrid(float y)
@@ -95,8 +95,16 @@ namespace HeroCat.Client.Screens
                 b.GetComponent<CanvasGroup>().alpha = tile.Owned ? 1f : Palette.UnownedAlpha;
                 var label = UiKit.LabelOf(b);
                 label.color = UiKit.C(Palette.DarkTextOn(tile.Rarity) ? 0x121212u : 0xFFFFFFu);
-                // Placeholder icon (07 section 15.1): rarity glyph + pool index; "?" when unowned.
-                label.text = tile.Owned ? Palette.ShapeGlyph(tile.Rarity) + " " + tile.PoolCode + "\nLv" + tile.Level : Palette.ShapeGlyph(tile.Rarity) + " ?";
+                // The icon art when the build has it (issue #291); else the placeholder (07 section 15.1): rarity glyph + pool
+                // index, "?" when unowned. Unowned art draws at the tile's unowned opacity like the placeholder.
+                var art = SpriteLibrary.Overlay("Art", rt, SpriteLibrary.Get(tile.IconId), 10);
+                if (art != null)
+                {
+                    label.alignment = TextAlignmentOptions.BottomRight;
+                    label.text = tile.Owned ? "Lv" + tile.Level + " " : "";
+                    label.transform.SetAsLastSibling();
+                }
+                else label.text = tile.Owned ? Palette.ShapeGlyph(tile.Rarity) + " " + tile.PoolCode + "\nLv" + tile.Level : Palette.ShapeGlyph(tile.Rarity) + " ?";
                 if (tile.IsNew) UiKit.Place(UiKit.CirclePanel("New", rt, UiKit.C(Palette.Bad)).rectTransform, size - 32, 4, 28, 28);
                 if (tile.IsEquipped) { var o = b.gameObject.AddComponent<Outline>(); o.effectColor = UiKit.C(Palette.Accent); o.effectDistance = new Vector2(5, 5); }
                 if (c.SelectedId == id) b.transform.localScale = new Vector3(1.06f, 1.06f, 1);

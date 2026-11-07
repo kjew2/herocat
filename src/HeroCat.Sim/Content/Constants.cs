@@ -52,10 +52,8 @@ namespace HeroCat.Sim.Content
         public double OfflineCapH { get; private set; }
         /// <summary>OFFLINE_MIN_S (S).</summary>
         public int OfflineMinS { get; private set; }
-        /// <summary>SKILL_SLOTS (I).</summary>
-        public int SkillSlots { get; private set; }
-        /// <summary>COMPANION_SLOTS (S).</summary>
-        public int CompanionSlots { get; private set; }
+        /// <summary>PARTY_SLOTS (I): party size, all open from the start (00 decision 109).</summary>
+        public int PartySlots { get; private set; }
         /// <summary>RUNE_SLOTS (S).</summary>
         public int RuneSlots { get; private set; }
         /// <summary>DUPE_LVL_BONUS (I).</summary>
@@ -137,8 +135,7 @@ namespace HeroCat.Sim.Content
             "OFFLINE_RATE",
             "OFFLINE_CAP_H",
             "OFFLINE_MIN_S",
-            "SKILL_SLOTS",
-            "COMPANION_SLOTS",
+            "PARTY_SLOTS",
             "RUNE_SLOTS",
             "DUPE_LVL_BONUS",
             "FISH_BOARD_W",
@@ -187,8 +184,7 @@ namespace HeroCat.Sim.Content
                 case "OFFLINE_RATE": return "double";
                 case "OFFLINE_CAP_H": return "double";
                 case "OFFLINE_MIN_S": return "int";
-                case "SKILL_SLOTS": return "int";
-                case "COMPANION_SLOTS": return "int";
+                case "PARTY_SLOTS": return "int";
                 case "RUNE_SLOTS": return "int";
                 case "DUPE_LVL_BONUS": return "double";
                 case "FISH_BOARD_W": return "int";
@@ -242,8 +238,7 @@ namespace HeroCat.Sim.Content
                     case "OFFLINE_RATE": c.OfflineRate = v.Double; break;
                     case "OFFLINE_CAP_H": c.OfflineCapH = v.Double; break;
                     case "OFFLINE_MIN_S": c.OfflineMinS = v.Int; break;
-                    case "SKILL_SLOTS": c.SkillSlots = v.Int; break;
-                    case "COMPANION_SLOTS": c.CompanionSlots = v.Int; break;
+                    case "PARTY_SLOTS": c.PartySlots = v.Int; break;
                     case "RUNE_SLOTS": c.RuneSlots = v.Int; break;
                     case "DUPE_LVL_BONUS": c.DupeLvlBonus = v.Double; break;
                     case "FISH_BOARD_W": c.FishBoardW = v.Int; break;

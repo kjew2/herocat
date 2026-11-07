@@ -3,7 +3,7 @@
     [
       "achievements",
       "ach_stage_02,stage,2,REACH_STAGE,",
-      "ach_stage_02,stage,2,REACH_HERO_LEVEL,"
+      "ach_stage_02,stage,2,REACH_PARTY_LEVEL,"
     ]
   ],
   "csharp": true

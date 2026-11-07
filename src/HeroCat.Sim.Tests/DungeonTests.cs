@@ -114,7 +114,7 @@ namespace HeroCat.Sim.Tests
         {
             var fish = Simulation.RewardOf(Mvp.DungeonOf(Dungeon.FISH_COIN).Floor(f));
             var candy = Simulation.RewardOf(Mvp.DungeonOf(Dungeon.ROCK_CANDY).Floor(f));
-            Assert.That((fish.Currency, fish.Amount), Is.EqualTo((Currency.FISH_COIN, 50.0 * f)), "FISH_COIN_FLOOR(f) = 50 f");   // TODO(#165): the curve may change
+            Assert.That((fish.Currency, fish.Amount), Is.EqualTo((Currency.FISH_COIN, 50.0 * f)), "FISH_COIN_FLOOR(f) = 50 f");   // settled in #165
             Assert.That((candy.Currency, candy.Amount), Is.EqualTo((Currency.ROCK_CANDY, 10.0 * f)), "ROCK_CANDY_FLOOR(f) = 10 f");
         }
 
@@ -122,7 +122,7 @@ namespace HeroCat.Sim.Tests
         public void AC17_ExpFloor_Is300KillsAtStage20f_WithTheCurrentExpCurve()
         {
             var exp = Simulation.RewardOf(Mvp.DungeonOf(Dungeon.EXP).Floor(4));
-            Assert.That(exp.Currency, Is.EqualTo(Currency.HERO_EXP));
+            Assert.That(exp.Currency, Is.EqualTo(Currency.PARTY_EXP));
             Assert.That(Rel(exp.Amount, 300 * 5 * Math.Pow(1.025, 80)), Is.LessThan(1e-9), "EXP_FLOOR(4) = 300 * ExpPerKill(80), EXP0 5, EXP_G 1.025");
             Assert.That(exp.Amount, Is.EqualTo(300 * Mvp.ExpPerKill.Eval(80)));
             Assert.That(Rel(Simulation.RewardOf(Mvp.DungeonOf(Dungeon.EXP).Floor(1)).Amount, 2458.0), Is.LessThan(1e-3), "06 section 6.3 table: 2,458");
@@ -151,7 +151,7 @@ namespace HeroCat.Sim.Tests
             var sim = StrongSim();
             sim.Advance(5);   // a frontier mob is up and partly hit
             var frontier = StateCopy.DeepClone(sim.State).Combat;
-            long crit = sim.State.Rng[RngStreams.Crit].Counter, hits = sim.State.Stats.HeroHits, kills = sim.State.Stats.Kills;
+            long crit = sim.State.Rng[RngStreams.Crit].Counter, hits = sim.State.Stats.PartyHits, kills = sim.State.Stats.Kills;
             double gold = sim.State.Wallet.Gold;
             sim.DrainEvents();
 
@@ -168,7 +168,7 @@ namespace HeroCat.Sim.Tests
             Assert.That((c.Stage, c.KillsInStage, c.Boss, c.Fight.EnemyHp, c.Fight.SpawnTimer, c.Fight.Phase),
                         Is.EqualTo((frontier.Stage, frontier.KillsInStage, frontier.Boss, frontier.Fight.EnemyHp, frontier.Fight.SpawnTimer, frontier.Fight.Phase)),
                         "the frontier resumes unchanged (02 section 3.3)");
-            Assert.That((sim.State.Rng[RngStreams.Crit].Counter, sim.State.Stats.HeroHits, sim.State.Stats.Kills), Is.EqualTo((crit, hits, kills)),
+            Assert.That((sim.State.Rng[RngStreams.Crit].Counter, sim.State.Stats.PartyHits, sim.State.Stats.Kills), Is.EqualTo((crit, hits, kills)),
                         "dungeon hits draw from dungeon_run, not crit (03 section 10)");
             Assert.That(sim.State.Wallet.Gold, Is.EqualTo(gold), "the boss pays only the floor reward");
             Assert.That(sim.LastDungeonRun.StreamCounter, Is.GreaterThan(0), "one dungeon_run draw per hero hit");
@@ -372,13 +372,13 @@ namespace HeroCat.Sim.Tests
         public void ExpDungeonClear_GrantsHeroExp_ThroughTheOneExpPath()
         {
             var sim = StrongSim();
-            int level = sim.State.Hero.Level;
+            int level = sim.State.Party.Level;
             Assert.That(sim.Apply(Local(sim, Dungeon.EXP, 1)).Ok, Is.True);
             sim.DrainEvents();
             RunToEnd(sim);
-            var cc = sim.DrainEvents().OfType<CurrencyChanged>().Single(e => e.Currency == Currency.HERO_EXP);
+            var cc = sim.DrainEvents().OfType<CurrencyChanged>().Single(e => e.Currency == Currency.PARTY_EXP);
             Assert.That((cc.Delta, cc.Reason), Is.EqualTo((300 * Mvp.ExpPerKill.Eval(20), CurrencyReason.DUNGEON)));
-            Assert.That(sim.State.Hero.Level, Is.GreaterThanOrEqualTo(level));
+            Assert.That(sim.State.Party.Level, Is.GreaterThanOrEqualTo(level));
         }
 
         [Test]

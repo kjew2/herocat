@@ -15,10 +15,10 @@ namespace HeroCat.Bots.Report
         static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
         public const string RowFormat =
-            "{0,3} {1,5} {2,7} {3,5} {4,10:0.00e+00} {5,10:0.00e+00} {6,7} {7,8} {8,5} {9,5} {10,9} {11,7} {12,10:0.00e+00} {13,5} {14,9:0.0} {15,8}";
+            "{0,3} {1,5} {2,7} {3,6} {4,10:0.00e+00} {5,10:0.00e+00} {6,7} {7,8} {8,5} {9,5} {10,9} {11,7} {12,10:0.00e+00} {13,5} {14,9:0.0} {15,8}";
 
         static readonly string[] Columns =
-            { "day", "stage", "highest", "heroL", "dps", "gold", "diaEarn", "diaSpent", "pulls", "lplus", "rarity", "fishLvl", "fishCoin",
+            { "day", "stage", "highest", "partyL", "dps", "gold", "diaEarn", "diaSpent", "pulls", "lplus", "rarity", "fishLvl", "fishCoin",
               "wall1", "longWallH", "hash" };
 
         public static string ShortHash(string hash) => string.IsNullOrEmpty(hash) ? "-" : hash.Substring(0, Math.Min(8, hash.Length));
@@ -31,7 +31,7 @@ namespace HeroCat.Bots.Report
             string.Format(Inv, RowFormat.Replace(":0.00e+00", "").Replace(":0.0", ""), Columns.Cast<object>().ToArray());
 
         public static string FormatRow(DayRow r) =>
-            string.Format(Inv, RowFormat, r.Day, r.Stage, r.HighestCleared, r.HeroLevel, r.Dps, r.Gold, r.DiamondsEarned, r.DiamondsSpent,
+            string.Format(Inv, RowFormat, r.Day, r.Stage, r.HighestCleared, r.PartyLevel, r.Dps, r.Gold, r.DiamondsEarned, r.DiamondsSpent,
                           r.Pulls, r.LPlus, RarityName(r.HighestRarity), r.FishMaxLevel, r.FishCoins, r.FirstWallStage, r.LongestWallHours,
                           ShortHash(r.StateHash));
 
@@ -80,7 +80,7 @@ namespace HeroCat.Bots.Report
             foreach (var r in SelectRows(run, allDays))
             {
                 sb.Append(string.Format(Inv, "{0},{1},{2},{3},{4:R},{5:R},{6},{7},{8},{9},{10},{11},{12:R},{13},{14:R},{15}", r.Day, r.Stage,
-                                        r.HighestCleared, r.HeroLevel, r.Dps, r.Gold, r.DiamondsEarned, r.DiamondsSpent, r.Pulls, r.LPlus,
+                                        r.HighestCleared, r.PartyLevel, r.Dps, r.Gold, r.DiamondsEarned, r.DiamondsSpent, r.Pulls, r.LPlus,
                                         RarityName(r.HighestRarity), r.FishMaxLevel, r.FishCoins, r.FirstWallStage, r.LongestWallHours, r.StateHash));
                 foreach (var (_, v) in r.Shares.All()) sb.Append(',').Append(v.ToString("R", Inv));
                 sb.Append('\n');

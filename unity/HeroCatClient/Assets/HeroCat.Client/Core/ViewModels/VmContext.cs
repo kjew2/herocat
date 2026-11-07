@@ -73,6 +73,12 @@ namespace HeroCat.Client.Core
 
         public Constants K => Db.Constants;
 
+        /// <summary>
+        /// Slot mode (07 section 3, 00 decision 109): the party slot (0-based) a collection screen equips into when pushed
+        /// from a SCR_PARTY slot card; null when opened from the tab bar (Equip then asks for the slot).
+        /// </summary>
+        public int? TargetSlot { get; set; }
+
         public TextKeyLabel Label() => new TextKeyLabel(Loc);
 
         public ButtonState Button() => new ButtonState(Loc);

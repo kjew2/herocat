@@ -44,7 +44,7 @@ namespace HeroCat.Sim.Content
 
         /// <summary>By Rank. MVP rows; empty in an M0 build.</summary>
         public IReadOnlyList<AwakeningDef> Awakening { get; private set; }
-        public HeroLevelsDef HeroLevels { get; private set; }
+        public PartyLevelsDef PartyLevels { get; private set; }
 
         /// <summary>[0] is level 1. Its count is FISH_MAX_LVL_HARD (05 section 2.2).</summary>
         public IReadOnlyList<FishLevelDef> FishLevels { get; private set; }
@@ -60,8 +60,20 @@ namespace HeroCat.Sim.Content
         /// <summary>By Rank; tools and bots only.</summary>
         public IReadOnlyList<AwakeningTargetDef> AwakeningTargets { get; private set; }
 
-        /// <summary>TUTORIAL_WEAPON_ID: the item grant on the PROFILE_CREATED step (tut_welcome); null if absent.</summary>
+        /// <summary>
+        /// TUTORIAL_WEAPON_IDS: the PROFILE_CREATED step's WEAPON grants in grant order, which is slot order (00 decision
+        /// 111); empty if absent.
+        /// </summary>
+        public IReadOnlyList<string> TutorialWeaponIds { get; private set; } = System.Array.Empty<string>();
+
+        /// <summary>Slot 0's starter weapon, the first of <see cref="TutorialWeaponIds"/>; null if absent.</summary>
         public string TutorialWeaponId { get; private set; }
+
+        /// <summary>
+        /// TUTORIAL_COMPANION_IDS: the PROFILE_CREATED step's COMPANION grants in grant order, which is slot order (09 section
+        /// 5.29, 00 decision 109); empty if absent.
+        /// </summary>
+        public IReadOnlyList<string> TutorialCompanionIds { get; private set; } = System.Array.Empty<string>();
 
         /// <summary>The PROFILE_CREATED step's grants (TUTORIAL_DIAMONDS and the starter weapon); empty if absent.</summary>
         public IReadOnlyList<Grant> ProfileCreatedGrants { get; private set; }
@@ -139,10 +151,10 @@ namespace HeroCat.Sim.Content
         public StatDef Stat(Stat s) => Stats[(int)s];
 
         /// <summary>HERO_LVL_EXP(l): EXP from level l to l + 1.</summary>
-        public double HeroLvlExp(int level) => HeroLevels.Exp.Eval(level);
+        public double PartyLvlExp(int level) => PartyLevels.Exp.Eval(level);
 
         /// <summary>HERO_LVL_MULT^level from the cached table (bit-identical to repeated multiplication).</summary>
-        public double HeroMult(int level) => HeroLevels.Mult != null ? HeroLevels.Mult.Eval(level) : 1.0;
+        public double PartyMult(int level) => PartyLevels.Mult != null ? PartyLevels.Mult.Eval(level) : 1.0;
 
         /// <summary>The chapter row for a stage; stages past the last chapter reuse it (09 section 5.5).</summary>
         public ChapterDef ChapterFor(int stage)
@@ -172,7 +184,7 @@ namespace HeroCat.Sim.Content
             {
                 case FeatureCondition.ALWAYS: return true;
                 case FeatureCondition.STAGE_HIGHEST: return s.Progress.HighestCleared >= f.Threshold.GetValueOrDefault();
-                case FeatureCondition.AWAKEN_RANK: return s.Hero.AwakenRank >= f.Threshold.GetValueOrDefault();
+                case FeatureCondition.AWAKEN_RANK: return AwakeningRules.HighestRank(this, s) >= f.Threshold.GetValueOrDefault();   // the highest slot rank (00 decision 109)
                 default: return false;
             }
         }

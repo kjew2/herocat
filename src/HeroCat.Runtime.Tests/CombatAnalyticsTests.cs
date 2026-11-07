@@ -87,9 +87,9 @@ namespace HeroCat.Runtime.Tests
             int hz = TestContent.Db.Constants.TickHz;
             var h = new Harness(s => { s.Time.AnchorServerTime = TestContent.T0; s.Time.AnchorTick = 0; });
             h.Publish(At(100, new StageCleared(9, 10, false)), At(500, new BossFailed(10, 1, 0.25)));
-            h.State.Hero.Level += 5;   // the Hero layer moves during the wall
+            h.State.Party.Level += 5;   // the Hero layer moves during the wall
             h.Publish(At(800, new BossFailed(10, 2, 0.1)));
-            h.State.Hero.Level += 1;
+            h.State.Party.Level += 1;
             h.Publish(At(1100, new StageFirstCleared(10, 10)), At(1100, new StageCleared(10, 11, true)));
 
             var fails = h.Rows("boss_failed");
@@ -106,7 +106,7 @@ namespace HeroCat.Runtime.Tests
             AssertProps(h.Rows("wall_broken").Single(), new Dictionary<string, object>
             {
                 ["wallStage"] = 10, ["wallSec"] = (long)(600 / hz), ["activeSecDuringWall"] = 600.0 / hz, ["attempts"] = 3,
-                ["layersChangedDuringWall"] = new List<string> { "Hero" },
+                ["layersChangedDuringWall"] = new List<string> { "PartyLevel" },
             });
         }
 
@@ -171,7 +171,7 @@ namespace HeroCat.Runtime.Tests
             Assert.That(cleared.Count, Is.EqualTo(s.Sim.State.Combat.Stage - 1), "one row per frontier advance");
             Assert.That(cleared.Select(e => (int)e.Props["clearedStage"]), Is.EqualTo(Enumerable.Range(1, cleared.Count)));
             Assert.That(cleared.All(e => (long)e.Props["ticksOnStage"] > 0 && (double)e.Props["dps"] > 0), Is.True);
-            Assert.That(s.Analytics.Count("level_up"), Is.EqualTo(s.Sim.State.Hero.Level - 1));
+            Assert.That(s.Analytics.Count("level_up"), Is.EqualTo(s.Sim.State.Party.Level - 1));
         }
 
         [Test]

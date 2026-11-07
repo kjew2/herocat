@@ -116,7 +116,7 @@ class Banner:
         if not self.levels:
             raise SystemExit(f"banner {banner_id} has no banner_levels rows")
         self.base_lplus = self.levels[0]["rates"]["LEGENDARY"] + self.levels[0]["rates"]["MYTHIC"]
-        items = {"WEAPON": "weapons", "SKILL": "skills"}.get(banner_id)
+        items = {"WEAPON": "weapons", "SKILL": "skills", "COMPANION": "companions"}.get(banner_id)
         self.pool = {r: [] for r in RARITIES}
         if items:
             for it in load_table(content_dir, items):
@@ -392,8 +392,9 @@ def print_fill(b):
 
 # ------------------------------------------------------------------------------------------------ cadence (04 14.5)
 # The F2P pull cadence per banner is never hand-entered (issue #38): it comes from power_curve_model.py's bot, which
-# earns 06's diamonds and tickets and spends them with 03's policy, pulling with this file's algorithm. The cadence
-# block runs that bot over the seeds (MVP tier) and reads pulls and banner levels per day from it.
+# plays the five-companion party (00 decision 109), earns 06's diamonds and tickets and spends them with 03's policy,
+# pulling with this file's algorithm and re-equipping the five slots after every pull. The cadence block runs that bot
+# over the seeds (MVP tier) and reads pulls and banner levels per day from it.
 
 CADENCE_ITEM_DAYS = (7, 30, 90)
 CADENCE_TAIL_DAYS = 15        # days past the run are extrapolated at the median pulls/day of its last 15 days
@@ -437,6 +438,7 @@ class Cadence:
 
         def med_day(d, f):
             return median(f(runs[s].daily[d - 1]) for s in runs) if d <= days else None
+        # 04 section 14: passive / (equippedWeaponPct(i) + passive) for the slot holding the best weapon
         self.passive_share = {d: med_day(d, lambda r: r["weapon_pct"]["passive"]
                                          / max(1e-9, r["weapon_pct"]["passive"] + r["weapon_pct"]["equipped"]))
                               for d in PASSIVE_SHARE_DAYS}
@@ -524,9 +526,10 @@ def cadence_checks(p, cad, shifts):
 
     if cad.companion_share is not None:
         # TODO(#249): item 1 (layer floors). Misses under the current content, as power_curve_model.py's share check
-        # does; retuning companions is the pending balance call, so this stays report-only like that check.
+        # does; retuning companions is the pending balance call, so this stays report-only like that check. The layer
+        # is the 03 section 7.4 fold of the five slots' own DAMAGE factors times the party BUFF_ATK term.
         add(cad.companion_share >= COMPANION_SHARE_MIN,
-            f"COMPANION_SLOTS / companion dps_pct: companion layer >= {COMPANION_SHARE_MIN:.0%} of ln(DPS) by day "
+            f"PARTY_SLOTS / companion dps_pct: companion layer >= {COMPANION_SHARE_MIN:.0%} of ln(DPS) by day "
             f"{COMPANION_SHARE_DAY} (median, report-only until #249 item 1)", f"{cad.companion_share:.1%}", hard=False)
     return out
 

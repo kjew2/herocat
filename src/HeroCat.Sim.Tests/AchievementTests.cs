@@ -149,8 +149,8 @@ namespace HeroCat.Sim.Tests
             state.Progress.HighestCleared = 9;
             var sim = NewSim(state: state, unlocked: false);
             for (int i = 0; i < 50; i++) Merge(sim, 1);
-            sim.State.Hero.Exp = 0;
-            Ledger.Apply(sim.State, new CurrencyDelta(Currency.HERO_EXP, 1e9), CurrencyReason.ADMIN, sim);   // levels past 10
+            sim.State.Party.Exp = 0;
+            Ledger.Apply(sim.State, new CurrencyDelta(Currency.PARTY_EXP, 1e9), CurrencyReason.ADMIN, sim);   // levels past 10
             Assert.That(St(sim, "ach_hero_level_01"), Is.EqualTo(QuestStatus.COMPLETED));
             AssertRejectIsPure(sim, new ClaimAllQuests(QuestKind.ACHIEVEMENT), RejectCode.Locked, QuestRejectReasons.QUESTS_LOCKED);
             AssertRejectIsPure(sim, new ClaimQuest("ach_merges_01"), RejectCode.Locked, QuestRejectReasons.QUESTS_LOCKED);
@@ -176,8 +176,8 @@ namespace HeroCat.Sim.Tests
         {
             var sim = NewSim();
             for (int i = 0; i < 60; i++) Merge(sim, 1);
-            sim.State.Hero.Exp = 0;
-            Ledger.Apply(sim.State, new CurrencyDelta(Currency.HERO_EXP, 1e9), CurrencyReason.ADMIN, sim);
+            sim.State.Party.Exp = 0;
+            Ledger.Apply(sim.State, new CurrencyDelta(Currency.PARTY_EXP, 1e9), CurrencyReason.ADMIN, sim);
             Unlock(sim);
             Assert.That(sim.Apply(new ClaimQuest("ach_hero_level_01")).Ok, Is.True);
             var before = sim.State.Quests.Achievement.ToDictionary(kv => kv.Key, kv => (kv.Value.Progress, kv.Value.State));
@@ -201,9 +201,9 @@ namespace HeroCat.Sim.Tests
         {
             var sim = NewSim();
 
-            sim.State.Hero.Exp = 0;
-            Ledger.Apply(sim.State, new CurrencyDelta(Currency.HERO_EXP, 1e9), CurrencyReason.ADMIN, sim);
-            int level = sim.State.Hero.Level;
+            sim.State.Party.Exp = 0;
+            Ledger.Apply(sim.State, new CurrencyDelta(Currency.PARTY_EXP, 1e9), CurrencyReason.ADMIN, sim);
+            int level = sim.State.Party.Level;
             Assert.That(level, Is.GreaterThan(10));
             Assert.That(Pr(sim, "ach_hero_level_01"), Is.EqualTo(level));
 
@@ -214,7 +214,7 @@ namespace HeroCat.Sim.Tests
 
             sim.State.Progress.HighestCleared = 50;
             sim.State.Wallet.RockCandy = 100;
-            Assert.That(sim.Apply(new Awaken()).Ok, Is.True);
+            Assert.That(sim.Apply(new Awaken(0)).Ok, Is.True);
             Assert.That((St(sim, "ach_awakening_01"), Pr(sim, "ach_awakening_02")), Is.EqualTo((QuestStatus.COMPLETED, 1L)));
 
             Combat.Give(sim, Currency.DIAMOND, 100_000);
@@ -235,8 +235,8 @@ namespace HeroCat.Sim.Tests
         {
             var state = NewState(Mvp);
             state.Progress.HighestCleared = 120;
-            state.Hero.Level = 30;
-            state.Hero.AwakenRank = 2;
+            state.Party.Level = 30;
+            state.Party.Slots[0].AwakenRank = 2;
             state.Fish.HighestLevel = 8;
             state.Stats.Merges = 600;
             state.Stats.Pulls = 120;
@@ -245,7 +245,7 @@ namespace HeroCat.Sim.Tests
             var ev = sim.DrainEvents().OfType<QuestCompleted>().Select(e => e.QuestId).ToArray();
             Assert.That(ev, Is.EqualTo(new[]
             {
-                "ach_stage_02", "ach_stage_03", "ach_stage_04", "ach_hero_level_01", "ach_hero_level_02",
+                "ach_stage_02", "ach_stage_03", "ach_stage_04", "ach_hero_level_01", "ach_hero_level_02", "ach_weapons_01", "ach_companions_01",
                 "ach_fish_level_01", "ach_fish_level_02", "ach_awakening_01", "ach_awakening_02",
                 "ach_merges_01", "ach_merges_02", "ach_merges_03", "ach_summons_01", "ach_summons_02", "ach_summons_03",
             }));

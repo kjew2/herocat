@@ -5,6 +5,7 @@ using HeroCat.Sim.Commands;
 using HeroCat.Sim.Content;
 using HeroCat.Sim.Fish;
 using HeroCat.Sim.Power;
+using HeroCat.Sim;
 using HeroCat.Sim.State;
 using HeroCat.Sim.Summons;
 
@@ -130,15 +131,55 @@ namespace HeroCat.Bots.Policies
         /// True when a rank was bought. Not called from Decide yet: wiring step 3 changes the bot's runs, the golden files
         /// and the acceptance sweep, and the Rock Candy cadence is decision #249 items 3 and 5. TODO(#214).
         /// </summary>
-        public static bool TryAwaken(BotContext ctx) => ctx.Query.CanAwaken && ctx.Apply(new Awaken()).Ok;
+        public static bool TryAwaken(BotContext ctx)
+        {
+            int slot = BestAwakenSlot(ctx);
+            return slot >= 0 && ctx.Apply(new Awaken(slot)).Ok;
+        }
 
         /// <summary>
-        /// 03 section 8.3's <c>NextAwakenWithin(sim, 50)</c>: the next rank's gate is at most <paramref name="stages"/> above
-        /// Progress.HighestCleared, so Rock Candy is saved for it instead of limit breaks. False at the last rank.
+        /// The slot to awaken now (03 section 8.3 step 3, 00 decision 111): among the occupied slots whose next gate and cost
+        /// both pass, the one with the largest SlotDps_i (a rank multiplies it by AWAKEN_MULT), lowest slot index on a tie;
+        /// -1 when none can. The same rule as tools/power_curve_model.py's best_awaken_slot.
+        /// </summary>
+        public static int BestAwakenSlot(BotContext ctx)
+        {
+            var p = ctx.Query.Power;
+            int best = -1;
+            for (int i = 0; i < p.SlotCount; i++)
+            {
+                if (!p.Occupied(i) || !ctx.Query.CanAwaken(i)) continue;
+                if (best < 0 || p.SlotDps(i) > p.SlotDps(best)) best = i;
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// The strongest slot (00 decision 111): the occupied slot with the largest SlotDps_i that still has a next rank,
+        /// gate and cost aside, lowest index on a tie; -1 when none. It is the slot the bot awakens next, so it is the only
+        /// one Rock Candy is reserved for.
+        /// </summary>
+        public static int StrongestAwakenSlot(BotContext ctx)
+        {
+            var p = ctx.Query.Power;
+            int best = -1;
+            for (int i = 0; i < p.SlotCount; i++)
+            {
+                if (!p.Occupied(i) || !ctx.Query.NextAwakenStageGate(i).HasValue) continue;
+                if (best < 0 || p.SlotDps(i) > p.SlotDps(best)) best = i;
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// 03 section 8.3's <c>NextAwakenWithin(sim, 50)</c>, decision 111's reading: the strongest slot's next gate is at
+        /// most <paramref name="stages"/> above Progress.HighestCleared, so Rock Candy is saved for that rank instead of limit
+        /// breaks; the other slots' ranks reserve nothing. False when no occupied slot has a next rank.
         /// </summary>
         public static bool NextAwakenWithin(BotContext ctx, int stages)
         {
-            int? gate = ctx.Query.NextAwakenStageGate;
+            int slot = StrongestAwakenSlot(ctx);
+            int? gate = slot >= 0 ? ctx.Query.NextAwakenStageGate(slot) : null;
             return gate.HasValue && gate.Value - ctx.State.Progress.HighestCleared <= stages;
         }
 
@@ -222,8 +263,8 @@ namespace HeroCat.Bots.Policies
                 case Stat.EXP_GAIN:
                 {
                     double income = Math.Log((1 + p * (n + 1)) / (1 + p * n));
-                    double levels = income / Math.Log(db.HeroLevels.Exp.Growth);
-                    return IncomeStatWeight * levels * Math.Log(db.HeroLevels.MultPerLevel.GetValueOrDefault(1.0));
+                    double levels = income / Math.Log(db.PartyLevels.Exp.Growth);
+                    return IncomeStatWeight * levels * Math.Log(db.PartyLevels.MultPerLevel.GetValueOrDefault(1.0));
                 }
                 default:
                     return 0;
@@ -324,13 +365,12 @@ namespace HeroCat.Bots.Policies
             bool added = item == null;
             if (added) col.Items[id] = item = new OwnedItem();
             item.Copies += 1;
-            string weapon = s.Loadout.Weapon;
-            string[] skills = s.Loadout.Skills;
-            if (b == Banner.WEAPON) s.Loadout.Weapon = CollectionRules.BestWeapon(db, s);
-            else if (b == Banner.SKILL) s.Loadout.Skills = CollectionRules.BestSkills(db, s);
-            double gain = Math.Log(PowerFormula.Compute(db, s).RatedDps) - baseLn;
-            s.Loadout.Weapon = weapon;
-            s.Loadout.Skills = skills;
+            var slots = s.Party.Slots;
+            PartySlot[] probe = slots;
+            if (b == Banner.WEAPON) probe = CollectionRules.WithField(slots, CollectionRules.BestWeapons(db, s), (x, v) => x.Weapon = v);
+            else if (b == Banner.SKILL) probe = CollectionRules.WithField(slots, CollectionRules.BestSkills(db, s), (x, v) => x.Skill = v);
+            else if (b == Banner.COMPANION) probe = CollectionRules.WithField(slots, CollectionRules.BestCompanions(db, s), (x, v) => x.Companion = v);
+            double gain = Math.Log(PowerFormula.Compute(db, s, 0.0, probe).RatedDps) - baseLn;
             item.Copies -= 1;
             if (added) col.Items.Remove(id);
             return gain > 0 ? gain : 0;
@@ -341,11 +381,22 @@ namespace HeroCat.Bots.Policies
 
         static int Pity(BotContext ctx, Banner b) => ctx.State.Banners.TryGetValue(b, out var bs) && bs != null ? bs.Pity : 0;
 
-        /// <summary>AutoEquipBest* after every pull (10 section 3.4). Weapons are also auto-equipped by ApplySummonResult.</summary>
+        /// <summary>
+        /// AutoEquipBest* across all five slots after every pull (10 section 3.4, 00 decision 109), each only when it changes
+        /// the arrangement. Weapons are also auto-equipped by ApplySummonResult.
+        /// </summary>
         static void AutoEquip(BotContext ctx, Banner b)
         {
-            if (b == Banner.WEAPON && CollectionRules.BestWeapon(ctx.Content, ctx.State) != ctx.State.Loadout.Weapon) ctx.Apply(new AutoEquipBestWeapon());
-            if (b == Banner.SKILL && CollectionRules.BetterSkillAvailable(ctx.Content, ctx.State)) ctx.Apply(new AutoEquipBestSkills());
+            var db = ctx.Content;
+            var slots = ctx.State.Party.Slots;
+            bool Differs(string[] best, Func<PartySlot, string> f)
+            {
+                for (int i = 0; i < slots.Length; i++) if (f(slots[i]) != best[i]) return true;
+                return false;
+            }
+            if (b == Banner.COMPANION && Differs(CollectionRules.BestCompanions(db, ctx.State), x => x.Companion)) ctx.Apply(new AutoEquipBestCompanions());
+            if (Differs(CollectionRules.BestWeapons(db, ctx.State), x => x.Weapon)) ctx.Apply(new AutoEquipBestWeapons());
+            if (Differs(CollectionRules.BestSkills(db, ctx.State), x => x.Skill)) ctx.Apply(new AutoEquipBestSkills());
         }
 
         // ============================================================================================ step 5: Fish Board

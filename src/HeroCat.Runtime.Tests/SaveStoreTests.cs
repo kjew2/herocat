@@ -31,15 +31,15 @@ namespace HeroCat.Runtime.Tests
             var store = Opened(slots);
             var s = TestContent.NewState();
             store.Save(s, SaveTrigger.Periodic);
-            s.Hero.Level = 9;
+            s.Party.Level = 9;
             store.Save(s, SaveTrigger.Periodic);
 
             Assert.That(File.Exists(slots.TempPath), Is.False);
             var sav = Decode(slots.Read(SaveSlot.Primary));
             var prev = Decode(slots.Read(SaveSlot.Backup));
-            Assert.That(sav.Hero.Level, Is.EqualTo(9));
+            Assert.That(sav.Party.Level, Is.EqualTo(9));
             Assert.That(sav.SaveSeq, Is.EqualTo(2));
-            Assert.That(prev.Hero.Level, Is.EqualTo(1));
+            Assert.That(prev.Party.Level, Is.EqualTo(1));
             Assert.That(prev.SaveSeq, Is.EqualTo(1));
 
             var r = TestContent.Store(new FileSaveStore(Dir)).Load(Now, TestContent.Db);
@@ -56,11 +56,11 @@ namespace HeroCat.Runtime.Tests
             var store = Opened(slots);
             var s = TestContent.NewState();
             store.Save(s, SaveTrigger.Periodic);
-            s.Hero.Level = 4;
+            s.Party.Level = 4;
             store.Save(s, SaveTrigger.Periodic);
             Assert.That(slots.Temp, Is.Null);
             Assert.That(Decode(slots.Primary).SaveSeq, Is.EqualTo(2));
-            Assert.That(Decode(slots.Backup).Hero.Level, Is.EqualTo(1));
+            Assert.That(Decode(slots.Backup).Party.Level, Is.EqualTo(1));
         }
 
         [Test]
@@ -104,7 +104,7 @@ namespace HeroCat.Runtime.Tests
             var store = Opened(slots);
             var s = TestContent.NewState();
             store.Save(s, SaveTrigger.Periodic);
-            s.Hero.Level = 2;
+            s.Party.Level = 2;
             store.Save(s, SaveTrigger.Periodic);
             var bytes = File.ReadAllBytes(slots.PrimaryPath);
             bytes[bytes.Length - 5] ^= 0x01;
@@ -113,7 +113,7 @@ namespace HeroCat.Runtime.Tests
             var analytics = new MemoryAnalytics();
             var r = TestContent.Store(slots, analytics: analytics).Load(Now, TestContent.Db);
             Assert.That(r.Status, Is.EqualTo(LoadStatus.LoadedFromPrev));
-            Assert.That(r.State.Hero.Level, Is.EqualTo(1));
+            Assert.That(r.State.Party.Level, Is.EqualTo(1));
             Assert.That(analytics.Count("save_fallback"), Is.EqualTo(1));
             Assert.That(analytics.Count("save_reject"), Is.EqualTo(1));
             Assert.That(analytics.Events.First(e => e.Name == "save_reject").Props["file"], Is.EqualTo("slot0.sav"));
@@ -162,14 +162,14 @@ namespace HeroCat.Runtime.Tests
             var s = TestContent.NewState();
             store.Save(s, SaveTrigger.Periodic);
             slots.AfterRotate = () => throw new IOException("power cut");
-            s.Hero.Level = 5;
+            s.Party.Level = 5;
             Assert.Throws<SaveWriteException>(() => store.Save(s, SaveTrigger.Periodic));
             Assert.That(File.Exists(slots.PrimaryPath), Is.False);
             Assert.That(File.Exists(slots.BackupPath), Is.True);
 
             var r = TestContent.Store(new FileSaveStore(Dir)).Load(Now, TestContent.Db);
             Assert.That(r.Status, Is.EqualTo(LoadStatus.LoadedFromPrev));
-            Assert.That(r.State.Hero.Level, Is.EqualTo(1));
+            Assert.That(r.State.Party.Level, Is.EqualTo(1));
         }
 
         [Test]
@@ -281,13 +281,13 @@ namespace HeroCat.Runtime.Tests
             var slots = new FileSaveStore(Dir);
             var store = Opened(slots);
             var chosen = TestContent.NewState();
-            chosen.Hero.Level = 7;
+            chosen.Party.Level = 7;
             var rejected = TestContent.NewState();
-            rejected.Hero.Level = 3;
+            rejected.Party.Level = 3;
             store.ResolveConflictAsync(chosen, rejected, CancellationToken.None).GetAwaiter().GetResult();
-            Assert.That(Decode(slots.Read(SaveSlot.Primary)).Hero.Level, Is.EqualTo(7));
+            Assert.That(Decode(slots.Read(SaveSlot.Primary)).Party.Level, Is.EqualTo(7));
             Assert.That(slots.ConflictFiles(), Has.Length.EqualTo(1));
-            Assert.That(Decode(File.ReadAllBytes(slots.ConflictFiles()[0])).Hero.Level, Is.EqualTo(3));
+            Assert.That(Decode(File.ReadAllBytes(slots.ConflictFiles()[0])).Party.Level, Is.EqualTo(3));
 
             TestContent.Store(slots).Load(Now + SaveConfig.CONFLICT_KEEP_DAYS * Day, TestContent.Db);
             Assert.That(slots.ConflictFiles(), Has.Length.EqualTo(1));

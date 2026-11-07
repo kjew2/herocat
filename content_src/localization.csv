@@ -10,13 +10,13 @@ achievement.stage_08.name,Clear stage 400,,,,40,false,
 achievement.stage_09.name,Clear stage 500,,,,40,false,
 achievement.stage_10.name,Clear stage 700,,,,40,false,
 achievement.stage_11.name,"Clear stage 1,000",,,,40,false,
-achievement.hero_level_01.name,Reach hero level 10,,,,40,false,
-achievement.hero_level_02.name,Reach hero level 25,,,,40,false,
-achievement.hero_level_03.name,Reach hero level 50,,,,40,false,
-achievement.hero_level_04.name,Reach hero level 75,,,,40,false,
-achievement.hero_level_05.name,Reach hero level 100,,,,40,false,
-achievement.hero_level_06.name,Reach hero level 150,,,,40,false,
-achievement.hero_level_07.name,Reach hero level 200,,,,40,false,
+achievement.hero_level_01.name,Reach party level 10,,,,40,false,
+achievement.hero_level_02.name,Reach party level 25,,,,40,false,
+achievement.hero_level_03.name,Reach party level 50,,,,40,false,
+achievement.hero_level_04.name,Reach party level 75,,,,40,false,
+achievement.hero_level_05.name,Reach party level 100,,,,40,false,
+achievement.hero_level_06.name,Reach party level 150,,,,40,false,
+achievement.hero_level_07.name,Reach party level 200,,,,40,false,
 achievement.weapons_01.name,Own 5 different weapons,,,,40,false,
 achievement.weapons_02.name,Own 10 different weapons,,,,40,false,
 achievement.weapons_03.name,Own 20 different weapons,,,,40,false,
@@ -66,7 +66,7 @@ boot.step.auth,Signing in...,,,,28,false,07 M0 screens
 boot.step.catchup,Catching up...,,,,28,false,07 M0 screens
 boot.step.config,Checking for updates...,,,,28,false,07 M0 screens
 boot.step.content,Loading content...,,,,28,false,07 M0 screens
-boot.step.save,Loading your cat...,,,,28,false,07 M0 screens
+boot.step.save,Loading your squire...,,,,28,false,07 M0 screens
 boot.step.warmup,Almost there...,,,,28,false,07 M0 screens
 chapter.01.name,Dreamland 1,,,,24,false,
 chapter.02.name,Dreamland 2,,,,24,false,
@@ -216,7 +216,7 @@ reject.not_enough_diamond,Not enough diamonds,,,,48,false,
 reject.not_enough_fish_coin,Not enough Fish Coins,,,,48,false,
 reject.not_enough_gold,Not enough gold,,,,48,false,
 reject.not_enough_guild_coin,Not enough Guild Coins,,,,48,false,
-reject.not_enough_hero_exp,Not enough EXP,,,,48,false,
+reject.not_enough_party_exp,Not enough EXP,,,,48,false,
 reject.not_enough_rock_candy,Not enough Rock Candy,,,,48,false,
 reject.not_enough_ticket_exp,Not enough EXP tickets,,,,48,false,
 reject.not_enough_ticket_fish_coin,Not enough Fish Coin tickets,,,,48,false,
@@ -235,8 +235,7 @@ reject.rate_limited,"Too fast, try again",,,,48,false,
 reject.shop_locked,Shop not available yet,,,,48,false,
 reject.skill_in_other_slot,Equipped in another slot,,,,48,false,
 reject.companion_in_other_slot,Equipped in another slot,,,,48,false,
-reject.companion_slot_locked,Unlocks with Awakening,,,,48,false,
-reject.slot_empty,That slot is empty,,,,48,false,
+reject.weapon_in_other_slot,Equipped in another slot,,,,48,false,
 reject.slot_occupied,That slot is taken,,,,48,false,
 reject.stage_not_cleared,Clear this stage first,,,,48,false,
 reject.stage_out_of_range,No such stage,,,,48,false,
@@ -273,6 +272,15 @@ scr.common.back,Back,,,,18,false,07 M0 screens
 scr.common.close,Close,,,,18,false,07 M0 screens
 scr.common.coming_soon,Coming soon,,,,48,false,07 M0 screens
 scr.common.need_more,Need {0} more,,,,18,false,07 M0 screens
+scr.companions.ability_buff_atk,attack buff,,,,18,false,07 M0 screens
+scr.companions.ability_buff_gold,gold buff,,,,18,false,07 M0 screens
+scr.companions.ability_damage,damage,,,,18,false,07 M0 screens
+scr.companions.ability_mp_regen,MP regen,,,,18,false,07 M0 screens
+scr.companions.budget,Equipped cost {0} MP/s,,,,40,false,07 M0 screens
+scr.companions.mp,MP {0} / {1} · regen {2}/s,,,,48,false,07 M0 screens
+scr.companions.slots,Party slots,,,,28,false,07 M0 screens
+scr.companions.stats,{0} · DPS {1} · every {2},,,,60,false,07 M0 screens
+scr.companions.title,Companions,,,,28,false,07 M0 screens
 scr.confirm.cancel,Cancel,,,,18,false,07 M0 screens
 scr.confirm.cost,"{0}: {1}, balance after {2}",,,,60,false,07 M0 screens
 scr.confirm.exit_body,Press back again to quit.,,,,160,false,07 M0 screens
@@ -287,15 +295,16 @@ scr.error.reset_profile,Reset profile,,,,18,false,07 M0 screens
 scr.error.restore_cloud,Restore from cloud,,,,18,false,07 M0 screens
 scr.error.retry,Retry,,,,18,false,07 M0 screens
 scr.error.update_app,Update,,,,18,false,07 M0 screens
-scr.hero.buy_levels,Buy {0} levels for {1},,,,28,false,07 M0 screens
-scr.hero.level,Lv {0},,,,18,false,07 M0 screens
-scr.hero.loadout,Loadout,,,,28,false,07 M0 screens
-scr.hero.max,MAX,,,,18,false,07 M0 screens
-scr.hero.plus,+,,,,18,false,07 M0 screens
-scr.hero.step_max,Max,,,,18,false,07 M0 screens
-scr.hero.step_n,x{0},,,,18,false,07 M0 screens
-scr.hero.title,Hero,,,,28,false,07 M0 screens
-scr.hero.training,Training,,,,28,false,07 M0 screens
+scr.party.buy_levels,Buy {0} levels for {1},,,,28,false,07 M0 screens
+scr.party.awaken_gate,Reach stage {0},,,,28,false,07 M0 screens
+scr.party.level,Lv {0},,,,18,false,07 M0 screens
+scr.party.loadout,Party,,,,28,false,07 M0 screens
+scr.party.max,MAX,,,,18,false,07 M0 screens
+scr.party.plus,+,,,,18,false,07 M0 screens
+scr.party.step_max,Max,,,,18,false,07 M0 screens
+scr.party.step_n,x{0},,,,18,false,07 M0 screens
+scr.party.title,Party,,,,28,false,07 M0 screens
+scr.party.training,Training,,,,28,false,07 M0 screens
 scr.item_detail.at_max,Max level,,,,28,false,07 M0 screens
 scr.item_detail.compare,Equipped weapon: ATK {0},,,,60,false,07 M0 screens
 scr.item_detail.compare_button,Compare,,,,18,false,07 M0 screens
@@ -332,7 +341,7 @@ scr.main.stage,Stage {0} · Ch.{1},,,,28,false,07 M0 screens
 scr.main.stage_farming,Farming {0} · frontier {1},,,,28,false,07 M0 screens
 scr.main.tab_collection,Collection,,,,10,false,07 M0 screens
 scr.main.tab_dungeons,Dungeons,,,,10,false,07 M0 screens
-scr.main.tab_hero,Hero,,,,10,false,07 M0 screens
+scr.main.tab_party,Party,,,,10,false,07 M0 screens
 scr.main.tab_quests,Quests,,,,10,false,07 M0 screens
 scr.main.tab_shop,Shop,,,,10,false,07 M0 screens
 scr.main.tab_summon,Summon,,,,10,false,07 M0 screens
@@ -480,7 +489,7 @@ tut.10.skip,Tap to skip.,,,,48,false,
 tut.11.equip,Equip your best weapon.,,,,48,false,
 tut.12.boss,A boss! Merge fish to fire missiles,,,,48,false,
 tut.2.gold,Monsters drop gold.,,,,48,false,
-tut.3.hero,Make your cat stronger,,,,48,false,
+tut.3.party,Make your party stronger,,,,48,false,
 tut.4.train,Train Attack.,,,,48,false,
 tut.5.back,Back to the fight.,,,,48,false,
 tut.6.release,Release a fish,,,,48,false,
@@ -517,8 +526,8 @@ weapon.e_04.desc,A epic weapon.,,,,0,false,
 weapon.e_04.name,Epic Weapon 4,,,,24,false,
 weapon.e_05.desc,A epic weapon.,,,,0,false,
 weapon.e_05.name,Epic Weapon 5,,,,24,false,
-weapon.e_06.desc,A epic weapon.,,,,0,false,
-weapon.e_06.name,Epic Weapon 6,,,,24,false,
+weapon.e_06.desc,"Dual katana cut from one violet crystal. Every swing sheds a storm of glittering shards.",,,,0,false,
+weapon.e_06.name,Twin Crystals,,,,24,false,
 weapon.l_01.desc,A legendary weapon.,,,,0,false,
 weapon.l_01.name,Legendary Weapon 1,,,,24,false,
 weapon.l_02.desc,A legendary weapon.,,,,0,false,
@@ -652,20 +661,20 @@ companion.e_09.desc,An epic mana companion.,,,,0,false,
 companion.e_09.name,Epic Companion 9,,,,24,false,
 companion.e_10.desc,An epic mana companion.,,,,0,false,
 companion.e_10.name,Epic Companion 10,,,,24,false,
-companion.l_01.desc,A legendary damage companion.,,,,0,false,
-companion.l_01.name,Legendary Companion 1,,,,24,false,
-companion.l_02.desc,A legendary damage companion.,,,,0,false,
-companion.l_02.name,Legendary Companion 2,,,,24,false,
+companion.l_01.desc,"Arcane caster. Her astrolabe staff calls starfall down on the enemy.",,,,0,false,
+companion.l_01.name,Lucy,,,,24,false,
+companion.l_02.desc,"Shadow mage. Her parasol scatters a storm of shadow butterflies over the enemy.",,,,0,false,
+companion.l_02.name,Yuki,,,,24,false,
 companion.l_03.desc,A legendary damage companion.,,,,0,false,
 companion.l_03.name,Legendary Companion 3,,,,24,false,
-companion.l_04.desc,A legendary attack-buff companion.,,,,0,false,
-companion.l_04.name,Legendary Companion 4,,,,24,false,
+companion.l_04.desc,"Paladin. While her banner flies, every strike lands harder.",,,,0,false,
+companion.l_04.name,Valeria,,,,24,false,
 companion.l_05.desc,A legendary gold-buff companion.,,,,0,false,
 companion.l_05.name,Legendary Companion 5,,,,24,false,
 companion.l_06.desc,A legendary mana companion.,,,,0,false,
 companion.l_06.name,Legendary Companion 6,,,,24,false,
-companion.m_01.desc,A mythic damage companion.,,,,0,false,
-companion.m_01.name,Mythic Companion 1,,,,24,false,
+companion.m_01.desc,"Death knight. Her soul-reaping scythe cuts through anything in her way.",,,,0,false,
+companion.m_01.name,Seraphine,,,,24,false,
 companion.m_02.desc,A mythic attack-buff companion.,,,,0,false,
 companion.m_02.name,Mythic Companion 2,,,,24,false,
 dungeon.dungeon_fish.name,Fish Coin Dungeon,,,,32,false,
@@ -673,7 +682,7 @@ dungeon.dungeon_fish.desc,Earn Fish Coins for Research,,,,64,false,
 dungeon.dungeon_candy.name,Rock Candy Dungeon,,,,32,false,
 dungeon.dungeon_candy.desc,Earn Rock Candy for Awakening,,,,64,false,
 dungeon.dungeon_exp.name,EXP Dungeon,,,,32,false,
-dungeon.dungeon_exp.desc,Earn hero EXP,,,,64,false,
+dungeon.dungeon_exp.desc,Earn party EXP,,,,64,false,
 reject.dungeon_locked,Dungeons unlock at stage 30,,,,48,false,
 reject.dungeon_floor_not_unlocked,Clear the previous floor first,,,,48,false,
 reject.boss_attempt_in_progress,Finish the boss fight first,,,,48,false,

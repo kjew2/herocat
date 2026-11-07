@@ -131,16 +131,24 @@ namespace HeroCat.Sim.Summons
                                     BannerLevel(db, s, b), PullsToNextLevel(db, s, b));
         }
 
-        /// <summary>The collection's power-formula layer (03 section 7.1): weaponMult, skillMult, companionMult; 1 for runes until #227.</summary>
+        /// <summary>
+        /// The collection's layer as a party-level multiplier (04 section 11, 00 decision 109): the rated party DPS divided by
+        /// the rated party DPS with that kind's per-slot factor neutral in every slot (weaponFactor, skillFactor, or the
+        /// companion ownFactor and the party BUFF_ATK term). 1 with an empty party, and for runes until #227.
+        /// </summary>
         public static double LayerMult(ContentDb db, GameState s, Banner b)
         {
-            switch (b)
+            if (b != Banner.WEAPON && b != Banner.SKILL && b != Banner.COMPANION) return 1.0;
+            var p = PowerFormula.Compute(db, s);
+            double without = 0.0;
+            for (int i = 0; i < p.SlotCount; i++)
             {
-                case Banner.WEAPON: return 1.0 + (PowerFormula.EquippedWeaponPct(db, s) + PowerFormula.WeaponPassivePct(db, s)) / Units.Percent;
-                case Banner.SKILL: return 1.0 + PowerFormula.SkillDpsPct(db, s) / Units.Percent;
-                case Banner.COMPANION: return 1.0 + PowerFormula.MpSufficiency(db, s) * PowerFormula.CompanionDpsPct(db, s) / Units.Percent;
-                default: return 1.0;
+                if (!p.Occupied(i)) continue;
+                double f = b == Banner.WEAPON ? p.WeaponFactor(i) : b == Banner.SKILL ? p.SkillFactor(i) : p.OwnFactor(i);
+                without += p.SlotDps(i) / f;
             }
+            if (b != Banner.COMPANION) without *= p.PartyBuff;
+            return without > 0 ? p.AutoDps / without : 1.0;
         }
 
         /// <summary>weaponPassivePct for weapons (04 section 6.1), 0 for every other kind.</summary>
@@ -165,24 +173,19 @@ namespace HeroCat.Sim.Summons
             if (b == Banner.WEAPON && db.Weapons.TryGetValue(id, out var w))
             {
                 nameKey = w.NameKey; icon = w.Icon; rarity = w.Rarity;
-                if (s.Loadout.Weapon == id) { equipped = true; slot = 0; }
+                slot = SlotOf(s, x => x.Weapon, id);
             }
             else if (b == Banner.SKILL && db.Skills.TryGetValue(id, out var k))
             {
                 nameKey = k.NameKey; icon = k.Icon; rarity = k.Rarity;
-                var slots = s.Loadout.Skills;
-                if (slots != null)
-                    for (int i = 0; i < slots.Length; i++)
-                        if (slots[i] == id) { equipped = true; slot = i; break; }
+                slot = SlotOf(s, x => x.Skill, id);
             }
             else if (b == Banner.COMPANION && db.Companions.TryGetValue(id, out var cp))
             {
                 nameKey = cp.NameKey; icon = cp.Icon; rarity = cp.Rarity;
-                var slots = s.Loadout.Companions;
-                if (slots != null)
-                    for (int i = 0; i < slots.Length; i++)
-                        if (slots[i] == id) { equipped = true; slot = i; break; }
+                slot = SlotOf(s, x => x.Companion, id);
             }
+            equipped = slot.HasValue;
 
             // Headline numbers after LevelMult (04 section 11), the Power layer's per-item math: ValueNow at the effective level
             // (0 when unowned), ValueNextLevel one copies-level up (the level-1 value when unowned; ValueNow at level 10).
@@ -194,6 +197,16 @@ namespace HeroCat.Sim.Summons
             int lbCost = (int)CollectionRules.NextLimitBreakCost(db, b, col, id);   // 04 section 5.2
             return new CollectibleVm(id, rarity, nameKey, icon, owned, copies, level, lb, eff, toNext, lbCost, now, next, passiveNow,
                                      equipped, slot, isNew);
+        }
+
+        /// <summary>The party slot holding <paramref name="id"/> in the given field, or null (an item is in at most one slot).</summary>
+        static int? SlotOf(GameState s, Func<PartySlot, string> field, string id)
+        {
+            var slots = s.Party.Slots;
+            if (slots == null) return null;
+            for (int i = 0; i < slots.Length; i++)
+                if (slots[i] != null && field(slots[i]) == id) return i;
+            return null;
         }
     }
 }

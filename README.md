@@ -1,6 +1,6 @@
 # Whisker Hero (working title) - design specs
 
-Mobile idle RPG in the *Cat Hero: Idle RPG* mould. A cat hero auto-fights through stages on the top half of a portrait screen while the player merges fish on the bottom half; kills, fish, dungeons and summons feed a dozen parallel upgrade systems, and the game is deciding where to spend next. Deterministic pure-C# simulation shared by the Unity client, the ASP.NET Core server and a headless bot harness; every number is content data tuned from a spreadsheet and verified by bots before a human sees it.
+Mobile idle RPG in the *Cat Hero: Idle RPG* mould. A party of five companions, each with its own weapon, auto-fights through stages on the top half of a portrait screen while the player merges fish on the bottom half; kills, fish, dungeons and summons feed a dozen parallel upgrade systems, and the game is deciding where to spend next. Deterministic pure-C# simulation shared by the Unity client, the ASP.NET Core server and a headless bot harness; every number is content data tuned from a spreadsheet and verified by bots before a human sees it.
 
 Start with `specs/00-overview.md`. It fixes the tech stack, the authority split, the canonical names, every constant with its inherited/seed tag, the power formula, the cross-spec contracts and the decisions log. Where another spec disagrees with it, 00 wins.
 
@@ -9,7 +9,7 @@ Start with `specs/00-overview.md`. It fixes the tech stack, the authority split,
 | `specs/00-overview.md` | Scope tiers (M0/MVP/P1/P2), pitch and pillars, tech stack, architecture, vocabulary, constants, power formula, contracts, milestones, decisions |
 | `specs/01-architecture-and-data-flow.md` | Layers, commands/events, every end-to-end flow, threading, network |
 | `specs/02-domain-model-and-persistence.md` | Entities, save schema v1, migrations, local + cloud save, server DB |
-| `specs/03-combat-and-progression.md` | Combat loop, stats, training, hero level, awakening, research, power curve |
+| `specs/03-combat-and-progression.md` | Combat loop, party, stats, training, party level, awakening, research, power curve |
 | `specs/04-summons-and-collections.md` | Banners, pity, banner level, weapons, skills, companions, runes |
 | `specs/05-fish-merge-minigame.md` | Board, tank, merge rules, discovery, missiles, auto-merge |
 | `specs/06-economy-and-daily-loop.md` | Currencies, daily sources/sinks, quests, dungeons, offline, shop, inbox |

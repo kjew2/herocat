@@ -9,6 +9,23 @@ namespace HeroCat.Client.Screens
     /// <summary>SCR_ITEM_DETAIL (07 section 4.19; issue #116).</summary>
     public sealed class ItemDetailModal : ModalView
     {
+        Image _icon, _art;
+        TextMeshProUGUI _glyph;
+        string _artShown;
+
+        /// <summary>Card art follows the item, not its rarity: two Legendaries in a row still swap the splash.</summary>
+        public override void Tick(double now)
+        {
+            var d = Vm.ItemDetail;
+            string want = d.ItemId == null ? null : d.ItemId + "|" + d.ArtAddress;
+            if (want == _artShown || _icon == null) return;
+            _artShown = want;
+            if (_art != null) Destroy(_art.gameObject);
+            // Splash for an L+ companion, else its portrait, else the icon (00 decision 108, issue #291).
+            _art = SpriteLibrary.Overlay("Art", _icon.transform, SpriteLibrary.First(d.ArtAddress, d.FallbackArtAddress), 4);
+            _glyph.text = _art != null ? "" : Palette.ShapeGlyph(d.Rarity.Value);
+        }
+
         protected override void BuildCard()
         {
             var d = Vm.ItemDetail;
@@ -23,9 +40,12 @@ namespace HeroCat.Client.Screens
             UiKit.Place(icon.rectTransform, 380, 136, 200, 200);
             var glyph = UiKit.Text("Glyph", icon.transform, UiKit.Display, 0x121212, TextAlignmentOptions.Center);
             UiKit.Fill(glyph.rectTransform);
+            _icon = icon;
+            _glyph = glyph;
             d.Rarity.Bind(new ActionSink<HeroCat.Sim.Content.Rarity>(r =>
             {
                 icon.color = UiKit.Rarity(r);
+                _artShown = null;   // re-pick the art on the next Tick
                 glyph.text = Palette.ShapeGlyph(r);
                 kind.text = Vm.Localizer.Text(UiKeys.KindKey(d.Banner)) + " · " + Vm.Localizer.Text(UiKeys.RarityName(r));   // rarity word (07 section 11)
             }));

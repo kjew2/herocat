@@ -10,7 +10,7 @@
     {
       "key": "BASE_ATK",
       "type": "double",
-      "value": 10.0,
+      "value": 2.0,
       "kind": "I"
     },
     {
@@ -126,16 +126,10 @@
       "kind": "S"
     },
     {
-      "key": "SKILL_SLOTS",
+      "key": "PARTY_SLOTS",
       "type": "int",
-      "value": 6,
+      "value": 5,
       "kind": "I"
-    },
-    {
-      "key": "COMPANION_SLOTS",
-      "type": "int",
-      "value": 4,
-      "kind": "S"
     },
     {
       "key": "RUNE_SLOTS",
@@ -206,7 +200,7 @@
     {
       "key": "MP_REGEN0",
       "type": "double",
-      "value": 2.0,
+      "value": 0.5,
       "kind": "S"
     },
     {

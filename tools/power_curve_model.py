@@ -1,14 +1,21 @@
 #!/usr/bin/env python3
 """Greedy F2P power-curve model for HeroCat (specs/03 section 8.6). Stdlib only; reads content/*.json via content.py.
 
-A per-minute aggregate model of the 03 section 8.3 bot, not the real sim: every layer of the power formula
-(03 section 7.1: Training x6 stats, Hero Level, Weapons, Skills, Companions, Fish Board, Research, Awakening, crit and
-speed) is driven by the income that feeds it. Per active minute it computes the rated DPS, runs kills with the
-03 section 2.8 boss check, plays the Fish Board with 05's attentive policy (tools/fish_model.py's board as a count per
+A per-minute aggregate model of the 03 section 8.3 bot, not the real sim, on the five-companion party (00 decisions 109
+and 110). Every layer of the power formula (03 section 7.1: party-wide Training x6 stats, Party Level, Fish Board,
+Research, crit and speed; per slot Weapons, Skills, Companions and Awakening) is driven by the income that feeds it. Per
+active minute it computes the rated DPS as the sum over the PARTY_SLOTS slots (per-pool mpSufficiency_i), runs kills with
+the 03 section 2.8 boss check, plays the Fish Board with 05's attentive policy (tools/fish_model.py's board as a count per
 level) and spends gold, Rock Candy and Fish Coins greedily; once per day it grants income and pulls with 04's exact
-algorithm (tools/gacha_model.py: banner level per pull, pity, 10-pull guarantee). Offline gaps credit gold and EXP at
-OFFLINE_RATE and fill the tank (06 section 7). Enemy and cost curves use `**`: this is an estimator, bit-exactness is
-the C# harness's job (10).
+algorithm (tools/gacha_model.py: banner level per pull, pity, 10-pull guarantee). After every pull, limit break and
+awakening it re-runs the AutoEquipBest* proposal of 04 sections 6.3, 7.2 and 8.2 over the five slots (03 section 8.3
+item 8). Layer shares fold the per-slot layers into party factors as 03 section 7.4 proposes. Offline gaps credit gold
+and EXP at OFFLINE_RATE and fill the tank (06 section 7). Enemy and cost curves use `**`: this is an estimator,
+bit-exactness is the C# harness's job (10).
+
+Content written before the party model (no PARTY_SLOTS constant, hero_levels instead of party_levels, no starter party
+grant) still runs: the tool then uses the party values 00 states (PARTY_SLOTS 5, BASE_ATK 2, MP_REGEN0 0.5, the first
+five Common companions as the starter party) and prints a `fallback` note for each.
 
   power_curve_model.py [--seed 7] [--days 30] [--active-min 120] [--sessions 2] [--m0] [--override NAME=VALUE ...]
                        [--tickets W,S,C] [--rock-candy-per-day N] [--fish-coin-per-day N] [--policy greedy|lazy]
@@ -43,7 +50,8 @@ TIERS = gacha_model.TIERS
 BANNERS = ["WEAPON", "SKILL", "COMPANION"]
 TICKET = {"WEAPON": "TICKET_SUMMON_WEAPON", "SKILL": "TICKET_SUMMON_SKILL", "COMPANION": "TICKET_SUMMON_COMPANION"}
 TRAINABLE = ["ATK", "CRIT_RATE", "CRIT_DMG", "ATK_SPD", "GOLD_GAIN", "EXP_GAIN"]
-LAYERS = ["Training", "Hero", "Weapons", "Skills", "Companions", "Fish", "Research", "Runes", "Awaken", "Crit", "Speed"]
+LAYERS = ["Training", "PartyLevel", "Weapons", "Skills", "Companions", "Fish", "Research", "Runes", "Awaken", "Crit", "Speed"]
+SHARE_COLS = LAYERS + ["Base"]   # Base = BASE_ATK * exp(H(w)), the party-size term; outside the floor and ceiling (03 7.4)
 REPORT_DAYS = [1, 2, 3, 5, 7, 10, 14, 21, 30]
 SHARE_DAYS = [1, 3, 7, 14, 30]
 
@@ -52,7 +60,8 @@ INVEST_VALUE_SHARE = 0.5       # GOLD_GAIN / EXP_GAIN / res_gold_gain valued at 
 LIMIT_BREAK_GATE_STAGES = 50   # limit breaks only when the next Awakening gate is more than 50 stages away
 RES_TANK_NATS_PER_LEVEL = 0.08 # res_tank_* value: measured board growth per 10% more fish
 RES_FISH_CAP_VALUE = 0.5       # res_fish_cap value: 0.5 * ln(1.5) * fraction of the board already at the cap
-COMPANION_SLOTS_AT_RANK0 = 1   # 03 section 5.3: companion slot 1 is open from the start
+# ---- party values of 00 decisions 109 / 110, used only for content that predates them (no PARTY_SLOTS constant)
+PARTY_FALLBACK = {"PARTY_SLOTS": 5, "BASE_ATK": 2.0, "MP_REGEN0": 0.5}
 
 # ---- 03 section 8.5 / 10 section 3.6 share rule (acceptance-targets.json mirrors it for the C# sweep)
 SHARE_MAX, SHARE_MIN = 0.40, 0.05
@@ -64,12 +73,12 @@ FIRST_WALL_BAND = (60, 200)                                # 03 section 8.6, AC1
 EARLY_WALL_MAX_ACTIVE_MIN, EARLY_WALL_LAST_DAY = 240, 14   # 03 AC18
 LATE_WALL_MAX_ACTIVE_MIN = None                            # acceptance-targets.json lateWallMaxActiveMinutes: pending (issue #36)
 TRAIN_GOLD_SHARE_BAND = (0.05, 0.50)
-HERO_LEVEL_PER_STAGE_BAND = (0.25, 0.45)
+PARTY_LEVEL_PER_STAGE_BAND = (0.25, 0.45)
 TAP_WALL_SPEEDUP_MAX = 2.5
 BOSS_CANDY_SHARE_MAX = 0.20
 RESEARCH_ALL_NODES_BY_DAY, FISH_CAP_2_BY_DAY = 7, 10
 LIMIT_BREAK_DAILY_FROM_DAY, LIMIT_BREAK_CANDY_SHARE_MAX = 10, 0.60   # 04 section 5.2
-FISH_DUNGEON_SHARE_BAND, FISH_DUNGEON_DAYS = (0.25, 0.50), (1, 7, 30)  # 06 section 6.3 (a)
+FISH_DUNGEON_SHARE_BAND, FISH_DUNGEON_DAYS = (0.20, 0.50), (7, 30)  # 06 section 6.3 (a); #249 item 6, agreed
 
 # ---- MVP tables the M0 content does not ship yet. Each is the owning spec's row set, used only when content lacks it.
 RESEARCH_FALLBACK = [   # 03 section 6 / 09 section 5.18. Only for content without a research table (content/ ships it, #158).
@@ -88,7 +97,7 @@ RESEARCH_FALLBACK = [   # 03 section 6 / 09 section 5.18. Only for content witho
 COMPANION_FALLBACK = {"mix": [("DAMAGE", 0.50), ("BUFF_ATK", 0.20), ("BUFF_GOLD", 0.15), ("MP_REGEN", 0.15)],
                       "mp_cost": 10, "cooldown_ticks": 100}
 # 06 sections 6.1-6.3 / 09 sections 5.24-5.25: equal to content/dungeons.json and dungeon_floors.json today.
-# TODO(#165): read the per-floor rewards from dungeon_floors when the Fish Coin curve is settled.
+# The Fish Coin curve is settled at 50 * f (#165).
 DUNGEON_FALLBACK = {"tickets_per_day": 2, "floor_stage_step": 20, "floors": 40,
                     "FISH_COIN": 50.0, "ROCK_CANDY": 10.0, "EXP_KILLS": 300}
 # 06 section 1 / 00 decision 15: skill and companion tickets come from the weekly complete-all bonus (about 0.15 a day
@@ -99,7 +108,7 @@ DUNGEON_FALLBACK = {"tickets_per_day": 2, "floor_stage_step": 20, "floors": 40,
 ACHIEVEMENTS_FALLBACK = [
     ("REACH_STAGE", [(10, 20), (30, 30), (50, 50), (100, 80), (150, 100), (200, 100), (300, 150), (400, 150), (500, 200),
                      (700, 250), (1000, 300)]),
-    ("REACH_HERO_LEVEL", [(10, 20), (25, 30), (50, 50), (75, 80), (100, 100), (150, 150), (200, 200)]),
+    ("REACH_PARTY_LEVEL", [(10, 20), (25, 30), (50, 50), (75, 80), (100, 100), (150, 150), (200, 200)]),
     ("OWN_WEAPONS", [(5, 30), (10, 50), (20, 100), (25, 200)]),
     ("OWN_SKILLS", [(5, 30), (10, 50), (20, 100), (30, 150), (35, 250)]),
     ("OWN_COMPANIONS", [(5, 30), (10, 50), (20, 100), (35, 150), (45, 300)]),
@@ -143,8 +152,21 @@ class Params:
         for cid, key in (("enemy_hp", "HP"), ("gold_per_kill", "GOLD"), ("exp_per_kill", "EXP")):
             base, growth, off = db.curves[cid]
             c[key + "0"], c[key + "_G"], c[key + "_OFF"] = base, growth, off
-        hero = db.table("hero_levels")[0]
-        c["HERO_LVL_EXP0"], c["HERO_LVL_EXP_G"], c["HERO_LVL_MULT"] = hero["exp0"], hero["exp_g"], hero["mult_per_level"]
+        # Party model (00 decisions 109, 110). Content that predates it has no PARTY_SLOTS and carries the hero's
+        # BASE_ATK and MP_REGEN0, so the party values of 00 replace those three and each is flagged.
+        self.party_content = "PARTY_SLOTS" in c
+        if not self.party_content:
+            for k, v in PARTY_FALLBACK.items():
+                old = c.get(k)
+                c[k] = v
+                self.fallbacks.append(f"{k} = {v:g}: 00 decisions 109/110 (content predates the party model"
+                                      + (f"; its {k} {old:g} is the hero's)" if old is not None else ")"))
+        lv_rows = db.table("party_levels", None)
+        if lv_rows is None:
+            lv_rows = db.table("hero_levels")
+            self.fallbacks.append("party_levels: read from the hero_levels table (content predates the rename)")
+        lv = lv_rows[0]
+        c["PARTY_LVL_EXP0"], c["PARTY_LVL_EXP_G"], c["PARTY_LVL_MULT"] = lv["exp0"], lv["exp_g"], lv["mult_per_level"]
         stats = {r["id"]: r for r in db.table("stats")}
         curves = {r["stat"]: r for r in db.table("training_curves")}
         for s in TRAINABLE:
@@ -156,6 +178,9 @@ class Params:
         for r in RARITIES:
             c[f"LIMIT_BREAK_COST[{r}]"] = self.rarity[r]["limit_break_cost"]
             c[f"WEAPON_PASSIVE_PCT[{r}]"] = self.rarity[r]["weapon_passive_pct"]
+            c[f"COMPANION_DPS_PCT[{r}]"] = self.rarity[r]["companion_dps_pct"]
+            # COMPANION_ATK_MULT[r] (00 decision 111): a rarities column; 1.0 when an older content set lacks it.
+            c[f"COMPANION_ATK_MULT[{r}]"] = self.rarity[r].get("companion_atk_mult", 1.0)
         self.awakening = sorted((r for r in db.table("awakening") if tier_ok(r)), key=lambda r: r["rank"])
         for r in self.awakening:
             c[f"AWAKEN_STAGES[{r['rank']}]"] = r["stage_gate"]
@@ -204,8 +229,9 @@ class Params:
             if k in GACHA_OVERRIDES:
                 continue   # banner columns, not constants: applied to gacha_model.Banner below
             if k not in c:
-                sys.exit(f"--override: unknown name {k} (known: constants keys, HP_G, GOLD_G, EXP_G, HERO_LVL_MULT, "
-                         f"TRAIN_PER_LVL[STAT], TRAIN_CAP[STAT], AWAKEN_COST_ROCK_CANDY[RANK], RES_COST0[id], ...)")
+                sys.exit(f"--override: unknown name {k} (known: constants keys, HP_G, GOLD_G, EXP_G, PARTY_LVL_MULT, "
+                         f"TRAIN_PER_LVL[STAT], TRAIN_CAP[STAT], AWAKEN_COST_ROCK_CANDY[RANK], RES_COST0[id], "
+                         f"COMPANION_DPS_PCT[RARITY], ...)")
             old = c[k]
             if isinstance(old, bool):
                 c[k] = v.lower() == "true"
@@ -235,10 +261,16 @@ class Params:
             if rows is None:
                 rows = self._companion_fallback(banners["COMPANION"])
                 self.fallbacks.append("companions: 04 section 8.1 pool mix and defaults (content has no companions table)")
-            self.companions = {r["id"]: r for r in rows if tier_ok(r)}
+            self.companions = {r["id"]: dict(r) for r in rows if tier_ok(r)}
+            for row in self.companions.values():   # an override rescales the rarity's rows (fixtures, sweeps)
+                r = row["rarity"]
+                base = self.rarity[r]["companion_dps_pct"]
+                if c[f"COMPANION_DPS_PCT[{r}]"] != base:
+                    row["dps_pct"] = row["dps_pct"] * c[f"COMPANION_DPS_PCT[{r}]"] / base if base else c[f"COMPANION_DPS_PCT[{r}]"]
             pool = self.banner["COMPANION"].pool
             for r in RARITIES:
                 pool[r] = sorted(i for i, row in self.companions.items() if row["rarity"] == r)
+        self._load_starter_party()
         self.dupe_cum = [r["cum_copies"] for r in sorted(db.table("dupe_levels"), key=lambda r: r["level"])]
 
         # Fish Board: 05's model (constants, fish_levels, tank, research effects), same overrides where they apply.
@@ -251,6 +283,21 @@ class Params:
                               ("res_fish_cap", "RES_FISH_CAP_PER_LVL")):
                 if node in self.research:
                     self.fish.c[key] = c[f"RES_EFFECT[{node}]"]
+
+    def _load_starter_party(self):
+        """The tutorial's starter party (04 section 8.3): the COMPANION grants of tut_welcome in slots 0-4, in grant
+        order, and the WEAPON grants in slots 0-4 (TUTORIAL_WEAPON_IDS, 00 decision 111). Content without the companion grants gets the first PARTY_SLOTS Common
+        companions by id (flagged)."""
+        n = int(self.c["PARTY_SLOTS"])
+        comps = [i for k, i, _ in self.tutorial_items if k == "COMPANION" and i in self.companions]
+        if not comps and self.companions:
+            comps = sorted(i for i, r in self.companions.items() if r["rarity"] == "COMMON")[:n]
+            self.tutorial_items += [("COMPANION", i, 1) for i in comps]
+            self.fallbacks.append(f"starter party: the first {n} Common companions ({', '.join(comps)}; content has no "
+                                  "tut_welcome COMPANION grants, 04 section 8.3)")
+        weapons = [i for k, i, _ in self.tutorial_items if k == "WEAPON" and i in self.weapons]
+        self.starter_companions = comps[:n]
+        self.starter_weapons = weapons[:n]
 
     def _load_quests(self, db, tier_ok):
         """06 section 5 quest rows (content) and the section 5.4 ladders (content, else the spec rows, TODO(#171))."""
@@ -300,8 +347,8 @@ class Params:
     def train_cost(self, stat, n):
         return self.c[f"TRAIN_COST0[{stat}]"] * self.c[f"TRAIN_COST_G[{stat}]"] ** n
 
-    def hero_lvl_exp(self, lvl):
-        return self.c["HERO_LVL_EXP0"] * self.c["HERO_LVL_EXP_G"] ** lvl
+    def party_lvl_exp(self, lvl):
+        return self.c["PARTY_LVL_EXP0"] * self.c["PARTY_LVL_EXP_G"] ** lvl
 
     def res_cost(self, rid, k):
         return self.c[f"RES_COST0[{rid}]"] * self.c[f"RES_COST_G[{rid}]"] ** k
@@ -324,9 +371,8 @@ class Bot:
         self.stage, self.kills, self.walled, self.highest = 1, 0, False, 0
         self.carry = 0.0
         self.gold = self.exp_bank = 0.0
-        self.hero_level = 0
+        self.party_level = 0
         self.train = {s: 0 for s in TRAINABLE}
-        self.rank = 0
         self.candy = 0.0
         self.coins = 0.0
         self.diamonds = float(c["TUTORIAL_DIAMONDS"])
@@ -343,6 +389,15 @@ class Bot:
         for kind, iid, n in p.tutorial_items:
             if kind in self.state:
                 self.state[kind].copies[iid] = self.state[kind].copies.get(iid, 0) + n
+        # The party (02 Party.Slots): progression belongs to the slot (00 decision 109). Starters in slots 0-4 in grant
+        # order, the starter weapons in slots 0-4 (00 decision 111), no skills (04 section 8.3).
+        self.slots = [{"comp": None, "weapon": None, "skill": None, "rank": 0} for _ in range(int(c["PARTY_SLOTS"]))]
+        for i, cid in enumerate(p.starter_companions[:len(self.slots)]):
+            self.slots[i]["comp"] = cid
+        for i, wid in enumerate(p.starter_weapons[:len(self.slots)]):
+            self.slots[i]["weapon"] = wid
+        self._mc = {}
+        self._pf = None
         self.board = fish_model.Board(p.fish)
         self.board.day = fish_model.new_day()
         self.missile_pct = 0.0
@@ -354,7 +409,8 @@ class Bot:
         self.wall = None
         self.walls = []
         self.gate_day = {}                             # awaken rank -> day its stage gate was first reached
-        self.awaken_day = {}
+        self.awaken_day = {}                           # awaken rank -> day the first slot bought it (03 5.3 check)
+        self.slot_awaken_day = {}                      # (slot, rank) -> day bought (reported, not checked)
         self.banner_level_day = {b: {1: 0} for b in p.banner_ids}
         self.econ = {"gold_kills": 0.0, "gold_offline": 0.0, "gold_spent": {s: 0.0 for s in TRAINABLE},
                      "exp_kills": 0.0, "exp_offline": 0.0, "exp_dungeon": 0.0,
@@ -374,75 +430,38 @@ class Bot:
         self._dirty = True
         self._layers = None
 
-    # ------------------------------------------------------------------------------------------ layers (03 7.1)
+    # ------------------------------------------------------------------------------------------ party DPS (03 7.1)
     def item_mult(self, banner, iid, extra_copy=0, extra_lb=0):
         copies = self.state[banner].copies.get(iid, 0) + extra_copy
         cap = self.p.dupe_cum[-1]
         return self.p.level_mult(min(copies, cap), self.lb.get((banner, iid), 0) + extra_lb)
 
-    def weapon_parts(self, probe=None):
-        """(equippedWeaponPct, weaponPassivePct) of 04 section 6.1, best weapon equipped."""
-        eq = passive = 0.0
-        for iid, row in self.p.weapons.items():
-            m = self.item_mult("WEAPON", iid, *(probe[1:] if probe and probe[0] == iid else (0, 0)))
-            if m > 0:
-                eq = max(eq, row["atk_pct"] * m)
-                passive += row["passive_pct"] * m
-        return eq, passive
+    def _m(self, banner, iid, probe=None):
+        """LevelMult of an item; `probe` = (banner, id, extra copies, extra limit breaks) evaluates one change."""
+        if probe is not None and probe[0] == banner and probe[1] == iid:
+            return self.item_mult(banner, iid, probe[2], probe[3])
+        key = (banner, iid)
+        m = self._mc.get(key)
+        if m is None:
+            m = self._mc[key] = self.item_mult(banner, iid)
+        return m
 
-    def weapon_mult(self, probe=None):
-        eq, passive = self.weapon_parts(probe)
-        return 1.0 + (eq + passive) / 100.0
+    def owned(self, banner, probe=None):
+        if banner not in self.state:
+            return []
+        ids = [i for i, n in self.state[banner].copies.items() if n > 0]
+        if probe is not None and probe[0] == banner and probe[2] > 0 and self.state[banner].copies.get(probe[1], 0) <= 0:
+            ids.append(probe[1])
+        return ids
 
-    def skill_pct(self, probe=None):
-        vals = []
-        for iid, row in self.p.skills.items():
-            m = self.item_mult("SKILL", iid, *(probe[1:] if probe and probe[0] == iid else (0, 0)))
-            if m > 0:
-                vals.append(row["dps_pct"] * m)
-        vals.sort(reverse=True)
-        return sum(vals[: self.c["SKILL_SLOTS"]])
-
-    def companion_slots(self):
-        slots = COMPANION_SLOTS_AT_RANK0
-        for r in self.p.awakening:
-            if r["rank"] <= self.rank:
-                slots = r["companion_slots_after"]
-        return min(slots, self.c["COMPANION_SLOTS"])
+    def weapon_passive(self, probe=None):
+        """weaponPassivePct (04 section 6.1): every owned weapon, equipped or not, for the whole party."""
+        rows = self.p.weapons
+        return sum(rows[i]["passive_pct"] * self._m("WEAPON", i, probe) for i in self.owned("WEAPON", probe))
 
     def mp_regen(self):
         lvl = self.research.get("res_mp_regen", 0)
         return self.c["MP_REGEN0"] + (self.c["RES_EFFECT[res_mp_regen]"] * lvl if lvl else 0.0)
-
-    def companion_layer(self, probe=None):
-        """(mult, mpSufficiency, starved): best loadout with zero or one reserved MP_REGEN slot (04 section 8.2)."""
-        if "COMPANION" not in self.state:
-            return 1.0, 1.0, False
-        tick_hz = self.c["TICK_HZ"]
-        dmg, regen = [], []
-        for iid, row in self.p.companions.items():
-            m = self.item_mult("COMPANION", iid, *(probe[1:] if probe and probe[0] == iid else (0, 0)))
-            if m <= 0:
-                continue
-            cd_s = row["cooldown_ticks"] / tick_hz
-            if row["ability_type"] in ("DAMAGE", "BUFF_ATK"):
-                dmg.append((row["dps_pct"] * m, row["mp_cost"] / cd_s))
-            elif row["ability_type"] == "MP_REGEN":
-                regen.append(((row["dps_pct"] * m / 4.0 - row["mp_cost"]) / cd_s,))
-            # BUFF_GOLD: no DPS (04 section 8.1); the bot does not equip it for the rated layer.
-        dmg.sort(reverse=True)
-        regen.sort(reverse=True)
-        slots = self.companion_slots()
-        best = (1.0, 1.0, False)
-        for k in range(0, min(1, len(regen), slots) + 1):
-            chosen = dmg[: slots - k]
-            supply = self.mp_regen() + sum(r[0] for r in regen[:k])
-            demand = sum(d[1] for d in chosen)
-            suff = 1.0 if demand == 0 else min(1.0, supply / demand)
-            mult = 1.0 + suff * sum(d[0] for d in chosen) / 100.0
-            if mult > best[0] or k == 0:
-                best = (mult, suff, suff < 1.0)
-        return best
 
     def crit(self):
         c = self.c
@@ -455,12 +474,15 @@ class Bot:
         c = self.c
         return 1.0 + c["TRAIN_PER_LVL[ATK_SPD]"] * min(self.train["ATK_SPD"], c["TRAIN_CAP[ATK_SPD]"] or 10 ** 9)
 
-    def awaken_mult(self):
+    def awaken_mult(self, rank):
         m = 1.0
         for r in self.p.awakening:
-            if r["rank"] <= self.rank:
+            if r["rank"] <= rank:
                 m *= self.c[f"AWAKEN_MULT[{r['rank']}]"]
         return m
+
+    def highest_rank(self):
+        return max((s["rank"] for s in self.slots), default=0)
 
     def research_pct(self):
         lvl = self.research.get("res_atk", 0)
@@ -476,28 +498,102 @@ class Bot:
     def exp_mult(self):
         return 1.0 + self.c["TRAIN_PER_LVL[EXP_GAIN]"] * self.train["EXP_GAIN"]
 
+    def party_factors(self):
+        """The party-wide layers (03 section 7.1), cached until the next dirty()."""
+        if self._pf is None:
+            c = self.c
+            self._pf = {"Training": 1.0 + c["TRAIN_PER_LVL[ATK]"] * self.train["ATK"],
+                        "PartyLevel": c["PARTY_LVL_MULT"] ** self.party_level,
+                        "board_pct": self.board.dps_pct(),
+                        "Research": 1.0 + self.research_pct(), "Runes": 1.0,
+                        "Crit": self.crit(), "Speed": self.speed(), "regen": self.mp_regen()}
+        return self._pf
+
+    def mp_sufficiency(self, comps, probe=None):
+        """mpSufficiency_i for each companion id in `comps` (03 section 7.1, one pool per slot, issue #39)."""
+        c, rows = self.c, self.p.companions
+        tick = c["TICK_HZ"]
+        regen = self.party_factors()["regen"]
+        restore = 0.0
+        for cid in comps:
+            row = rows[cid]
+            if row["ability_type"] != "MP_REGEN":
+                continue
+            cd = row["cooldown_ticks"] / tick
+            restored = row["dps_pct"] / 4.0 * self._m("COMPANION", cid, probe)   # mp_restored (04 section 8.1)
+            cost = row["mp_cost"]
+            up = 1.0 if restored >= cost else min(1.0, regen / ((cost - restored) / cd))
+            restore += up * restored / cd
+        out = []
+        for cid in comps:
+            row = rows[cid]
+            demand = row["mp_cost"] / (row["cooldown_ticks"] / tick)
+            out.append(1.0 if demand <= 0 else min(1.0, (regen + restore) / demand))
+        return out
+
+    def evaluate(self, slots, probe=None):
+        """Rated DPS of a slot arrangement, with every per-slot term (03 section 7.1). Empty slots are left out."""
+        c, pf = self.c, self.party_factors()
+        rows_w, rows_s, rows_c = self.p.weapons, self.p.skills, self.p.companions
+        pw = c["BASE_ATK"] * pf["Training"] * pf["PartyLevel"] * (1 + pf["board_pct"] / 100.0) * pf["Research"] * pf["Runes"]
+        cs = pf["Crit"] * pf["Speed"]
+        passive = self.weapon_passive(probe)
+        occ = [i for i, s in enumerate(slots) if s["comp"] is not None]
+        suff = self.mp_sufficiency([slots[i]["comp"] for i in occ], probe)
+        ev = {"slots": occ, "suff": suff, "passive": passive, "eq": [], "wf": [], "skf": [], "own": [], "aw": [], "am": [],
+              "hit": [], "unit": [], "slot_dps": [], "buff_pct": 0.0}
+        for k, i in enumerate(occ):
+            s = slots[i]
+            row = rows_c[s["comp"]]
+            cm = self._m("COMPANION", s["comp"], probe)
+            eq = rows_w[s["weapon"]]["atk_pct"] * self._m("WEAPON", s["weapon"], probe) if s["weapon"] else 0.0
+            sk = rows_s[s["skill"]]["dps_pct"] * self._m("SKILL", s["skill"], probe) if s["skill"] else 0.0
+            wf = 1.0 + (eq + passive) / 100.0
+            aw = self.awaken_mult(s["rank"])
+            am = c[f"COMPANION_ATK_MULT[{row['rarity']}]"]   # the companion's rarity attack multiplier (00 decision 111)
+            hit = pw * am * wf * aw
+            unit = hit * cs
+            skf = 1.0 + sk / 100.0
+            dmg = row["dps_pct"] * cm if row["ability_type"] == "DAMAGE" else 0.0
+            if row["ability_type"] == "BUFF_ATK":
+                ev["buff_pct"] += suff[k] * row["dps_pct"] * cm
+            own = 1.0 + suff[k] * dmg / 100.0
+            ev["am"].append(am)
+            for key, v in (("eq", eq), ("wf", wf), ("skf", skf), ("own", own), ("aw", aw), ("hit", hit), ("unit", unit),
+                           ("slot_dps", unit * skf * own)):
+                ev[key].append(v)
+        ev["party_buff"] = 1.0 + ev["buff_pct"] / 100.0
+        ev["party_hit"] = sum(ev["hit"])
+        ev["auto"] = sum(ev["slot_dps"]) * ev["party_buff"]
+        ev["missile"] = ev["party_hit"] * pf["Speed"] * self.missile_pct / 100.0
+        ev["rated"] = ev["auto"] + ev["missile"]
+        return ev
+
+    def layer_factors(self, ev):
+        """(factor per layer, Base) with the per-slot layers folded in as 03 section 7.4 proposes: a slot-damage
+        weighted geometric mean, Base = BASE_ATK * exp(H(w)); the logs add up to ln RatedDps exactly."""
+        pf = self.party_factors()
+        total = sum(ev["slot_dps"])
+        w = [x / total for x in ev["slot_dps"]] if total > 0 else []
+        fold = lambda key: math.exp(sum(wi * math.log(f) for wi, f in zip(w, ev[key])))
+        L = {"Training": pf["Training"], "PartyLevel": pf["PartyLevel"], "Weapons": fold("wf"), "Skills": fold("skf"),
+             "Companions": fold("own") * fold("am") * ev["party_buff"],
+             "Fish": (1 + pf["board_pct"] / 100.0) * (ev["rated"] / ev["auto"] if ev["auto"] > 0 else 1.0),
+             "Research": pf["Research"], "Runes": pf["Runes"], "Awaken": fold("aw"), "Crit": pf["Crit"],
+             "Speed": pf["Speed"]}
+        entropy = -sum(wi * math.log(wi) for wi in w if wi > 0)
+        return L, self.c["BASE_ATK"] * math.exp(entropy)
+
     def layers(self):
         if not self._dirty:
             return self._layers
-        c = self.c
-        comp, suff, starved = self.companion_layer()
-        board = self.board.dps_pct()
-        L = {
-            "Training": 1.0 + c["TRAIN_PER_LVL[ATK]"] * self.train["ATK"],
-            "Hero": c["HERO_LVL_MULT"] ** self.hero_level,
-            "Weapons": self.weapon_mult(),
-            "Skills": 1.0 + self.skill_pct() / 100.0,
-            "Companions": comp,
-            "Fish": 1.0 + (board + self.missile_pct) / 100.0,
-            "Research": 1.0 + self.research_pct(),
-            "Runes": 1.0,
-            "Awaken": self.awaken_mult(),
-            "Crit": self.crit(),
-            "Speed": self.speed(),
-        }
-        self._layers = L
-        self._board_pct, self._mp_suff, self._starved = board, suff, starved
-        self._dps = c["BASE_ATK"] * math.prod(L.values())
+        ev = self.evaluate(self.slots)
+        L, base = self.layer_factors(ev)
+        self._ev, self._layers, self._base = ev, L, base
+        self._board_pct = self.party_factors()["board_pct"]
+        self._mp_suff = ev["suff"]
+        self._starved = any(x < 1.0 for x in ev["suff"])
+        self._dps = ev["rated"]
         self._dirty = False
         return L
 
@@ -505,13 +601,98 @@ class Bot:
         self.layers()
         return self._dps
 
-    def hero_hit(self):
-        L = self.layers()
-        return (self.c["BASE_ATK"] * L["Training"] * L["Hero"] * L["Weapons"] * (1 + self._board_pct / 100.0)
-                * L["Research"] * L["Runes"] * L["Awaken"])
+    def auto_dps(self):
+        """Rated DPS without missiles (dungeon runs: passive board only, issue #40)."""
+        self.layers()
+        return self._ev["auto"]
+
+    def party_hit(self):
+        self.layers()
+        return self._ev["party_hit"]
 
     def dirty(self):
         self._dirty = True
+        self._pf = None
+
+    def items_changed(self):
+        self._mc.clear()
+        self.dirty()
+
+    # ------------------------------------------------------------------------------------------ equip (04 6.3, 7.2, 8.2)
+    def _rank_key(self, banner, iid, value, probe):
+        row = self.item_rows(banner)[iid]
+        return (-value * self._m(banner, iid, probe), -RARITIES.index(row["rarity"]), iid)
+
+    def _place_companions(self, slots, picks, probe):
+        """04 section 8.2 step 3: DAMAGE by mpSufficiency * dps_pct * LevelMult to the slots with the highest
+        SlotUnit_i * skillFactor(i) (ties: slot index); the others take the remaining slots in pick order."""
+        rows = self.p.companions
+        out = [dict(s, comp=None) for s in slots]
+        full = [dict(s, comp=s["comp"] or (picks[0] if picks else None)) for s in slots]   # coefficient needs a body
+        ev = self.evaluate(full, probe)
+        coef = {i: ev["unit"][k] * ev["skf"][k] for k, i in enumerate(ev["slots"])}
+        suff = dict(zip(picks, self.mp_sufficiency(picks, probe)))
+        dmg = sorted((cid for cid in picks if rows[cid]["ability_type"] == "DAMAGE"),
+                     key=lambda cid: (-suff[cid] * rows[cid]["dps_pct"] * self._m("COMPANION", cid, probe),
+                                      -RARITIES.index(rows[cid]["rarity"]), cid))
+        order = sorted(range(len(slots)), key=lambda i: (-coef.get(i, 0.0), i))
+        for cid, i in zip(dmg, order):
+            out[i]["comp"] = cid
+        free = [i for i in range(len(slots)) if out[i]["comp"] is None]
+        for cid, i in zip((cid for cid in picks if rows[cid]["ability_type"] != "DAMAGE"), free):
+            out[i]["comp"] = cid
+        return out
+
+    def auto_equip(self, slots, probe=None):
+        """AutoEquipBestCompanions, AutoEquipBestWeapons, AutoEquipBestSkills over the slots, in that order (03 section
+        8.3 item 8, the 04 sections 6.3, 7.2 and 8.2 proposal). Returns a new arrangement; ranks stay with the slots."""
+        n = len(slots)
+        rows = self.p.companions
+        if "COMPANION" in self.state:
+            ranked = {t: sorted((i for i in self.owned("COMPANION", probe) if rows[i]["ability_type"] in t),
+                                key=lambda i: self._rank_key("COMPANION", i, rows[i]["dps_pct"], probe))
+                      for t in (("DAMAGE", "BUFF_ATK"), ("MP_REGEN",), ("BUFF_GOLD",))}
+            picks = ranked[("DAMAGE", "BUFF_ATK")][:n]
+            for t in (("MP_REGEN",), ("BUFF_GOLD",)):
+                picks += ranked[t][:n - len(picks)]
+            slots = self._place_companions(slots, picks, probe)
+            spare = [i for i in ranked[("MP_REGEN",)] if i not in picks]
+            while spare:   # step 2: an MP_REGEN in place of the lowest-ranked non-MP_REGEN while it raises RatedDps
+                ev = self.evaluate(slots, probe)
+                victims = [cid for cid in picks if rows[cid]["ability_type"] != "MP_REGEN"]
+                if not victims or all(x >= 1.0 for x in ev["suff"]):
+                    break
+                trial = [spare[0] if cid == victims[-1] else cid for cid in picks]
+                tslots = self._place_companions(slots, trial, probe)
+                if self.evaluate(tslots, probe)["rated"] <= ev["rated"]:
+                    break
+                picks, slots, spare = trial, tslots, spare[1:]
+        for banner, key, col, coef in (("WEAPON", "weapon", "atk_pct", "w"), ("SKILL", "skill", "dps_pct", "s")):
+            if banner not in self.state:
+                continue
+            items = self.item_rows(banner)
+            ranked = sorted(self.owned(banner, probe), key=lambda i: self._rank_key(banner, i, items[i][col], probe))
+            ev = self.evaluate(slots, probe)
+            pf_speed = self.party_factors()["Speed"]
+            weight = {}
+            for k, i in enumerate(ev["slots"]):
+                if coef == "w":   # coefficient of weaponFactor(i) in RatedDps (04 section 6.3)
+                    weight[i] = (ev["slot_dps"][k] * ev["party_buff"] + ev["hit"][k] * pf_speed * self.missile_pct / 100.0) / ev["wf"][k]
+                else:             # coefficient of skillFactor(i): SlotUnit_i x its DAMAGE ability factor (04 section 7.2)
+                    weight[i] = ev["unit"][k] * ev["own"][k]
+            order = sorted(weight, key=lambda i: (-weight[i], i))
+            slots = [dict(s, **{key: None}) for s in slots]
+            for iid, i in zip(ranked, order):
+                slots[i][key] = iid
+        return slots
+
+    def rated_after(self, probe=None):
+        """RatedDps once the probed change is made and the party re-equipped (03 section 8.3 items 2 and 8)."""
+        return self.evaluate(self.auto_equip(self.slots, probe), probe)["rated"]
+
+    def reequip(self):
+        self.slots = self.auto_equip(self.slots)
+        self.dirty()
 
     # ------------------------------------------------------------------------------------------ combat (03 2.6-2.8)
     def attack_s(self):
@@ -535,7 +716,7 @@ class Bot:
         possible = math.floor(c["BOSS_TIME_TICKS"] * sp / c["ATTACK_INTERVAL_TICKS"] + 1e-9)
         timer_s = c["BOSS_TIME_TICKS"] / c["TICK_HZ"]
         tap = self.tap and allow_tap
-        tap_dps = self.hero_hit() * c["TAP_ZAP_DMG_PCT"] * c["TAP_ZAP_MAX_PER_SEC"] if tap else 0.0
+        tap_dps = self.party_hit() * c["TAP_ZAP_DMG_PCT"] * c["TAP_ZAP_MAX_PER_SEC"] if tap else 0.0
         if tap:
             ok = possible * hit + tap_dps * timer_s >= hp
             t = min(timer_s, hp / (dps + tap_dps))
@@ -568,10 +749,10 @@ class Bot:
 
     def add_exp(self, e):
         self.exp_bank += e
-        while self.exp_bank >= self.p.hero_lvl_exp(self.hero_level):
-            self.exp_bank -= self.p.hero_lvl_exp(self.hero_level)
-            self.hero_level += 1
-            self._dirty = True
+        while self.exp_bank >= self.p.party_lvl_exp(self.party_level):
+            self.exp_bank -= self.p.party_lvl_exp(self.party_level)
+            self.party_level += 1
+            self.dirty()
 
     def advance(self):
         self.highest = max(self.highest, self.stage)
@@ -654,7 +835,7 @@ class Bot:
             atk = c["TRAIN_PER_LVL[ATK]"]
             atk_level_value = math.log((1 + atk * (self.train["ATK"] + 1)) / (1 + atk * self.train["ATK"]))
             return INVEST_VALUE_SHARE * gain / math.log(c["TRAIN_COST_G[ATK]"]) * atk_level_value
-        return INVEST_VALUE_SHARE * gain / math.log(c["HERO_LVL_EXP_G"]) * math.log(c["HERO_LVL_MULT"])   # EXP_GAIN
+        return INVEST_VALUE_SHARE * gain / math.log(c["PARTY_LVL_EXP_G"]) * math.log(c["PARTY_LVL_MULT"])   # EXP_GAIN
 
     def spend_gold(self):
         while True:
@@ -673,25 +854,61 @@ class Bot:
             self.train[best] += 1
             if self.day_counters is not None:
                 self.day_counters["train_levels"] += 1
-            self._dirty = True
+            self.dirty()
 
-    def next_gate(self):
+    def next_gate(self, rank):
+        """(stage gate, Rock Candy cost) of the rank after `rank`, the same for every slot (03 section 5.3)."""
         for r in self.p.awakening:
-            if r["rank"] == self.rank + 1:
+            if r["rank"] == rank + 1:
                 return self.c[f"AWAKEN_STAGES[{r['rank']}]"], self.c[f"AWAKEN_COST_ROCK_CANDY[{r['rank']}]"]
         return None, None
 
+    def strongest_awaken_slot(self):
+        """00 decision 111: the occupied slot with the largest SlotDps_i that still has a next rank, gate and cost aside,
+        ties to the lowest slot index; the slot the bot awakens next, so the only one Rock Candy is reserved for."""
+        self.layers()
+        ev = self._ev
+        best, best_v = None, -1.0
+        for k, i in enumerate(ev["slots"]):
+            gate, _ = self.next_gate(self.slots[i]["rank"])
+            if gate is not None and ev["slot_dps"][k] > best_v:
+                best, best_v = i, ev["slot_dps"][k]
+        return best
+
+    def best_awaken_slot(self):
+        """03 section 8.3 item 3 (proposal): among the occupied slots whose next gate and cost are met, the one with
+        the largest SlotDps_i (a rank multiplies SlotDps_i by AWAKEN_MULT), ties to the lowest slot index."""
+        self.layers()
+        ev = self._ev
+        best, best_v = None, -1.0
+        for k, i in enumerate(ev["slots"]):
+            gate, cost = self.next_gate(self.slots[i]["rank"])
+            if gate is None or self.highest < gate or self.candy < cost:
+                continue
+            if ev["slot_dps"][k] > best_v:
+                best, best_v = i, ev["slot_dps"][k]
+        return best
+
     def spend_candy(self):
-        gate, cost = self.next_gate()
-        if gate is not None and self.highest >= gate and self.candy >= cost:
+        while True:
+            i = self.best_awaken_slot()
+            if i is None:
+                break
+            _, cost = self.next_gate(self.slots[i]["rank"])
             self.candy -= cost
             self.econ["candy_awaken"] += cost
-            self.rank += 1
-            self.awaken_day[self.rank] = self.day
-            self._dirty = True
-            return self.spend_candy()
-        if self.p.m0 or (gate is not None and gate - self.highest <= LIMIT_BREAK_GATE_STAGES):
+            self.slots[i]["rank"] += 1
+            rank = self.slots[i]["rank"]
+            self.awaken_day.setdefault(rank, self.day)
+            self.slot_awaken_day[(i, rank)] = self.day
+            self.reequip()
+        if self.p.m0:
             return
+        strongest = self.strongest_awaken_slot()   # Rock Candy is reserved for that slot's next rank only (00 decision 111)
+        if strongest is not None:
+            gate, _ = self.next_gate(self.slots[strongest]["rank"])
+            if gate - self.highest <= LIMIT_BREAK_GATE_STAGES:
+                return
         cheapest = min(self.c[f"LIMIT_BREAK_COST[{r}]"] for r in RARITIES)
         while self.candy >= cheapest:
             lb = self.best_limit_break()
@@ -703,20 +920,31 @@ class Bot:
             self.econ["limit_breaks"] += 1
             self.day_counters["limit_breaks"] += 1
             self.lb[(b, iid)] = self.lb.get((b, iid), 0) + 1
-            self._dirty = True
+            self.items_changed()
+            self.reequip()
 
-    def layer_of(self, banner, probe=None):
-        if banner == "WEAPON":
-            return self.weapon_mult(probe)
-        if banner == "SKILL":
-            return 1.0 + self.skill_pct(probe) / 100.0
-        return self.companion_layer(probe)[0]
+    def _signature(self, b, iid, extra_copy, extra_lb):
+        """Items that differ only by id give the same probe value (up to id tie-breaks): memo key for the scans."""
+        row = self.item_rows(b)[iid]
+        cols = {"WEAPON": ("atk_pct", "passive_pct"), "SKILL": ("dps_pct",),
+                "COMPANION": ("ability_type", "dps_pct", "mp_cost", "cooldown_ticks")}[b]
+        equipped = any(s[{"WEAPON": "weapon", "SKILL": "skill", "COMPANION": "comp"}[b]] == iid for s in self.slots)
+        return (b, row["rarity"], tuple(row[k] for k in cols), self.state[b].copies.get(iid, 0), self.lb.get((b, iid), 0),
+                equipped, extra_copy, extra_lb)
+
+    def probe_gain(self, b, iid, extra_copy, extra_lb, base, memo):
+        key = self._signature(b, iid, extra_copy, extra_lb)
+        if key not in memo:
+            memo[key] = math.log(self.rated_after((b, iid, extra_copy, extra_lb)) / base)
+        return memo[key]
 
     def best_limit_break(self):
+        """The limit break with the most ln(RatedDps) per Rock Candy, the item placed by step 8 (03 section 8.3)."""
         best, best_v = None, -1.0
         ranks = self.c["LIMIT_BREAK_RANKS"]
+        base = self.rated_after()
+        memo = {}
         for b in self.p.banner_ids:
-            base = self.layer_of(b)
             rows = self.item_rows(b)
             for iid, n in self.state[b].copies.items():
                 if n <= 0 or self.lb.get((b, iid), 0) >= ranks:
@@ -724,7 +952,7 @@ class Bot:
                 cost = self.c[f"LIMIT_BREAK_COST[{rows[iid]['rarity']}]"] * (self.lb.get((b, iid), 0) + 1)
                 if cost > self.candy:
                     continue
-                v = math.log(self.layer_of(b, (iid, 0, 1)) / base) / cost
+                v = self.probe_gain(b, iid, 0, 1, base, memo) / cost
                 if v > best_v:
                     best, best_v = ((b, iid), cost), v
         return best
@@ -735,7 +963,7 @@ class Bot:
     def research_open(self, rid):
         u = self.p.unlocks.get("RESEARCH")
         gate = u["threshold"] if u and u["condition"] == "AWAKEN_RANK" else 0
-        return self.rank >= max(gate, self.p.research[rid].get("unlock_awaken_rank", 0))
+        return self.highest_rank() >= max(gate, self.p.research[rid].get("unlock_awaken_rank", 0))
 
     def research_value(self, rid):
         c, k = self.c, self.research[rid]
@@ -782,20 +1010,22 @@ class Bot:
             self.coins -= best_cost
             self.econ["coins_spent"][best] += best_cost
             self.research[best] += 1
-            self._dirty = True
+            self.dirty()
 
     # ------------------------------------------------------------------------------------------ summons (04 3, 03 8.3 item 2)
     def pull_value(self, b):
-        """Expected ln(layer) gain per pull over the current level's rate table, against the current collection."""
+        """Expected ln(RatedDps) gain per pull over the current level's rate table, against the current collection, each
+        pool item evaluated in its best slot after the step-8 re-equip (03 section 8.3 item 2)."""
         bn, st = self.p.banner[b], self.state[b]
         rates = bn.rates(bn.level_for(st.exp + bn.exp_per_pull))
-        base = self.layer_of(b)
+        base = self.rated_after()
+        memo = {}
         ev = 0.0
         for r in RARITIES:
             pool = bn.pool[r]
             if not pool or rates[r] <= 0:
                 continue
-            gain = sum(math.log(self.layer_of(b, (iid, 1, 0)) / base) for iid in pool) / len(pool)
+            gain = sum(self.probe_gain(b, iid, 1, 0, base, memo) for iid in pool) / len(pool)
             ev += rates[r] * gain
         return ev
 
@@ -813,7 +1043,8 @@ class Bot:
         lvl = bn.level_for(st.exp)
         for L in range(1, lvl + 1):
             self.banner_level_day[b].setdefault(L, self.day)
-        self._dirty = True
+        self.items_changed()
+        self.reequip()
 
     def do_summons(self):
         for b in self.p.banner_ids:
@@ -869,7 +1100,7 @@ class Bot:
         merged = self.board.day["merges"] - before["merges"]
         self.missile_pct = f.missile_dps_pct(released, fcap, self.speed()) if merged > 0 else 0.0
         self._collect_coins(before)
-        self._dirty = True
+        self.dirty()
 
     def _collect_coins(self, before):
         for k in ("coins_discovery", "coins_merge", "coins_discard"):
@@ -883,7 +1114,7 @@ class Bot:
         f = self.p.fish
         fish_model.act(self.board, max(1, int(f.c["TANK_RELEASE_LEVEL"])), self.fish_cap(), discard=False)
         self._collect_coins(before)
-        self._dirty = True
+        self.dirty()
 
     # ------------------------------------------------------------------------------------------ dungeons (06 6)
     def dungeons_open(self):
@@ -896,8 +1127,7 @@ class Bot:
         if not self.dungeons_open():
             return
         c = self.c
-        L = self.layers()
-        dps = self.dps() / L["Fish"] * (1 + self._board_pct / 100.0)   # passive board only, no missiles (issue #40)
+        dps = self.auto_dps()   # passive board only, no missiles (issue #40)
         step = c["DUNGEON_floor_stage_step"]
         for kind in self.best_floor:
             while self.dungeon_tickets[kind] >= 1:
@@ -974,10 +1204,11 @@ class Bot:
 
     def _achievement_value(self, goal):
         owned = lambda b: sum(1 for n in self.state[b].copies.values() if n > 0) if b in self.state else 0
-        values = {"REACH_STAGE": lambda: self.highest, "REACH_HERO_LEVEL": lambda: self.hero_level,
+        values = {"REACH_STAGE": lambda: self.highest, "REACH_PARTY_LEVEL": lambda: self.party_level,
+                  "REACH_HERO_LEVEL": lambda: self.party_level,
                   "OWN_WEAPONS": lambda: owned("WEAPON"), "OWN_SKILLS": lambda: owned("SKILL"),
                   "OWN_COMPANIONS": lambda: owned("COMPANION"), "LIFETIME_MERGES": lambda: self.econ["merges_total"],
-                  "FISH_LEVEL": lambda: max(self.board.discovered, default=0), "AWAKEN_RANK": lambda: self.rank,
+                  "FISH_LEVEL": lambda: max(self.board.discovered, default=0), "AWAKEN_RANK": self.highest_rank,
                   "LIFETIME_SUMMONS": lambda: sum(self.econ["pulls_ticket"].values()) + sum(self.econ["pulls_diamond"].values())}
         if goal not in values:
             raise ValueError(f"power_curve_model: no model for achievement goal {goal}")
@@ -1113,12 +1344,19 @@ class Bot:
     def snapshot(self):
         L = dict(self.layers())
         dps = self.dps()
+        ev = self._ev
         total = math.log(dps / self.c["BASE_ATK"])
         shares = {k: (math.log(v) / total if total > 0 else 0.0) for k, v in L.items()}
+        shares["Base"] = math.log(self._base / self.c["BASE_ATK"]) / total if total > 0 else 0.0   # party size, H(w)
+        # 04 section 14: the passive's share is read for the slot holding the best weapon
+        weapon_pct = {"equipped": max(ev["eq"], default=0.0), "passive": ev["passive"]}
         return {
             "day": self.day, "stage": self.stage, "highest_cleared": self.highest, "dps": dps,
-            "layers": L, "shares": shares, "weapon_pct": dict(zip(("equipped", "passive"), self.weapon_parts())), "training": dict(self.train), "hero_level": self.hero_level,
-            "awaken_rank": self.rank, "fish_cap": self.fish_cap(), "board_dps_pct": self._board_pct,
+            "layers": L, "base": self._base, "shares": shares, "weapon_pct": weapon_pct, "training": dict(self.train),
+            "party_level": self.party_level, "awaken_rank": self.highest_rank(),
+            "awaken_ranks": [s["rank"] for s in self.slots], "slots": [dict(s) for s in self.slots],
+            "slot_dps": dict(zip(ev["slots"], ev["slot_dps"])),
+            "fish_cap": self.fish_cap(), "board_dps_pct": self._board_pct,
             "missile_dps_pct": self.missile_pct, "mp_sufficiency": self._mp_suff, "research": dict(self.research),
             "pulls": {b: self.econ["pulls_ticket"][b] + self.econ["pulls_diamond"][b] for b in self.p.banner_ids},
             "pulls_today": dict(self.day_counters["pulls"]),
@@ -1308,7 +1546,7 @@ def checks_for(p, bot):
         f"BOSS_TIME_TICKS: first wall stage in {FIRST_WALL_BAND[0]}..{FIRST_WALL_BAND[1]}", f"stage {fw}")
     early = wall_stats(bot, 1, EARLY_WALL_LAST_DAY)
     add(early is None or early["active_min"] <= EARLY_WALL_MAX_ACTIVE_MIN,
-        f"HP_G/GOLD_G/EXP_G/HERO_LVL_MULT: longest wall opened by day {EARLY_WALL_LAST_DAY} <= "
+        f"HP_G/GOLD_G/EXP_G/PARTY_LVL_MULT: longest wall opened by day {EARLY_WALL_LAST_DAY} <= "
         f"{EARLY_WALL_MAX_ACTIVE_MIN} active min", _wall_text(early))
     late = wall_stats(bot, EARLY_WALL_LAST_DAY + 1)
     if LATE_WALL_MAX_ACTIVE_MIN is None:
@@ -1326,14 +1564,14 @@ def checks_for(p, bot):
         add(TRAIN_GOLD_SHARE_BAND[0] <= sh <= TRAIN_GOLD_SHARE_BAND[1],
             f"TRAIN_PER_LVL/TRAIN_CAP[{s}]: share of Training gold over {last} days in 5%..50%", f"{sh:.2%}")
 
-    # Hero level per stage
-    bad = [(d, days[d]["hero_level"] / days[d]["stage"]) for d in REPORT_DAYS if d in days
-           and not HERO_LEVEL_PER_STAGE_BAND[0] <= days[d]["hero_level"] / days[d]["stage"] <= HERO_LEVEL_PER_STAGE_BAND[1]]
-    add(not bad, "EXP0/HERO_LVL_EXP: hero level between 0.25 s and 0.45 s at every reported day",
+    # Party level per stage
+    bad = [(d, days[d]["party_level"] / days[d]["stage"]) for d in REPORT_DAYS if d in days
+           and not PARTY_LEVEL_PER_STAGE_BAND[0] <= days[d]["party_level"] / days[d]["stage"] <= PARTY_LEVEL_PER_STAGE_BAND[1]]
+    add(not bad, "EXP0/PARTY_LVL_EXP: party level between 0.25 s and 0.45 s at every reported day",
         ", ".join(f"day {d}: {r:.2f} s" for d, r in bad) if bad else
-        ", ".join(f"{days[d]['hero_level'] / days[d]['stage']:.2f}" for d in REPORT_DAYS if d in days))
+        ", ".join(f"{days[d]['party_level'] / days[d]['stage']:.2f}" for d in REPORT_DAYS if d in days))
 
-    # Awakening cadence (issue #43)
+    # Awakening cadence (issue #43): checked on the first slot to reach each rank, the other slots reported (03 5.3)
     for r in p.awakening:
         rank = r["rank"]
         if rank not in bot.gate_day:
@@ -1345,8 +1583,11 @@ def checks_for(p, bot):
         if got is None and last - bot.gate_day[rank] <= (limit or 0):
             out.append(("INFO", f"AWAKEN rank {rank}: gate day {bot.gate_day[rank]}, not yet bought (window still open)", "-"))
             continue
-        add(ok, f"AWAKEN_STAGES/AWAKEN_COST_ROCK_CANDY: rank {rank} bought within {limit} days of its gate",
+        add(ok, f"AWAKEN_STAGES/AWAKEN_COST_ROCK_CANDY: rank {rank} bought (first slot) within {limit} days of its gate",
             f"gate day {bot.gate_day[rank]}, bought day {got}")
+        per_slot = [bot.slot_awaken_day.get((i, rank)) for i in range(len(bot.slots))]
+        out.append(("INFO", f"AWAKEN rank {rank} per slot (report-only until #249 sets a per-slot target)",
+                    ", ".join(f"slot {i}: " + (f"day {d}" if d is not None else "not bought") for i, d in enumerate(per_slot))))
 
     if not p.m0 and p.research:
         d7 = days.get(RESEARCH_ALL_NODES_BY_DAY)
@@ -1375,7 +1616,8 @@ def checks_for(p, bot):
                     tot = r["coins_board_today"] + r["coins_dungeon_today"]
                     sh = r["coins_dungeon_today"] / tot if tot else 0.0
                     add(FISH_DUNGEON_SHARE_BAND[0] <= sh <= FISH_DUNGEON_SHARE_BAND[1],
-                        f"FISH_COIN_FLOOR (06 6.3a): dungeon share of day-{d} Fish Coin income in 25%..50%", f"{sh:.1%}")
+                        f"FISH_COIN_FLOOR (06 6.3a): dungeon share of day-{d} Fish Coin income in "
+                        f"{FISH_DUNGEON_SHARE_BAND[0]:.0%}..{FISH_DUNGEON_SHARE_BAND[1]:.0%}", f"{sh:.1%}")
 
     # Tap Zap: per wall, idle active minutes over the minutes until the same boss is clearable with full tapping.
     ratios = sorted(w["active_min"] / max(1, w.get("tap_min") or w["active_min"]) for w in bot.walls if w["active_min"] > 0)
@@ -1407,9 +1649,10 @@ def fmt(x):
 
 def print_day_table(p, rows):
     print("\nDay table (stage, DPS, layer multipliers)")
-    print("day  stage  hero  rank  fcap        DPS  " + " ".join(f"{k[:6]:>7}" for k in LAYERS))
+    print("day  stage  plvl  ranks      fcap        DPS  " + " ".join(f"{k[:6]:>7}" for k in LAYERS))
     for r in rows:
-        print(f"{r['day']:>3}  {r['stage']:>5}  {r['hero_level']:>4}  {r['awaken_rank']:>4}  {r['fish_cap']:>4}  "
+        ranks = "/".join(str(x) for x in r["awaken_ranks"])
+        print(f"{r['day']:>3}  {r['stage']:>5}  {r['party_level']:>4}  {ranks:<9}  {r['fish_cap']:>4}  "
               f"{r['dps']:>9.2e}  " + " ".join(f"x{r['layers'][k]:>6.2f}" if r['layers'][k] < 1000 else f"{r['layers'][k]:>7.1e}"
                                              for k in LAYERS))
     print("\nday  Training levels (ATK/CR/CD/SPD/GG/EG)   research levels                         pulls (W/S/C) L+ (W/S/C)  banner lvl  LB")
@@ -1423,10 +1666,11 @@ def print_day_table(p, rows):
 
 
 def print_shares(p, rows, checks):
-    print("\nLayer shares of ln(DPS / BASE_ATK) (03 section 8.2 format)")
-    print("day  stage        DPS  " + " ".join(f"{k[:6]:>7}" for k in LAYERS))
+    print("\nLayer shares of ln(DPS / BASE_ATK) (03 section 8.2 format; per-slot layers folded per 03 section 7.4, Base is "
+          "the party-size term)")
+    print("day  stage        DPS  " + " ".join(f"{k[:6]:>7}" for k in SHARE_COLS))
     for r in rows:
-        print(f"{r['day']:>3}  {r['stage']:>5}  {r['dps']:>9.2e}  " + " ".join(f"{r['shares'][k]:>7.1%}" for k in LAYERS))
+        print(f"{r['day']:>3}  {r['stage']:>5}  {r['dps']:>9.2e}  " + " ".join(f"{r['shares'][k]:>7.1%}" for k in SHARE_COLS))
     print("\nper-layer rule (<= 40% on days 1/7/30, >= 5% on days 7/30; speed and runes floor-exempt"
           + (f"; {p.tier} exempts {', '.join(sorted(SHARE_FLOOR_EXEMPT.get(p.tier, [])))} as WARN" if SHARE_FLOOR_EXEMPT.get(p.tier) else "") + ")")
     by_day = {r["day"]: r for r in rows}
@@ -1457,7 +1701,7 @@ def print_economy(bot):
     print("\nEconomy report (cumulative)")
     print(f"  gold earned: kills {fmt(e['gold_kills'])}, offline {fmt(e['gold_offline'])}; spent "
           + ", ".join(f"{s} {fmt(v)}" for s, v in e["gold_spent"].items()))
-    print(f"  hero EXP: kills {fmt(e['exp_kills'])}, offline {fmt(e['exp_offline'])}, dungeon {fmt(e['exp_dungeon'])}")
+    print(f"  party EXP: kills {fmt(e['exp_kills'])}, offline {fmt(e['exp_offline'])}, dungeon {fmt(e['exp_dungeon'])}")
     print(f"  diamonds earned {fmt(e['diamonds_earned'])}; spent " + ", ".join(f"{b} {fmt(v)}" for b, v in e["diamonds_spent"].items()))
     print(f"  Fish Coins earned: discovery {fmt(e['coins_discovery'])}, merges {fmt(e['coins_merge'])}, discards "
           f"{fmt(e['coins_discard'])}, dungeon {fmt(e['coins_dungeon'])}; spent "
@@ -1526,15 +1770,15 @@ def median_rows(runs, seeds):
             continue
         out.append({"day": d, "stage": statistics.median(r["stage"] for r in rs),
                     "dps": statistics.median(r["dps"] for r in rs),
-                    "shares": {k: statistics.median(r["shares"][k] for r in rs) for k in LAYERS}})
+                    "shares": {k: statistics.median(r["shares"][k] for r in rs) for k in SHARE_COLS}})
     return out
 
 
 def print_sweep(p, a, seeds, runs, rows):
     print(f"\n{len(seeds)}-seed medians: stage, DPS and layer shares")
-    print("day   stage        DPS  " + " ".join(f"{k[:6]:>7}" for k in LAYERS))
+    print("day   stage        DPS  " + " ".join(f"{k[:6]:>7}" for k in SHARE_COLS))
     for r in rows:
-        print(f"{r['day']:>3}  {r['stage']:>6g}  {r['dps']:>9.2e}  " + " ".join(f"{r['shares'][k]:>7.1%}" for k in LAYERS))
+        print(f"{r['day']:>3}  {r['stage']:>6g}  {r['dps']:>9.2e}  " + " ".join(f"{r['shares'][k]:>7.1%}" for k in SHARE_COLS))
     fw = sorted(runs[s].first_wall_stage or 0 for s in seeds)
     early = sorted((wall_stats(runs[s], 1, EARLY_WALL_LAST_DAY) or {"active_min": 0})["active_min"] for s in seeds)
     late = sorted((wall_stats(runs[s], EARLY_WALL_LAST_DAY + 1) or {"active_min": 0})["active_min"] for s in seeds)
@@ -1556,8 +1800,15 @@ def print_sweep(p, a, seeds, runs, rows):
         lags = [runs[s].awaken_day[rank] - runs[s].gate_day[rank] for s in seeds
                 if rank in runs[s].gate_day and rank in runs[s].awaken_day]
         if lags:
-            print(f"  Awakening rank {rank}: days from gate to purchase median {statistics.median(lags):g}, max {max(lags)} "
-                  f"({len(lags)}/{len(seeds)} seeds bought it)")
+            print(f"  Awakening rank {rank} (first slot): days from gate to purchase median {statistics.median(lags):g}, "
+                  f"max {max(lags)} ({len(lags)}/{len(seeds)} seeds bought it)")
+            n = len(runs[seeds[0]].slots)
+            per = []
+            for i in range(n):
+                d = [runs[s].slot_awaken_day[(i, rank)] - runs[s].gate_day[rank] for s in seeds
+                     if (i, rank) in runs[s].slot_awaken_day]
+                per.append(f"slot {i} {statistics.median(d):g} ({len(d)}/{len(seeds)})" if d else f"slot {i} -")
+            print(f"    per slot, days from gate (median, seeds that bought it; reported only): " + ", ".join(per))
 
 
 def daytable_line(stages):
@@ -1597,7 +1848,8 @@ def main(argv=None):
     ap.add_argument("--policy", default="greedy", choices=("greedy", "lazy", "spender20", "whale"))
     ap.add_argument("--diamonds", default="content", choices=("content", "flat"),
                     help="content: 06's login, quests, first clears and achievements (default); flat: DIAMONDS_PER_DAY_F2P a day")
-    ap.add_argument("--m0", action="store_true", help="M0 tier: no Companions, Research, dungeons or summon tickets")
+    ap.add_argument("--m0", action="store_true", help="M0 tier: no Research, dungeons, summon tickets, limit breaks or MVP rows (so no "
+                         "Awakening); the five-companion party stays (03 section 8.5)")
     ap.add_argument("--check", action="store_true", help="20-seed sweep + every S-constant check; exit 1 on FAIL")
     ap.add_argument("--seeds", default="1-20")
     ap.add_argument("--out", default=os.path.join(HERE, "out"))

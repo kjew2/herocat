@@ -30,7 +30,7 @@ namespace HeroCat.Runtime.Tests
         public void TabReplace_KeepsDepthTwo_AndBackReturnsToMain()
         {
             var r = new ScreenRouter();
-            r.Replace(ScreenIds.Hero);
+            r.Replace(ScreenIds.Party);
             r.Replace(ScreenIds.Summon);
             r.Replace(ScreenIds.Weapons);
             Assert.That(r.Depth, Is.EqualTo(2));
@@ -49,7 +49,7 @@ namespace HeroCat.Runtime.Tests
             r.ShowModal(ScreenIds.OfflineReward);
             Assert.That(r.KeepScreenAwake, Is.True, "a modal over SCR_MAIN keeps it awake");
             r.CloseModal();
-            r.Replace(ScreenIds.Hero);
+            r.Replace(ScreenIds.Party);
             Assert.That(r.KeepScreenAwake, Is.False, "SystemSetting elsewhere");
             r.Back(0);
             Assert.That(r.TopFull.Id, Is.EqualTo(ScreenIds.Main));
@@ -136,7 +136,7 @@ namespace HeroCat.Runtime.Tests
         public void BlockingError_SwallowsBack_AndSitsAboveEverything()
         {
             var r = new ScreenRouter();
-            r.Replace(ScreenIds.Hero);
+            r.Replace(ScreenIds.Party);
             r.ShowModal(ScreenIds.Error, "CONTENT_CORRUPT");
             Assert.That(r.BlockingError, Is.Not.Null);
             Assert.That(r.Back(0), Is.EqualTo(BackResult.Ignored));
@@ -149,11 +149,11 @@ namespace HeroCat.Runtime.Tests
         {
             var host = new Host();
             var r = new ScreenRouter(host);
-            r.Replace(ScreenIds.Hero);
+            r.Replace(ScreenIds.Party);
             r.Replace(ScreenIds.Weapons);
             r.Replace(ScreenIds.Skills);
             r.Replace(ScreenIds.Summon);
-            Assert.That(host.Evicted, Is.EqualTo(new[] { ScreenIds.Hero }));
+            Assert.That(host.Evicted, Is.EqualTo(new[] { ScreenIds.Party }));
             Assert.That(r.CachedFull.Count, Is.EqualTo(UiConstants.ScreenCache));
         }
     }

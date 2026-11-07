@@ -90,7 +90,7 @@ namespace HeroCat.Runtime.Save
         {
             if (s == null) throw new SaveInvalidException("state is null");
             if (s.SchemaVersion < 1) throw new SaveInvalidException("R2: SchemaVersion missing or < 1");
-            if (s.Time == null || s.Hero == null || s.Training == null || s.Wallet == null || s.Weapons == null || s.Skills == null ||
+            if (s.Time == null || s.Party == null || s.Training == null || s.Wallet == null || s.Weapons == null || s.Skills == null ||
                 s.Companions == null || s.Runes == null || s.Loadout == null || s.Fish == null || s.Banners == null || s.Combat == null ||
                 s.Progress == null || s.Quests == null || s.Dungeons == null || s.Shop == null || s.Research == null || s.Inbox == null ||
                 s.Offline == null || s.Pending == null || s.Tutorial == null || s.Rng == null || s.Stats == null)
@@ -137,7 +137,7 @@ namespace HeroCat.Runtime.Save
                 P1Stage();
                 P5(); P6();
                 P1Rest();
-                P2(); P3(); P4(); P7();
+                P2(); P7(); P3(); P4();   // P7 sizes the party slots P3 clamps
                 P10(); P14();      // collections before the loadout that points into them
                 P8();
                 P9(); P9b(); P11(); P12(); P13(); P15(); P16(); P17(); P18(); P19(); P20(); P21();
@@ -164,11 +164,13 @@ namespace HeroCat.Runtime.Save
                 if (ClampNonNegative(c.SkillCooldowns)) Hit("P1");
                 if (ClampNonNegative(c.CompanionCooldowns)) Hit("P1");
                 if (c.MissileQueue.RemoveAll(m => !(m > 0) || double.IsInfinity(m)) > 0) Hit("P1");   // FishBoard invariant: positive, finite
-                // Mp is a double like the wallet's: a NaN would poison every tick (decision in the #75 change; 02 P1).
-                if (!IsFiniteNonNegative(c.Mp)) { c.Mp = 0; Hit("P1"); }
+                // Each pool is a double like the wallet's: a NaN would poison every tick (decision in the #75 change; 02 P1).
+                if (c.Mp != null)
+                    for (int i = 0; i < c.Mp.Length; i++)
+                        if (!IsFiniteNonNegative(c.Mp[i])) { c.Mp[i] = 0; Hit("P1"); }
             }
 
-            // P2: wallet balances and Hero.Exp.
+            // P2: wallet balances and Party.Exp.
             void P2()
             {
                 var w = s.Wallet;
@@ -179,17 +181,21 @@ namespace HeroCat.Runtime.Save
                 if (w.GuildCoin < 0) { w.GuildCoin = 0; Hit("P2"); }
                 if (ClampNonNegative(w.DungeonTicket)) Hit("P2");
                 if (ClampNonNegative(w.SummonTicket)) Hit("P2");
-                if (!IsFiniteNonNegative(s.Hero.Exp)) { s.Hero.Exp = 0; Hit("P2"); }
+                if (!IsFiniteNonNegative(s.Party.Exp)) { s.Party.Exp = 0; Hit("P2"); }
             }
 
-            // P3: hero level and awakening rank (AWAKEN_STAGES.Length = the awakening row count; 0 in an M0 build).
+            // P3: party level and every slot's awakening rank (AWAKEN_STAGES.Length = the awakening row count; 0 in an M0
+            // build). Runs after P7, so every slot exists.
             void P3()
             {
-                var h = s.Hero;
+                var h = s.Party;
                 if (h.Level < 1) { h.Level = 1; Hit("P3"); }
                 int maxRank = db.Awakening?.Count ?? 0;
-                if (h.AwakenRank < 0) { h.AwakenRank = 0; Hit("P3"); }
-                if (h.AwakenRank > maxRank) { h.AwakenRank = maxRank; Hit("P3"); }
+                foreach (var x in h.Slots)
+                {
+                    if (x.AwakenRank < 0) { x.AwakenRank = 0; Hit("P3"); }
+                    if (x.AwakenRank > maxRank) { x.AwakenRank = maxRank; Hit("P3"); }
+                }
             }
 
             // P4: training levels within [0, TRAIN_CAP[stat]]; a null cap is uncapped.
@@ -224,58 +230,51 @@ namespace HeroCat.Runtime.Save
                 if (v != p.HighestFirstClearBoss) { p.HighestFirstClearBoss = v; Hit("P6"); }
             }
 
-            // P7: loadout slot arrays sized to the slot counts. The per-slot cooldown arrays follow their slots (an index
-            // guard for the tick loop; recorded under P7, decision in the #75 change).
+            // P7: party slots and the per-slot combat arrays sized PARTY_SLOTS (02 section 6.4, 00 decision 109); a null slot
+            // element becomes an empty slot; the rune slots sized RUNE_SLOTS.
             void P7()
             {
-                var l = s.Loadout;
+                var pa = s.Party;
                 var c = s.Combat;
-                if (Resize(l.Skills, k.SkillSlots, out var a)) { l.Skills = a; Hit("P7"); }
-                if (Resize(l.Companions, k.CompanionSlots, out var b)) { l.Companions = b; Hit("P7"); }
-                if (Resize(l.Runes, k.RuneSlots, out var r)) { l.Runes = r; Hit("P7"); }
-                if (Resize(c.SkillCooldowns, k.SkillSlots, out var sc)) { c.SkillCooldowns = sc; Hit("P7"); }
-                if (Resize(c.CompanionCooldowns, k.CompanionSlots, out var cc)) { c.CompanionCooldowns = cc; Hit("P7"); }
+                int n = k.PartySlots;
+                if (pa.Slots == null || pa.Slots.Length != n || Array.Exists(pa.Slots, x => x == null))
+                {
+                    var slots = PartyState.NewSlots(n);
+                    if (pa.Slots != null) for (int i = 0; i < n && i < pa.Slots.Length; i++) if (pa.Slots[i] != null) slots[i] = pa.Slots[i];
+                    pa.Slots = slots;
+                    Hit("P7");
+                }
+                if (Resize(s.Loadout.Runes, k.RuneSlots, out var r)) { s.Loadout.Runes = r; Hit("P7"); }
+                if (Resize(c.Mp, n, out var mp)) { c.Mp = mp; Hit("P7"); }
+                if (Resize(c.SkillCooldowns, n, out var sc)) { c.SkillCooldowns = sc; Hit("P7"); }
+                if (Resize(c.CompanionCooldowns, n, out var cc)) { c.CompanionCooldowns = cc; Hit("P7"); }
             }
 
-            // P8: equipped ids owned, known, of the right kind, not duplicated; a null weapon auto-equips.
+            // P8: every slot's companion, weapon and skill owned, known, of the right kind and in at most one slot (the lowest
+            // index keeps a duplicate). Nothing is auto-equipped: an empty or unarmed slot is valid (02 section 3.2).
             void P8()
             {
-                var l = s.Loadout;
-                if (l.Weapon != null && (!db.Weapons.ContainsKey(l.Weapon) || !s.Weapons.Items.ContainsKey(l.Weapon)))
-                {
-                    l.Weapon = null;
-                    Hit("P8");
-                }
-                if (l.Weapon == null && s.Weapons.Items.Count > 0)
-                {
-                    l.Weapon = BestOwnedWeapon();
-                    Hit("P8");
-                }
-                if (CleanSlots(l.Skills, s.Skills, db.Skills)) Hit("P8");
-                if (CleanSlots(l.Companions, s.Companions, db.Companions)) Hit("P8");
+                var slots = s.Party.Slots;
+                if (CleanField(slots, x => x.Companion, (x, v) => x.Companion = v, s.Companions, db.Companions)) Hit("P8");
+                if (CleanField(slots, x => x.Weapon, (x, v) => x.Weapon = v, s.Weapons, db.Weapons)) Hit("P8");
+                if (CleanField(slots, x => x.Skill, (x, v) => x.Skill = v, s.Skills, db.Skills)) Hit("P8");
                 // TODO(#227): rune content (P1).
-                if (CleanSlots<object>(l.Runes, s.Runes, null)) Hit("P8");
+                if (CleanSlots<object>(s.Loadout.Runes, s.Runes, null)) Hit("P8");
             }
 
-            /// <summary>
-            /// 04's AutoEquipBestWeapon choice: highest WEAPON_ATK_PCT * LevelMult, ties by rarity then id ordinal.
-            /// TODO(#93): call the sim's AutoEquipBestWeapon once it lands, so there is one implementation.
-            /// </summary>
-            string BestOwnedWeapon()
+            static bool CleanField<TDef>(PartySlot[] slots, Func<PartySlot, string> get, Action<PartySlot, string> set,
+                                         CollectionState owned, IReadOnlyDictionary<string, TDef> content)
             {
-                string best = null;
-                double bestScore = double.NegativeInfinity;
-                Rarity bestRarity = Rarity.COMMON;
-                foreach (var kv in s.Weapons.Items)
+                bool changed = false;
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var x in slots)
                 {
-                    if (!db.Weapons.TryGetValue(kv.Key, out var w)) continue;
-                    double score = w.AtkPct * db.LevelMult(db.DupeLevel(kv.Value.Copies));
-                    bool better = best == null || score > bestScore ||
-                                  (score == bestScore && (w.Rarity > bestRarity ||
-                                                          (w.Rarity == bestRarity && string.CompareOrdinal(kv.Key, best) < 0)));
-                    if (better) { best = kv.Key; bestScore = score; bestRarity = w.Rarity; }
+                    var id = get(x);
+                    if (id == null) continue;
+                    bool ok = owned.Items.ContainsKey(id) && content.ContainsKey(id) && seen.Add(id);
+                    if (!ok) { set(x, null); changed = true; }
                 }
-                return best;
+                return changed;
             }
 
             static bool CleanSlots<TDef>(string[] slots, CollectionState owned, IReadOnlyDictionary<string, TDef> content)
@@ -429,7 +428,7 @@ namespace HeroCat.Runtime.Save
             {
                 var st = s.Stats;
                 SetCounter(RngStreams.Combat, 0);
-                SetCounter(RngStreams.Crit, st.HeroHits);
+                SetCounter(RngStreams.Crit, st.PartyHits);
                 SetCounter(RngStreams.Loot, st.BossKills);
                 SetCounter(RngStreams.FishSpawn, st.FishReleased);
                 if (!opt.RemoteMode)

@@ -1,7 +1,7 @@
 {
   "SchemaVersion": 1,
-  "ContentVersion": "2026.11.02.4",
-  "ContentHash": "677f0079483792202421c749576c256a93dcf2aee7b5ee14543367d159ed2399",
+  "ContentVersion": "2026.11.02.10",
+  "ContentHash": "500fd807daae3b4e99ca0f29ed1145bd6d65fbf6f25a83d5df0c2132fd0a05ec",
   "PlayerId": "00000007-0000-4000-8000-000000000001",
   "DeviceId": "b07b07b0-0000-4000-8000-000000000001",
   "RngRoot": "00000007-0000-4000-8000-000000000001",
@@ -17,26 +17,57 @@
     "WeekKey": 2922,
     "LoginDayKey": 20460
   },
-  "Hero": {
-    "Level": 135,
-    "Exp": 1742588.0171568051,
-    "AwakenRank": 0
+  "Party": {
+    "Level": 133,
+    "Exp": 211463.64067302176,
+    "Slots": [
+      {
+        "Companion": "comp_c_01",
+        "Weapon": "weapon_e_01",
+        "Skill": null,
+        "AwakenRank": 0
+      },
+      {
+        "Companion": "comp_c_02",
+        "Weapon": "weapon_r_01",
+        "Skill": null,
+        "AwakenRank": 0
+      },
+      {
+        "Companion": "comp_c_03",
+        "Weapon": "weapon_r_04",
+        "Skill": null,
+        "AwakenRank": 0
+      },
+      {
+        "Companion": "comp_c_04",
+        "Weapon": "weapon_r_06",
+        "Skill": null,
+        "AwakenRank": 0
+      },
+      {
+        "Companion": "comp_c_05",
+        "Weapon": "weapon_r_08",
+        "Skill": null,
+        "AwakenRank": 0
+      }
+    ]
   },
   "Training": {
     "Level": [
-      151,
+      148,
       0,
       0,
-      140,
-      136,
+      137,
+      132,
       100,
-      131,
-      135
+      128,
+      131
     ]
   },
   "Wallet": {
-    "Gold": 13418.861881177058,
-    "Diamond": 890,
+    "Gold": 30786.116817207134,
+    "Diamond": 880,
     "FishCoin": 14305.599999999424,
     "RockCandy": 11,
     "DungeonTicket": [
@@ -60,7 +91,22 @@
         "FirstAcquiredServerTime": 1767603600
       },
       "weapon_c_02": {
-        "Copies": 2,
+        "Copies": 3,
+        "LimitBreaks": 0,
+        "FirstAcquiredServerTime": 1767603600
+      },
+      "weapon_c_03": {
+        "Copies": 1,
+        "LimitBreaks": 0,
+        "FirstAcquiredServerTime": 1767603600
+      },
+      "weapon_c_04": {
+        "Copies": 1,
+        "LimitBreaks": 0,
+        "FirstAcquiredServerTime": 1767603600
+      },
+      "weapon_c_05": {
+        "Copies": 1,
         "LimitBreaks": 0,
         "FirstAcquiredServerTime": 1767603600
       },
@@ -110,27 +156,38 @@
     "Items": {}
   },
   "Companions": {
-    "Items": {}
+    "Items": {
+      "comp_c_01": {
+        "Copies": 1,
+        "LimitBreaks": 0,
+        "FirstAcquiredServerTime": 1767603600
+      },
+      "comp_c_02": {
+        "Copies": 1,
+        "LimitBreaks": 0,
+        "FirstAcquiredServerTime": 1767603600
+      },
+      "comp_c_03": {
+        "Copies": 1,
+        "LimitBreaks": 0,
+        "FirstAcquiredServerTime": 1767603600
+      },
+      "comp_c_04": {
+        "Copies": 1,
+        "LimitBreaks": 0,
+        "FirstAcquiredServerTime": 1767603600
+      },
+      "comp_c_05": {
+        "Copies": 1,
+        "LimitBreaks": 0,
+        "FirstAcquiredServerTime": 1767603600
+      }
+    }
   },
   "Runes": {
     "Items": {}
   },
   "Loadout": {
-    "Weapon": "weapon_e_01",
-    "Skills": [
-      null,
-      null,
-      null,
-      null,
-      null,
-      null
-    ],
-    "Companions": [
-      null,
-      null,
-      null,
-      null
-    ],
     "Runes": [
       null,
       null,
@@ -183,6 +240,11 @@
     "AutoMergeEnabled": false
   },
   "Banners": {
+    "COMPANION": {
+      "Pity": 0,
+      "Exp": 0,
+      "TotalPulls": 0
+    },
     "SKILL": {
       "Pity": 0,
       "Exp": 0,
@@ -196,14 +258,19 @@
   },
   "Combat": {
     "Mode": "Stage",
-    "Stage": 250,
+    "Stage": 240,
     "KillsInStage": 9,
     "Boss": "Walled",
     "BossFailsOnStage": 1,
     "Selected": null,
-    "Mp": 0.0,
+    "Mp": [
+      6.5849548036567285E-12,
+      10.000000000006892,
+      10.000000000007198,
+      10.000000000007589,
+      10.000000000007926
+    ],
     "SkillCooldowns": [
-      0,
       0,
       0,
       0,
@@ -211,6 +278,7 @@
       0
     ],
     "CompanionCooldowns": [
+      100,
       0,
       0,
       0,
@@ -235,8 +303,8 @@
     "DungeonRun": null
   },
   "Progress": {
-    "HighestCleared": 249,
-    "HighestFirstClearBoss": 240,
+    "HighestCleared": 239,
+    "HighestFirstClearBoss": 230,
     "StageCapReached": 0
   },
   "Quests": {
@@ -294,7 +362,7 @@
     },
     "crit": {
       "Seed": "10e431400760b15e",
-      "Counter": 21833
+      "Counter": 101752
     },
     "dungeon": {
       "Seed": "0ff384dc670a7e71",
@@ -306,7 +374,7 @@
     },
     "loot": {
       "Seed": "e1b462ae37ccbc87",
-      "Counter": 24
+      "Counter": 23
     },
     "summon_companion": {
       "Seed": "1352fdc4fc9a7f59",
@@ -322,27 +390,27 @@
     }
   },
   "Stats": {
-    "Kills": 4103,
-    "BossKills": 24,
-    "BossFails": 9,
-    "HeroHits": 21833,
+    "Kills": 3937,
+    "BossKills": 23,
+    "BossFails": 7,
+    "PartyHits": 101752,
     "Taps": 0,
     "Pulls": 10,
     "Merges": 2433,
     "FishReleased": 2440,
     "FishDiscards": 0,
     "DungeonClears": 0,
-    "TrainingLevelsBought": 793,
+    "TrainingLevelsBought": 776,
     "FirstWallStage": 130,
     "ActiveSeconds": 14400,
-    "GoldEarned": 48191630.251442805,
-    "GoldSpent": 48178211.389561504,
+    "GoldEarned": 38740127.07613188,
+    "GoldSpent": 38709340.959314145,
     "FishCoinEarned": 14305.599999999424,
-    "DiamondsEarned": 1890,
+    "DiamondsEarned": 1880,
     "DiamondsSpent": 1000,
     "DiamondsPurchased": 0,
     "ClientDiamondsEarned": {
-      "FIRST_CLEAR": 240,
+      "FIRST_CLEAR": 230,
       "LOGIN": 150,
       "TUTORIAL": 1500
     },

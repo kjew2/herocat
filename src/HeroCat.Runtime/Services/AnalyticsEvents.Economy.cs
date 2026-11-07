@@ -152,12 +152,12 @@ namespace HeroCat.Runtime.Services
         }
 
         /// <summary>03 section 11: Awaken bought a rank. The stage is the envelope's (02 section 14.1).</summary>
-        public sealed record Awakened(int Rank, long RockCandyCost, double RockCandyAfter) : AnalyticsEvent
+        public sealed record Awakened(int Slot, int Rank, long RockCandyCost, double RockCandyAfter) : AnalyticsEvent
         {
             public override string Name => AnalyticsNames.AWAKENED;
             public override Dictionary<string, object> Props() => new Dictionary<string, object>
             {
-                ["rank"] = Rank, ["rockCandyCost"] = RockCandyCost, ["rockCandyAfter"] = RockCandyAfter,
+                ["slot"] = Slot, ["rank"] = Rank, ["rockCandyCost"] = RockCandyCost, ["rockCandyAfter"] = RockCandyAfter,
             };
         }
     }

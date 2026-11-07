@@ -26,5 +26,6 @@
     <Compile Include="../../unity/HeroCatClient/Assets/HeroCat.Client/Screens/**/*.cs" LinkBase="Screens" />
     <!-- The one Editor script with logic the build depends on (content bundle and asset check, issue #133). -->
     <Compile Include="../../unity/HeroCatClient/Assets/HeroCat.Client/Editor/ContentPreBuild.cs" LinkBase="Editor" />
+    <Compile Include="../../unity/HeroCatClient/Assets/HeroCat.Client/Editor/ArtImportSettings.cs" LinkBase="Editor" />
   </ItemGroup>
 </Project>

@@ -32,15 +32,15 @@ SECTION_4 = [
     ("constants", "LOGIN_DIAMONDS"), ("banner_levels", "rate_c"), ("banner_levels", "rate_m"),
     ("banners", "pity_soft_start"), ("banners", "pity_soft_step"), ("banners", "pity_hard"),
     ("banners", "m_share_of_lplus"), ("banners", "guarantee_batch_size"), ("banners", "guarantee_min_rarity"),
-    ("banners", "exp_per_pull"), ("constants", "SKILL_SLOTS"), ("constants", "COMPANION_SLOTS"),
+    ("banners", "exp_per_pull"), ("constants", "PARTY_SLOTS"),
     ("constants", "RUNE_SLOTS"), ("dupe_levels", "cum_copies"), ("constants", "DUPE_LVL_BONUS"),
     ("constants", "LIMIT_BREAK_RANKS"), ("rarities", "limit_break_cost"), ("rarities", "dupe_overflow_rock_candy"),
     ("banners", "pool_c"), ("rarities", "weapon_passive_pct"), ("weapons", "passive_pct"),
     ("constants", "FISH_BOARD_W"), ("constants", "FISH_BOARD_H"), ("tank", "cap0"), ("tank", "refill_s0"),
     ("constants", "FISH_MAX_LVL0"), ("fish_levels", "discovery_coins"), ("constants", "FISH_MERGE_COINS_PCT"),
     ("fish_levels", "missile_pct"), ("constants", "FISH_BOARD_DPS_FACTOR"), ("awakening", "stage_gate"),
-    ("awakening", "rock_candy_cost"), ("awakening", "mult"), ("hero_levels", "exp0"), ("hero_levels", "exp_g"),
-    ("hero_levels", "atk_pct_per_level"), ("hero_levels", "mult_per_level"), ("progress_targets", "day"),
+    ("awakening", "rock_candy_cost"), ("awakening", "mult"), ("party_levels", "exp0"), ("party_levels", "exp_g"),
+    ("party_levels", "atk_pct_per_level"), ("party_levels", "mult_per_level"), ("progress_targets", "day"),
     ("progress_targets", "stage"), ("feature_unlocks", "condition"), ("feature_unlocks", "threshold"),
     ("awakening_targets", "max_days_after_gate"), ("plausibility_stage_bound", "stage"),
     ("constants", "REF_DAILIES_DONE"), ("constants", "REF_NEW_BOSSES"),
@@ -147,7 +147,7 @@ class ErrorCodeTests(unittest.TestCase):
     def test_missing_unknown_columns_and_tables(self):
         os.remove(os.path.join(self.src, "tank.csv"))
         self.edit("dupe_levels", "level,cum_copies", "level,cum_copies,extra")
-        self.edit("hero_levels", "id,exp0", "id,exp0x")
+        self.edit("party_levels", "id,exp0", "id,exp0x")
         codes = self.codes()
         self.assertIn("E001", codes)
         self.assertIn("E003", codes)

@@ -26,6 +26,18 @@ namespace HeroCat.Sim.Tests
             return sim;
         }
 
+        /// <summary>
+        /// A one-companion party for tests that measure a single attacker: slot 0 holds <paramref name="companion"/> (default
+        /// a Common BUFF_GOLD, whose ability deals no damage), slots 1-4 are empty (00 decision 109).
+        /// </summary>
+        public static void Solo(Simulation sim, string companion = "comp_c_14")
+        {
+            var s = sim.State;
+            if (!s.Companions.Items.ContainsKey(companion)) Own(s.Companions, companion, 1);
+            for (int i = 0; i < s.Party.Slots.Length; i++) s.Party.Slots[i].Companion = i == 0 ? companion : null;
+            sim.Query.MarkDirty();
+        }
+
         public static void SetLevel(Simulation sim, Stat stat, int level)
         {
             sim.State.Training.Level[(int)stat] = level;
@@ -93,7 +105,10 @@ namespace HeroCat.Sim.Tests
             while (ticks.Count < 1001)
             {
                 sim.Advance(1);
-                ticks.AddRange(sim.DrainEvents().OfType<HitLanded>().Select(h => h.Tick));
+                var hits = sim.DrainEvents().OfType<HitLanded>().ToList();
+                if (hits.Count > 0)
+                    Assert.That(hits.Select(h => h.Slot), Is.EqualTo(new[] { 0, 1, 2, 3, 4 }), "an attack round: every slot, in slot order");
+                ticks.AddRange(hits.Where(h => h.Slot == 0).Select(h => h.Tick));
             }
             var gaps = ticks.Zip(ticks.Skip(1), (a, b) => b - a).ToList();
             Assert.That(gaps.Count, Is.EqualTo(1000));
@@ -125,15 +140,19 @@ namespace HeroCat.Sim.Tests
             Assert.That(Combat.Fight(sim).BossTicksLeft, Is.EqualTo(K.BossTimeTicks));
         }
 
-        /// <summary>A stage-10 boss whose HP needs exactly <paramref name="hits"/> - 0.5 non-crit hero hits.</summary>
+        /// <summary>
+        /// A stage-10 boss whose HP needs exactly <paramref name="hits"/> non-crit attack rounds of a one-companion party whose
+        /// ability deals no damage (so a round is one slot hit).
+        /// </summary>
         static (Simulation sim, EnemySpawned spawn) BossNeeding(double hits)
         {
             var sim = Combat.NewSim(hits: false);
+            Combat.Solo(sim);
             Combat.GoTo(sim, 10, kills: K.KillsPerStage - 1, boss: BossPhase.Pending);
             var spawn = Combat.AdvanceUntil<EnemySpawned>(sim);
             Assert.That(spawn.IsBoss, Is.True);
             var f = Combat.Fight(sim);
-            f.EnemyHp = f.EnemyMaxHp = hits * sim.Query.HeroHit;   // CRIT_RATE 0: no crits
+            f.EnemyHp = f.EnemyMaxHp = hits * sim.Query.SlotHit(0);   // CRIT_RATE 0: no crits
             return (sim, spawn);
         }
 
@@ -154,7 +173,7 @@ namespace HeroCat.Sim.Tests
         public void AC3_ABossNeedingOneMoreHit_FailsAtTheTimer()
         {
             var (sim, spawn) = BossNeeding(30.5);
-            double hit = sim.Query.HeroHit;
+            double hit = sim.Query.SlotHit(0);
             var fail = Combat.AdvanceUntil<BossFailed>(sim, K.BossTimeTicks + 1);
             Assert.That(fail.Tick, Is.EqualTo(spawn.Tick + K.BossTimeTicks));
             Assert.That((fail.Stage, fail.Attempt), Is.EqualTo((10, 1)));
@@ -182,10 +201,10 @@ namespace HeroCat.Sim.Tests
             }
 
             Combat.AdvanceUntil<EnemySpawned>(sim);
-            double gold = sim.State.Wallet.Gold, exp = sim.State.Hero.Exp;
+            double gold = sim.State.Wallet.Gold, exp = sim.State.Party.Exp;
             long kills = sim.State.Stats.Kills;
             Assert.That(sim.Apply(new AttemptBoss()).Ok, Is.True);
-            Assert.That((sim.State.Wallet.Gold, sim.State.Hero.Exp, sim.State.Stats.Kills), Is.EqualTo((gold, exp, kills)), "despawn pays nothing");
+            Assert.That((sim.State.Wallet.Gold, sim.State.Party.Exp, sim.State.Stats.Kills), Is.EqualTo((gold, exp, kills)), "despawn pays nothing");
             Assert.That(Combat.Fight(sim).Phase, Is.EqualTo(FightPhase.Spawning));
             var r = sim.Apply(new AttemptBoss());
             Assert.That((r.Code, r.Reason), Is.EqualTo((RejectCode.NotAvailable, CombatRejectReasons.BOSS_ALREADY_PENDING)));
@@ -281,8 +300,8 @@ namespace HeroCat.Sim.Tests
             sim.Advance(1);
             var tz = sim.DrainEvents().OfType<TapZapped>().Single();
             Assert.That(tz.Count, Is.EqualTo(K.TapZapMaxPerSec));
-            Assert.That(tz.Damage, Is.EqualTo(sim.Query.HeroHit * K.TapZapDmgPct * K.TapZapMaxPerSec));
-            Assert.That(before - f.EnemyHp, Is.EqualTo(tz.Damage).Within(1e-6), "no hero hit on this tick");
+            Assert.That(tz.Damage, Is.EqualTo(sim.Query.PartyHit * K.TapZapDmgPct * K.TapZapMaxPerSec), "a tap is a share of one PartyHit");
+            Assert.That(before - f.EnemyHp, Is.EqualTo(tz.Damage).Within(1e-6), "no slot hit on this tick");
             Assert.That(sim.State.Rng[RngStreams.Crit].Counter, Is.EqualTo(crit), "taps draw nothing");
 
             sim.Advance(K.TickHz);
@@ -315,7 +334,7 @@ namespace HeroCat.Sim.Tests
                 var hits = ev.OfType<FishMissileHit>().ToList();
                 Assert.That(hits.Select(h => h.Fraction), Is.EqualTo(new[] { 0.05, 0.075 }));
                 Assert.That(hits.All(h => h.Tick == spawn.Tick + 1), Is.True, "first Fighting tick");
-                Assert.That(hits[0].Damage, Is.EqualTo(s.Query.HeroHit * 0.05));
+                Assert.That(hits[0].Damage, Is.EqualTo(s.Query.PartyHit * 0.05), "a missile is a share of one PartyHit");
                 Assert.That(s.State.Combat.MissileQueue, Is.Empty);
                 Assert.That(s.State.Rng[RngStreams.Crit].Counter, Is.EqualTo(crit));
             }
@@ -352,9 +371,9 @@ namespace HeroCat.Sim.Tests
             Combat.Own(state.Skills, "skill_e_02", 3);
             Combat.Own(state.Skills, "skill_c_09", 1);
             Combat.Own(state.Skills, "skill_c_13", 1);
-            state.Loadout.Skills[0] = "skill_e_02";
-            state.Loadout.Skills[1] = "skill_c_09";
-            state.Loadout.Skills[2] = "skill_c_13";
+            state.Party.Slots[0].Skill = "skill_e_02";
+            state.Party.Slots[1].Skill = "skill_c_09";
+            state.Party.Slots[2].Skill = "skill_c_13";
             sim.Query.MarkDirty();
             return sim;
         }
@@ -389,8 +408,8 @@ namespace HeroCat.Sim.Tests
 
             var s = a.State;
             Assert.That(s.Combat.Stage, Is.GreaterThan(20), "the scripted player progresses");
-            Assert.That(s.Stats.HeroHits, Is.GreaterThan(0));
-            Assert.That(s.Rng[RngStreams.Crit].Counter, Is.EqualTo(s.Stats.HeroHits), "AC5: skills, missiles and taps draw no crit");
+            Assert.That(s.Stats.PartyHits, Is.GreaterThan(0));
+            Assert.That(s.Rng[RngStreams.Crit].Counter, Is.EqualTo(s.Stats.PartyHits), "AC5: skills, missiles and taps draw no crit");
             Assert.That(s.Rng[RngStreams.Loot].Counter, Is.EqualTo(s.Stats.BossKills));
             Assert.That(s.Rng[RngStreams.Combat].Counter, Is.EqualTo(0));
         }
@@ -438,14 +457,16 @@ namespace HeroCat.Sim.Tests
         public void Snapshot_CarriesRatedDps_AndTheLastTicksDamageNumbers()
         {
             var sim = Combat.NewSim(hits: false);
+            Combat.Solo(sim);
             var spawn = Combat.AdvanceUntil<EnemySpawned>(sim);
             Combat.Fight(sim).EnemyHp = 1e9;
             sim.Advance(K.AttackIntervalTicks);   // the first hit lands on this Advance's last tick
             var snap = sim.GetSnapshot();
-            Assert.That(snap.HeroDps, Is.EqualTo(sim.Query.RatedDps));
-            Assert.That(snap.HeroDps, Is.GreaterThan(0));
+            Assert.That(snap.PartyDps, Is.EqualTo(sim.Query.RatedDps));
+            Assert.That(snap.PartyDps, Is.GreaterThan(0));
             Assert.That(snap.DamageNumbersThisTick.Length, Is.EqualTo(1));
-            Assert.That(snap.DamageNumbersThisTick[0].Amount, Is.EqualTo(sim.Query.HeroHit));
+            Assert.That(snap.DamageNumbersThisTick[0].Amount, Is.EqualTo(sim.Query.SlotHit(0)));
+            Assert.That(snap.DamageNumbersThisTick[0].Slot, Is.EqualTo(0));
             sim.Advance(1);
             Assert.That(sim.GetSnapshot().DamageNumbersThisTick.Length, Is.EqualTo(0));
             Assert.That(spawn.Stage, Is.EqualTo(1));

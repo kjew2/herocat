@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using HeroCat.Runtime.Power;
 using HeroCat.Sim.Power;
 
 namespace HeroCat.Bots.Measure
@@ -9,23 +10,30 @@ namespace HeroCat.Bots.Measure
     /// 00 section 7. <see cref="Base"/> is <c>ln(BASE_ATK) / ln(RatedDps)</c>, reported only (never floor-checked). Computed
     /// with Math.Log in the harness: reporting only, never fed back into the sim. Runes are P1 and not reported.
     /// </summary>
-    public sealed record LayerShares(double Training, double HeroLevel, double Weapons, double Skills, double Companions, double FishBoard,
+    public sealed record LayerShares(double Training, double PartyLevel, double Weapons, double Skills, double Companions, double FishBoard,
                                      double Research, double Awakening, double Crit, double Speed, double Base)
     {
         /// <summary>Layer names as acceptance-targets.json and the reports spell them, in formula order.</summary>
         public static readonly string[] Names =
-            { "Training", "HeroLevel", "Weapons", "Skills", "Companions", "FishBoard", "Research", "Awakening", "Crit", "Speed", "Base" };
+            { "Training", "PartyLevel", "Weapons", "Skills", "Companions", "FishBoard", "Research", "Awakening", "Crit", "Speed", "Base" };
 
         public static readonly LayerShares Zero = new LayerShares(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
+        /// <summary>
+        /// Shares over 03 section 7.4's slot-weighted layer factors (Runtime's LayerFactors): their logs add up to
+        /// ln(RatedDps), so the layers other than Base sum to 1 over <c>ln(RatedDps / Base)</c>, Base being BASE_ATK times
+        /// the party-size term, reported in its own column.
+        /// </summary>
         public static LayerShares From(PowerBreakdown p)
         {
-            double total = Math.Log(p.RatedDps / p.Base);
+            double b = LayerFactors.Factor(p, PowerLayer.Base);
+            double total = Math.Log(p.RatedDps / b);
             if (!(total > 0) || double.IsInfinity(total)) return Zero;
-            double S(double f) => Math.Log(f) / total;
-            double baseShare = p.RatedDps > 1 ? Math.Log(p.Base) / Math.Log(p.RatedDps) : 0;
-            return new LayerShares(S(p.Training), S(p.Hero), S(p.Weapons), S(p.Skills), S(p.Companions), S(p.Fish), S(p.Research),
-                                   S(p.Awakening), S(p.Crit), S(p.Speed), baseShare);
+            double S(PowerLayer l) => Math.Log(LayerFactors.Factor(p, l)) / total;
+            double baseShare = p.RatedDps > 1 ? Math.Log(b) / Math.Log(p.RatedDps) : 0;
+            return new LayerShares(S(PowerLayer.Training), S(PowerLayer.PartyLevel), S(PowerLayer.Weapons), S(PowerLayer.Skills),
+                                   S(PowerLayer.Companions), S(PowerLayer.Fish), S(PowerLayer.Research), S(PowerLayer.Awakening),
+                                   S(PowerLayer.Crit), S(PowerLayer.Speed), baseShare);
         }
 
         /// <summary>The share of <paramref name="name"/> (one of <see cref="Names"/>).</summary>
@@ -34,7 +42,7 @@ namespace HeroCat.Bots.Measure
             switch (name)
             {
                 case "Training": return Training;
-                case "HeroLevel": return HeroLevel;
+                case "PartyLevel": return PartyLevel;
                 case "Weapons": return Weapons;
                 case "Skills": return Skills;
                 case "Companions": return Companions;
@@ -53,17 +61,17 @@ namespace HeroCat.Bots.Measure
         {
             switch (name)
             {
-                case "Training": return p.Training;
-                case "HeroLevel": return p.Hero;
-                case "Weapons": return p.Weapons;
-                case "Skills": return p.Skills;
-                case "Companions": return p.Companions;
-                case "FishBoard": return p.Fish;
-                case "Research": return p.Research;
-                case "Awakening": return p.Awakening;
-                case "Crit": return p.Crit;
-                case "Speed": return p.Speed;
-                case "Base": return p.Base;
+                case "Training": return LayerFactors.Factor(p, PowerLayer.Training);
+                case "PartyLevel": return LayerFactors.Factor(p, PowerLayer.PartyLevel);
+                case "Weapons": return LayerFactors.Factor(p, PowerLayer.Weapons);
+                case "Skills": return LayerFactors.Factor(p, PowerLayer.Skills);
+                case "Companions": return LayerFactors.Factor(p, PowerLayer.Companions);
+                case "FishBoard": return LayerFactors.Factor(p, PowerLayer.Fish);
+                case "Research": return LayerFactors.Factor(p, PowerLayer.Research);
+                case "Awakening": return LayerFactors.Factor(p, PowerLayer.Awakening);
+                case "Crit": return LayerFactors.Factor(p, PowerLayer.Crit);
+                case "Speed": return LayerFactors.Factor(p, PowerLayer.Speed);
+                case "Base": return LayerFactors.Factor(p, PowerLayer.Base);
                 default: throw new ArgumentException("unknown layer " + name);
             }
         }

@@ -45,12 +45,12 @@ namespace HeroCat.Client.Core
         public const string MainBossNeed = "scr.main.boss_need";          // "Boss: need ~{0}x"
         public const string MainBossClearable = "scr.main.boss_clearable";
         public const string MainTapHint = "scr.main.tap_hint";
-        public const string TabHero = "scr.main.tab_hero", TabCollection = "scr.main.tab_collection", TabSummon = "scr.main.tab_summon",
+        public const string TabParty = "scr.main.tab_party", TabCollection = "scr.main.tab_collection", TabSummon = "scr.main.tab_summon",
                             TabDungeons = "scr.main.tab_dungeons", TabQuests = "scr.main.tab_quests", TabShop = "scr.main.tab_shop";
 
         public static string TabKey(MainTab t) => t switch
         {
-            MainTab.Hero => TabHero,
+            MainTab.Party => TabParty,
             MainTab.Collection => TabCollection,
             MainTab.Summon => TabSummon,
             MainTab.Dungeons => TabDungeons,
@@ -87,16 +87,17 @@ namespace HeroCat.Client.Core
         public const string ToastLogin = "scr.main.toast_login";              // "+{0} diamonds: daily login"
         public const string ToastSaveFailed = "scr.main.toast_save_failed";
 
-        // SCR_HERO
-        public const string HeroTitle = "scr.hero.title";
-        public const string HeroLevel = "scr.hero.level";                 // "Lv {0}"
-        public const string HeroTraining = "scr.hero.training";
-        public const string HeroStepN = "scr.hero.step_n";                // "x{0}"
-        public const string HeroStepMax = "scr.hero.step_max";
-        public const string HeroPlus = "scr.hero.plus";
-        public const string HeroMax = "scr.hero.max";
-        public const string HeroBuyLevels = "scr.hero.buy_levels";        // "Buy {0} levels for {1}"
-        public const string HeroLoadout = "scr.hero.loadout";
+        // SCR_PARTY
+        public const string PartyTitle = "scr.party.title";
+        public const string PartyLevel = "scr.party.level";                 // "Lv {0}"
+        public const string PartyTraining = "scr.party.training";
+        public const string PartyStepN = "scr.party.step_n";                // "x{0}"
+        public const string PartyStepMax = "scr.party.step_max";
+        public const string PartyPlus = "scr.party.plus";
+        public const string PartyMax = "scr.party.max";
+        public const string PartyBuyLevels = "scr.party.buy_levels";        // "Buy {0} levels for {1}"
+        public const string PartyLoadout = "scr.party.loadout";
+        public const string PartyAwakenGate = "scr.party.awaken_gate";   // "Reach stage {0}"
 
         // collections
         public const string WeaponsTitle = "scr.weapons.title", SkillsTitle = "scr.skills.title";
@@ -114,6 +115,11 @@ namespace HeroCat.Client.Core
         public const string SkillStats = "scr.skills.stats";                   // "DPS {0} · CD {1} · {2}"
         public const string SkillsAutoEquip = "scr.skills.auto_equip";
         public const string SkillsSlots = "scr.skills.slots";
+        public const string CompanionsTitle = "scr.companions.title";
+        public const string CompanionsSlots = "scr.companions.slots";
+        public const string CompanionsStats = "scr.companions.stats";         // "{0} · DPS {1} · every {2}"
+        public const string CompanionsMp = "scr.companions.mp";               // "MP {0} / {1} · regen {2}/s"
+        public const string CompanionsBudget = "scr.companions.budget";       // "Equipped cost {0} MP/s"
         public const string SortRarity = "scr.collection.sort_rarity", SortLevel = "scr.collection.sort_level", SortNewest = "scr.collection.sort_newest",
                             SortOwned = "scr.collection.sort_owned";
         public const string FilterAll = "scr.collection.filter_all", FilterOwned = "scr.collection.filter_owned";
@@ -134,6 +140,8 @@ namespace HeroCat.Client.Core
         };
 
         public static string CastTypeKey(CastType t) => "scr.skills.cast_" + t.ToString().ToLowerInvariant();
+
+        public static string AbilityKey(AbilityType t) => "scr.companions.ability_" + t.ToString().ToLowerInvariant();
 
         /// <summary>09's rarity rows: <c>rarity.epic.name</c>.</summary>
         public static string RarityName(Rarity r) => TextFmt.RarityKey(r);

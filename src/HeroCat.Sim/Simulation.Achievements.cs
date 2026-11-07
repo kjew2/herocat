@@ -9,7 +9,7 @@ namespace HeroCat.Sim
     ///
     /// Each rung is an ACHIEVEMENT quest row keyed by its id in <see cref="QuestState.Achievement"/>: one-time, never reset
     /// by a day or week rollover, claimed through ClaimQuest / ClaimAllQuests (reason ACHIEVEMENT). Progress for
-    /// REACH_STAGE, REACH_HERO_LEVEL, OWN_WEAPONS / OWN_SKILLS / OWN_COMPANIONS (distinct ids), FISH_LEVEL and AWAKEN_RANK
+    /// REACH_STAGE, REACH_PARTY_LEVEL, OWN_WEAPONS / OWN_SKILLS / OWN_COMPANIONS (distinct ids), FISH_LEVEL and AWAKEN_RANK
     /// is a max (<see cref="AchievementsSetMax"/>, called where the value changes); LIFETIME_MERGES and LIFETIME_SUMMONS
     /// are sums (<see cref="AchievementsAdd"/>, from the MERGE_FISH and SUMMON progress sites). Every rung a value crosses
     /// completes at once, so a jump from stage 9 to 30 completes rungs 10 and 30 together.
@@ -26,12 +26,12 @@ namespace HeroCat.Sim
             if (Db.Achievements.Count == 0) return;   // an M0 build: no rungs
             var s = State;
             AchievementsSetMax(QuestGoal.REACH_STAGE, s.Progress.HighestCleared);
-            AchievementsSetMax(QuestGoal.REACH_HERO_LEVEL, s.Hero.Level);
+            AchievementsSetMax(QuestGoal.REACH_PARTY_LEVEL, s.Party.Level);
             AchievementsSetMax(QuestGoal.OWN_WEAPONS, OwnedCount(s.Weapons));
             AchievementsSetMax(QuestGoal.OWN_SKILLS, OwnedCount(s.Skills));
             AchievementsSetMax(QuestGoal.OWN_COMPANIONS, OwnedCount(s.Companions));
             AchievementsSetMax(QuestGoal.FISH_LEVEL, s.Fish.HighestLevel);
-            AchievementsSetMax(QuestGoal.AWAKEN_RANK, s.Hero.AwakenRank);
+            AchievementsSetMax(QuestGoal.AWAKEN_RANK, AwakeningRules.HighestRank(Db, s));
             AchievementsSetMax(QuestGoal.LIFETIME_MERGES, s.Stats.Merges);
             AchievementsSetMax(QuestGoal.LIFETIME_SUMMONS, s.Stats.Pulls);
         }

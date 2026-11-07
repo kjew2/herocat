@@ -6,8 +6,8 @@ namespace HeroCat.Sim.Economy
 {
     /// <summary>
     /// <c>Wallet.Apply(CurrencyDelta, CurrencyReason)</c> of 06 section 1 and 00 contract 6: the single path every currency
-    /// change in the sim takes. It lives here rather than on <see cref="Wallet"/> because HERO_EXP credits
-    /// <c>Hero.Exp</c>, which the wallet cannot reach (00 contract 9).
+    /// change in the sim takes. It lives here rather than on <see cref="Wallet"/> because PARTY_EXP credits
+    /// <c>Party.Exp</c>, which the wallet cannot reach (00 contract 9).
     /// </summary>
     public static class Ledger
     {
@@ -23,19 +23,19 @@ namespace HeroCat.Sim.Economy
             var c = d.Currency;
             if (Wallet.IsCounted(c) && amount != System.Math.Floor(amount)) return false;
 
-            double before = c == Currency.HERO_EXP ? s.Hero.Exp : s.Wallet.Get(c);
+            double before = c == Currency.PARTY_EXP ? s.Party.Exp : s.Wallet.Get(c);
             double next = before + amount;
             if (next < 0 || double.IsInfinity(next)) return false;
-            if (c == Currency.HERO_EXP)
-                s.Hero.Exp = next;   // CheckHeroLevel runs below, after the CurrencyChanged (03 section 5.2)
+            if (c == Currency.PARTY_EXP)
+                s.Party.Exp = next;   // CheckPartyLevel runs below, after the CurrencyChanged (03 section 5.2)
             else
                 s.Wallet.Set(c, next);
 
             Count(s.Stats, c, amount, reason);
-            if (reason == CurrencyReason.KILL && (c == Currency.GOLD || c == Currency.HERO_EXP) && events is Simulation folding && folding.CoalescingKills)
+            if (reason == CurrencyReason.KILL && (c == Currency.GOLD || c == Currency.PARTY_EXP) && events is Simulation folding && folding.CoalescingKills)
                 folding.FoldKillCurrency(c, amount);   // never allocated (01 2.3); the batch keeps the amount for analytics
             else events?.Emit(new CurrencyChanged(c, amount, next, reason));
-            if (c == Currency.HERO_EXP && events is Simulation sim) sim.CheckHeroLevel();   // the one EXP path (03 section 5.2)
+            if (c == Currency.PARTY_EXP && events is Simulation sim) sim.CheckPartyLevel();   // the one EXP path (03 section 5.2)
             return true;
         }
 

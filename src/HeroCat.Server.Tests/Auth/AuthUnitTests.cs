@@ -148,7 +148,7 @@ public sealed class AuthUnitTests
 
     [Test]
     public void The_default_display_name_is_Cat_hash_and_the_last_4_of_the_player_id() =>
-        Assert.That(AuthService.DefaultDisplayName(Guid.Parse("6b1f2c40-0000-4000-8000-00000000ab12")), Is.EqualTo("Cat#AB12"));
+        Assert.That(AuthService.DefaultDisplayName(Guid.Parse("6b1f2c40-0000-4000-8000-00000000ab12")), Is.EqualTo("Squire#AB12"));
 
     [Test]
     public async Task GET_time_returns_serverTime_without_auth()

@@ -298,8 +298,11 @@ namespace HeroCat.Runtime.Tests
         public void ANewProfile_TracksTheStarterWeapon_AsATutorialItemAcquired()   // 04 section 13
         {
             var t = TestSession.Open();
-            var e = t.Analytics.Events.Single(x => x.Name == "item_acquired");
+            var acquired = t.Analytics.Events.Where(x => x.Name == "item_acquired").ToList();
+            Assert.That(acquired.Count(x => (string)x.Props["banner"] == "COMPANION"), Is.EqualTo(5), "the five starter companions (04 section 8.3)");
+            Assert.That(acquired.Count(x => (string)x.Props["banner"] == "WEAPON"), Is.EqualTo(5), "the five starter weapons (00 decision 111)");
             var id = TestContent.Db.TutorialWeaponId;
+            var e = acquired.First(x => (string)x.Props["banner"] == "WEAPON" && (string)x.Props["itemId"] == id);
             Assert.That((e.Props["banner"], e.Props["itemId"], e.Props["isNew"], e.Props["levelBefore"], e.Props["acquireReason"], e.Props["requestId"]),
                         Is.EqualTo(("WEAPON", id, true, 0, "TUTORIAL", (object)null)));
             Assert.That(e.Props["copiesAfter"], Is.EqualTo(t.Sim.State.Weapons.Items[id].Copies));
@@ -311,10 +314,10 @@ namespace HeroCat.Runtime.Tests
         {
             var t = TestSession.Open();
             var s = t.Sim.State;
-            string before = s.Loadout.Weapon;
-            for (int i = 0; i < 5 && s.Loadout.Weapon == before; i++)
+            string before = s.Party.Slots[0].Weapon;
+            for (int i = 0; i < 5 && s.Party.Slots[0].Weapon == before; i++)
                 t.Runner.SummonAsync(Banner.WEAPON, 10, SummonPayment.Diamonds).GetAwaiter().GetResult();
-            Assume.That(s.Loadout.Weapon, Is.Not.EqualTo(before), "a better weapon was pulled");
+            Assume.That(s.Party.Slots[0].Weapon, Is.Not.EqualTo(before), "a better weapon was pulled");
             var e = t.Analytics.Events.First(x => x.Name == "item_equipped");
             Assert.That(e.Props.Keys, Is.EquivalentTo(new[] { "banner", "slot", "itemId", "previousItemId", "auto" }));
             Assert.That((e.Props["banner"], e.Props["slot"], e.Props["previousItemId"], e.Props["auto"]), Is.EqualTo(("WEAPON", 0, before, true)));

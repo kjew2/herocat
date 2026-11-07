@@ -8,7 +8,7 @@ Depends on: 00 (section 6.4 constants), 02 (`FishBoardState` persistence), 03 (t
 
 ## 1. Design goals
 
-1. The board is the thing the thumb does while the cat fights. Every merge should pay out in three ways at once: a coin number, a missile crossing the screen, and a bigger fish that raises the passive DPS line.
+1. The board is the thing the thumb does while the party fights. Every merge should pay out in three ways at once: a coin number, a missile crossing the screen, and a bigger fish that raises the passive DPS line.
 2. It is never mandatory. A player who only presses `Release max` and `Merge all` once per session still progresses; one who never touches it still gets the passive DPS of whatever is on the board.
 3. It is deterministic. Cell placement is the only random element and it comes from the `fish_spawn` stream; merge results, coins and missiles are pure functions of levels.
 4. It is tiny in the sim: 20 cells of board, a stock count and a refill timer. Everything else is presentation.
@@ -41,7 +41,7 @@ public sealed class FishBoardState                               // GameState.Fi
 
 One row per level in the `fish_levels` table (09). Values are the 00 formulas evaluated; the table exists so that the sheet can override a level (for example to make level 10 a visible milestone) without the code knowing.
 
-| Level `n` | `FISH_DISCOVERY_COINS[n]` = `10 * 2^(n-1)` | `FISH_MERGE_COINS[n]` = 2% of discovery | `FISH_MISSILE_PCT[n]` = `5 * 1.5^(n-1)` (% of one hero hit) | Board DPS per fish = `FISH_BOARD_DPS_FACTOR (0.77) * missile` (%) | Level-1 fish consumed |
+| Level `n` | `FISH_DISCOVERY_COINS[n]` = `10 * 2^(n-1)` | `FISH_MERGE_COINS[n]` = 2% of discovery | `FISH_MISSILE_PCT[n]` = `5 * 1.5^(n-1)` (% of one `PartyHit`) | Board DPS per fish = `FISH_BOARD_DPS_FACTOR (0.77) * missile` (%) | Level-1 fish consumed |
 |---|---|---|---|---|---|
 | 1 | 10 | - | - (never fired: level 1 is released, not merged) | 3.85 | 1 |
 | 2 | 20 | 0.4 | 7.5 | 5.78 | 2 |
@@ -197,25 +197,25 @@ A cosmetic reposition (00 decision 22): it consumes no stream, pays nothing, cha
 
 ### 5.1 Missiles
 
-Every merge that creates a level-`n` fish enqueues one missile worth `FISH_MISSILE_PCT[n]` percent of one hero hit (section 4.2). 03 section 2.5 drains the queue on the next `Fighting` tick: no crit, no RNG, never lost, surplus discarded on a kill. The queue belongs to the stage fight: it is not drained while `Combat.Mode == Dungeon`, so missiles queued before a run wait for the stage fight to resume (issue #40). `Combat.MissileQueue` is persisted in the save (02), so a save taken while `Spawning` with missiles queued resumes and re-simulates identically (issue #7). The client draws the missile from the merged fish's cell to the enemy when it sees `FishMerged`, timed so it arrives about when the sim applies it (07; the sim does not wait for the animation).
+Every merge that creates a level-`n` fish enqueues one missile worth `FISH_MISSILE_PCT[n]` percent of one `PartyHit` (section 4.2): the sum of every occupied party slot's non-crit, unbuffed hit `SlotHit_i` (00 section 7, 00 decision 109; implementation tracked in issue #309), not one companion's hit. A missile is one hit on the enemy, not one per slot, and draws nothing. 03 section 2.5 drains the queue on the next `Fighting` tick: no crit, no RNG, never lost, surplus discarded on a kill. The queue belongs to the stage fight: it is not drained while `Combat.Mode == Dungeon`, so missiles queued before a run wait for the stage fight to resume (issue #40). `Combat.MissileQueue` is persisted in the save (02), so a save taken while `Spawning` with missiles queued resumes and re-simulates identically (issue #7). The client draws the missile from the merged fish's cell to the enemy when it sees `FishMerged`, timed so it arrives about when the sim applies it (07; the sim does not wait for the animation).
 
-`missileDpsPct` is rated-only (issue #15): it enters `Query.RatedDps` (`SCR_HERO`, layer shares, bots, the tools and 08's plausibility bound), never the tick loop's hero hit, because missiles already deal their damage as discrete hits. The sim does not keep a trailing average; if `SCR_HERO` needs a live number, the runtime/view-model keeps a 60 s rolling sum of `FishMissileHit`, outside the save and `StateHash`. Closed form for the bot and the tool, for a player merging at `f` level-1 fish per minute with every fish eventually merged up to level `cap`:
+`missileDpsPct` is rated-only (issue #15): it enters `Query.RatedDps` (`SCR_PARTY`, layer shares, bots, the tools and 08's plausibility bound), never the tick loop's slot hits, because missiles already deal their damage as discrete hits. The sim does not keep a trailing average; if `SCR_PARTY` needs a live number, the runtime/view-model keeps a 60 s rolling sum of `FishMissileHit`, outside the save and `StateHash`. Closed form for the bot and the tool, for a player merging at `f` level-1 fish per minute with every fish eventually merged up to level `cap`:
 
 ```
 missileHitsPerFish(cap) = sum over n = 2..cap of FISH_MISSILE_PCT[n] / 100 * 2^-(n-1)      # each level-n merge is shared by 2^(n-1) released fish
                         = 0.05 * sum over n = 2..cap of 0.75^(n-1)
                         = 0.05 * 0.75 * (1 - 0.75^(cap-1)) / 0.25                          # 0.139 hits per fish at cap 10, 0.149 at cap 20 (limit 0.15)
-missileDpsPct           = 100 * f * missileHitsPerFish(cap) / (60 * speedFactor)           # hits per minute from missiles over hero hits per minute
+missileDpsPct           = 100 * f * missileHitsPerFish(cap) / (60 * speedFactor)           # PartyHits per minute from missiles over PartyHits per minute of auto-attack
 ```
 
-At Research 0 (`f = 10`, cap 10, speed 1): 1.39 hero hits per minute from missiles, `missileDpsPct = 2.3`. With `RES_TANK_REFILL` 10 (`f = 30`) and cap 15: 7.5%. Missiles are a visible reward, not a DPS layer; the board's passive is where the Fish Board earns its 15% share in 03 section 8.2.
+In units of `PartyHit` the form does not depend on how many slots are occupied: every slot attacks at the party-wide `speedFactor`, so the party's auto-attacks deal `60 * speedFactor` PartyHits per minute and missiles deal `f * missileHitsPerFish(cap)` PartyHits per minute. At Research 0 (`f = 10`, cap 10, speed 1): 1.39 PartyHits per minute from missiles, `missileDpsPct = 2.3`. With `RES_TANK_REFILL` 10 (`f = 30`) and cap 15: 7.5%. Missiles are a visible reward, not a DPS layer; the board's passive is where the Fish Board earns its 15% share in 03 section 8.2 (a share from the old single-hero model, stale until the bots and `tools/power_curve_model.py` are rerun on the party model, 00 decision 109).
 
 ### 5.2 Passive board DPS
 
 ```
 FISH_BOARD_DPS_PCT = sum over occupied cells of BoardDpsPct[level] = sum of FISH_BOARD_DPS_FACTOR (0.77) * FISH_MISSILE_PCT[level]
-fishMult_live      = 1 + FISH_BOARD_DPS_PCT / 100                      # in the tick loop's hero hit (03 section 7.1)
-fishMult           = 1 + (FISH_BOARD_DPS_PCT + missileDpsPct) / 100    # rated: Query.RatedDps only (issue #15)
+fishMult_live      = 1 + FISH_BOARD_DPS_PCT / 100                      # in every slot's hit SlotHit_i, so in PartyHit too (03 section 7.1)
+fishMult           = 1 + (FISH_BOARD_DPS_PCT + missileDpsPct) / 100    # rated: Query.RatedDps only (issue #15); the same factor for every slot
 ```
 
 Recomputed when DPS is dirty after any board command, at most once per command, even `MergeAll` (section 6.1). Worked board states for the attentive player at Research 0 (section 8 explains the fish counts; regenerated with `tools/fish_model.py`, `fishMult` includes the 2.3% missile share while merging):
@@ -327,7 +327,7 @@ coinsPerFish(cap) = sum over n = 2..cap of FISH_MERGE_COINS_PCT * FISH_DISCOVERY
 
 ### 8.4 DPS per active minute
 
-Each active minute at Research 0 adds 10 fish to the board's merge tree. The board's passive after `F` released fish (all merged as far as they go) is `FISH_BOARD_DPS_FACTOR (0.77) * sum of FISH_MISSILE_PCT over the levels in the binary representation of F`, which for large `F` is dominated by `floor(F / 512)` cap-10 fish at 148% each. So the attentive player gains about 148 percentage points of passive every 51 minutes, roughly +2.9 points of hero DPS per active minute, until the board reaches its ceiling (section 4.3) on day 6; then nothing until `RES_FISH_CAP`. Missiles add a steady 2.3% of DPS while merging (section 5.1).
+Each active minute at Research 0 adds 10 fish to the board's merge tree. The board's passive after `F` released fish (all merged as far as they go) is `FISH_BOARD_DPS_FACTOR (0.77) * sum of FISH_MISSILE_PCT over the levels in the binary representation of F`, which for large `F` is dominated by `floor(F / 512)` cap-10 fish at 148% each. So the attentive player gains about 148 percentage points of passive every 51 minutes, roughly +2.9 points of party DPS per active minute (the passive multiplies every slot's hit), until the board reaches its ceiling (section 4.3) on day 6; then nothing until `RES_FISH_CAP`. Missiles add a steady 2.3% of DPS while merging (section 5.1).
 
 ## 9. `tools/fish_model.py`
 
@@ -348,7 +348,7 @@ public sealed record FishDiscovered(long Tick, int Level, double Coins) : SimEve
 public sealed record FishDiscarded(long Tick, int Cell, int Level, double Coins) : SimEvent(Tick);
 public sealed record FishMoved(long Tick, int Source, int Target, int Level) : SimEvent(Tick);      // MVP, MoveFish (4.5)
 public sealed record TankFishReady(long Tick, int TankCount) : SimEvent(Tick);      // opt-in, off by default
-public sealed record FishMissileHit(long Tick, double HitFraction) : SimEvent(Tick); // published by 03 when the queue drains
+public sealed record FishMissileHit(long Tick, double HitFraction) : SimEvent(Tick); // published by 03 when the queue drains; HitFraction is in PartyHits
 ```
 
 All of these except `FishMissileHit` (03's) are in 00 section 5.1's fish group; this spec owns their fields. There is no `FishMissileFired`: the client animates the missile from `FishMerged.MissilePct` and shows damage from `FishMissileHit` (issue #11). `CurrencyChanged` with reasons `FISH_DISCOVERY` and `FISH_MERGE` is published by the Wallet as for every delta.

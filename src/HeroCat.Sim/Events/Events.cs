@@ -21,7 +21,7 @@ namespace HeroCat.Sim.Events
 
     // ---------------------------------------------------------------------------------------- economy (06)
 
-    /// <summary>Every Ledger.Apply emits exactly one (06 AC 22). Delta is signed; BalanceAfter is the new balance (Hero.Exp for HERO_EXP).</summary>
+    /// <summary>Every Ledger.Apply emits exactly one (06 AC 22). Delta is signed; BalanceAfter is the new balance (Hero.Exp for PARTY_EXP).</summary>
     public sealed record CurrencyChanged(Currency Currency, double Delta, double BalanceAfter, CurrencyReason Reason) : Event;
 
     /// <summary>

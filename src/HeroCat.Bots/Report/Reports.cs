@@ -53,7 +53,7 @@ namespace HeroCat.Bots.Report
         public static LayerShares MedianShares(SweepResult sw, int day)
         {
             double M(string n) => Sweep.Median(sw.Runs.Select(r => r.Rows[day - 1].Shares.Get(n)));
-            return new LayerShares(M("Training"), M("HeroLevel"), M("Weapons"), M("Skills"), M("Companions"), M("FishBoard"), M("Research"),
+            return new LayerShares(M("Training"), M("PartyLevel"), M("Weapons"), M("Skills"), M("Companions"), M("FishBoard"), M("Research"),
                                    M("Awakening"), M("Crit"), M("Speed"), M("Base"));
         }
 

@@ -173,8 +173,8 @@ namespace HeroCat.Bots.Tests
         {
             var row = new BotRunner(Content.Db).Run(new GreedyF2PBot(), 7, 1).Rows[0];
             double sum = row.Shares.All().Where(x => x.name != "Base").Sum(x => x.share);
-            Assert.That(sum, Is.EqualTo(1.0).Within(1e-9), "ln(DPS / BASE_ATK) is the sum of the layers' ln factors");
-            Assert.That(row.Shares.Companions, Is.EqualTo(0), "no companions at M0");
+            Assert.That(sum, Is.EqualTo(1.0).Within(1e-9), "ln(DPS / Base) is the sum of 03 section 7.4's layer ln factors");
+            Assert.That(row.Shares.Companions, Is.GreaterThan(0), "the starter party's DAMAGE abilities count at M0 (00 decision 109)");
             Assert.That(row.Dps, Is.GreaterThan(Content.Db.Constants.BaseAtk));
         }
     }
@@ -231,7 +231,7 @@ namespace HeroCat.Bots.Tests
             string unequippedSkill = ctx.Content.Pool(Banner.SKILL, Rarity.MYTHIC)[0];
             ctx.State.Weapons.Items[mythic] = new OwnedItem { Copies = 1 };
             ctx.State.Skills.Items[unequippedSkill] = new OwnedItem { Copies = 1 };
-            Assert.That(ctx.Apply(new EquipWeapon(mythic)).Ok, Is.True);
+            Assert.That(ctx.Apply(new EquipWeapon(0, mythic)).Ok, Is.True);
             ctx.State.Wallet.RockCandy = 1_000_000;
             ctx.Query.MarkDirty();
 
@@ -253,14 +253,16 @@ namespace HeroCat.Bots.Tests
             var ctx = BotRunner.CreateContext(Content.Mvp, 7);
             ctx.Runner.Start();
             ctx.State.Progress.HighestCleared = 49;
-            ctx.State.Wallet.RockCandy = 100;
+            ctx.State.Wallet.RockCandy = 20;
             Assert.That(GreedyF2PBot.NextAwakenWithin(ctx, GreedyF2PBot.AwakenSaveWindowStages), Is.True, "gate 50 is 1 stage away");
             Assert.That(GreedyF2PBot.TryAwaken(ctx), Is.False, "gate not reached");
             ctx.State.Progress.HighestCleared = 50;
             Assert.That(GreedyF2PBot.TryAwaken(ctx), Is.True);
-            Assert.That(ctx.State.Hero.AwakenRank, Is.EqualTo(1));
+            Assert.That(ctx.State.Party.Slots[0].AwakenRank, Is.EqualTo(1));
             Assert.That(ctx.State.Wallet.RockCandy, Is.EqualTo(0));
-            Assert.That(GreedyF2PBot.NextAwakenWithin(ctx, GreedyF2PBot.AwakenSaveWindowStages), Is.False, "gate 150 is 100 stages away");
+            Assert.That(GreedyF2PBot.StrongestAwakenSlot(ctx), Is.EqualTo(0), "the awakened slot is now the strongest");
+            Assert.That(GreedyF2PBot.NextAwakenWithin(ctx, GreedyF2PBot.AwakenSaveWindowStages), Is.False,
+                        "the strongest slot's next gate (150) is 100 stages away; the other slots' rank 1 reserves nothing (00 decision 111)");
             Assert.That(GreedyF2PBot.NextAwakenWithin(ctx, 100), Is.True);
             Assert.That(GreedyF2PBot.TryAwaken(ctx), Is.False, "no candy");
         }
@@ -272,7 +274,7 @@ namespace HeroCat.Bots.Tests
             ctx.Runner.Start();
             ctx.State.Wallet.FishCoin = 300;
             Assert.That(GreedyF2PBot.TryResearch(ctx, "res_mp_regen"), Is.False, "locked before Awakening rank 1");
-            ctx.State.Hero.AwakenRank = 1;
+            ctx.State.Party.Slots[0].AwakenRank = 1;
             Assert.That(GreedyF2PBot.TryResearch(ctx, "res_mp_regen"), Is.True);
             Assert.That(ctx.State.Research.Level["res_mp_regen"], Is.EqualTo(1));
             Assert.That(ctx.State.Wallet.FishCoin, Is.EqualTo(0));
@@ -292,7 +294,7 @@ namespace HeroCat.Bots.Tests
             long pulls = ctx.State.Banners.Values.Sum(x => x.TotalPulls);
             Assert.That(pulls % 10, Is.EqualTo(0), "only 10-pulls with full pity left");
             Assert.That(pulls, Is.GreaterThanOrEqualTo(10));
-            Assert.That(ctx.State.Loadout.Weapon != null || ctx.State.Loadout.Skills.Any(x => x != null), Is.True, "auto-equipped after the pull");
+            Assert.That(ctx.State.Party.Slots.Count(x => x.Weapon != null) > 1 || ctx.State.Party.Slots.Any(x => x.Skill != null), Is.True, "auto-equipped after the pull");
         }
 
         [Test]
@@ -396,7 +398,7 @@ namespace HeroCat.Bots.Tests
             foreach (var n in LayerShares.Names)
                 Assert.That(med.Get(n), Is.EqualTo(sw.Runs.Select(r => r.Rows[2].Shares.Get(n)).OrderBy(x => x).ElementAt(1)), n);
             string text = Reports.LayerSharesReport(sw, "x", 0.40, 0.05);
-            Assert.That(text, Does.Contain("HeroLevel"));
+            Assert.That(text, Does.Contain("PartyLevel"));
         }
 
         [Test]

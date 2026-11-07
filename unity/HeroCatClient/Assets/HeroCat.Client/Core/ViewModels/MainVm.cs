@@ -10,8 +10,8 @@ namespace HeroCat.Client.Core
 {
     /// <summary>
     /// The HUD bar (07 sections 2 and 4.3; issue #111): wallet chips, avatar, inbox and settings. Shown on every Full
-    /// screen. Chip taps route per section 2 (gold opens SCR_HERO, diamonds SCR_SHOP, Fish Coins SCR_RESEARCH, Rock Candy
-    /// SCR_HERO); targets this build does not have show a locked toast.
+    /// screen. Chip taps route per section 2 (gold opens SCR_PARTY, diamonds SCR_SHOP, Fish Coins SCR_RESEARCH, Rock Candy
+    /// SCR_PARTY); targets this build does not have show a locked toast.
     /// </summary>
     public sealed class HudVm
     {
@@ -30,7 +30,7 @@ namespace HeroCat.Client.Core
         /// <summary>Shown once Progress.HighestCleared reaches AWAKEN_STAGES[0] (07 section 4.3, MVP row).</summary>
         public readonly Flag RockCandyVisible = new Flag();
 
-        public readonly IntLabel HeroLevel = new IntLabel();
+        public readonly IntLabel PartyLevel = new IntLabel();
         public readonly BadgeDot Inbox = new BadgeDot();
 
         public void Refresh(Simulation sim, in Snapshot s)
@@ -41,7 +41,7 @@ namespace HeroCat.Client.Core
             RockCandy.Set(s.RockCandy);
             var aw = _c.Db.Awakening;
             RockCandyVisible.Set(aw != null && aw.Count > 0 && sim.State.Progress.HighestCleared >= aw[0].StageGate);
-            HeroLevel.Set(s.HeroLevel);
+            PartyLevel.Set(s.PartyLevel);
             Inbox.Set(s.PendingInboxCount);
         }
 
@@ -63,22 +63,22 @@ namespace HeroCat.Client.Core
             }
         }
 
-        public void OnGoldChip() => _c.Router?.Replace(ScreenIds.Hero);
+        public void OnGoldChip() => _c.Router?.Replace(ScreenIds.Party);
         public void OnDiamondChip() => _c.LockedToast("SHOP");
         public void OnFishCoinChip() => _c.LockedToast("RESEARCH");
-        public void OnRockCandyChip() => _c.Router?.Replace(ScreenIds.Hero);
+        public void OnRockCandyChip() => _c.Router?.Replace(ScreenIds.Party);
         public void OnAvatar() => _c.Toast(UiKeys.ComingSoon, ToastStyle.Reject);
         public void OnInbox() => _c.Toast(UiKeys.ComingSoon, ToastStyle.Reject);
         public void OnSettings() => _c.Toast(UiKeys.ComingSoon, ToastStyle.Reject);
     }
 
-    /// <summary>The six tabs (07 section 2): Hero, Collection, Summon, Dungeons, Quests, Shop.</summary>
-    public enum MainTab { Hero, Collection, Summon, Dungeons, Quests, Shop }
+    /// <summary>The six tabs (07 section 2): Party, Collection, Summon, Dungeons, Quests, Shop.</summary>
+    public enum MainTab { Party, Collection, Summon, Dungeons, Quests, Shop }
 
     /// <summary>
     /// The SCR_MAIN combat band (07 section 4.3; issue #113): stage label, kill counter, WALL badge, enemy HP and boss
-    /// timer, hero placeholder, DPS readout (at most 2 Hz), skill and companion rows, MP bar, the Tap Zap throttle and the
-    /// pooled damage numbers. Every value comes from the per-tick snapshot or the drained events (00 contract 8).
+    /// timer, the two-row party formation (00 decision 110: slots 1-3 in front, 4-5 behind; each with its companion, weapon,
+    /// skill, MP bar and Awakening aura), DPS readout (at most 2 Hz), the Tap Zap throttle and the pooled damage numbers. Every value comes from the per-tick snapshot or the drained events (00 contract 8).
     /// </summary>
     public sealed class CombatVm
     {
@@ -94,10 +94,20 @@ namespace HeroCat.Client.Core
             _c = c;
             var k = c.K;
             Taps = new TapZapThrottle(k.TapZapMaxPerSec);
-            Skills = new Bindable<SlotLook>[k.SkillSlots];
-            for (int i = 0; i < Skills.Length; i++) Skills[i] = new Bindable<SlotLook>();
-            Companions = new Bindable<SlotLook>[k.CompanionSlots];
-            for (int i = 0; i < Companions.Length; i++) Companions[i] = new Bindable<SlotLook>();
+            int n = k.PartySlots;
+            Skills = new Bindable<SlotLook>[n];
+            Companions = new Bindable<SlotLook>[n];
+            WeaponIds = new Bindable<string>[n];
+            AwakenRanks = new Bindable<int>[n];
+            SlotMp = new BarFill[n];
+            for (int i = 0; i < n; i++)
+            {
+                Skills[i] = new Bindable<SlotLook>();
+                Companions[i] = new Bindable<SlotLook>();
+                WeaponIds[i] = new Bindable<string>();
+                AwakenRanks[i] = new Bindable<int>();
+                SlotMp[i] = new BarFill();
+            }
             StageLabel = c.Label();
             Boss = c.Button();
         }
@@ -131,11 +141,16 @@ namespace HeroCat.Client.Core
         public readonly Flag BossTimerBad = new Flag();
 
         public readonly NumberLabel Dps = new NumberLabel();
-        public readonly Bindable<int> AwakenRank = new Bindable<int>();
-        public readonly Bindable<string> WeaponId = new Bindable<string>();
+        /// <summary>Per party slot (slot 1 first): the skill (cooldown ring), the companion (ability cooldown), the equipped
+        /// weapon (an id only; no held sprite is drawn, 00 decision 113), the Awakening aura and the slot's own MP bar (03 section 2.4).</summary>
         public readonly Bindable<SlotLook>[] Skills;
         public readonly Bindable<SlotLook>[] Companions;
-        public readonly BarFill MpFill = new BarFill();
+        public readonly Bindable<string>[] WeaponIds;
+        public readonly Bindable<int>[] AwakenRanks;
+        public readonly BarFill[] SlotMp;
+
+        /// <summary>The formation row of a slot (07 section 4.3, 00 decision 110): 0 front (slots 1-3), 1 back (slots 4-5). Presentation only.</summary>
+        public static int RowOf(int slot) => slot < 3 ? 0 : 1;
 
         /// <summary>The action strip's Boss button: visible only while walled (07 sections 2, 4.3).</summary>
         public readonly ButtonState Boss;
@@ -182,31 +197,41 @@ namespace HeroCat.Client.Core
             if (now - _lastDps >= UiConstants.DpsRefreshSec || double.IsNegativeInfinity(_lastDps))
             {
                 _lastDps = now;
-                Dps.Set(s.HeroDps);
+                Dps.Set(s.PartyDps);
             }
-            AwakenRank.Set(s.AwakenRank);
-            WeaponId.Set(st.Loadout.Weapon);
 
-            var slots = st.Loadout.Skills;
+            var party = st.Party.Slots;
             var cds = st.Combat.SkillCooldowns;
             for (int i = 0; i < Skills.Length; i++)
             {
-                string id = slots != null && i < slots.Length ? slots[i] : null;
+                var x = i < party.Length ? party[i] : null;
+                WeaponIds[i].Set(x?.Weapon);
+                AwakenRanks[i].Set(s.Slot(i).AwakenRank);
+                SlotMp[i].Set(s.Slot(i).Mp, s.MpMax);
+                string id = x?.Skill;
                 if (id == null || !_c.Db.Skills.TryGetValue(id, out var def)) { Skills[i].Set(default); continue; }
                 int cd = cds != null && i < cds.Length ? cds[i] : 0;
                 float pct = def.CooldownTicks > 0 ? (float)Math.Round(Math.Min(1.0, cd / (double)def.CooldownTicks) * 100) / 100f : 0f;
                 st.Skills.Items.TryGetValue(id, out var owned);
                 Skills[i].Set(new SlotLook(id, def.Icon, def.Rarity, owned != null ? _c.Db.DupeLevel(owned.Copies) : 0, pct));
             }
-            for (int i = 0; i < Companions.Length; i++) Companions[i].Set(default);   // companions are MVP (#156)
-            MpFill.Set(s.Mp, s.MpMax);
+            var ccds = st.Combat.CompanionCooldowns;
+            for (int i = 0; i < Companions.Length; i++)
+            {
+                string id = i < party.Length ? party[i]?.Companion : null;
+                if (id == null || !_c.Db.Companions.TryGetValue(id, out var cdef)) { Companions[i].Set(default); continue; }
+                int cd = ccds != null && i < ccds.Length ? ccds[i] : 0;
+                float pct = cdef.CooldownTicks > 0 ? (float)Math.Round(Math.Min(1.0, cd / (double)cdef.CooldownTicks) * 100) / 100f : 0f;
+                st.Companions.Items.TryGetValue(id, out var owned);
+                Companions[i].Set(new SlotLook(id, cdef.Icon, cdef.Rarity, owned != null ? _c.Db.DupeLevel(owned.Copies) : 0, pct));
+            }
 
             // Boss button: "Boss: need ~2.3x" or "Boss: clearable" (green border).
             Boss.Visible.Set(walled);
             Boss.Enabled.Set(walled);
             bool clearable = walled && sim.Query.BossClearable(s.Stage);
             BossClearable.Set(clearable);
-            double dps = s.HeroDps;
+            double dps = s.PartyDps;
             double need = dps > 0 ? k.BossHpMult * sim.Query.EnemyHp(s.Stage) / (dps * k.BossTimeTicks / k.TickHz) : double.PositiveInfinity;
             NeedDpsRatio.Set(walled ? need : 0);
             if (clearable) Boss.Label.Set(UiKeys.MainBossClearable);
@@ -257,7 +282,7 @@ namespace HeroCat.Client.Core
                     if (sp.IsBoss) _c.Cues?.Feel(Haptic.Medium, Sounds.BossEnter);
                     break;
                 case HitLanded h:
-                    DamageNumbers.Add(h.Damage, h.IsCrit, DamageSource.Hero, h.Tick, now);
+                    DamageNumbers.Add(h.Damage, h.IsCrit, DamageSource.Attack, h.Tick, now);
                     if (h.IsCrit) _c.Cues?.Feel(Haptic.None, Sounds.HitCrit);
                     break;
                 case FishMissileHit m:
@@ -370,7 +395,7 @@ namespace HeroCat.Client.Core
         {
             switch (id)
             {
-                case ScreenIds.Hero: return (int)MainTab.Hero;
+                case ScreenIds.Party: return (int)MainTab.Party;
                 case ScreenIds.Weapons:
                 case ScreenIds.Skills:
                 case ScreenIds.Companions: return (int)MainTab.Collection;
@@ -391,7 +416,7 @@ namespace HeroCat.Client.Core
         {
             switch (tab)
             {
-                case MainTab.Hero: _c.Router?.Replace(ScreenIds.Hero); break;
+                case MainTab.Party: _c.Router?.Replace(ScreenIds.Party); break;
                 case MainTab.Collection: _c.Router?.Replace(ScreenIds.Weapons); break;
                 case MainTab.Summon: _c.Router?.Replace(ScreenIds.Summon); break;
                 case MainTab.Dungeons:

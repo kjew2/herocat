@@ -1,6 +1,6 @@
 key,value
-content_version,2026.11.02.4
-min_client_version,0.1.0
+content_version,2026.11.02.10
+min_client_version,0.2.0
 source_revision,"2026-11-01 m0 skeleton, spec 00 seed values (agent)"
 ship_locales,en
-notes,M0 skeleton: values are spec 00 section 6 seeds; S values pending tools/power_curve_model.py and fish_model.py
+notes,"M0 skeleton: values are spec 00 section 6 seeds; S values pending tools/power_curve_model.py and fish_model.py. Party model (00 decisions 109, 110): BASE_ATK per companion, PARTY_SLOTS, MP_REGEN0 0.5 per slot pool; decision 111: COMPANION_ATK_MULT, COMPANION_DPS_PCT +25%, Awakening costs /5, five starter weapons; BANNER_LVL_EXP x0.26 (decision 70 rule)"

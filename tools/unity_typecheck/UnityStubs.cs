@@ -165,7 +165,7 @@ namespace UnityEngine
     public class Font : Object { }
     public enum TextureFormat { RGBA32 }
     public enum TextureWrapMode { Clamp }
-    public enum FilterMode { Bilinear }
+    public enum FilterMode { Point, Bilinear }
     public class Texture2D : Object
     {
         public Texture2D(int w, int h, TextureFormat f, bool mip) { }
@@ -174,7 +174,7 @@ namespace UnityEngine
         public void SetPixels32(Color32[] p) { }
         public void Apply(bool a, bool b) { }
     }
-    public class Sprite : Object { public static Sprite Create(Texture2D t, Rect r, Vector2 p, float ppu) => null; }
+    public class Sprite : Object { public static Sprite Create(Texture2D t, Rect r, Vector2 p, float ppu) => null; public Rect rect => default; }
     public enum CameraClearFlags { SolidColor }
     public class Camera : Behaviour
     {
@@ -235,7 +235,7 @@ namespace UnityEngine.UI
         public bool raycastTarget { get; set; }
         public UnityEngine.RectTransform rectTransform => null;
     }
-    public class Image : Graphic { public UnityEngine.Sprite sprite { get; set; } }
+    public class Image : Graphic { public UnityEngine.Sprite sprite { get; set; } public bool preserveAspect { get; set; } }
     public class Selectable : UnityEngine.Behaviour { public bool interactable { get; set; } public Graphic targetGraphic { get; set; } }
     public class Button : Selectable { public UnityEngine.Events.UnityEvent onClick { get; } = new UnityEngine.Events.UnityEvent(); }
     public class CanvasScaler : UnityEngine.Behaviour
@@ -262,7 +262,7 @@ namespace UnityEngine.UI
 
 namespace TMPro
 {
-    public enum TextAlignmentOptions { MidlineLeft, MidlineRight, Center, Bottom }
+    public enum TextAlignmentOptions { MidlineLeft, MidlineRight, Center, Bottom, BottomRight }
     public enum TextOverflowModes { Ellipsis }
     [Flags] public enum FontStyles { Normal = 0, Bold = 1 }
     public class TMP_FontAsset : UnityEngine.Object
@@ -307,6 +307,24 @@ namespace UnityEditor
     public sealed class MenuItem : System.Attribute { public MenuItem(string itemName) { } }
     [System.Flags] public enum ImportAssetOptions { Default = 0, ForceUpdate = 1, ForceSynchronousImport = 8 }
     public static class AssetDatabase { public static void Refresh(ImportAssetOptions options = ImportAssetOptions.Default) { } }
+    public class AssetImporter : UnityEngine.Object { }
+    public enum TextureImporterType { Default, Sprite }
+    public enum SpriteImportMode { None, Single, Multiple }
+    public enum TextureImporterCompression { Uncompressed, Compressed }
+    public class TextureImporter : AssetImporter
+    {
+        public TextureImporterType textureType { get; set; }
+        public SpriteImportMode spriteImportMode { get; set; }
+        public bool mipmapEnabled { get; set; }
+        public bool alphaIsTransparency { get; set; }
+        public UnityEngine.FilterMode filterMode { get; set; }
+        public TextureImporterCompression textureCompression { get; set; }
+    }
+    public class AssetPostprocessor
+    {
+        public string assetPath => "";
+        public AssetImporter assetImporter => null;
+    }
 }
 
 namespace UnityEditor.Build.Reporting

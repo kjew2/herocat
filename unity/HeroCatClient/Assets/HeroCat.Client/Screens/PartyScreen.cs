@@ -7,19 +7,19 @@ using UnityEngine.UI;
 
 namespace HeroCat.Client.Screens
 {
-    /// <summary>SCR_HERO (07 section 4.4; issue #115).</summary>
-    public sealed class HeroScreen : FullScreenView
+    /// <summary>SCR_PARTY (07 section 4.4; issue #115).</summary>
+    public sealed class PartyScreen : FullScreenView
     {
-        protected override string TitleKey => UiKeys.HeroTitle;
+        protected override string TitleKey => UiKeys.PartyTitle;
 
         readonly List<Image> _rowFlash = new List<Image>();
         readonly List<int> _rowSerial = new List<int>();
 
         protected override void BuildContent()
         {
-            var h = Vm.Hero;
+            var h = Vm.Party;
             var level = Line("Level", 16, UiKit.Title, Palette.Text, 24, 300, 64);
-            h.Level.Bind(new ActionTextSink(t => level.text = Vm.Localizer.Format(UiKeys.HeroLevel, t)));
+            h.Level.Bind(new ActionTextSink(t => level.text = Vm.Localizer.Format(UiKeys.PartyLevel, t)));
             var bar = UiKit.Bar("Exp", Content, Palette.Accent, out var fill);
             UiKit.Place(bar, 340, 32, 420, 32);
             h.ExpFill.Bind(fill.Sink());
@@ -29,27 +29,29 @@ namespace HeroCat.Client.Screens
             var dps = Line("Dps", 88, UiKit.Body, Palette.Text, 24, 600, 56);
             h.Dps.Bind(new ActionTextSink(t => dps.text = Vm.Localizer.Format(UiKeys.MainDps, t)));
 
-            // Loadout: weapon, 6 skills, 4 companions; tap -> SCR_ITEM_DETAIL, empty -> the collection screen.
-            Line("LoadoutTitle", 152, UiKit.Caption, Palette.Muted).text = Vm.Localizer.Text(UiKeys.HeroLoadout);
-            for (int i = 0; i < h.Loadout.Length; i++)
+            // Five slot cards (07 section 4.4, 00 decision 109): companion, weapon and skill open the collection screen in
+            // slot mode for that slot; Awaken N sends Awaken(slot).
+            Line("LoadoutTitle", 152, UiKit.Caption, Palette.Muted).text = Vm.Localizer.Text(UiKeys.PartyLoadout);
+            for (int i = 0; i < h.Slots.Length; i++)
             {
                 int idx = i;
-                var b = Btn("Slot" + i, 24 + i * 94, 200, 88, 88, () => Vm.Hero.OnLoadout(idx, Vm.ItemDetail), Palette.PanelRaised, UiKit.Micro);
-                var img = b.GetComponent<Image>();
-                var label = UiKit.LabelOf(b);
-                h.Loadout[i].Bind(new ActionSink<SlotLook>(s =>
-                {
-                    img.color = s.IsEmpty ? UiKit.C(Palette.PanelRaised) : UiKit.Rarity(s.Rarity);
-                    label.text = s.IsEmpty ? "--" : Palette.ShapeGlyph(s.Rarity) + s.Level;
-                }));
+                var slot = h.Slots[i];
+                float x = 24 + i * 208;
+                SlotButton("Comp" + i, x, 200, slot.Companion, () => Vm.Party.OnSlotItem(idx, Banner.COMPANION));
+                SlotButton("Weapon" + i, x, 296, slot.Weapon, () => Vm.Party.OnSlotItem(idx, Banner.WEAPON));
+                SlotButton("Skill" + i, x + 96, 296, slot.Skill, () => Vm.Party.OnSlotItem(idx, Banner.SKILL));
+                var aw = Btn("Awaken" + i, x, 392, 184, 56, () => Vm.Party.OnAwaken(idx), Palette.PanelRaised, UiKit.Micro);
+                Anchor(slot.AwakenAnchor, aw.GetComponent<RectTransform>());
+                slot.AwakenRank.Bind(new ActionTextSink(t => UiKit.LabelOf(aw).text = "Awaken " + t));   // placeholder copy (07 section 15.1)
+                slot.Awaken.Visible.Bind(new ActionFlagSink(on => aw.gameObject.SetActive(on)));
             }
 
-            Line("TrainingTitle", 316, UiKit.Title, Palette.Text, 24, 400, 64).text = Vm.Localizer.Text(UiKeys.HeroTraining);
+            Line("TrainingTitle", 316, UiKit.Title, Palette.Text, 24, 400, 64).text = Vm.Localizer.Text(UiKeys.PartyTraining);
             var stepImgs = new Image[h.StepCount];
             for (int i = 0; i < h.StepCount; i++)
             {
                 int idx = i;
-                var b = Btn("Step" + i, 480 + i * 144, 304, 136, 112, () => Vm.Hero.SelectStep(idx), Palette.PanelRaised, UiKit.Caption);
+                var b = Btn("Step" + i, 480 + i * 144, 304, 136, 112, () => Vm.Party.SelectStep(idx), Palette.PanelRaised, UiKit.Caption);
                 h.StepLabels[i].Bind(UiKit.LabelOf(b).Sink());
                 stepImgs[i] = b.GetComponent<Image>();
             }
@@ -71,7 +73,7 @@ namespace HeroCat.Client.Screens
                 r.Name.Bind(name.Sink());
                 var lv = UiKit.Text("Level", flash.transform, UiKit.Body, Palette.Muted);
                 UiKit.Place(lv.rectTransform, 300, 0, 140, 128);
-                r.Level.Bind(new ActionTextSink(t => lv.text = Vm.Localizer.Format(UiKeys.HeroLevel, t)));
+                r.Level.Bind(new ActionTextSink(t => lv.text = Vm.Localizer.Format(UiKeys.PartyLevel, t)));
                 var eff = UiKit.Text("Effect", flash.transform, UiKit.Body, Palette.Text);
                 UiKit.Place(eff.rectTransform, 440, 0, 180, 128);
                 r.Effect.Bind(eff.Sink());
@@ -79,7 +81,7 @@ namespace HeroCat.Client.Screens
                 UiKit.Place(cost.rectTransform, 600, 0, 140, 128);
                 r.Cost.Bind(cost.Sink());
                 r.AtCap.Bind(new ActionFlagSink(cap => cost.gameObject.SetActive(!cap)));
-                var buy = UiKit.Button("Buy", flash.transform, () => Vm.Hero.OnTrain(r.Stat), 0x37474F, UiKit.Caption);
+                var buy = UiKit.Button("Buy", flash.transform, () => Vm.Party.OnTrain(r.Stat), 0x37474F, UiKit.Caption);
                 var brt = buy.GetComponent<RectTransform>();
                 UiKit.Place(brt, 752, 8, 288, 112);
                 var reason = UiKit.Text("Reason", brt, UiKit.Micro, Palette.Muted, TextAlignmentOptions.Bottom);
@@ -93,13 +95,25 @@ namespace HeroCat.Client.Screens
 
         public override void Tick(double now)
         {
-            var rows = Vm.Hero.Rows;
+            var rows = Vm.Party.Rows;
             for (int i = 0; i < rows.Count && i < _rowFlash.Count; i++)
                 if (rows[i].FlashSerial != _rowSerial[i])
                 {
                     _rowSerial[i] = rows[i].FlashSerial;
                     Ui.Tweens.Pulse(_rowFlash[i].rectTransform, now, 0.03f, 0.25);   // StatTrained row flash
                 }
+        }
+
+        void SlotButton(string name, float x, float y, Bindable<SlotLook> look, UnityEngine.Events.UnityAction onTap)
+        {
+            var b = Btn(name, x, y, 88, 88, onTap, Palette.PanelRaised, UiKit.Micro);
+            var img = b.GetComponent<Image>();
+            var label = UiKit.LabelOf(b);
+            look.Bind(new ActionSink<SlotLook>(s =>
+            {
+                img.color = s.IsEmpty ? UiKit.C(Palette.PanelRaised) : UiKit.Rarity(s.Rarity);
+                label.text = s.IsEmpty ? "--" : Palette.ShapeGlyph(s.Rarity) + s.Level;
+            }));
         }
     }
 }

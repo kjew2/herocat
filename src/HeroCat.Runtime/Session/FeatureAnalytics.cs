@@ -203,7 +203,7 @@ namespace HeroCat.Runtime.Session
         {
             int i = e.Rank - 1;
             long cost = i >= 0 && i < _db.Awakening.Count ? _db.Awakening[i].RockCandyCost : 0;
-            Track(new AnalyticsEvents.Awakened(e.Rank, cost, _rockCandyAfterAwaken));
+            Track(new AnalyticsEvents.Awakened(e.Slot, e.Rank, cost, _rockCandyAfterAwaken));   // the slot's rank (03 section 11)
         }
 
         /// <summary>04 section 13's <c>limit_break</c>: the kind and rarity come from content (ids are table-prefixed, 09).</summary>

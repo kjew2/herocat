@@ -73,17 +73,17 @@
    },
    {
     "properties": {
-     "title": "hero_levels"
-    }
-   },
-   {
-    "properties": {
      "title": "localization"
     }
    },
    {
     "properties": {
      "title": "meta"
+    }
+   },
+   {
+    "properties": {
+     "title": "party_levels"
     }
    },
    {
@@ -208,7 +208,7 @@
     ]
    },
    {
-    "range": "awakening!A1:I6",
+    "range": "awakening!A1:H6",
     "majorDimension": "ROWS",
     "values": [
      [
@@ -216,7 +216,6 @@
       "stage_gate",
       "rock_candy_cost",
       "mult",
-      "companion_slots_after",
       "rune_slots_after",
       "tier",
       "name_key",
@@ -227,7 +226,6 @@
       "50",
       "100",
       "1.5",
-      "2",
       "0",
       "MVP",
       "awakening.rank_1.name",
@@ -238,7 +236,6 @@
       "150",
       "300",
       "1.5",
-      "3",
       "0",
       "MVP",
       "awakening.rank_2.name",
@@ -249,7 +246,6 @@
       "300",
       "800",
       "1.5",
-      "4",
       "0",
       "MVP",
       "awakening.rank_3.name",
@@ -260,7 +256,6 @@
       "500",
       "2000",
       "1.5",
-      "4",
       "3",
       "MVP",
       "awakening.rank_4.name",
@@ -271,7 +266,6 @@
       "800",
       "5000",
       "1.5",
-      "4",
       "6",
       "MVP",
       "awakening.rank_5.name",
@@ -540,7 +534,7 @@
     ]
    },
    {
-    "range": "constants!A1:D44",
+    "range": "constants!A1:D43",
     "majorDimension": "ROWS",
     "values": [
      [
@@ -558,7 +552,7 @@
      [
       "BASE_ATK",
       "double",
-      "10",
+      "2",
       "I"
      ],
      [
@@ -670,16 +664,10 @@
       "S"
      ],
      [
-      "SKILL_SLOTS",
+      "PARTY_SLOTS",
       "int",
-      "6",
+      "1",
       "I"
-     ],
-     [
-      "COMPANION_SLOTS",
-      "int",
-      "4",
-      "S"
      ],
      [
       "RUNE_SLOTS",
@@ -750,7 +738,7 @@
      [
       "MP_REGEN0",
       "double",
-      "2.0",
+      "0.5",
       "S"
      ],
      [
@@ -856,19 +844,13 @@
       "dungeon_fish",
       "1",
       "FISH_COIN",
-      "50",
-      "",
-      "",
-      ""
+      "50"
      ],
      [
       "dungeon_fish",
       "2",
       "FISH_COIN",
-      "100",
-      "",
-      "",
-      ""
+      "100"
      ]
     ]
    },
@@ -1181,28 +1163,6 @@
       "spr_fish_08",
       "#EF5350",
       "fish.20.name"
-     ]
-    ]
-   },
-   {
-    "range": "hero_levels!A1:F2",
-    "majorDimension": "ROWS",
-    "values": [
-     [
-      "id",
-      "exp0",
-      "exp_g",
-      "atk_pct_per_level",
-      "mult_per_level",
-      "level_cap"
-     ],
-     [
-      "default",
-      "100",
-      "1.08",
-      "",
-      "1.02",
-      "9999"
      ]
     ]
    },
@@ -1954,6 +1914,28 @@
     ]
    },
    {
+    "range": "party_levels!A1:F2",
+    "majorDimension": "ROWS",
+    "values": [
+     [
+      "id",
+      "exp0",
+      "exp_g",
+      "atk_pct_per_level",
+      "mult_per_level",
+      "level_cap"
+     ],
+     [
+      "default",
+      "100",
+      "1.08",
+      "",
+      "1.02",
+      "9999"
+     ]
+    ]
+   },
+   {
     "range": "progress_targets!A1:C6",
     "majorDimension": "ROWS",
     "values": [
@@ -2110,7 +2092,7 @@
     ]
    },
    {
-    "range": "rarities!A1:M6",
+    "range": "rarities!A1:N6",
     "majorDimension": "ROWS",
     "values": [
      [
@@ -2122,6 +2104,7 @@
       "weapon_passive_pct",
       "skill_dps_pct",
       "companion_dps_pct",
+      "companion_atk_mult",
       "rune_stat_pct",
       "limit_break_cost",
       "dupe_overflow_rock_candy",
@@ -2136,7 +2119,8 @@
       "20.0",
       "1.0",
       "10.0",
-      "16.0",
+      "20.0",
+      "1.0",
       "2.0",
       "10",
       "1",
@@ -2151,7 +2135,8 @@
       "50.0",
       "2.0",
       "20.0",
-      "32.0",
+      "40.0",
+      "1.1",
       "4.0",
       "20",
       "2",
@@ -2166,7 +2151,8 @@
       "120.0",
       "4.0",
       "40.0",
-      "64.0",
+      "80.0",
+      "1.25",
       "8.0",
       "40",
       "5",
@@ -2181,7 +2167,8 @@
       "300.0",
       "8.0",
       "80.0",
-      "128.0",
+      "160.0",
+      "1.5",
       "16.0",
       "80",
       "20",
@@ -2196,7 +2183,8 @@
       "700.0",
       "16.0",
       "160.0",
-      "256.0",
+      "320.0",
+      "2.0",
       "32.0",
       "150",
       "50",
