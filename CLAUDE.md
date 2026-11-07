@@ -45,6 +45,7 @@ This file is how lessons reach the next agent. When the user corrects you on som
 
 ## Lessons
 
+- The project is pivoting from HeroCat to an original-world gacha game on *Pick Me Up!* mechanics (epic #353, `specs/00` decisions 121-122). Never put that work's names, characters, story, art or text in the repo, and check #353 before starting HeroCat-only feature work.
 - The product is a Unity 6 app for iOS and Android and the only client; there is no web build (`specs/00` decisions 31-32). Keep the sim Unity-safe (netstandard2.1, C# 9).
 - Code names are `HeroCat.*`; "Whisker Hero" is only the product's working title (`specs/00` decision 30).
 - Unity cannot run in cloud sessions. Only the client's engine-free `unity/HeroCatClient/Assets/HeroCat.Client/Core/` is compiled and tested (inside `HeroCat.Runtime.Tests`); `Boot/`, `Screens/` and `Editor/ContentPreBuild.cs` are only type-checked against Unity API stubs by `tools/unity_typecheck`, which proves nothing about behaviour in Unity. Say so when you change them.

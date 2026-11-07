@@ -1,5 +1,7 @@
 # Whisker Hero (working title) - design specs
 
+> **Pivot in progress:** this project is being rewritten in place as a new gacha game with its own world, built on mechanics from the *Pick Me Up!* webtoon's in-story game (epic #353, `specs/00` decisions 121-122). The specs below still describe HeroCat until they are replaced.
+
 Mobile idle RPG in the *Cat Hero: Idle RPG* mould. A party of five companions, each with its own weapon, auto-fights through stages on the top half of a portrait screen while the player merges fish on the bottom half; kills, fish, dungeons and summons feed a dozen parallel upgrade systems, and the game is deciding where to spend next. Deterministic pure-C# simulation shared by the Unity client, the ASP.NET Core server and a headless bot harness; every number is content data tuned from a spreadsheet and verified by bots before a human sees it.
 
 Start with `specs/00-overview.md`. It fixes the tech stack, the authority split, the canonical names, every constant with its inherited/seed tag, the power formula, the cross-spec contracts and the decisions log. Where another spec disagrees with it, 00 wins.
