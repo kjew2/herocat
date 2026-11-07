@@ -2,7 +2,7 @@
 
 Usage: python3 tools/art/splash_gen.py lucy astraea [--n 2] [--start 1] [--quality medium] [--style house|e]
 Needs OPENAI_API_KEY and curl. Writes art/exploration/splash_batch/<name>_<k>.png and appends to prompts.txt there.
-A character whose section names a reference image is sent to the edits endpoint with that image.
+Generation is text only (splash-prompts.md rules). --style-ref is kept for experiments.
 """
 import argparse, base64, concurrent.futures as cf, json, os, re, subprocess, sys, tempfile
 from datetime import date
