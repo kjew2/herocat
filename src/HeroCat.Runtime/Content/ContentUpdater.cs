@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using HeroCat.Runtime.Errors;
 using HeroCat.Runtime.Services;
 using HeroCat.Sim.Content;
 using HeroCat.Sim.Content.Dto;
@@ -17,8 +18,11 @@ namespace HeroCat.Runtime.Content
     public interface IContentStaging
     {
         /// <summary>
-        /// Downloads <paramref name="bundle"/> into a staging area (not yet visible to cold boot) and returns it. Throws on a
-        /// network failure or a manifest that does not match <c>bundle.Sha256</c>. Runs on the thread pool.
+        /// Downloads <paramref name="bundle"/> into a staging area (not yet visible to cold boot) and returns it. Throws a
+        /// <see cref="ContentBuildException"/> for content that does not verify (a manifest that does not match
+        /// <c>bundle.Sha256</c>, a bad table hash) and a retryable <see cref="ServiceException"/> for a fetch that failed
+        /// (offline, timeout, 5xx after the transport's retries): <see cref="ContentUpdater"/> rules out the version on the
+        /// first and retries it at the next config on the second (issue #316). Runs on the thread pool.
         /// </summary>
         Task<IContentSource> DownloadAsync(ContentPointer bundle, CancellationToken ct);
 
@@ -81,7 +85,10 @@ namespace HeroCat.Runtime.Content
     /// offered <c>content.version</c> with the running content (step 2) and the client gate (step 3), then on the thread
     /// pool downloads through <see cref="IContentStaging"/>, verifies the manifest and every table hash and runs
     /// <see cref="ContentDb.Build"/> (09's validator rules, step 5). A failure discards the staged copy, so the next boot
-    /// uses what it used before. A good bundle is marked pending for the next cold boot. The running sim's
+    /// uses what it used before, and the version is not tried again this session. A transient fetch failure (a retryable
+    /// <see cref="ServiceException"/>, or cancellation) is not a verdict on the bundle: the staged copy is discarded, the
+    /// previous state comes back, nothing is reported, and the next landed config tries the version again (issue #316).
+    /// A good bundle is marked pending for the next cold boot. The running sim's
     /// <see cref="ContentDb"/> is never replaced (01 AC 11): the new build is thrown away after validation.
     /// <para>Hot apply (00 contract 3): only a bundle whose manifest sets <c>hot_apply</c> AND whose tables differ from the
     /// running set's only in <see cref="HotApplyTables"/> becomes <see cref="ContentUpdateState.HotReady"/>; anything else
@@ -105,6 +112,8 @@ namespace HeroCat.Runtime.Content
         readonly HashSet<string> _failed = new HashSet<string>(StringComparer.Ordinal);
         ContentUpdateState _state;
         string _version;
+        ContentUpdateState _prevState;   // restored when a staging attempt fails transiently (issue #316)
+        string _prevVersion;
         HotContentSet _hot;
         Task _task = Task.CompletedTask;
         IReadOnlyList<ContentError> _errors = Array.Empty<ContentError>();
@@ -158,7 +167,8 @@ namespace HeroCat.Runtime.Content
 
         /// <summary>
         /// A landed config (boot, every refresh). Starts staging on the thread pool when the offered bundle is newer than the
-        /// running one, this client may load it, and it is not already staged, pending or failed this session. Returns the
+        /// running one, this client may load it, and it is not already staged, pending or ruled out this session (a transient
+        /// fetch failure does not rule it out). Returns the
         /// staging task (completed when nothing starts); it never faults.
         /// </summary>
         public Task Check(ClientConfig config, CancellationToken ct = default)
@@ -183,6 +193,8 @@ namespace HeroCat.Runtime.Content
                     }
                     return Task.CompletedTask;
                 }
+                _prevState = _state;
+                _prevVersion = _version;
                 _state = ContentUpdateState.Staging;
                 _version = p.Version;
                 _task = Task.Run(() => StageAsync(p, ct));
@@ -234,9 +246,33 @@ namespace HeroCat.Runtime.Content
             {
                 Fail(p.Version, e.Errors);
             }
+            catch (Exception e) when (IsTransient(e, ct))
+            {
+                Retry(p.Version);
+            }
             catch (Exception e)
             {
                 Fail(p.Version, new[] { new ContentError("E900", p.Url ?? p.Version, e.GetType().Name + ": " + e.Message) });
+            }
+        }
+
+        /// <summary>
+        /// Issue #316: a fetch that failed on the network (offline, timeout, 5xx once the ApiClient's 01 section 5.2
+        /// retries are spent), or a cancelled one, says nothing about the bundle. Anything else (content errors, a 4xx
+        /// such as a missing CDN file, a disk failure) rules the version out.
+        /// </summary>
+        static bool IsTransient(Exception e, CancellationToken ct) =>
+            e is ServiceException { Retryable: true } || (e is OperationCanceledException && ct.IsCancellationRequested);
+
+        /// <summary>Drops the partial download and puts the state back; the next landed config stages the version again.</summary>
+        void Retry(string version)
+        {
+            try { _staging.Discard(version); }
+            catch (Exception) { /* as in Fail */ }
+            lock (_lock)
+            {
+                _state = _prevState;
+                _version = _prevVersion;
             }
         }
 
@@ -293,6 +329,10 @@ namespace HeroCat.Runtime.Content
         public Dictionary<string, IContentSource> Cdn { get; } = new Dictionary<string, IContentSource>(StringComparer.Ordinal);
 
         public int Downloads { get; private set; }
+
+        /// <summary>While set, every download throws it (a <see cref="ServiceException"/> simulates the network).</summary>
+        public Exception Fault { get; set; }
+
         public List<string> Discarded { get; } = new List<string>();
 
         public IReadOnlyList<IContentSource> Cached
@@ -305,6 +345,7 @@ namespace HeroCat.Runtime.Content
             lock (_lock)
             {
                 Downloads++;
+                if (Fault != null) return Task.FromException<IContentSource>(Fault);
                 if (!Cdn.TryGetValue(bundle.Version, out var src))
                     return Task.FromException<IContentSource>(new System.IO.IOException("fake CDN: no bundle " + bundle.Version));
                 _staged[bundle.Version] = src;
