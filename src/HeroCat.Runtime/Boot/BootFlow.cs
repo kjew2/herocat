@@ -22,7 +22,7 @@ namespace HeroCat.Runtime.Boot
     public sealed class BootOptions
     {
         /// <summary>
-        /// Content sources in priority order (step 1): a verified cached newer bundle first (TODO(#212)), then the bundled
+        /// Content sources in priority order (step 1): a verified cached newer bundle first (ContentCache.LoadPreferred, which falls back to the bundle itself), then the bundled
         /// one. Each builds a ContentDb or throws; the first that succeeds wins. All failing is Fatal CONTENT_CORRUPT.
         /// </summary>
         public IReadOnlyList<Func<ContentDb>> Content { get; set; }
@@ -190,6 +190,15 @@ namespace HeroCat.Runtime.Boot
             if (r.ContentUpdates != null)
             {
                 // A newer bundle downloads in the background and applies at the next cold boot (8.12); never this ContentDb.
+                // 09 section 10.3 step 5: a ruled-out bundle is one content_update_failed, tracked on the main thread through
+                // the runner's dispatcher (issue #298); a driver without one (tests, tools) tracks where it lands.
+                var dispatcher = o.Runner?.Dispatcher;
+                r.ContentUpdates.Failed += (version, e) =>
+                {
+                    var ev = new AnalyticsEvents.ContentUpdateFailed(version, e.Code, e.Location);
+                    if (dispatcher != null) dispatcher.Post(() => analytics.Track(ev));
+                    else analytics.Track(ev);
+                };
                 r.ContentUpdates.Check(r.Config);
                 if (r.ConfigRefresher != null) r.ConfigRefresher.Landed += c => r.ContentUpdates.Check(c);
             }

@@ -133,6 +133,19 @@ namespace HeroCat.Runtime.Account
 
         public string PendingGuestRequestId { get; init; }
 
+        /// <summary>
+        /// <see cref="DeviceKey.KeyId"/> of the device key the server holds for this session's player (registered by
+        /// <c>POST /auth/guest</c> or <c>POST /devices</c>, 02 section 10.1); null: not known to be registered.
+        /// </summary>
+        public string RegisteredKeyId { get; init; }
+
+        /// <summary>
+        /// The account has a linked platform provider (<c>linked</c> in <c>tokens.json</c>; absent: false). The guest call
+        /// stores false; TODO(#196): <c>/auth/link</c> and <c>/auth/link-login</c> success store true. Decides whether a
+        /// logout needs the server's confirmation (00 decision 119).
+        /// </summary>
+        public bool Linked { get; init; }
+
         public bool HasSession => !string.IsNullOrEmpty(RefreshToken);
     }
 
@@ -176,6 +189,8 @@ namespace HeroCat.Runtime.Account
                     RefreshToken = (string)o["refreshToken"],
                     AccessExpiresAt = o["accessExpiresAt"]?.Type == JTokenType.Integer ? (long)o["accessExpiresAt"] : 0,
                     PendingGuestRequestId = (string)o["pendingGuestRequestId"],
+                    RegisteredKeyId = (string)o["registeredKeyId"],
+                    Linked = o["linked"]?.Type == JTokenType.Boolean && (bool)o["linked"],
                 };
             }
             catch (Exception e) when (e is JsonException || e is FormatException || e is InvalidCastException || e is ArgumentException)
@@ -195,6 +210,8 @@ namespace HeroCat.Runtime.Account
                 ["refreshToken"] = t.RefreshToken,
                 ["accessExpiresAt"] = t.AccessExpiresAt,
                 ["pendingGuestRequestId"] = t.PendingGuestRequestId,
+                ["registeredKeyId"] = t.RegisteredKeyId,
+                ["linked"] = t.Linked,
             };
             _store.Set(Key, Utf8.GetBytes(o.ToString(Formatting.None)));
         }
@@ -203,13 +220,23 @@ namespace HeroCat.Runtime.Account
     }
 
     /// <summary>
-    /// The save HMAC key (02 sections 8.4 and 10): <see cref="KeyBytes"/> random bytes, created at first launch and kept
-    /// in secure storage as <c>device_key</c>. <c>POST /auth/guest</c> registers it.
+    /// The save HMAC key (02 sections 8.4 and 10.1): <see cref="KeyBytes"/> (<c>HMAC_KEY_BYTES</c>) random bytes from a
+    /// CSPRNG, created at first launch and kept in secure storage as <c>device_key</c>. <c>POST /auth/guest</c> registers
+    /// it; the AuthClient's <c>POST /devices</c> registers a key the server does not hold yet. The key never goes to logs
+    /// or analytics; <see cref="KeyId"/> is what may be stored or shown outside secure storage.
     /// </summary>
     public static class DeviceKey
     {
         public const string Key = "device_key";
         public const int KeyBytes = 32;
+
+        /// <summary><see cref="KeyBytes"/> fresh bytes from a CSPRNG. Not stored; see <see cref="LoadOrCreate"/>.</summary>
+        public static byte[] Create()
+        {
+            var k = new byte[KeyBytes];
+            using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create()) rng.GetBytes(k);
+            return k;
+        }
 
         /// <summary>The stored key, or a fresh one stored now. A stored value of the wrong length is replaced.</summary>
         public static byte[] LoadOrCreate(ISecureStore store)
@@ -217,11 +244,24 @@ namespace HeroCat.Runtime.Account
             if (store == null) throw new ArgumentNullException(nameof(store));
             var k = store.Get(Key);
             if (k != null && k.Length == KeyBytes) return k;
-            k = new byte[KeyBytes];
-            using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create()) rng.GetBytes(k);
+            k = Create();
             try { store.Set(Key, k); }
-            catch (IOException) { }   // usable for this session; the next launch makes another (and re-registers it)
+            catch (IOException) { }   // usable for this session; the next launch makes another (and POST /devices registers it)
             return k;
+        }
+
+        /// <summary>
+        /// The key's id (02 section 10.1): the first 16 lowercase hex digits of SHA-256(key). Names which key is registered
+        /// without revealing it; not sent to the server, which compares the key bytes themselves (08 section 2.2).
+        /// </summary>
+        public static string KeyId(byte[] key)
+        {
+            if (key == null) throw new ArgumentNullException(nameof(key));
+            byte[] h;
+            using (var sha = System.Security.Cryptography.SHA256.Create()) h = sha.ComputeHash(key);
+            var sb = new StringBuilder(16);
+            for (int i = 0; i < 8; i++) sb.Append(h[i].ToString("x2", System.Globalization.CultureInfo.InvariantCulture));
+            return sb.ToString();
         }
     }
 }

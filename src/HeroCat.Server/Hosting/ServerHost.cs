@@ -14,6 +14,7 @@ using HeroCat.Server.Infrastructure.Db.Migrations;
 using HeroCat.Server.Infrastructure.Idempotency;
 using HeroCat.Server.Infrastructure.Redis;
 using HeroCat.Server.Infrastructure.Secrets;
+using HeroCat.Server.Observability;
 using HeroCat.Server.Pipeline;
 using HeroCat.Server.Worker;
 using Microsoft.Extensions.Options;
@@ -49,6 +50,8 @@ public static class ServerHost
                 return 0;
             case ServerRole.Migrate:
                 return await MigrateAsync(rest).ConfigureAwait(false);
+            case ServerRole.ExportOdds:
+                return await ExportOddsAsync(rest).ConfigureAwait(false);
             default:
                 throw new ArgumentOutOfRangeException(nameof(role));
         }
@@ -58,7 +61,10 @@ public static class ServerHost
     public static WebApplication BuildApi(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
+        // The key secrets (specs/08 section 9.3, issue #272): only the api holds keys.
+        builder.Configuration.AddHeroCatSecrets();
         AddCore(builder.Services, builder.Configuration, ServerRole.Api);
+        builder.Services.AddHostedService<SigningKeyRotationService>();
         builder.Services.AddControllers();
         builder.Services
             .AddAuthFeature()
@@ -72,6 +78,7 @@ public static class ServerHost
             .AddAdminFeature()
             .AddAnalyticsFeature();
         builder.Services.AddRequestPipeline();
+        builder.AddHeroCatTelemetry(ServerRole.Api);
 
         var app = builder.Build();
         app.UseRequestPipeline();
@@ -83,11 +90,13 @@ public static class ServerHost
     public static IHost BuildWorker(string[] args)
     {
         var builder = Host.CreateApplicationBuilder(args);
+        builder.AddHeroCatTelemetry(ServerRole.Worker);
         AddCore(builder.Services, builder.Configuration, ServerRole.Worker);
         builder.Services.AddHostedService<WorkerService>();
         builder.Services.AddHostedService<IdempotencyPurgeService>();
         builder.Services.AddHostedService<InboxPurgeService>();
         builder.Services.AddHostedService<PartitionMaintenanceService>();
+        builder.Services.AddRateDriftJob();
         return builder.Build();
     }
 
@@ -124,6 +133,11 @@ public static class ServerHost
                 : ActivatorUtilities.CreateInstance<RedisDistributedLock>(sp));
         services.AddSingleton<SummonLock>();
         // Built on first use, so a process without keys still starts and serves /health (specs/08 section 9.3).
+        services.AddSingleton<IDataKeyUnwrapper>(sp =>
+        {
+            var o = sp.GetRequiredService<IOptions<ServerOptions>>().Value.Secrets;
+            return o.Provider == SecretProviders.Aws ? new AwsKmsDataKeyUnwrapper(o) : new NoDataKeyUnwrapper();
+        });
         services.AddSingleton(sp => new Lazy<ServerKeyRing>(() => ServerKeyRing.Create(sp)));
         services.AddSingleton(sp => sp.GetRequiredService<Lazy<ServerKeyRing>>().Value);
         services.AddSingleton(sp => new SecretProtector(sp.GetRequiredService<Lazy<ServerKeyRing>>()));
@@ -134,6 +148,7 @@ public static class ServerHost
     static async Task<int> MigrateAsync(string[] args)
     {
         var builder = Host.CreateApplicationBuilder(args);
+        builder.AddHeroCatTelemetry(ServerRole.Migrate);
         AddCore(builder.Services, builder.Configuration, ServerRole.Migrate);
         using var host = builder.Build();
         try
@@ -146,6 +161,31 @@ public static class ServerHost
             Console.Error.WriteLine("migrate: " + e.Message);
             return 1;
         }
+    }
+
+    /// <summary><c>--export-odds [--out PATH]</c>: the odds export of the newest held content set, to PATH or stdout.</summary>
+    static async Task<int> ExportOddsAsync(string[] args)
+    {
+        string? outPath;
+        string[] rest;
+        try { (outPath, rest) = OddsExport.ParseArgs(args); }
+        catch (ArgumentException e)
+        {
+            Console.Error.WriteLine("error: " + e.Message);
+            return 2;
+        }
+        var builder = Host.CreateApplicationBuilder(rest);
+        builder.Services.AddSummonContent();
+        using var host = builder.Build();
+        string text = OddsExport.Serialize(OddsExport.Build(host.Services.GetRequiredService<IContentSets>().Active));
+        if (outPath == null) await Console.Out.WriteAsync(text).ConfigureAwait(false);
+        else
+        {
+            string? dir = Path.GetDirectoryName(Path.GetFullPath(outPath));
+            if (dir != null) Directory.CreateDirectory(dir);
+            await File.WriteAllTextAsync(outPath, text).ConfigureAwait(false);
+        }
+        return 0;
     }
 
     public static async Task<IReadOnlyList<MigrationScript>> ApplyMigrationsAsync(IServiceProvider services, CancellationToken ct)

@@ -95,11 +95,11 @@ namespace HeroCat.Sim.Commands
     /// <summary>ApplyInboxGrant's reject reasons (issue #176).</summary>
     public static class InboxRejectReasons
     {
-        /// <summary>Malformed payload: no id, null lines, a non-inbox reason, an unknown currency or a non-positive amount.</summary>
+        /// <summary>
+        /// Malformed payload: no id, null lines, a non-inbox reason, an unknown currency, an unknown item id, or an amount
+        /// outside the line's range.
+        /// </summary>
         public const string INBOX_BAD_GRANT = "INBOX_BAD_GRANT";
-
-        /// <summary>The payload carries an item line, which the sim cannot apply yet (TODO(#271)).</summary>
-        public const string INBOX_ITEM_GRANT_UNSUPPORTED = "INBOX_ITEM_GRANT_UNSUPPORTED";
 
         /// <summary>The inbox item id is already in Inbox.ClaimedIds: a replay or a reconciled double claim.</summary>
         public const string INBOX_ALREADY_APPLIED = "INBOX_ALREADY_APPLIED";
@@ -127,6 +127,6 @@ namespace HeroCat.Sim.Commands
     /// <summary>Reason in {IAP, MAIL, REFUND, ADMIN}.</summary>
     public sealed record InboxGrantPayload(string InboxItemId, GrantLine[] Lines, CurrencyReason Reason);
 
-    /// <summary>08 section 3.2's grant line. Kind: "currency" (Id is a Currency name) | "item" (TODO(#271)).</summary>
+    /// <summary>08 section 3.2's grant line. Kind: "currency" (Id is a Currency name) | "item" (Id a weapon, skill or companion id, Amount the copies).</summary>
     public sealed record GrantLine(string Kind, string Id, long Amount);
 }

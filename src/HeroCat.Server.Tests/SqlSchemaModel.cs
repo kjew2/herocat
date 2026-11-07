@@ -18,13 +18,16 @@ sealed class SqlTable
     public string Name { get; }
     public List<SqlColumn> Columns { get; } = new();
     public string? PartitionBy { get; set; }
+    /// <summary>The primary key's comma-joined column list, or null when the table has none.</summary>
+    public string? PrimaryKey { get; set; }
 }
 
 /// <summary>
 /// A small reader for the DDL subset the schema uses (specs/02 section 12 and server/db/migrations): create table,
-/// alter table ... add column, create [unique] index, create materialized view, create function and create trigger.
-/// Anything else that changes the schema (drop, other alters, ...) throws, so a new kind of statement extends this reader
-/// instead of being ignored.
+/// alter table ... add column / drop constraint {table}_pkey / add primary key, create [unique] index, drop index (by
+/// PostgreSQL's default index name), create and drop materialized view, create [or replace] function and create trigger.
+/// Anything else that changes the schema (drop table, other alters, ...) throws, so a new kind of statement extends this
+/// reader instead of being ignored.
 /// It exists so tests can hold the migration set to the spec, statically and against a live database.
 /// </summary>
 sealed class SqlSchemaModel
@@ -138,23 +141,38 @@ sealed class SqlSchemaModel
             int open = x.Length - 1;
             int close = Matching(low, open);
             var t = new SqlTable(name);
-            var pk = new HashSet<string>();
+            var pk = new List<string>();
             foreach (string entry in SplitTopLevel(low[(open + 1)..close])) AddEntry(t, entry, pk);
-            for (int i = 0; i < t.Columns.Count; i++)
-                if (pk.Contains(t.Columns[i].Name)) t.Columns[i] = t.Columns[i] with { NotNull = true };
+            if (pk.Count > 0) SetPrimaryKey(t, pk);
             var part = Regex.Match(low[(close + 1)..], @"^\s*partition by (\w+) \((\w+)\)");
             if (part.Success) t.PartitionBy = part.Groups[1].Value + "(" + part.Groups[2].Value + ")";
             Tables.Add(name, t);
         }
-        else if ((x = Regex.Match(low, @"^alter table (\w+) (add column .*)$")).Success)
+        else if ((x = Regex.Match(low, @"^alter table (\w+) (.+)$")).Success)
         {
-            var t = Tables[x.Groups[1].Value];
-            var none = new HashSet<string>();
-            foreach (string add in SplitTopLevel(x.Groups[2].Value))
+            if (!Tables.TryGetValue(x.Groups[1].Value, out var t)) throw new InvalidOperationException("alter of an unknown table: " + stmt);
+            foreach (string action in SplitTopLevel(x.Groups[2].Value))
             {
-                if (!add.StartsWith("add column ", StringComparison.Ordinal))
-                    throw new NotSupportedException("SqlSchemaModel reads only add column in an alter table; extend it: " + stmt);
-                AddEntry(t, add["add column ".Length..], none);
+                Match a;
+                if (action.StartsWith("add column ", StringComparison.Ordinal))
+                {
+                    var pk = new List<string>();
+                    AddEntry(t, action["add column ".Length..], pk);
+                    if (pk.Count > 0) throw new NotSupportedException("add column ... primary key is not read; add the key on its own: " + stmt);
+                }
+                else if (action == "drop constraint " + t.Name + "_pkey")
+                {
+                    if (t.PrimaryKey == null) throw new InvalidOperationException("drop of a primary key that does not exist: " + stmt);
+                    t.PrimaryKey = null;
+                }
+                else if ((a = Regex.Match(action, @"^add primary key \(([^)]*)\)$")).Success)
+                {
+                    if (t.PrimaryKey != null) throw new InvalidOperationException("a second primary key: " + stmt);
+                    SetPrimaryKey(t, a.Groups[1].Value.Split(',').Select(c => c.Trim()).ToList());
+                }
+                else
+                    throw new NotSupportedException(
+                        "SqlSchemaModel reads only add column, drop constraint {table}_pkey and add primary key in an alter table; extend it: " + stmt);
             }
         }
         else if ((x = Regex.Match(low, @"^create (unique )?index (?:\w+ )?on (\w+) \(([^)]*)\)( where .*)?$")).Success)
@@ -162,15 +180,23 @@ sealed class SqlSchemaModel
             string cols = string.Join(", ", x.Groups[3].Value.Split(',').Select(c => c.Trim()));
             Indexes.Add(new SqlIndex(x.Groups[2].Value, cols, x.Groups[1].Success, x.Groups[4].Success));
         }
-        else if ((x = Regex.Match(low, @"^alter table (\w+) add column (.+)$")).Success)
+        else if ((x = Regex.Match(low, @"^drop index (\w+)$")).Success)
         {
-            if (!Tables.TryGetValue(x.Groups[1].Value, out var t)) throw new InvalidOperationException("alter of an unknown table: " + stmt);
-            if (x.Groups[2].Value.Contains(", add ", StringComparison.Ordinal))
-                throw new NotSupportedException("one column per alter table statement: " + stmt);
-            AddEntry(t, x.Groups[2].Value, new HashSet<string>());
+            // The schema names no index, so a dropped one goes by PostgreSQL's default name (DefaultIndexName).
+            int at = Indexes.FindIndex(i => DefaultIndexName(i) == x.Groups[1].Value);
+            if (at < 0) throw new InvalidOperationException("drop of an index that does not exist: " + stmt);
+            Indexes.RemoveAt(at);
+        }
+        else if ((x = Regex.Match(low, @"^drop materialized view (\w+)$")).Success)
+        {
+            if (!MaterializedViews.Remove(x.Groups[1].Value)) throw new InvalidOperationException("drop of a view that does not exist: " + stmt);
         }
         else if ((x = Regex.Match(low, @"^create materialized view (\w+) as ")).Success) MaterializedViews.Add(x.Groups[1].Value);
         else if ((x = Regex.Match(low, @"^create function (\w+)\(")).Success) Functions.Add(x.Groups[1].Value);
+        else if ((x = Regex.Match(low, @"^create or replace function (\w+)\(")).Success)
+        {
+            if (!Functions.Contains(x.Groups[1].Value)) Functions.Add(x.Groups[1].Value);
+        }
         else if ((x = Regex.Match(low, @"^create trigger (\w+) (?:before|after) insert on (\w+) ")).Success) Triggers.Add((x.Groups[1].Value, x.Groups[2].Value));
         else if (low.StartsWith("select ", StringComparison.Ordinal)) OtherStatements.Add(low);
         else throw new NotSupportedException("SqlSchemaModel does not read this statement; extend it: " + stmt);
@@ -178,7 +204,17 @@ sealed class SqlSchemaModel
 
     static readonly string[] ColumnEnd = { "not", "null", "default", "primary", "references", "unique", "check", "generated", "collate" };
 
-    void AddEntry(SqlTable t, string entry, HashSet<string> pk)
+    /// <summary>PostgreSQL's name for an unnamed index, <c>{table}_{col}_..._idx</c> (the schema's names are short enough not to be truncated).</summary>
+    public static string DefaultIndexName(SqlIndex i) => i.Table + "_" + i.Columns.Replace(", ", "_", StringComparison.Ordinal) + "_idx";
+
+    static void SetPrimaryKey(SqlTable t, List<string> cols)
+    {
+        t.PrimaryKey = string.Join(", ", cols.Distinct());
+        for (int i = 0; i < t.Columns.Count; i++)
+            if (cols.Contains(t.Columns[i].Name)) t.Columns[i] = t.Columns[i] with { NotNull = true };
+    }
+
+    void AddEntry(SqlTable t, string entry, List<string> pk)
     {
         var tableConstraint = Regex.Match(entry, @"^(primary key|unique|check|constraint|foreign key)\b");
         if (tableConstraint.Success)
@@ -196,6 +232,7 @@ sealed class SqlSchemaModel
         string type = Normalise(string.Join(" ", words[1..k]));
         string rest = " " + string.Join(" ", words[k..]) + " ";
         bool notNull = rest.Contains(" not null ") || rest.Contains(" primary key ") || words[1] is "serial" or "bigserial";
+        if (rest.Contains(" primary key ")) pk.Add(name);
         t.Columns.Add(new SqlColumn(name, type, notNull));
         var fk = Regex.Match(rest, @" references (\w+)(?: \((\w+)\))?(?: on delete (cascade|restrict|set null|set default|no action))?");
         if (fk.Success)

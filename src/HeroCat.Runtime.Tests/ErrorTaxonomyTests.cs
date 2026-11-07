@@ -50,6 +50,15 @@ namespace HeroCat.Runtime.Tests
             new object[] { 503, "SOMETHING_NEW", ErrorClass.Retryable, RetryPolicy.Backoff },
             new object[] { 502, null, ErrorClass.Retryable, RetryPolicy.Backoff },
             new object[] { 404, "SOMETHING_NEW", ErrorClass.Rejected, RetryPolicy.None },
+            // Client-visible endpoint codes (00 decision 115, issues #264 and #307).
+            new object[] { 400, "DISPLAY_NAME_BLOCKED", ErrorClass.Rejected, RetryPolicy.None },
+            new object[] { 409, "AGE_GATE_LOCKED", ErrorClass.Rejected, RetryPolicy.None },
+            new object[] { 403, "DUNGEON_LOCKED", ErrorClass.Rejected, RetryPolicy.None },
+            new object[] { 503, "DUNGEONS_DISABLED", ErrorClass.Rejected, RetryPolicy.None },
+            new object[] { 413, "SAVE_TOO_LARGE", ErrorClass.Rejected, RetryPolicy.None },
+            new object[] { 404, "INBOX_NOT_FOUND", ErrorClass.Rejected, RetryPolicy.None },
+            new object[] { 410, "INBOX_EXPIRED", ErrorClass.Rejected, RetryPolicy.None },
+            new object[] { 409, "INBOX_BAD_GRANT", ErrorClass.Rejected, RetryPolicy.None },
         };
 
         [TestCaseSource(nameof(Rows))]

@@ -115,10 +115,11 @@ namespace HeroCat.Runtime.Services
     /// (IAP, PACKAGE_DAILY, MAIL, COMPENSATION, COUPON, REFUND; 08's wire <c>kind</c> upper-cased). AvailableAtServerSeconds
     /// above now: a scheduled package portion, not claimable yet (issue #51). ExpiresAtServerSeconds is
     /// <see cref="InboxRules.NeverExpires"/> for IAP items (06 rule 9.1). TitleKey / BodyKey / Args are presentation (07).
+    /// CreatedAtServerSeconds is 08's <c>createdAt</c> (0 when unknown), for <c>inbox_claimed.ageSec</c> (06 section 13).
     /// </summary>
     public sealed record InboxItem(string Id, InboxGrantPayload Grant, long ExpiresAtServerSeconds, long AvailableAtServerSeconds = 0,
                                    string Type = null, string TitleKey = null, string BodyKey = null,
-                                   IReadOnlyDictionary<string, string> Args = null);
+                                   IReadOnlyDictionary<string, string> Args = null, long CreatedAtServerSeconds = 0);
 
     /// <summary>A claim's grants. AlreadyClaimed: the 409 INBOX_ALREADY_CLAIMED success-equivalent (01 5.2, 8.9 step 6).</summary>
     public sealed record InboxClaimResult(InboxGrantPayload Grant, bool AlreadyClaimed);
@@ -183,9 +184,26 @@ namespace HeroCat.Runtime.Services
             return list;
         }
 
-        /// <summary>06 rule 9.5: the HUD badge, the count of available unclaimed items.</summary>
-        public static int BadgeCount(IEnumerable<InboxItem> items, long nowServerSec, ICollection<string> claimedIds) =>
-            Available(items, nowServerSec, claimedIds).Count;
+        /// <summary>
+        /// 06 rule 9.5: the HUD badge, the count of available unclaimed items. Allocation-free for a list: the client reads
+        /// it on every refresh (07 section 10 rule 2, AC 12).
+        /// </summary>
+        public static int BadgeCount(IEnumerable<InboxItem> items, long nowServerSec, ICollection<string> claimedIds)
+        {
+            if (items == null) return 0;
+            int n = 0;
+            if (items is IReadOnlyList<InboxItem> list)
+            {
+                for (int k = 0; k < list.Count; k++)
+                    if (Claimable(list[k], nowServerSec, claimedIds)) n++;
+                return n;
+            }
+            foreach (var i in items) if (Claimable(i, nowServerSec, claimedIds)) n++;
+            return n;
+        }
+
+        static bool Claimable(InboxItem i, long nowServerSec, ICollection<string> claimedIds) =>
+            IsAvailable(i, nowServerSec) && (claimedIds == null || !claimedIds.Contains(i.Id));
 
         /// <summary>
         /// The Wallet reason a grant of this item type carries when the server does not name one (01 section 2.5):

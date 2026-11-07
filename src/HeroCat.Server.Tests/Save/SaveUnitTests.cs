@@ -77,7 +77,8 @@ public sealed class SaveUnitTests
     [Test]
     public void Blob_keys_and_etags_have_the_documented_shape()
     {
-        Assert.That(SaveController.BlobKey(Player, 1875), Is.EqualTo("saves/6b1f2c40-9d1e-4a7b-8f3e-2c1a9b7d5e01/1875.sav"));
+        Assert.That(SaveController.BlobKey(Player, 1875, Guid.Parse("0f9e3a1b-2c4d-4e5f-8a6b-7c8d9e0f1a2b")),
+                    Is.EqualTo("saves/6b1f2c40-9d1e-4a7b-8f3e-2c1a9b7d5e01/1875-0f9e3a1b.sav"));
         Assert.That(SaveController.BlobUri("herocat-saves-prod", "saves/x/1.sav"), Is.EqualTo("s3://herocat-saves-prod/saves/x/1.sav"));
         string a = SaveController.NewEtag(1875), b = SaveController.NewEtag(1875);
         Assert.That(a, Does.Match("^W/\"1875-[0-9a-f]{8}\"$"));

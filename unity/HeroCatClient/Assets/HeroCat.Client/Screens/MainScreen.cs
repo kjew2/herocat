@@ -92,6 +92,7 @@ namespace HeroCat.Client.Screens
             var rc = Chip("RockCandy", 736, "R", Palette.RockCandy, hud.OnRockCandyChip, out var candy);
             hud.RockCandy.Bind(candy.Sink());
             hud.RockCandyVisible.Bind(new ActiveSink(rc.gameObject));
+            LockedBinding.Bind(hud.RockCandyLock, rc, 176, 0);   // shown but locked before AWAKEN_STAGES[0] (07 section 10 rule 8)
 
             var inbox = UiKit.Button("Inbox", _hud, hud.OnInbox, Palette.PanelRaised);
             UiKit.Place(inbox.GetComponent<RectTransform>(), 852, 4, 112, 112);
@@ -141,6 +142,8 @@ namespace HeroCat.Client.Screens
             c.Kills.Bind(new ActionTextSink(_ => WriteKills()));
             c.KillsPerStage.Bind(new ActionTextSink(_ => WriteKills()));
             c.Walled.Bind(new ActionFlagSink(on => { _killsText.color = UiKit.C(on ? Palette.Bad : Palette.Text); WriteKills(); }));
+
+            BuildMaintenanceBanner();
 
             _hero = UiKit.Panel("Hero", _combat, Palette.Accent).rectTransform;
             _hero.anchorMin = _hero.anchorMax = _hero.pivot = new Vector2(0.25f, 0.5f);
@@ -304,6 +307,24 @@ namespace HeroCat.Client.Screens
             Ui.Tweens.Pulse(_enemy, Vm.Now, 0.06f, 0.12);
         }
 
+        /// <summary>The maintenance banner under the stage label (01 section 8.12 step 4): countdown line, optional message.</summary>
+        void BuildMaintenanceBanner()
+        {
+            var mb = Vm.Main.Maintenance;
+            var panel = UiKit.Panel("MaintenanceBanner", _combat, Palette.PanelRaised, 0.92f);
+            var rt = panel.rectTransform;
+            UiKit.Place(rt, 16, 136, 1048, 96);
+            var line = UiKit.Text("Line", rt, UiKit.Body, Palette.Text, TextAlignmentOptions.MidlineLeft, bold: true);
+            UiKit.Place(line.rectTransform, 16, 4, 1016, 48);
+            mb.Line.Bind(line.Sink());
+            var msg = UiKit.Text("Message", rt, UiKit.Caption, Palette.Muted, TextAlignmentOptions.MidlineLeft);
+            UiKit.Place(msg.rectTransform, 16, 52, 1016, 40);
+            mb.Message.Bind(msg.Sink());
+            mb.MessageVisible.Bind(new ActiveSink(msg.gameObject));
+            mb.Active.Bind(new ActionFlagSink(on => line.color = UiKit.C(on ? Palette.Bad : Palette.Text)));
+            mb.Visible.Bind(new ActiveSink(panel.gameObject));
+        }
+
         // ------------------------------------------------------------------------------------------ action strip
 
         void BuildAction()
@@ -320,8 +341,8 @@ namespace HeroCat.Client.Screens
             c.BossClearable.Bind(new ActionFlagSink(on => border.enabled = on));
             Anchor(CombatVm.AnchorBoss, br);
 
-            Pill("Quests", 640, m.QuestsPill, () => Vm.Context.LockedToast("QUESTS"));
-            Pill("Dungeons", 784, m.DungeonsPill, () => Vm.Context.LockedToast("DUNGEONS"));
+            Pill("Quests", 640, m.QuestsPill, m.OnQuestsPill);         // the tab's route: lock toast before the gate
+            Pill("Dungeons", 784, m.DungeonsPill, m.OnDungeonsPill);
             Pill("Inbox", 928, m.InboxPill, Vm.Hud.OnInbox);
         }
 
@@ -359,6 +380,7 @@ namespace HeroCat.Client.Screens
             BoardButton("Release", 156, b.Release, b.OnRelease, FishBoardVm.AnchorRelease);
             BoardButton("ReleaseMax", 296, b.ReleaseMax, b.OnReleaseMax, FishBoardVm.AnchorReleaseMax);
             _mergeAllBtn = BoardButton("MergeAll", 436, b.MergeAll, b.OnMergeAll, FishBoardVm.AnchorMergeAll);
+            BuildResearchButton();
 
             // 5 x 4 grid, 176 rp cells with 8 rp gaps (912 rp wide).
             var gridImg = UiKit.Panel("Grid", _board, Palette.Panel, 1f, raycast: true);
@@ -410,11 +432,32 @@ namespace HeroCat.Client.Screens
             _info.gameObject.SetActive(false);
             b.InfoVisible.Bind(new ActiveSink(_info.gameObject));   // after the hide: Bind pushes the current value
 
+            BuildResearchButton();
+
             _discovery = UiKit.Panel("Discovery", _board, Palette.Gold, 0.95f).rectTransform;
             UiKit.Place(_discovery, 240, 200, 720, 200);
             _discoveryText = UiKit.Text("Text", _discovery, UiKit.Title, 0x121212, TextAlignmentOptions.Center, bold: true);
             UiKit.Fill(_discoveryText.rectTransform, 16, 16, 16, 16);
             _discovery.gameObject.SetActive(false);
+        }
+
+        /// <summary>
+        /// The [Research] button (MVP, 07 section 4.3) in the free strip right of the grid, bottom: the Locked state before
+        /// Research unlocks (Awakening rank 1), then the red dot for an affordable node (Badges.ResearchAffordable).
+        /// </summary>
+        void BuildResearchButton()
+        {
+            var m = Vm.Main;
+            var btn = UiKit.Button("Research", _board, m.OnResearch, 0x37474F, UiKit.Micro);
+            var rt = btn.GetComponent<RectTransform>();
+            UiKit.Place(rt, 952, 520, 120, 112);
+            UiKit.LabelOf(btn).text = Vm.Localizer.Text(UiKeys.ResearchEntry);
+            LockedBinding.Bind(m.ResearchLock, rt, 72, 0);
+            var dot = UiKit.CirclePanel("Dot", rt, UiKit.C(Palette.Bad));
+            UiKit.Place(dot.rectTransform, 88, 4, 28, 28);
+            m.Badges.ResearchAffordable.Bind(new ActiveSink(dot.gameObject));
+            m.ResearchVisible.Bind(new ActiveSink(btn.gameObject));
+            Anchor("main.research", rt);
         }
 
         RectTransform BoardButton(string name, float y, ButtonState state, UnityEngine.Events.UnityAction tap, string anchor)
@@ -496,10 +539,8 @@ namespace HeroCat.Client.Screens
                 var icon = UiKit.Text("Icon", rt, UiKit.Title, Palette.Text, TextAlignmentOptions.Center);
                 UiKit.Place(icon.rectTransform, 58, 16, 64, 64);
                 icon.text = tab.ToString().Substring(0, 1);   // placeholder icon (07 section 15.1)
-                var lockGlyph = UiKit.Text("Lock", rt, UiKit.Caption, Palette.Muted, TextAlignmentOptions.Center);
-                UiKit.Place(lockGlyph.rectTransform, 120, 8, 48, 40);
-                lockGlyph.text = "\u2298";   // ⊘ placeholder lock: the M0 font has no emoji (07 section 15.1)
-                m.TabLocked[i].Bind(new ActiveSink(lockGlyph.gameObject));
+                LockedBinding.Bind(m.TabLocks[i], rt, 120, 8);   // glyph + greyed; the tap toasts the condition (07 section 3)
+                m.TabDisabled[i].Bind(new ActionFlagSink(off => { icon.color = UiKit.C(off ? Palette.Muted : Palette.Text); label.color = UiKit.C(off ? Palette.Muted : Palette.Text); }));
                 var dot = UiKit.CirclePanel("Dot", rt, UiKit.C(Palette.Bad));
                 UiKit.Place(dot.rectTransform, 116, 12, 28, 28);
                 m.TabBadges[i].Bind(new ActiveSink(dot.gameObject));

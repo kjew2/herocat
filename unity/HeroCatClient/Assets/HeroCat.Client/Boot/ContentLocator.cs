@@ -13,7 +13,7 @@ namespace HeroCat.Client.Boot
     ///   2. StreamingAssets/content: the bundled floor (09 section 10.1) on iOS and desktop players.
     ///   3. Resources/content TextAssets: Android, whose StreamingAssets is inside the APK and not a folder.
     /// Editor/ContentPreBuild.cs verifies content/ and writes both copies before every player build (issue #133).
-    /// TODO(#212): the CDN cache.
+    /// TODO(#315): boot through Runtime's ContentCache.LoadPreferred over persistentDataPath/content.
     /// Unity-only: not compiled in cloud sessions.
     /// </summary>
     public static class ContentLocator

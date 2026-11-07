@@ -327,12 +327,72 @@
       "text": "Dreamland 12"
     },
     {
+      "key": "currency.diamond.name",
+      "text": "Diamonds"
+    },
+    {
+      "key": "currency.fish_coin.name",
+      "text": "Fish Coins"
+    },
+    {
+      "key": "currency.gold.name",
+      "text": "Gold"
+    },
+    {
+      "key": "currency.guild_coin.name",
+      "text": "Guild Coins"
+    },
+    {
+      "key": "currency.party_exp.name",
+      "text": "Party EXP"
+    },
+    {
+      "key": "currency.rock_candy.name",
+      "text": "Rock Candy"
+    },
+    {
+      "key": "currency.ticket_exp.name",
+      "text": "EXP Dungeon Tickets"
+    },
+    {
+      "key": "currency.ticket_fish_coin.name",
+      "text": "Fish Coin Dungeon Tickets"
+    },
+    {
+      "key": "currency.ticket_rock_candy.name",
+      "text": "Rock Candy Dungeon Tickets"
+    },
+    {
+      "key": "currency.ticket_summon_companion.name",
+      "text": "Companion Summon Tickets"
+    },
+    {
+      "key": "currency.ticket_summon_rune.name",
+      "text": "Rune Summon Tickets"
+    },
+    {
+      "key": "currency.ticket_summon_skill.name",
+      "text": "Skill Summon Tickets"
+    },
+    {
+      "key": "currency.ticket_summon_weapon.name",
+      "text": "Weapon Summon Tickets"
+    },
+    {
       "key": "err.account_banned.body",
       "text": "This account has been suspended. Contact support to appeal."
     },
     {
       "key": "err.account_banned.title",
       "text": "Account suspended"
+    },
+    {
+      "key": "err.age_gate_locked.body",
+      "text": "Your age setting can't be changed in the game. Contact support if it is wrong."
+    },
+    {
+      "key": "err.age_gate_locked.title",
+      "text": "Can't change this"
     },
     {
       "key": "err.banner_closed.body",
@@ -367,12 +427,36 @@
       "text": "Update needed"
     },
     {
+      "key": "err.display_name_blocked.body",
+      "text": "That name isn't allowed. Try a different one."
+    },
+    {
+      "key": "err.display_name_blocked.title",
+      "text": "Name not allowed"
+    },
+    {
+      "key": "err.dungeon_locked.body",
+      "text": "Clear the floor before this one first."
+    },
+    {
+      "key": "err.dungeon_locked.title",
+      "text": "Floor locked"
+    },
+    {
       "key": "err.dungeon_seed_cap.body",
       "text": "You've started too many dungeon runs. Try again later."
     },
     {
       "key": "err.dungeon_seed_cap.title",
       "text": "Try again later"
+    },
+    {
+      "key": "err.dungeons_disabled.body",
+      "text": "Dungeons are paused for a moment. Try again later."
+    },
+    {
+      "key": "err.dungeons_disabled.title",
+      "text": "Dungeons paused"
     },
     {
       "key": "err.export_rate_limited.body",
@@ -391,12 +475,52 @@
       "text": "Purchase pending"
     },
     {
+      "key": "err.inbox_bad_grant.body",
+      "text": "This reward couldn't be read. Contact support if it stays in your inbox."
+    },
+    {
+      "key": "err.inbox_bad_grant.title",
+      "text": "Can't claim this reward"
+    },
+    {
+      "key": "err.inbox_expired.body",
+      "text": "This reward expired before it was claimed."
+    },
+    {
+      "key": "err.inbox_expired.title",
+      "text": "Reward expired"
+    },
+    {
+      "key": "err.inbox_not_found.body",
+      "text": "This reward is no longer in your inbox."
+    },
+    {
+      "key": "err.inbox_not_found.title",
+      "text": "Reward not found"
+    },
+    {
       "key": "err.insufficient_funds.body",
       "text": "You don't have enough diamonds for this."
     },
     {
       "key": "err.insufficient_funds.title",
       "text": "Not enough diamonds"
+    },
+    {
+      "key": "err.logout_offline.body",
+      "text": "Logging out of a guest account needs a connection. You're still signed in. Try again when you're back online."
+    },
+    {
+      "key": "err.logout_offline.title",
+      "text": "Couldn't log out"
+    },
+    {
+      "key": "err.logout_unsynced.body",
+      "text": "Your latest progress couldn't be saved to the cloud. If you log out now, it stays only on this device."
+    },
+    {
+      "key": "err.logout_unsynced.title",
+      "text": "Progress not saved"
     },
     {
       "key": "err.maintenance.body",
@@ -469,6 +593,14 @@
     {
       "key": "err.save_rolled_back.title",
       "text": "Progress restored"
+    },
+    {
+      "key": "err.save_too_large.body",
+      "text": "Your save couldn't be uploaded. Your progress is safe on this device. Contact support."
+    },
+    {
+      "key": "err.save_too_large.title",
+      "text": "Cloud save failed"
     },
     {
       "key": "err.save_too_new.body",
@@ -811,10 +943,6 @@
       "text": "This reward could not be read"
     },
     {
-      "key": "reject.inbox_item_grant_unsupported",
-      "text": "Update the game to claim this reward"
-    },
-    {
       "key": "reject.invalid_count",
       "text": "Invalid amount"
     },
@@ -1147,6 +1275,18 @@
       "text": "Exit Whisker Hero?"
     },
     {
+      "key": "scr.confirm.logout_body",
+      "text": "You can sign back in with your linked account."
+    },
+    {
+      "key": "scr.confirm.logout_guest_body",
+      "text": "This guest account is not linked. If you log out, you can't get it back, even on this device."
+    },
+    {
+      "key": "scr.confirm.logout_title",
+      "text": "Log out?"
+    },
+    {
       "key": "scr.confirm.ok",
       "text": "Confirm"
     },
@@ -1225,6 +1365,58 @@
     {
       "key": "scr.party.training",
       "text": "Training"
+    },
+    {
+      "key": "scr.companions.research",
+      "text": "Research +"
+    },
+    {
+      "key": "scr.main.research",
+      "text": "Research"
+    },
+    {
+      "key": "scr.party.research",
+      "text": "Research >"
+    },
+    {
+      "key": "scr.research.title",
+      "text": "Research"
+    },
+    {
+      "key": "scr.research.fish_coins",
+      "text": "{0} Fish Coins"
+    },
+    {
+      "key": "scr.research.level",
+      "text": "Lv {0}/{1}"
+    },
+    {
+      "key": "scr.research.buy",
+      "text": "Buy"
+    },
+    {
+      "key": "scr.research.max",
+      "text": "MAX"
+    },
+    {
+      "key": "scr.research.max_level",
+      "text": "Max level"
+    },
+    {
+      "key": "scr.research.node_locked",
+      "text": "Unlocks at Awakening {0}"
+    },
+    {
+      "key": "scr.research.per_sec",
+      "text": "{0}/s"
+    },
+    {
+      "key": "scr.research.hours",
+      "text": "{0}h"
+    },
+    {
+      "key": "scr.research.coach_tank",
+      "text": "Spend Fish Coins here: a bigger tank holds more fish while you are away."
     },
     {
       "key": "scr.item_detail.at_max",
@@ -1447,6 +1639,74 @@
       "text": "Welcome back!"
     },
     {
+      "key": "scr.quests.bonus",
+      "text": "{0} done: +{1}"
+    },
+    {
+      "key": "scr.quests.claim",
+      "text": "Claim"
+    },
+    {
+      "key": "scr.quests.claim_all",
+      "text": "Claim all ({0})"
+    },
+    {
+      "key": "scr.quests.claimed",
+      "text": "Claimed"
+    },
+    {
+      "key": "scr.quests.daily_progress",
+      "text": "Daily progress {0} / {1}"
+    },
+    {
+      "key": "scr.quests.done",
+      "text": "Done"
+    },
+    {
+      "key": "scr.quests.expires_soon",
+      "text": "Expires soon"
+    },
+    {
+      "key": "scr.quests.go",
+      "text": "Go >"
+    },
+    {
+      "key": "scr.quests.progress",
+      "text": "{0} / {1}"
+    },
+    {
+      "key": "scr.quests.rungs",
+      "text": "{0} / {1} rungs"
+    },
+    {
+      "key": "scr.quests.tab_achievements",
+      "text": "Achievements"
+    },
+    {
+      "key": "scr.quests.tab_daily",
+      "text": "Daily"
+    },
+    {
+      "key": "scr.quests.tab_weekly",
+      "text": "Weekly"
+    },
+    {
+      "key": "scr.quests.title",
+      "text": "Quests"
+    },
+    {
+      "key": "scr.quests.toast_claimed",
+      "text": "+{0} {1}"
+    },
+    {
+      "key": "scr.quests.toast_reset",
+      "text": "Missions reset"
+    },
+    {
+      "key": "scr.quests.weekly_progress",
+      "text": "Weekly progress {0} / {1}"
+    },
+    {
       "key": "scr.skills.auto_equip",
       "text": "Auto-equip"
     },
@@ -1473,6 +1733,42 @@
     {
       "key": "scr.skills.title",
       "text": "Skills"
+    },
+    {
+      "key": "scr.stage_select.challenge",
+      "text": "Challenge boss"
+    },
+    {
+      "key": "scr.stage_select.chapter",
+      "text": "Chapter {0} ({1}-{2})"
+    },
+    {
+      "key": "scr.stage_select.farming",
+      "text": "Farming: {0}"
+    },
+    {
+      "key": "scr.stage_select.frontier",
+      "text": "Frontier: {0}"
+    },
+    {
+      "key": "scr.stage_select.frontier_walled",
+      "text": "Frontier: {0} (walled)"
+    },
+    {
+      "key": "scr.stage_select.highest",
+      "text": "Highest cleared: {0}"
+    },
+    {
+      "key": "scr.stage_select.offline_note",
+      "text": "Rewards for offline time use your highest stage"
+    },
+    {
+      "key": "scr.stage_select.return",
+      "text": "Return to frontier"
+    },
+    {
+      "key": "scr.stage_select.title",
+      "text": "Stages"
     },
     {
       "key": "scr.summon.banner_level",
@@ -2757,6 +3053,30 @@
     {
       "key": "reject.invalid_dungeon",
       "text": "Unknown dungeon"
+    },
+    {
+      "key": "scr.common.feature_disabled",
+      "text": "Temporarily unavailable. Try again later."
+    },
+    {
+      "key": "scr.main.maint_active",
+      "text": "Maintenance: back in {0}"
+    },
+    {
+      "key": "scr.main.maint_active_open",
+      "text": "Maintenance in progress"
+    },
+    {
+      "key": "scr.main.maint_scheduled",
+      "text": "Maintenance starts in {0}"
+    },
+    {
+      "key": "scr.settings.update_ready",
+      "text": "Update ready, restarts on next launch"
+    },
+    {
+      "key": "scr.settings.update_app",
+      "text": "Update the app for new content"
     }
   ]
 }

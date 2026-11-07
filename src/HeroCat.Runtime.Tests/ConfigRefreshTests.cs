@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using HeroCat.Runtime.Boot;
@@ -217,6 +218,29 @@ namespace HeroCat.Runtime.Tests
         }
 
         [Test]
+        public void ABadBundle_TracksOneContentUpdateFailed_OnTheMainThread()   // 09 section 10.3 step 5, issue #298 item 3
+        {
+            const string bad = "2099.01.01";
+            var staging = new MemoryContentStaging();
+            staging.Cdn[bad] = Bundles.Make(bad, corrupt: true, touch: "skills");
+            var o = Boot(new ScriptedConfig(ScriptedConfig.Cfg(content: Bundles.Pointer(bad))), new FakeMonoClock());
+            o.Runner.Dispatcher = new MainThreadDispatcher();
+            o.ContentUpdates = db => new ContentUpdater(staging, db, Bundles.RunningManifest, null);
+            var r = BootFlow.Run(o);
+            Assert.That(r.ContentUpdates.Check(r.Config).Wait(10000), Is.True);
+            Assert.That(r.ContentUpdates.State, Is.EqualTo(ContentUpdateState.Failed));
+            var analytics = (MemoryAnalytics)r.Services.Analytics;
+            Assert.That(analytics.Count("content_update_failed"), Is.Zero, "posted, not tracked on the staging thread");
+            r.Runner.OnFrame();
+            var e = analytics.Events.Single(x => x.Name == "content_update_failed");
+            var first = r.ContentUpdates.LastErrors[0];
+            Assert.That(e.Props, Is.EquivalentTo(new Dictionary<string, object> { ["version"] = bad, ["code"] = first.Code, ["location"] = first.Location }));
+            Assert.That(r.ContentUpdates.Check(r.Config).IsCompleted, Is.True);
+            r.Runner.OnFrame();
+            Assert.That(analytics.Count("content_update_failed"), Is.EqualTo(1), "a failed version is not retried, so not reported again");
+        }
+
+        [Test]
         public void ACachedMaintenanceFlag_DoesNotBlockBoot_ALiveOneDoes()   // 01 section 8.1 step 2, 08 section 8.4
         {
             var maint = new MaintenanceInfo(true, "maint.db_upgrade", TestContent.T0 + 600);
@@ -259,9 +283,11 @@ namespace HeroCat.Runtime.Tests
             static readonly Guid Player = new Guid("00000000-0000-0000-0000-0000000000a1");
             public Guid PlayerId => Player;
             public bool HasSession => true;
+            public bool IsLinked => false;
             public Task<HeroCat.Runtime.Account.SignInResult> SignInAsync(CancellationToken ct = default) =>
                 Task.FromResult(new HeroCat.Runtime.Account.SignInResult(HeroCat.Runtime.Account.SignInStatus.SignedIn, Player));
             public Task<bool> LogoutAsync(CancellationToken ct = default) => Task.FromResult(true);
+            public Task<bool> TryConfirmedLogoutAsync(CancellationToken ct = default) => Task.FromResult(true);
             public Task<long> DeleteAccountAsync(CancellationToken ct = default) => Task.FromResult(0L);
             public event Action<HeroCat.Runtime.Account.SignInResult> SessionLost { add { } remove { } }
         }

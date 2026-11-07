@@ -52,6 +52,27 @@ namespace HeroCat.Remote.Tests
                 h.On("POST", AuthRoutes.Guest, Guest);
                 h.On("POST", AuthRoutes.Refresh, Refresh);
                 h.On("POST", AuthRoutes.Logout, Logout);
+                h.On("POST", AuthRoutes.Devices, Devices);
+            }
+
+            /// <summary>The key each device registered, as the server's <c>devices.hmac_key_enc</c> holds it.</summary>
+            public readonly Dictionary<string, byte[]> DeviceKeys = new Dictionary<string, byte[]>();
+
+            /// <summary>A final refusal <c>/devices</c> answers instead of 204 (null: accept).</summary>
+            public FakeReply DevicesRefusal;
+
+            FakeReply Devices(FakeApiCall c)
+            {
+                if (!_accessTokens.ContainsKey((c.Header(ApiHeaders.Authorization) ?? "").Replace("Bearer ", "")))
+                    return FakeReply.Error(401, "TOKEN_EXPIRED");
+                if (DevicesRefusal != null) return DevicesRefusal;
+                var b = JObject.Parse(c.BodyText);
+                string device = (string)b["deviceId"];
+                if (device != c.Header(ApiHeaders.DeviceId)) return FakeReply.Error(403, "FORBIDDEN", details: new { reason = "DEVICE_MISMATCH" });
+                var key = Convert.FromBase64String((string)b["deviceKey"]);
+                if (key.Length != 32) return FakeReply.Error(400, "VALIDATION");
+                DeviceKeys[device] = key;   // the same key again only updates the metadata (08 section 2.2)
+                return new FakeReply(204);
             }
 
             public string NewRefresh(Guid player, string device, Guid family)
@@ -81,6 +102,7 @@ namespace HeroCat.Remote.Tests
                 if (_devices.TryGetValue(device, out var bound)) return FakeReply.Error(409, "DEVICE_ALREADY_BOUND", details: new { playerId = bound });
                 var player = Guid.NewGuid();
                 _devices[device] = player;
+                DeviceKeys[device] = Convert.FromBase64String((string)b["deviceKey"]);
                 return FakeReply.Json(201, new
                 {
                     playerId = player, accessToken = NewAccess(player), refreshToken = NewRefresh(player, device, Guid.NewGuid()),
@@ -182,9 +204,9 @@ namespace HeroCat.Remote.Tests
             }
 
             /// <summary>A fresh AuthClient over the same token store: the next process.</summary>
-            public AuthClient NewAuth()
+            public AuthClient NewAuth(byte[] key = null)
             {
-                Auth = new AuthClient(Client, Tokens, Key, new AuthClientOptions
+                Auth = new AuthClient(Client, Tokens, key ?? Key, new AuthClientOptions
                 {
                     Model = () => "Pixel 7", Os = () => "Android 14", Region = () => "US", Mono = Mono, Jitter = () => 0.5,
                     Delay = (d, ct) =>
@@ -449,6 +471,50 @@ namespace HeroCat.Remote.Tests
         }
 
         [Test]
+        public void ConfirmedLogout_Offline_KeepsTheTokens_AndARetryThatLandsClearsThem()   // 00 decision 119
+        {
+            var h = SignedIn();
+            var t = h.Tokens.Load();
+            Assert.That(h.Auth.IsLinked, Is.False, "a guest has no linked provider");
+            h.Handler.Then(FakeFault.Drop);
+
+            Assert.That(h.Auth.TryConfirmedLogoutAsync().GetAwaiter().GetResult(), Is.False);
+            Assert.That(h.CallsTo(AuthRoutes.Logout).Length, Is.EqualTo(1), "one attempt per try; the player decides on a retry");
+            Assert.That(h.Tokens.Load(), Is.EqualTo(t), "still signed in");
+            Assert.That(h.Auth.HasSession, Is.True);
+            Assert.That(h.Server.IsLive(t.RefreshToken), Is.True);
+
+            Assert.That(h.Auth.TryConfirmedLogoutAsync().GetAwaiter().GetResult(), Is.True);
+            Assert.That(h.CallsTo(AuthRoutes.Logout).Length, Is.EqualTo(2));
+            Assert.That(h.Server.IsLive(t.RefreshToken), Is.False);
+            Assert.That(h.Tokens.Load(), Is.Null);
+            Assert.That(h.Auth.HasSession, Is.False);
+        }
+
+        [Test]
+        public void ConfirmedLogout_WithoutASession_SendsNothing()
+        {
+            var h = new Harness();
+            Assert.That(h.Auth.TryConfirmedLogoutAsync().GetAwaiter().GetResult(), Is.True);
+            Assert.That(h.CallsTo(AuthRoutes.Logout), Is.Empty);
+        }
+
+        [Test]
+        public void Linked_IsStoredInTokensJson_AndKeptAcrossARefresh()
+        {
+            var h = SignedIn();
+            Assert.That(h.Tokens.Load().Linked, Is.False, "the guest call stores false");
+            h.Tokens.Save(h.Tokens.Load() with { Linked = true });   // TODO(#196): set by /auth/link and /auth/link-login
+            h.NewAuth();
+            Assert.That(h.Auth.IsLinked, Is.True);
+
+            Assert.That(h.SignIn().Status, Is.EqualTo(SignInStatus.SignedIn));
+            Assert.That(h.CallsTo(AuthRoutes.Refresh).Length, Is.EqualTo(1));
+            Assert.That(h.Tokens.Load().Linked, Is.True);
+            Assert.That(h.Auth.IsLinked, Is.True);
+        }
+
+        [Test]
         public void DeleteAccount_ReturnsGraceUntil_AndClearsTheTokens_OnlyOnSuccess()
         {
             var h = SignedIn();
@@ -462,6 +528,155 @@ namespace HeroCat.Remote.Tests
             Assert.That(h.Auth.DeleteAccountAsync().GetAwaiter().GetResult(), Is.EqualTo(1_794_880_000L));
             Assert.That(h.CallsTo(AuthRoutes.AccountDelete).Last().Header(ApiHeaders.Authorization), Does.StartWith("Bearer "));
             Assert.That(h.Tokens.Load(), Is.Null);
+        }
+
+        // ------------------------------------------------------------------------------------------- device registration (02 section 10.1)
+
+        static DeviceRegistration Ensure(Harness h) => h.Auth.EnsureDeviceRegisteredAsync().GetAwaiter().GetResult();
+
+        /// <summary>A session from tokens.json without the registration record (a build before it), in a new process.</summary>
+        static Harness SignedInWithoutRecord(byte[] key = null)
+        {
+            var h = SignedIn();
+            h.Tokens.Save(h.Tokens.Load() with { RegisteredKeyId = null });
+            h.NewAuth(key);
+            return h;
+        }
+
+        [Test]
+        public void TheGuestCall_RegistersTheKey_SoNoDevicesCallFollows()
+        {
+            var h = SignedIn();
+            Assert.That(h.Server.DeviceKeys[Device], Is.EqualTo(Key));
+            Assert.That(h.Tokens.Load().RegisteredKeyId, Is.EqualTo(DeviceKey.KeyId(Key)));
+            Assert.That(Ensure(h), Is.EqualTo(DeviceRegistration.Registered));
+            Assert.That(h.CallsTo(AuthRoutes.Devices), Is.Empty);
+        }
+
+        [Test]
+        public void WithoutASession_ThereIsNothingToRegister()
+        {
+            var h = new Harness();
+            Assert.That(Ensure(h), Is.EqualTo(DeviceRegistration.NoSession));
+            Assert.That(h.Handler.Calls, Is.Empty);
+        }
+
+        [Test]
+        public void AKeyTheServerDoesNotHold_IsRegistered_WithThe08WireBody_Once()
+        {
+            var newKey = Enumerable.Range(100, 32).Select(i => (byte)i).ToArray();   // replaced after the guest call
+            var h = SignedInWithoutRecord(newKey);
+            Assert.That(Ensure(h), Is.EqualTo(DeviceRegistration.Registered));
+
+            var call = h.CallsTo(AuthRoutes.Devices).Single();
+            var body = JObject.Parse(call.BodyText);
+            Assert.That((string)body["deviceId"], Is.EqualTo(Device));
+            Assert.That(Convert.FromBase64String((string)body["deviceKey"]), Is.EqualTo(newKey));
+            Assert.That((string)body["clientVersion"], Is.EqualTo("1.4.2+318"));
+            Assert.That((string)body["model"], Is.EqualTo("Pixel 7"));
+            Assert.That((string)body["os"], Is.EqualTo("Android 14"));
+            Assert.That(body["keyId"], Is.Null, "the key id is client-local; the server compares the key bytes");
+            Assert.That(call.Header(ApiHeaders.Authorization), Does.StartWith("Bearer "));
+            Assert.That(call.Header(ApiHeaders.RequestId), Does.Match("^[0-9a-f]{32}$"));
+            Assert.That(h.Server.DeviceKeys[Device], Is.EqualTo(newKey));
+            Assert.That(h.Tokens.Load().RegisteredKeyId, Is.EqualTo(DeviceKey.KeyId(newKey)), "stored before anyone relies on it");
+
+            Assert.That(Ensure(h), Is.EqualTo(DeviceRegistration.Registered));
+            h.NewAuth(newKey);
+            Assert.That(Ensure(h), Is.EqualTo(DeviceRegistration.Registered), "the next process too");
+            Assert.That(h.CallsTo(AuthRoutes.Devices), Has.Length.EqualTo(1), "idempotent: registered once");
+        }
+
+        [Test]
+        public void ConcurrentCallers_ShareOneRegistration()
+        {
+            var h = SignedInWithoutRecord();
+            var all = Enumerable.Range(0, 8).Select(_ => h.Auth.EnsureDeviceRegisteredAsync()).ToArray();
+            Task.WaitAll(all);
+            Assert.That(all.Select(t => t.Result), Is.All.EqualTo(DeviceRegistration.Registered));
+            Assert.That(h.CallsTo(AuthRoutes.Devices), Has.Length.EqualTo(1));
+        }
+
+        [Test]
+        public void AnOfflineRegistration_Throws_AndIsRetriedWithTheSameRequestId_UntilItLands()
+        {
+            var h = SignedInWithoutRecord();
+            h.Handler.Then(Enumerable.Repeat(FakeFault.Drop, RuntimeConfig.HTTP_RETRY_MAX + 1).ToArray());
+            var e = Assert.Throws<ServiceException>(() => Ensure(h));
+            Assert.That(e.Kind, Is.EqualTo(ErrorClass.Offline));
+            Assert.That(h.Tokens.Load().RegisteredKeyId, Is.Null);
+
+            Assert.That(Ensure(h), Is.EqualTo(DeviceRegistration.Registered));
+            var ids = h.CallsTo(AuthRoutes.Devices).Select(c => c.Header(ApiHeaders.RequestId)).Distinct().ToArray();
+            Assert.That(ids, Has.Length.EqualTo(1), "one idempotent request, replayed until it lands");
+        }
+
+        [Test]
+        public void AFinalRefusal_IsNotRetriedThisProcess_AndUploadsGoAhead()
+        {
+            var h = SignedInWithoutRecord(Enumerable.Repeat((byte)9, 32).ToArray());
+            h.Server.DevicesRefusal = FakeReply.Error(403, "FORBIDDEN", details: new { reason = "KEY_ROTATION_NOT_ALLOWED" });
+            Assert.That(Ensure(h), Is.EqualTo(DeviceRegistration.Refused));
+            Assert.That(Ensure(h), Is.EqualTo(DeviceRegistration.Refused));
+            Assert.That(h.CallsTo(AuthRoutes.Devices), Has.Length.EqualTo(1));
+            Assert.That(h.Tokens.Load().RegisteredKeyId, Is.Null, "not recorded: the next launch asks again");
+        }
+
+        [Test]
+        public void ARefreshKeepsTheRegistrationRecord()
+        {
+            var h = SignedIn();
+            h.NewAuth();
+            Assert.That(h.SignIn().Status, Is.EqualTo(SignInStatus.SignedIn));
+            Assert.That(h.Server.Rotations, Is.EqualTo(1));
+            Assert.That(h.Tokens.Load().RegisteredKeyId, Is.EqualTo(DeviceKey.KeyId(Key)));
+        }
+
+        [Test]
+        public void Uploads_WaitForTheRegistration()
+        {
+            var h = SignedInWithoutRecord();
+            h.Handler.On("PUT", RemoteRoutes.Save, 200, new { etag = "e1" });
+            var store = new CloudSaveStore(new HeroCat.Runtime.Save.MemorySaveStore(), h.Client, ct => h.Auth.EnsureDeviceRegisteredAsync(ct));
+            var file = HeroCat.Runtime.Save.SaveSerializer.EncodeBody("{\"SchemaVersion\":1}", Key);
+            store.Write(file);
+
+            h.Handler.Then(Enumerable.Repeat(FakeFault.Drop, RuntimeConfig.HTTP_RETRY_MAX + 1).ToArray());
+            Assert.That(store.TryUploadAsync().GetAwaiter().GetResult(), Is.False);
+            Assert.That(h.CallsTo(RemoteRoutes.Save), Is.Empty, "no upload before the server holds the key");
+            Assert.That(store.PendingUpload, Is.EqualTo(file));
+
+            Assert.That(store.TryUploadAsync().GetAwaiter().GetResult(), Is.True);
+            var paths = h.Handler.Calls.Select(c => c.Path).Where(p => p == AuthRoutes.Devices || p == RemoteRoutes.Save).ToArray();
+            Assert.That(paths.Last(), Is.EqualTo(RemoteRoutes.Save));
+            Assert.That(h.CallsTo(RemoteRoutes.Save), Has.Length.EqualTo(1));
+            Assert.That(HeroCat.Runtime.Save.SaveSerializer.Decode(h.CallsTo(RemoteRoutes.Save)[0].Body, h.Server.DeviceKeys[Device]).HmacValid,
+                        Is.True, "the upload verifies against the key the server holds");
+        }
+
+        [Test]
+        public void TheKey_TravelsOnlyInTheRegistrationBodies_AndIsNotStoredWithTheTokens()
+        {
+            var h = SignedInWithoutRecord();
+            Ensure(h);
+            h.Handler.On("PUT", RemoteRoutes.Save, 200, new { etag = "e1" });
+            var store = new CloudSaveStore(new HeroCat.Runtime.Save.MemorySaveStore(), h.Client, ct => h.Auth.EnsureDeviceRegisteredAsync(ct));
+            store.Write(HeroCat.Runtime.Save.SaveSerializer.EncodeBody("{\"SchemaVersion\":1}", Key));
+            Assert.That(store.TryUploadAsync().GetAwaiter().GetResult(), Is.True);
+
+            string b64 = Convert.ToBase64String(Key);
+            string hex = string.Concat(Key.Select(b => b.ToString("x2")));
+            foreach (var c in h.Handler.Calls)
+            {
+                foreach (var kv in c.Headers)
+                    Assert.That(kv.Value, Does.Not.Contain(b64).And.Not.Contain(hex), $"{c} header {kv.Key}");
+                if (c.Path == AuthRoutes.Guest || c.Path == AuthRoutes.Devices) continue;
+                string text = c.Body == null ? "" : System.Text.Encoding.UTF8.GetString(c.Body);
+                Assert.That(text, Does.Not.Contain(b64).And.Not.Contain(hex), c.ToString());
+            }
+            string tokens = System.Text.Encoding.UTF8.GetString(h.Secure.Get(SecureTokenStore.Key));
+            Assert.That(tokens, Does.Not.Contain(b64).And.Not.Contain(hex));
+            Assert.That(DeviceKey.KeyId(Key), Has.Length.EqualTo(16).And.Not.Contain(hex.Substring(0, 16)), "the id is a hash, not a prefix");
         }
 
         // ------------------------------------------------------------------------------------------- wiring

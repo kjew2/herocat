@@ -35,7 +35,8 @@ public sealed class AuthStore
 
     /// <summary>
     /// Creates the account, its device and the first refresh token of a new family, or reports the player the device is
-    /// already bound to (<c>DEVICE_ALREADY_BOUND</c>), also when a concurrent call bound it first.
+    /// already bound to (<c>DEVICE_ALREADY_BOUND</c>), also when a concurrent call bound it first. A device that logout
+    /// released (<c>devices.released_at</c>, 00 decision 117) is rebound to the new guest with its new key.
     /// </summary>
     public async Task<GuestResult> CreateGuestAsync(Guid playerId, string displayName, string region, NewDevice device, byte[] refreshHash,
                                                     DateTimeOffset now, DateTimeOffset refreshExpiresAt, CancellationToken ct)
@@ -50,9 +51,14 @@ public sealed class AuthStore
             ("p", playerId), ("n", displayName), ("region", region), ("now", now)))
             await acc.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
 
+        // A released row keeps its device_id (saves and refresh_tokens reference it) and takes the new player and key.
         await using (var dev = c.Command(
             "insert into devices (device_id, player_id, hmac_key_enc, model, os, client_version, first_seen_at, last_seen_at) " +
-            "values (@d, @p, @k, @model, @os, @cv, @now, @now) on conflict (device_id) do nothing", tx,
+            "values (@d, @p, @k, @model, @os, @cv, @now, @now) on conflict (device_id) do update set " +
+            "player_id = excluded.player_id, hmac_key_enc = excluded.hmac_key_enc, model = excluded.model, os = excluded.os, " +
+            "client_version = excluded.client_version, push_token = null, first_seen_at = excluded.first_seen_at, " +
+            "last_seen_at = excluded.last_seen_at, released_at = null " +
+            "where devices.released_at is not null", tx,
             ("d", device.DeviceId), ("p", playerId), ("k", device.HmacKeyEnc), ("model", device.Model), ("os", device.Os),
             ("cv", device.ClientVersion), ("now", now)))
         {
@@ -144,18 +150,34 @@ public sealed class AuthStore
         return new RefreshResult(RefreshOutcome.Rotated, account with { LastLoginAt = now }, device);
     }
 
-    /// <summary>Revokes the family of <paramref name="hash"/> if it belongs to <paramref name="playerId"/> (logout). False when it does not.</summary>
+    /// <summary>
+    /// Logout (specs/08 section 2.2, 00 decision 117): revokes the family of <paramref name="hash"/> if it belongs to
+    /// <paramref name="playerId"/>, then releases that token's device if it is still bound to the player, in one
+    /// transaction, so the device's next <c>/auth/guest</c> makes a new guest. False when the token is not the player's
+    /// (nothing changes).
+    /// </summary>
     public async Task<bool> RevokeFamilyOfAsync(Guid playerId, byte[] hash, DateTimeOffset now, CancellationToken ct)
     {
         await using var c = await _db.OpenAsync(ct).ConfigureAwait(false);
-        await using var cmd = c.Command(
+        await using var tx = await c.BeginTransactionAsync(ct).ConfigureAwait(false);
+        Guid device;
+        await using (var sel = c.Command("select device_id from refresh_tokens where token_hash = @h and player_id = @p", tx,
+            ("h", hash), ("p", playerId)))
+        {
+            if (await sel.ExecuteScalarAsync(ct).ConfigureAwait(false) is not Guid d) return false;
+            device = d;
+        }
+        await using (var cmd = c.Command(
             "update refresh_tokens set revoked_at = @now where revoked_at is null and family_id = " +
-            "(select family_id from refresh_tokens where token_hash = @h and player_id = @p)", null,
-            ("now", now), ("h", hash), ("p", playerId));
-        await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-        await using var exists = c.Command("select exists(select 1 from refresh_tokens where token_hash = @h and player_id = @p)", null,
-            ("h", hash), ("p", playerId));
-        return (bool)(await exists.ExecuteScalarAsync(ct).ConfigureAwait(false))!;
+            "(select family_id from refresh_tokens where token_hash = @h and player_id = @p)", tx,
+            ("now", now), ("h", hash), ("p", playerId)))
+            await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        await using (var rel = c.Command(
+            "update devices set released_at = @now where device_id = @d and player_id = @p and released_at is null", tx,
+            ("now", now), ("d", device), ("p", playerId)))
+            await rel.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        await tx.CommitAsync(ct).ConfigureAwait(false);
+        return true;
     }
 
     public async Task<StoredDevice?> GetDeviceAsync(Guid deviceId, CancellationToken ct)
@@ -205,7 +227,7 @@ public sealed class AuthStore
 
     static async Task<Guid?> BoundPlayerAsync(DbConnection c, DbTransaction? tx, Guid deviceId, CancellationToken ct)
     {
-        await using var cmd = c.Command("select player_id from devices where device_id = @d", tx, ("d", deviceId));
+        await using var cmd = c.Command("select player_id from devices where device_id = @d and released_at is null", tx, ("d", deviceId));
         return await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false) is Guid g ? g : null;
     }
 

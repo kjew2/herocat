@@ -120,6 +120,7 @@ namespace HeroCat.Runtime.Summons
                 return result;
             }
 
+            var localAfter = LocalAfter(result.Value, state);   // before the apply snaps the wallet to the server's balances
             var applied = _runner.Issue(new ApplySummonResult(result.Value));
             if (!applied.Ok)
             {
@@ -133,8 +134,26 @@ namespace HeroCat.Runtime.Summons
             _runner.PublishDrained();
             _runner.SaveNow(SaveTrigger.Summon);
             Hit(SummonFlowPoint.AfterFinalSave);
-            Track(result.Value, pityBefore, expBefore, (mono.Ticks - started) * 1000.0 / mono.Frequency);
+            Track(result.Value, pityBefore, expBefore, (mono.Ticks - started) * 1000.0 / mono.Frequency, localAfter);
             return result;
+        }
+
+        /// <summary>
+        /// Remote payloads only (BalancesAfter set): per BalancesAfter row, the local balance minus the payload's debits in
+        /// that currency, i.e. what the wallet would hold without the server's snap. Null for a Local payload.
+        /// </summary>
+        static double[] LocalAfter(SummonResultPayload p, GameState state)
+        {
+            if (p?.BalancesAfter == null) return null;
+            var after = new double[p.BalancesAfter.Length];
+            for (int i = 0; i < after.Length; i++)
+            {
+                var c = p.BalancesAfter[i].Currency;
+                double v = state.Wallet.Get(c);
+                if (p.Debits != null) foreach (var d in p.Debits) if (d.Currency == c) v += d.Amount;
+                after[i] = v;
+            }
+            return after;
         }
 
         void Clear()
@@ -148,8 +167,11 @@ namespace HeroCat.Runtime.Summons
         /// <summary>
         /// 04 section 13's <c>summon</c> row, once per request after ApplySummonResult, then one <c>item_acquired</c> per
         /// result (acquireReason SUMMON). A replayed requestId returns before this, so it tracks nothing (04 AC 12).
+        /// Source is SERVER for a payload without a stream counter (the server rolled it); such a payload also sends one
+        /// <c>summon_reconciled</c> per BalancesAfter row that differs from <paramref name="localAfter"/>.
+        /// TODO(#145): summon_pending / summon_resolved come with the Remote pending path of 01 section 8.5.2.
         /// </summary>
-        void Track(SummonResultPayload p, int pityBefore, long expBefore, double latencyMs)
+        void Track(SummonResultPayload p, int pityBefore, long expBefore, double latencyMs, double[] localAfter)
         {
             var analytics = _runner.Services.Analytics;
             if (analytics == null) return;
@@ -177,6 +199,13 @@ namespace HeroCat.Runtime.Summons
             foreach (var r in p.Pulls)
                 analytics.Track(new AnalyticsEvents.ItemAcquired(p.Banner, r.ItemId, r.Rarity, r.IsNew, r.CopiesAfter, r.LevelBefore, r.LevelAfter,
                                                                  AnalyticsEvents.ItemAcquired.SUMMON, p.RequestId));
+            if (localAfter != null)
+                for (int i = 0; i < localAfter.Length; i++)
+                {
+                    var b = p.BalancesAfter[i];
+                    if (localAfter[i] != b.Amount)
+                        analytics.Track(new AnalyticsEvents.SummonReconciled(p.RequestId, p.Banner, b.Currency, localAfter[i], b.Amount));
+                }
         }
     }
 }

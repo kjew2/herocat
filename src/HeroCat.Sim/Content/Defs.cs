@@ -440,10 +440,12 @@ namespace HeroCat.Sim.Content
     public sealed class ResearchDef
     {
         internal ResearchDef(string id, ResearchEffect effect, double effectPerLevel, double? effectFloor, int maxLevel,
-                             double cost0, double costG, int unlockAwakenRank, Tier tier)
+                             double cost0, double costG, int unlockAwakenRank, Tier tier, int layoutRow = 0, int layoutCol = 0,
+                             string nameKey = null, string descKey = null, string icon = null)
         {
             Id = id; Effect = effect; EffectPerLevel = effectPerLevel; EffectFloor = effectFloor; MaxLevel = maxLevel;
             Cost0 = cost0; CostG = costG; UnlockAwakenRank = unlockAwakenRank; Tier = tier;
+            LayoutRow = layoutRow; LayoutCol = layoutCol; NameKey = nameKey; DescKey = descKey; Icon = icon;
             _cost = new CurveDef("research_cost_" + id, cost0, costG, 0, maxLevel < 0 ? 1 : maxLevel + 1);
         }
 
@@ -464,6 +466,14 @@ namespace HeroCat.Sim.Content
         public double CostG { get; }
         public int UnlockAwakenRank { get; }
         public Tier Tier { get; }
+
+        /// <summary>Presentation only (03 section 6): SCR_RESEARCH orders its rows by (row, col); the sim ignores both.</summary>
+        public int LayoutRow { get; }
+        public int LayoutCol { get; }
+
+        public string NameKey { get; }
+        public string DescKey { get; }
+        public string Icon { get; }
     }
 
     /// <summary>

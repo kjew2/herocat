@@ -114,11 +114,41 @@ namespace HeroCat.Runtime.Services
             }
         }
 
-        /// <summary>06 section 13: SCR_SHOP opened on a tab (07 section 4.16). The client's shop screen tracks it; no sim event.</summary>
+        /// <summary>
+        /// 06 section 13: SCR_SHOP opened on a tab (07 section 4.16). The client's shop screen tracks it; no sim event.
+        /// TODO(#184): SCR_SHOP's view model tracks this on open; nothing sends it until that screen exists.
+        /// </summary>
         public sealed record ShopView(string Tab) : AnalyticsEvent
         {
             public override string Name => AnalyticsNames.SHOP_VIEW;
             public override Dictionary<string, object> Props() => new Dictionary<string, object> { ["tab"] = Tab };
+        }
+
+        // TODO(#147): iap_initiated / iap_completed / iap_failed are tracked by the client purchase flow (01 section 8.9,
+        // 08 section 5) once it exists; their typed records go here with it. iap_status is the server's (08 section 5.2).
+
+        /// <summary>
+        /// 06 section 13: an inbox claim the server confirmed and this client credited (InboxFlow, issue #176). ItemId is
+        /// the inbox item id; Type its 06 type (IAP, MAIL, ...; null when the item was not in the last list); Grants the
+        /// payload's lines as <c>{kind, id, amount}</c>; Bulk is true for the rows of a claim-all; AgeSec the seconds since the
+        /// item was created (null when the list did not say).
+        /// </summary>
+        public sealed record InboxClaimed(string ItemId, string Type, IReadOnlyList<HeroCat.Sim.Commands.GrantLine> Grants, bool Bulk, long? AgeSec)
+            : AnalyticsEvent
+        {
+            public override string Name => AnalyticsNames.INBOX_CLAIMED;
+
+            public override Dictionary<string, object> Props()
+            {
+                var grants = new List<Dictionary<string, object>>(Grants?.Count ?? 0);
+                if (Grants != null)
+                    foreach (var g in Grants)
+                        if (g != null) grants.Add(new Dictionary<string, object> { ["kind"] = g.Kind, ["id"] = g.Id, ["amount"] = g.Amount });
+                return new Dictionary<string, object>
+                {
+                    ["itemId"] = ItemId, ["type"] = Type, ["grants"] = grants, ["bulk"] = Bulk, ["ageSec"] = AgeSec,
+                };
+            }
         }
 
         /// <summary>03 section 11: Awaken bought a rank. The stage is the envelope's (02 section 14.1).</summary>

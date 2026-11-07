@@ -76,6 +76,7 @@ namespace HeroCat.Runtime.Services
         public const string BOOT_MS = "boot_ms";
         public const string RESUME_MS = "resume_ms";
         public const string PERF_TICK = "perf_tick";
+        public const string CONTENT_UPDATE_FAILED = "content_update_failed";
 
         /// <summary>Every name above, in index order.</summary>
         public static readonly IReadOnlyList<string> All = new[]
@@ -88,7 +89,7 @@ namespace HeroCat.Runtime.Services
             PLAUSIBILITY_FLAG,
             SESSION_START, SESSION_END, CLOUD_SAVE_UPLOADED, CLOUD_CONFLICT, CLOUD_AUTORESOLVED, SAVE_FALLBACK, SAVE_CORRUPT,
             SAVE_CORRUPT_ALL, SAVE_REPAIRED, SAVE_REJECT, SAVE_WRITE_FAILED, MIGRATION_APPLIED, CLOCK_ANOMALY, PLAYER_DELETED,
-            PROFILE_CREATED, BOOT_MS, RESUME_MS, PERF_TICK,
+            PROFILE_CREATED, BOOT_MS, RESUME_MS, PERF_TICK, CONTENT_UPDATE_FAILED,
         };
 
         /// <summary>
@@ -177,7 +178,11 @@ namespace HeroCat.Runtime.Services
             }
         }
 
-        /// <summary>02 section 14.3: Runtime at SCR_MAIN shown.</summary>
+        /// <summary>
+        /// 02 section 14.3: Runtime at SCR_MAIN shown. ColdBoot true: BootFlow, once per boot (BootMs the boot's total).
+        /// ColdBoot false: SessionRunner, when a session reopens after a resume or an in-app gap (issue #298), so each
+        /// session_end has its start; BootMs is then the runner's catch-up milliseconds for that reopen.
+        /// </summary>
         public sealed record SessionStart(long OfflineElapsedSec, long OfflineCredited, bool ColdBoot, double BootMs) : AnalyticsEvent
         {
             public override string Name => AnalyticsNames.SESSION_START;
@@ -251,6 +256,20 @@ namespace HeroCat.Runtime.Services
             {
                 ["saveSeq"] = SaveSeq, ["sizeBytes"] = SizeBytes, ["trigger"] = Trigger, ["latencyMs"] = LatencyMs,
                 ["flags"] = Flags ?? Array.Empty<string>(),
+            };
+        }
+
+        /// <summary>
+        /// 02 section 14.3 / 09 section 10.3 step 5: a downloaded content bundle was ruled out and discarded (issue #298).
+        /// One per failed bundle, with its first error: Code (E900-E903 or a build rule) and Location (file or row).
+        /// </summary>
+        public sealed record ContentUpdateFailed(string Version, string Code, string Location) : AnalyticsEvent
+        {
+            public override string Name => AnalyticsNames.CONTENT_UPDATE_FAILED;
+
+            public override Dictionary<string, object> Props() => new Dictionary<string, object>
+            {
+                ["version"] = Version, ["code"] = Code, ["location"] = Location,
             };
         }
 

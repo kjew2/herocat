@@ -395,5 +395,31 @@ namespace HeroCat.Sim.Tests
             Assert.That(sim.Apply(new Research("res_atk")).Ok, Is.True);
             Assert.That(sim.Query.RatedDps, Is.GreaterThan(dps), "a DPS node does change it");
         }
+
+        [Test]
+        public void EffectAt_MatchesTheLiveRule_AtEveryLevel()   // SCR_RESEARCH's current -> next text (07 section 4.9; #181)
+        {
+            foreach (var node in Mvp.Research.Values)
+                for (int lv = 0; lv <= node.MaxLevel; lv++)
+                {
+                    var sim = Sim();
+                    SetLevel(sim, node.Id, lv);
+                    var st = sim.State;
+                    double live = node.Effect switch
+                    {
+                        ResearchEffect.MP_POOL => ResearchRules.MpPoolMax(Mvp, st),
+                        ResearchEffect.MP_REGEN => ResearchRules.MpRegenPerSecond(Mvp, st),
+                        ResearchEffect.TANK_CAP => ResearchRules.TankCap(Mvp, st),
+                        ResearchEffect.TANK_REFILL => ResearchRules.TankRefillTicks(Mvp, st) / (double)Mvp.Constants.TickHz,
+                        ResearchEffect.FISH_CAP => ResearchRules.FishMaxLvl(Mvp, st),
+                        ResearchEffect.OFFLINE_CAP => ResearchRules.OfflineCapH(Mvp, st),
+                        _ => ResearchRules.EffectTotal(Mvp, st, node.Effect),
+                    };
+                    Assert.That(ResearchRules.EffectAt(Mvp, node, lv), Is.EqualTo(live).Within(1e-12), node.Id + " level " + lv);
+                }
+            var cap = Mvp.Research["res_tank_cap"];
+            Assert.That(ResearchRules.EffectAt(Mvp, cap, cap.MaxLevel + 3), Is.EqualTo(ResearchRules.EffectAt(Mvp, cap, cap.MaxLevel)), "clamped to max_level");
+            Assert.That((cap.LayoutRow, cap.LayoutCol, cap.NameKey), Is.EqualTo((1, 1, "research.res_tank_cap.name")), "presentation columns reach the def");
+        }
     }
 }

@@ -188,17 +188,9 @@ namespace HeroCat.Remote.Api
         async Task<RawResult> AttemptAsync(ApiRequest req, string requestId, byte[] body, string contentType, string token,
                                            CancellationToken ct)
         {
-            using var msg = new HttpRequestMessage(req.Method, _baseUrl + req.Path);
-            if (token != null) msg.Headers.TryAddWithoutValidation(ApiHeaders.Authorization, "Bearer " + token);
-            msg.Headers.TryAddWithoutValidation(ApiHeaders.RequestId, requestId);
-            msg.Headers.TryAddWithoutValidation(ApiHeaders.ClientVersion, _o.ClientVersion ?? "");
-            string content = _o.ContentVersion?.Invoke();
-            if (!string.IsNullOrEmpty(content)) msg.Headers.TryAddWithoutValidation(ApiHeaders.ContentVersion, content);
-            if (!string.IsNullOrEmpty(_o.DeviceId)) msg.Headers.TryAddWithoutValidation(ApiHeaders.DeviceId, _o.DeviceId);
-            string locale = _o.Locale?.Invoke();
-            if (!string.IsNullOrEmpty(locale)) msg.Headers.TryAddWithoutValidation(ApiHeaders.AcceptLanguage, locale);
-            if (req.Headers != null)
-                foreach (var h in req.Headers) msg.Headers.TryAddWithoutValidation(h.Key, h.Value);
+            bool api = !req.IsAbsolute;   // a CDN GET goes out bare (ApiRequest.Cdn)
+            using var msg = new HttpRequestMessage(req.Method, api ? _baseUrl + req.Path : req.Path);
+            if (api) AddApiHeaders(msg, req, requestId, token);
             if (body != null)
             {
                 msg.Content = new ByteArrayContent(body);
@@ -214,11 +206,11 @@ namespace HeroCat.Remote.Api
                 using var response = await _http.SendAsync(msg, HttpCompletionOption.ResponseHeadersRead, cts.Token).ConfigureAwait(false);
                 long rttMs = (long)((_mono.Ticks - t0) * 1000.0 / _mono.Frequency);
                 raw.Status = (int)response.StatusCode;
-                raw.ServerTimeSec = ReadServerTime(response);
+                raw.ServerTimeSec = api ? ReadServerTime(response) : 0;
                 if (raw.ServerTimeSec > 0) _o.ServerTime?.Observe(raw.ServerTimeSec, rttMs);
                 raw.RetryAfterHeaderSec = ReadRetryAfter(response);
                 raw.Body = response.Content == null ? null : await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-                ServerReached?.Invoke(true);
+                if (api) ServerReached?.Invoke(true);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
@@ -231,9 +223,23 @@ namespace HeroCat.Remote.Api
             catch (Exception e) when (IsConnectionFailure(e))
             {
                 raw = new RawResult { Failure = e.GetType().Name + ": " + e.Message, ServerTimeSec = raw.ServerTimeSec, Status = 0 };
-                ServerReached?.Invoke(false);
+                if (api) ServerReached?.Invoke(false);
             }
             return raw;
+        }
+
+        void AddApiHeaders(HttpRequestMessage msg, ApiRequest req, string requestId, string token)
+        {
+            if (token != null) msg.Headers.TryAddWithoutValidation(ApiHeaders.Authorization, "Bearer " + token);
+            msg.Headers.TryAddWithoutValidation(ApiHeaders.RequestId, requestId);
+            msg.Headers.TryAddWithoutValidation(ApiHeaders.ClientVersion, _o.ClientVersion ?? "");
+            string content = _o.ContentVersion?.Invoke();
+            if (!string.IsNullOrEmpty(content)) msg.Headers.TryAddWithoutValidation(ApiHeaders.ContentVersion, content);
+            if (!string.IsNullOrEmpty(_o.DeviceId)) msg.Headers.TryAddWithoutValidation(ApiHeaders.DeviceId, _o.DeviceId);
+            string locale = _o.Locale?.Invoke();
+            if (!string.IsNullOrEmpty(locale)) msg.Headers.TryAddWithoutValidation(ApiHeaders.AcceptLanguage, locale);
+            if (req.Headers != null)
+                foreach (var h in req.Headers) msg.Headers.TryAddWithoutValidation(h.Key, h.Value);
         }
 
         static bool IsConnectionFailure(Exception e) =>

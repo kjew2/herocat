@@ -193,12 +193,15 @@ namespace HeroCat.Client.Screens
                 case ScreenIds.Weapons: v = rt.gameObject.AddComponent<WeaponsScreen>(); break;
                 case ScreenIds.Skills: v = rt.gameObject.AddComponent<SkillsScreen>(); break;
                 case ScreenIds.Companions: v = rt.gameObject.AddComponent<CompanionsScreen>(); break;
+                case ScreenIds.Research: v = rt.gameObject.AddComponent<ResearchScreen>(); break;
                 case ScreenIds.Summon: v = rt.gameObject.AddComponent<SummonScreen>(); break;
                 case ScreenIds.SummonResult: v = rt.gameObject.AddComponent<SummonResultOverlay>(); break;
                 case ScreenIds.ItemDetail: v = rt.gameObject.AddComponent<ItemDetailModal>(); break;
                 case ScreenIds.Confirm: v = rt.gameObject.AddComponent<ConfirmModal>(); break;
                 case ScreenIds.OfflineReward: v = rt.gameObject.AddComponent<OfflineRewardModal>(); break;
                 case ScreenIds.Error: v = rt.gameObject.AddComponent<ErrorModal>(); break;
+                case ScreenIds.Quests: v = rt.gameObject.AddComponent<QuestsScreen>(); break;
+                case ScreenIds.StageSelect: v = rt.gameObject.AddComponent<StageSelectModal>(); break;
                 default:
                     Destroy(rt.gameObject);
                     return null;

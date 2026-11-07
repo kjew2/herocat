@@ -73,6 +73,7 @@ Integration tests run against real Postgres and Redis in containers; unit tests 
 | Rate limits | 8 | per-route limits from 08 enforced via Redis, 429 body shape. |
 | Inbox and mail | 12 | grant, expiry at `INBOX_EXPIRY_DAYS`, claim-all idempotent, admin mail blast to a segment. |
 | Dungeon seed | 8 | seed issued once per ticket, `DUNGEON_SEED_TTL_S`; correlation only (issue #52): the uploaded save's `Dungeons.RecentRuns` entries are matched to issued seeds by `grantId`, a clear with no issued seed is flagged `DUNGEON_WITHOUT_SEED`, and dungeon rewards stay inside `GOLD_DELTA_BOUND` / `RESEARCH_WITHOUT_COINS`. No replay in MVP (a P1 follow-up if soft-launch data shows dungeon reward abuse). |
+| Observability | 58 | 08 section 9.4 (issue #210): a request carrying a bearer token and a receipt, logged carelessly by its handler (header, body, exception), produces log lines with neither, no display name and no IP beyond its `/24`; the request fields are on every line of a request; the metric catalog equals 08's table, every metric is a registered instrument and every one is scraped from the loopback Prometheus endpoint; 10% head sampling with every 5xx trace kept; every row of section 10's alarm table is in `server/ops/alarms.json` with its severity and runbook, and its PromQL reads only 9.4 metrics. |
 
 ### 1.4 Unity PlayMode smoke (4 tests, nightly and release)
 
@@ -547,7 +548,7 @@ Every runbook has a stable `RB-*` id (the link target alarms use, issue #59) and
 
 ### 9.3 Summon rate misconfiguration (`RB-SUMMON-RATES`)
 
-- **Detect**: the Odds drift alarm (section 10: observed rate per rarity and banner level outside the Wilson interval around the published rate, so the threshold scales with the pulls observed; issue #59), or `rateTableHash` served by `/summon/rates` differs from the content's. For 24 h after any `banners` or `banner_levels` change the operator watches the hourly window.
+- **Detect**: the Odds drift alarm (section 10: observed rate per rarity and banner level outside the Wilson interval around the published rate, so the threshold scales with the pulls observed; issue #59), the worker's nightly realised-rate job over the trailing 30 days (08 section 10.3, the same rule, which also fires on pulls logged with a `rate_table_hash` no held content set publishes), or `rateTableHash` served by `/summon/rates` differs from the content's. For 24 h after any `banners` or `banner_levels` change the operator watches the hourly window.
 - **Mitigate**: kill switch `summonEnabled[banner] = false` (08) within one config refresh; content rollback as in 9.1. Compute per-player impact from `summon_log` (every pull has the rate table hash it was rolled under).
 - **Communicate**: this is a regulatory matter in several markets. If published odds were higher than actual: refund the diamond difference as "pulls at the published odds" (grant the missing expected L+ as a pity-counter reduction plus diamonds), publish a notice in-game and on the store listing. If actual odds were higher than published: no clawback; note it publicly.
 - **Postmortem**: why `E037` or the server's rate hash check did not fire.
@@ -647,7 +648,7 @@ Alarms (PagerDuty P1 pages the on-call; P2 is a channel message and a ticket nex
 | Cost | daily spend > 1.5x the 7-day average | P2 | `RB-COST` |
 | Rollout halt | any P1 during a staged rollout automatically freezes `rolloutPct` | - | the P1's runbook |
 
-Every alarm links to its `RB-*` runbook (section 9).
+Every alarm links to its `RB-*` runbook (section 9). The table is defined as code in `server/ops/alarms.json` (08 section 9.5, issue #210): change a threshold here first, then there; `HeroCat.Server.Tests` (`AlarmCatalogTests`) fails when the two disagree on an alarm, its severity or its runbook.
 
 ## 11. Roadmap: 12 months, M0 to P1
 

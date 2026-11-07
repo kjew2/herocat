@@ -14,6 +14,17 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NUnit.Framework;
+using ApiClient = HeroCat.Remote.Api.ApiClient;
+using ApiClientOptions = HeroCat.Remote.Api.ApiClientOptions;
+using IApiCredentials = HeroCat.Remote.Api.IApiCredentials;
+using RemoteAnalyticsUploader = HeroCat.Remote.Services.RemoteAnalyticsUploader;
+using RuntimeClock = HeroCat.Runtime.Services.FakeClock;
+using AnalyticsEnvelope = HeroCat.Runtime.Services.AnalyticsEnvelope;
+using AnalyticsEvents = HeroCat.Runtime.Services.AnalyticsEvents;
+using AnalyticsSink = HeroCat.Runtime.Services.AnalyticsSink;
+using MemoryAnalyticsQueueStore = HeroCat.Runtime.Services.MemoryAnalyticsQueueStore;
+using QueuedEvent = HeroCat.Runtime.Services.QueuedEvent;
+using static HeroCat.Runtime.Services.AnalyticsExtensions;
 
 namespace HeroCat.Server.Tests.Analytics;
 
@@ -49,7 +60,7 @@ public sealed class PostgresAnalyticsTests
         _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(b =>
         {
             b.UseSetting("HeroCat:Database:ConnectionString", _db.ConnectionString);
-            b.UseSetting("HeroCat:Analytics:Env", "test");
+            b.UseSetting("HeroCat:Env", "test");
             b.UseSetting("HeroCat:Analytics:PlayerIdSalt", "test-salt");
             b.ConfigureServices(s =>
             {
@@ -262,5 +273,62 @@ public sealed class PostgresAnalyticsTests
         Assert.That(before.All(h => h.BelowOnePeriod && h.Created == 0 && h.HorizonDays < 0), string.Join(", ", before));
         var after = await job.EnsureOnceAsync(CancellationToken.None);
         Assert.That(after.All(h => !h.BelowOnePeriod), string.Join(", ", after));
+    }
+
+    // ---- the client's AnalyticsSink and RemoteAnalyticsUploader against this server (issue #297) ----
+
+    sealed class TokenCredentials : IApiCredentials
+    {
+        public TokenCredentials(string token) => AccessToken = token;
+        public string AccessToken { get; }
+        public Task<bool> RefreshAsync(CancellationToken ct) => Task.FromResult(false);
+    }
+
+    AnalyticsSink ClientSink(Guid player, MemoryAnalyticsQueueStore store, out RemoteAnalyticsUploader uploader, int ageGate = 2)
+    {
+        string device = Guid.NewGuid().ToString("D");
+        var api = new ApiClient(new ApiClientOptions
+        {
+            BaseUrl = "http://localhost/v1",
+            Handler = _factory.Server.CreateHandler(),
+            ClientVersion = PipelineHost.ClientVersion,
+            ContentVersion = () => PipelineHost.ContentVersion,
+            DeviceId = device,
+            Credentials = new TokenCredentials(_factory.Services.GetRequiredService<AccessTokenService>().Issue(player, device, ageGate).Token),
+            Delay = (_, _) => Task.CompletedTask,
+        });
+        uploader = new RemoteAnalyticsUploader(api);
+        var envelope = new AnalyticsEnvelope(new RuntimeClock(_clock.GetUtcNow().ToUnixTimeSeconds()), null, "test-salt", 86400,
+                                             Guid.NewGuid(), Guid.Parse(device), PipelineHost.ClientVersion, PipelineHost.ContentVersion);
+        return new AnalyticsSink(envelope, AnalyticsSink.MemoryQueue(store), uploader);
+    }
+
+    [Test]
+    public async Task The_client_sink_uploads_its_queue_and_a_resent_queue_is_stored_once()
+    {
+        var player = Guid.NewGuid();
+        var store = new MemoryAnalyticsQueueStore();
+        var sink = ClientSink(player, store, out var up, ageGate: 1);
+        for (int i = 0; i < 3; i++)
+            sink.Track(new AnalyticsEvents.CurrencyChanged(HeroCat.Sim.Content.Currency.DIAMOND, 50, 640 + 50 * i, HeroCat.Sim.Economy.CurrencyReason.QUEST));
+        sink.Track("currency_changed", new Dictionary<string, object> { ["currency"] = "DIAMOND", ["delta"] = 9, ["balanceAfter"] = 9, ["reason"] = "HACKED" });
+        sink.Track(new AnalyticsEvents.SessionStart(0, 0, true, 1000));   // not an economy event: never sent to the backend
+        var queued = store.Lines.ToList();
+
+        Assert.That(sink.FlushAsync().Wait(TimeSpan.FromSeconds(30)), Is.True);
+        Assert.That(sink.Queue.Count, Is.Zero, "a 200 drops the batch, refusals included");
+        Assert.That((up.BatchesSent, up.EventsAccepted, up.EventsRefused, up.EventsSkipped, up.LastRefusalCode),
+                    Is.EqualTo((1L, 3L, 1L, 1L, AnalyticsEventCodes.EVENT_REASON_INVALID)));
+        Assert.That(await Stored(player), Is.EqualTo(3));
+        var h = ("h", (object)AnalyticsEventRules.HashPlayerId(player, "test-salt"));
+        Assert.That(await _db.CountAsync("select count(*) from events where player_id_hash = @h and age_gate = 1 and source = 'client'", h), Is.EqualTo(3),
+                    "the token's age gate, not the envelope's");
+
+        // A process killed before the queue rewrite resends the same lines: same X-Request-Id, replayed, stored once.
+        var resend = ClientSink(player, new MemoryAnalyticsQueueStore(), out var up2);
+        foreach (var line in queued) resend.Queue.Enqueue(new QueuedEvent(AnalyticsSink.EventIdOf(line), line));
+        Assert.That(resend.FlushAsync().Wait(TimeSpan.FromSeconds(30)), Is.True);
+        Assert.That((resend.Queue.Count, up2.BatchesSent), Is.EqualTo((0, 1L)));
+        Assert.That(await Stored(player), Is.EqualTo(3));
     }
 }

@@ -31,7 +31,7 @@ public sealed class NpgsqlConnectionFactory : IDbConnectionFactory, IAsyncDispos
     }
 
     public async ValueTask<DbConnection> OpenAsync(CancellationToken ct = default) =>
-        await _dataSource.Value.OpenConnectionAsync(ct).ConfigureAwait(false);
+        Observability.DbMetrics.Track(await _dataSource.Value.OpenConnectionAsync(ct).ConfigureAwait(false));
 
     public async ValueTask DisposeAsync()
     {

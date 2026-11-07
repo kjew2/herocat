@@ -10,15 +10,17 @@ namespace HeroCat.Server.Features.Analytics;
 /// records its <c>currency_changed</c> row (06 section 13's fields) in the <c>events</c> table itself, in the ledger write's
 /// own transaction, so the warehouse never depends on the client for money events. Rows carry <c>source = 'server'</c>
 /// (the client's rows are <c>'client'</c>), no session, device or day index.
+/// TODO(#305): with no day_index, these rows group under a null day in currency_daily, which takes server-ledger
+/// pairs only from them (migration 0008).
 /// </summary>
 public sealed class ServerEconomyEvents
 {
-    readonly AnalyticsOptions _options;
+    readonly ServerOptions _options;
     readonly TimeProvider _clock;
 
     public ServerEconomyEvents(IOptions<ServerOptions> options, TimeProvider clock)
     {
-        _options = options.Value.Analytics;
+        _options = options.Value;
         _clock = clock;
     }
 
@@ -44,7 +46,7 @@ public sealed class ServerEconomyEvents
         foreach (string k in props.Keys)
             if (!AnalyticsEventRules.IsCamelCase(k) || AnalyticsEventRules.EnvelopeFields.Contains(k))
                 throw new ArgumentException($"'{k}' is not an owner field name (02 section 14.1)", nameof(props));
-        return new EventRow(Guid.NewGuid(), _clock.GetUtcNow(), name, AnalyticsEventRules.HashPlayerId(playerId, _options.RequireSalt()),
+        return new EventRow(Guid.NewGuid(), _clock.GetUtcNow(), name, AnalyticsEventRules.HashPlayerId(playerId, _options.Analytics.RequireSalt()),
                             null, null, null, JsonSerializer.Serialize(props), _options.RequireEnv(), AnalyticsEventRules.SourceServer,
                             null, null, null, null, null, true, AnalyticsEventRules.EnvelopeAgeGate(accountAgeGate));
     }

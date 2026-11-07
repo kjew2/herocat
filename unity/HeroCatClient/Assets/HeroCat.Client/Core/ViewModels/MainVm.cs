@@ -17,7 +17,11 @@ namespace HeroCat.Client.Core
     {
         readonly VmContext _c;
 
-        public HudVm(VmContext c) { _c = c; }
+        public HudVm(VmContext c)
+        {
+            _c = c;
+            RockCandyLock = new LockedVm(c);
+        }
 
         public readonly NumberLabel Gold = new NumberLabel();
         public readonly IntLabel Diamonds = new IntLabel();
@@ -27,8 +31,14 @@ namespace HeroCat.Client.Core
 
         public readonly IntLabel RockCandy = new IntLabel();
 
-        /// <summary>Shown once Progress.HighestCleared reaches AWAKEN_STAGES[0] (07 section 4.3, MVP row).</summary>
+        /// <summary>Shown in any build with Awakening rows (MVP); M0 has no Rock Candy at all.</summary>
         public readonly Flag RockCandyVisible = new Flag();
+
+        /// <summary>
+        /// Locked, never hidden (07 section 10 rule 8), until Progress.HighestCleared reaches AWAKEN_STAGES[0], the first
+        /// stage that can earn Rock Candy; the condition reads "Reach stage {AWAKEN_STAGES[0]}" (07 section 4.3).
+        /// </summary>
+        public readonly LockedVm RockCandyLock;
 
         public readonly IntLabel PartyLevel = new IntLabel();
         public readonly BadgeDot Inbox = new BadgeDot();
@@ -40,7 +50,9 @@ namespace HeroCat.Client.Core
             FishCoin.Set(Math.Floor(s.FishCoin));
             RockCandy.Set(s.RockCandy);
             var aw = _c.Db.Awakening;
-            RockCandyVisible.Set(aw != null && aw.Count > 0 && sim.State.Progress.HighestCleared >= aw[0].StageGate);
+            bool hasAwakening = aw != null && aw.Count > 0;
+            RockCandyVisible.Set(hasAwakening);
+            if (hasAwakening) RockCandyLock.Set(sim.State.Progress.HighestCleared < aw[0].StageGate, UiKeys.PartyAwakenGate, aw[0].StageGate);
             PartyLevel.Set(s.PartyLevel);
             Inbox.Set(s.PendingInboxCount);
         }
@@ -65,8 +77,12 @@ namespace HeroCat.Client.Core
 
         public void OnGoldChip() => _c.Router?.Replace(ScreenIds.Party);
         public void OnDiamondChip() => _c.LockedToast("SHOP");
-        public void OnFishCoinChip() => _c.LockedToast("RESEARCH");
-        public void OnRockCandyChip() => _c.Router?.Replace(ScreenIds.Party);
+        /// <summary>Opens SCR_RESEARCH even before its gate (the screen shows its Locked state; 07 section 4.3).</summary>
+        public void OnFishCoinChip() => ResearchVm.Open(_c, toast: false);
+        public void OnRockCandyChip()
+        {
+            if (RockCandyLock.Tap()) _c.Router?.Replace(ScreenIds.Party);
+        }
         public void OnAvatar() => _c.Toast(UiKeys.ComingSoon, ToastStyle.Reject);
         public void OnInbox() => _c.Toast(UiKeys.ComingSoon, ToastStyle.Reject);
         public void OnSettings() => _c.Toast(UiKeys.ComingSoon, ToastStyle.Reject);
@@ -259,8 +275,12 @@ namespace HeroCat.Client.Core
 
         public void OnBoss() => _c.Commands?.Send(new AttemptBoss(), AnchorBoss);
 
-        /// <summary>Stage label tap: SCR_STAGE_SELECT is MVP, a no-op in M0 (07 section 4.3).</summary>
-        public void OnStageLabel() { }
+        /// <summary>Stage label tap: opens SCR_STAGE_SELECT (07 sections 4.3 and 4.14). Not during a dungeon run (no stage to pick).</summary>
+        public void OnStageLabel()
+        {
+            if (_c.Router == null || _c.Router.TopFull.Id == ScreenIds.DungeonRun) return;
+            _c.Router.Push(ScreenIds.StageSelect);
+        }
 
         /// <summary>Skill icon tap pushes SCR_ITEM_DETAIL for that skill.</summary>
         public void OnSkillIcon(int slot, ItemDetailVm detail)
@@ -331,8 +351,10 @@ namespace HeroCat.Client.Core
     }
 
     /// <summary>
-    /// SCR_MAIN (07 section 4.3): the HUD, combat band, action strip, Fish Board and tab bar. Red-dot pills (Quests,
-    /// Dungeons, Inbox) and the Research button are MVP; their badges stay at zero in M0.
+    /// SCR_MAIN (07 section 4.3): the HUD, combat band, action strip, Fish Board and tab bar. The red dots (pills, tabs,
+    /// HUD inbox, Research button) come from <see cref="Badges"/> (07 section 10 rule 2); the Dungeons and Quests tabs and
+    /// the Research button show the shared Locked state (<see cref="LockedVm"/>) before their feature_unlocks condition.
+    /// The Research button and the Quests and Dungeons features are MVP; in M0 they stay locked and dot-free.
     /// </summary>
     public sealed class MainVm
     {
@@ -344,21 +366,53 @@ namespace HeroCat.Client.Core
             Hud = new HudVm(c);
             Combat = new CombatVm(c);
             Board = new FishBoardVm(c);
+            Badges = new BadgesVm(c);
+            ResearchLock = new LockedVm(c);
+            Research = new ResearchEntryVm(c, toastWhenLocked: true);
             for (int i = 0; i < TabBadges.Length; i++) TabBadges[i] = new BadgeDot();
-            for (int i = 0; i < TabLocked.Length; i++) TabLocked[i] = new Flag();
+            for (int i = 0; i < TabLocks.Length; i++)
+            {
+                TabLocks[i] = new LockedVm(c);
+                TabLocked[i] = TabLocks[i].Locked;
+            }
+            for (int i = 0; i < TabDisabled.Length; i++) TabDisabled[i] = new Flag();
+            Maintenance = new MaintenanceBannerVm(c.Loc);
         }
 
         public readonly HudVm Hud;
         public readonly CombatVm Combat;
         public readonly FishBoardVm Board;
 
+        /// <summary>The Fish Board's [Research] (MVP, 07 section 4.3): lock glyph and condition toast before the gate.</summary>
+        public readonly ResearchEntryVm Research;
+        /// <summary>The maintenance banner over the combat band (01 section 8.12 step 4); fed by the GameViewModel.</summary>
+        public readonly MaintenanceBannerVm Maintenance;
+
         public readonly BadgeDot QuestsPill = new BadgeDot();
         public readonly BadgeDot DungeonsPill = new BadgeDot();
         public readonly BadgeDot InboxPill = new BadgeDot();
 
+        /// <summary>The red-dot counts (07 section 10 rule 2) the pills, tabs, HUD inbox and Research button read.</summary>
+        public readonly BadgesVm Badges;
+
+        /// <summary>The Fish Board's [Research] button (MVP): shown only when content has Research nodes.</summary>
+        public readonly Flag ResearchVisible = new Flag();
+
+        /// <summary>The [Research] button's Locked state (feature_unlocks RESEARCH); its dot is <c>Badges.ResearchAffordable</c>.</summary>
+        public readonly LockedVm ResearchLock;
+
         /// <summary>Per <see cref="MainTab"/>: the red dot and the lock glyph.</summary>
         public readonly BadgeDot[] TabBadges = new BadgeDot[6];
+
+        /// <summary>Per <see cref="MainTab"/>: the shared Locked state (glyph, condition, tap toast).</summary>
+        public readonly LockedVm[] TabLocks = new LockedVm[6];
+
+        /// <summary>Per <see cref="MainTab"/>: the lock glyph, the same Flag as <c>TabLocks[i].Locked</c>.</summary>
         public readonly Flag[] TabLocked = new Flag[6];
+
+        /// <summary>Per <see cref="MainTab"/>: the feature's kill switch is off (Shop: <c>shopEnabled</c>, Dungeons:
+        /// <c>dungeonsEnabled</c>; 01 section 8.12 step 1). The tab greys out and a tap toasts <see cref="UiKeys.FeatureDisabled"/>.</summary>
+        public readonly Flag[] TabDisabled = new Flag[6];
 
         /// <summary>The tab tinted <c>accent</c>, or -1 on SCR_MAIN.</summary>
         public readonly Bindable<int> ActiveTab = new Bindable<int>();
@@ -368,14 +422,26 @@ namespace HeroCat.Client.Core
             Hud.Refresh(sim, s);
             Combat.Refresh(sim, s, now);
             Board.Refresh(sim, s);
-            QuestsPill.Set(0);
-            DungeonsPill.Set(0);
-            InboxPill.Set(s.PendingInboxCount);
-            TabBadges[(int)MainTab.Collection].Set(newCollectibles);
+            Badges.Refresh(sim, s.PendingInboxCount, newCollectibles);
+            QuestsPill.Set(Badges.QuestsClaimable.Count);
+            DungeonsPill.Set(Badges.DungeonTicketsUnused.Count);
+            InboxPill.Set(Badges.InboxUnclaimed.Count);
+            TabBadges[(int)MainTab.Party].Set(0);   // never for affordable Training (07 section 10 rule 2)
+            TabBadges[(int)MainTab.Collection].Set(Badges.NewCollectibles.Count);
+            TabBadges[(int)MainTab.Summon].Set(0);
+            TabBadges[(int)MainTab.Dungeons].Set(Badges.DungeonTicketsUnused.Count);
+            TabBadges[(int)MainTab.Quests].Set(Badges.QuestsClaimable.Count);
+            TabBadges[(int)MainTab.Shop].Set(Badges.DailyGiftFree.Count);
+            Research.Refresh(sim);
             var st = sim.State;
-            TabLocked[(int)MainTab.Dungeons].Set(!_c.Db.IsUnlocked("DUNGEONS", st));
-            TabLocked[(int)MainTab.Quests].Set(!_c.Db.IsUnlocked("QUESTS", st));
+            TabLocks[(int)MainTab.Dungeons].RefreshFeature("DUNGEONS", st);
+            TabLocks[(int)MainTab.Quests].RefreshFeature("QUESTS", st);
             TabLocked[(int)MainTab.Shop].Set(false);   // never locked; the screen itself is MVP
+            ResearchVisible.Set(_c.Db.Research != null && _c.Db.Research.Count > 0);
+            ResearchLock.RefreshFeature("RESEARCH", st);
+            var sw = _c.Switches;
+            TabDisabled[(int)MainTab.Dungeons].Set(!sw.DungeonsEnabled);
+            TabDisabled[(int)MainTab.Shop].Set(!sw.ShopEnabled);
             ActiveTab.Set(TabOf(_c.Router?.TopFull.Id));
         }
 
@@ -395,7 +461,11 @@ namespace HeroCat.Client.Core
             }
         }
 
-        /// <summary>A tab tap replaces the top Full screen (07 section 1 rule 2); an MVP tab shows the lock toast.</summary>
+        /// <summary>
+        /// A tab tap replaces the top Full screen (07 section 1 rule 2); an MVP tab shows the lock toast. A tab whose
+        /// feature is unlocked but kill-switched off toasts <see cref="UiKeys.FeatureDisabled"/> instead (read at the tap,
+        /// so a switch applies within one config refresh).
+        /// </summary>
         public void OnTab(MainTab tab)
         {
             switch (tab)
@@ -403,10 +473,29 @@ namespace HeroCat.Client.Core
                 case MainTab.Party: _c.Router?.Replace(ScreenIds.Party); break;
                 case MainTab.Collection: _c.Router?.Replace(ScreenIds.Weapons); break;
                 case MainTab.Summon: _c.Router?.Replace(ScreenIds.Summon); break;
-                case MainTab.Dungeons: _c.LockedToast("DUNGEONS"); break;
-                case MainTab.Quests: _c.LockedToast("QUESTS"); break;
-                case MainTab.Shop: _c.LockedToast("SHOP"); break;
+                case MainTab.Dungeons:
+                    if (!TabLocks[(int)MainTab.Dungeons].Tap()) break;   // locked: the condition toast
+                    if (!_c.Switches.DungeonsEnabled) _c.Toast(UiKeys.FeatureDisabled, ToastStyle.Reject);
+                    else _c.Router?.Replace(ScreenIds.Dungeons);
+                    break;
+                case MainTab.Quests: if (TabLocks[(int)MainTab.Quests].Tap()) _c.Router?.Replace(ScreenIds.Quests); break;
+                case MainTab.Shop:
+                    if (!_c.Switches.ShopEnabled) _c.Toast(UiKeys.FeatureDisabled, ToastStyle.Reject);
+                    else _c.LockedToast("SHOP");   // SCR_SHOP is MVP
+                    break;
             }
+        }
+
+        /// <summary>The Quests pill: the same route as the Quests tab (lock toast before its gate).</summary>
+        public void OnQuestsPill() => OnTab(MainTab.Quests);
+
+        /// <summary>The Dungeons pill: the same route as the Dungeons tab.</summary>
+        public void OnDungeonsPill() => OnTab(MainTab.Dungeons);
+
+        /// <summary>The Fish Board's [Research] button: SCR_RESEARCH once Research unlocks, the lock toast before.</summary>
+        public void OnResearch()
+        {
+            if (ResearchLock.Tap()) _c.Router?.Push(ScreenIds.Research);
         }
 
         public void OnEvent(Event e, double now)

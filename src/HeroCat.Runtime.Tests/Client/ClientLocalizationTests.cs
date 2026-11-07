@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using HeroCat.Client.Core;
 using HeroCat.Runtime.Boot;
@@ -34,6 +35,9 @@ namespace HeroCat.Runtime.Tests
             foreach (CollectionSort s in Enum.GetValues(typeof(CollectionSort))) Need(UiKeys.SortKey(s));
             foreach (CollectionFilter f in Enum.GetValues(typeof(CollectionFilter))) Need(UiKeys.FilterKey(f));
             foreach (Rarity r in Enum.GetValues(typeof(Rarity))) Need(UiKeys.RarityName(r));
+            foreach (QuestKind k in Enum.GetValues(typeof(QuestKind))) Need(UiKeys.QuestsTabKey(k));
+            foreach (Currency c in Enum.GetValues(typeof(Currency))) Need(UiKeys.CurrencyKey(c));   // the Claim all summary toast (issue #183)
+            foreach (var q in TestContent.Mvp.QuestsDaily.Concat(TestContent.Mvp.QuestsWeekly).Concat(TestContent.Mvp.Achievements)) Need(q.NameKey);
             // The error and reject keys the client builds itself (SummonVm's predicted rejects), through ErrorClassifier.
             Need(ErrorClassifier.RejectCodeKey(RejectCode.RateLimited));
             Need(ErrorClassifier.ErrTitleKey("NET_OFFLINE"));

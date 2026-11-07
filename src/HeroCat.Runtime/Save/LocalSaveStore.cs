@@ -33,8 +33,10 @@ namespace HeroCat.Runtime.Save
     }
 
     /// <summary>
-    /// Save metadata (02 section 9.1), the subset a local load knows. TODO(#152): clientVersion, hmac, progressScore and
-    /// the summary block for the cloud client.
+    /// Save metadata (02 section 9.1). A local load fills the file's own fields; the conflict rule (9.3,
+    /// <see cref="ConflictRule"/>) also reads <see cref="ClockAuthoritative"/>, <see cref="ProgressScore"/> and
+    /// <see cref="Summary"/>, and the modal (9.4) <see cref="DeviceModel"/>. TODO(#152): clientVersion, hmac, and filling
+    /// ClockAuthoritative, ProgressScore and Summary for the cloud client (a local load leaves them at their defaults).
     /// </summary>
     public sealed class SaveMeta
     {
@@ -47,6 +49,21 @@ namespace HeroCat.Runtime.Save
         public int SizeBytes { get; set; }
         public string Sha256 { get; set; } = "";
         public bool HmacValid { get; set; }
+
+        /// <summary>The stamp came from an authoritative clock (02 section 11). A non-authoritative stamp never beats an authoritative one (9.3).</summary>
+        public bool ClockAuthoritative { get; set; }
+
+        /// <summary>02 section 9.1's progressScore (computed by the cloud client, #152).</summary>
+        public double ProgressScore { get; set; }
+
+        /// <summary>02 section 9.1's <c>summary</c> block. Never null.</summary>
+        public SaveSummary Summary { get; set; } = new SaveSummary();
+
+        /// <summary>Remote candidates only: the server version's etag (the resolution's <c>If-Match</c>, 9.4).</summary>
+        public string Etag { get; set; }
+
+        /// <summary>Remote candidates only: the uploading device's model name from <c>devices</c> (08), for the modal's card.</summary>
+        public string DeviceModel { get; set; }
 
         public static SaveMeta Of(GameState s, SaveFile f, int sizeBytes) => new SaveMeta
         {
@@ -209,6 +226,8 @@ namespace HeroCat.Runtime.Save
                         new SaveValidatorOptions { InstallId = InstallId, RemoteMode = RemoteMode });
                     foreach (var rule in report.Repairs)
                         _analytics.Track(new AnalyticsEvents.SaveRepaired(rule));
+                    if (report.AbandonedRun is HeroCat.Sim.Events.DungeonAbandoned ab)   // 06 section 13 dungeon_run abandoned (issue #146)
+                        _analytics.Track(new AnalyticsEvents.DungeonRun(ab.Dungeon, ab.Floor, "abandoned", 0, null, 0, ab.GrantId));
                     if (slot == SaveSlot.Backup)
                     {
                         if (primaryBad) Slots.Quarantine(SaveSlot.Primary, nowServerSec);

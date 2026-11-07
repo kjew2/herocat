@@ -221,6 +221,65 @@ namespace HeroCat.Runtime.Tests
             }
         }
 
+        /// <summary>
+        /// The Remote path's shape (01 section 8.5.2): the server rolled the pull, so the payload has no stream counter and
+        /// carries the server's balance after the debit, Skew off what the local wallet minus the debit would be.
+        /// </summary>
+        sealed class ServerShapedSummons : ISummonService
+        {
+            readonly ISummonService _inner;
+            readonly Func<GameState> _state;
+            public double Skew;
+
+            public ServerShapedSummons(ISummonService inner, Func<GameState> state) { _inner = inner; _state = state; }
+
+            public async System.Threading.Tasks.Task<Result<SummonResultPayload, SummonError>> PullAsync(SummonRequest request,
+                                                                                                        System.Threading.CancellationToken ct)
+            {
+                var r = await _inner.PullAsync(request, ct);
+                if (!r.IsOk) return r;
+                var d = r.Value.Debits[0];
+                double server = _state().Wallet.Get(d.Currency) + d.Amount + Skew;
+                return Result<SummonResultPayload, SummonError>.Ok(r.Value with
+                {
+                    StreamCounterAfter = null, BalancesAfter = new[] { new HeroCat.Sim.Economy.CurrencyDelta(d.Currency, server) },
+                });
+            }
+
+            public System.Threading.Tasks.Task<RateTableDto> GetRateTableAsync(Banner banner, System.Threading.CancellationToken ct) =>
+                _inner.GetRateTableAsync(banner, ct);
+        }
+
+        static ServerShapedSummons ServerShaped(TestSession t)
+        {
+            var fake = new ServerShapedSummons(t.Runner.Services.Summon, () => t.Sim.State);
+            typeof(GameServices).GetProperty(nameof(GameServices.Summon)).SetValue(t.Runner.Services, fake);   // test seam: init-only
+            return fake;
+        }
+
+        [Test]
+        public void AServerPayload_TracksSourceServer_AndReconcilesOnlyWhenTheBalancesDiffer()   // 04 section 13, issue #163
+        {
+            var t = TestSession.Open();
+            var fake = ServerShaped(t);
+            var r = t.Runner.SummonAsync(Banner.WEAPON, 1, SummonPayment.Diamonds).GetAwaiter().GetResult();
+            Assert.That(r.IsOk, Is.True, r.ToString());
+            Assert.That(t.Analytics.Events.Single(x => x.Name == "summon").Props["source"], Is.EqualTo("SERVER"));
+            Assert.That(t.Analytics.Count("summon_reconciled"), Is.Zero, "the server agrees with local minus the debit");
+
+            fake.Skew = -50;
+            long before = t.Sim.State.Wallet.Diamond;
+            r = t.Runner.SummonAsync(Banner.WEAPON, 1, SummonPayment.Diamonds).GetAwaiter().GetResult();
+            Assert.That(r.IsOk, Is.True, r.ToString());
+            var e = t.Analytics.Events.Single(x => x.Name == "summon_reconciled");
+            Assert.That(e.Props.Keys, Is.EquivalentTo(new[] { "requestId", "banner", "currency", "localAfter", "serverAfter" }));
+            Assert.That((e.Props["requestId"], e.Props["banner"], e.Props["currency"]), Is.EqualTo((r.Value.RequestId, "WEAPON", "DIAMOND")));
+            Assert.That(e.Props["localAfter"], Is.EqualTo((double)(before - Cost(1))));
+            Assert.That(e.Props["serverAfter"], Is.EqualTo((double)(before - Cost(1) - 50)));
+            Assert.That(t.Sim.State.Wallet.Diamond, Is.EqualTo(before - Cost(1) - 50), "the server ledger wins");
+            Assert.That(t.Analytics.Events.Last(x => x.Name == "summon").Props["source"], Is.EqualTo("SERVER"));
+        }
+
         [Test]
         public void AReplayedRequestId_TracksNoSummonAndNoItems()   // 04 AC 12
         {

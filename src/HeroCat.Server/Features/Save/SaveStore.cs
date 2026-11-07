@@ -77,9 +77,9 @@ public sealed class SaveStore
 
     /// <summary>
     /// Step 7's rows: upserts the save of record (clearing <c>rollback_pending</c>) and inserts its history entry, whose
-    /// insert trigger trims the player's history to <c>SAVE_HISTORY_KEEP</c> (migration 0002). Two devices can reach the
-    /// same <c>saveSeq</c> (a <c>SEQ_REGRESSION</c> upload); the later one replaces the earlier history entry, as its blob
-    /// replaced the earlier blob at the same key.
+    /// insert trigger trims the player's history to <c>SAVE_HISTORY_KEEP</c> (migrations 0002, 0007). Two devices can
+    /// reach the same <c>saveSeq</c> (a <c>SEQ_REGRESSION</c> upload); each keeps its own history entry and blob, keyed by
+    /// the device (issue #295). One device never repeats a <c>saveSeq</c> (step 4's <c>SAVE_STALE</c>).
     /// </summary>
     public static async Task WriteAsync(DbConnection c, DbTransaction tx, StoredSave s, CancellationToken ct)
     {
@@ -103,7 +103,7 @@ public sealed class SaveStore
         await using var hist = c.Command(
             "insert into save_history (player_id, save_seq, device_id, blob_key, sha256, progress_score, summary, flags, uploaded_at) " +
             "values (@p, @seq, @d, @key, @sha, @score, cast(@summary as jsonb), @flags, @now) " +
-            "on conflict (player_id, save_seq) do update set device_id = excluded.device_id, blob_key = excluded.blob_key, " +
+            "on conflict (player_id, save_seq, device_id) do update set blob_key = excluded.blob_key, " +
             "sha256 = excluded.sha256, progress_score = excluded.progress_score, summary = excluded.summary, flags = excluded.flags, " +
             "uploaded_at = excluded.uploaded_at", tx,
             ("p", s.PlayerId), ("seq", s.SaveSeq), ("d", s.DeviceId), ("key", s.BlobKey), ("sha", s.Sha256), ("score", s.ProgressScore),
@@ -125,7 +125,7 @@ public sealed class SaveStore
         await using var c = await _db.OpenAsync(ct).ConfigureAwait(false);
         await using var cmd = c.Command(
             "select save_seq, device_id, uploaded_at, summary::text from save_history where player_id = @p " +
-            "order by uploaded_at desc, save_seq desc limit @n", null, ("p", playerId), ("n", limit));
+            "order by uploaded_at desc, save_seq desc, device_id desc limit @n", null, ("p", playerId), ("n", limit));
         await using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
         var list = new List<SaveHistoryEntryDto>();
         while (await r.ReadAsync(ct).ConfigureAwait(false))

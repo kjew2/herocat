@@ -76,6 +76,15 @@ namespace HeroCat.Runtime.Errors
         public const string SAVE_TOO_NEW = "SAVE_TOO_NEW";
         public const string CONTENT_CORRUPT = "CONTENT_CORRUPT";
 
+        /// <summary>Logout's choice modal when the save could not be uploaded first (01 section 8.13 step 1).</summary>
+        public const string LOGOUT_UNSYNCED = "LOGOUT_UNSYNCED";
+
+        /// <summary>
+        /// Logout's choice modal when an unlinked guest's <c>POST /auth/logout</c> was not confirmed ([Retry] / [Cancel];
+        /// 01 section 8.13 step 2, 00 decision 119).
+        /// </summary>
+        public const string LOGOUT_OFFLINE = "LOGOUT_OFFLINE";
+
         /// <summary>
         /// Not an error class (00 decision 103): no readable save copy means quarantine and a new profile (02 section 8.3),
         /// then a one-time <see cref="Notice"/> and the <c>save_corrupt_all</c> analytics event. Not in <see cref="Table"/>.
@@ -93,8 +102,11 @@ namespace HeroCat.Runtime.Errors
             R(401, "UNAUTHENTICATED", ErrorClass.AuthExpired, RetryPolicy.None, Presentation.None),
             R(401, "TOKEN_REVOKED", ErrorClass.AuthExpired, RetryPolicy.None, Presentation.None),
             R(401, "TOKEN_REUSED", ErrorClass.AuthExpired, RetryPolicy.None, Presentation.None),
+            R(400, "DISPLAY_NAME_BLOCKED", ErrorClass.Rejected, RetryPolicy.None, Presentation.Modal),
             R(402, "INSUFFICIENT_FUNDS", ErrorClass.Rejected, RetryPolicy.None, Presentation.Modal),
             R(403, "ACCOUNT_BANNED", ErrorClass.Fatal, RetryPolicy.None, Presentation.Fatal),
+            R(403, "DUNGEON_LOCKED", ErrorClass.Rejected, RetryPolicy.None, Presentation.Modal),
+            R(404, "INBOX_NOT_FOUND", ErrorClass.Rejected, RetryPolicy.None, Presentation.None),
             R(409, "IDEMPOTENCY_IN_FLIGHT", ErrorClass.Retryable, RetryPolicy.Backoff, Presentation.None),
             R(409, "PAYMENT_MISMATCH", ErrorClass.Rejected, RetryPolicy.None, Presentation.None),
             R(409, "SAVE_CONFLICT", ErrorClass.Conflict, RetryPolicy.None, Presentation.ChoiceModal),
@@ -103,15 +115,20 @@ namespace HeroCat.Runtime.Errors
             R(409, "CONTENT_TOO_OLD", ErrorClass.Rejected, RetryPolicy.None, Presentation.Modal),
             R(409, "INBOX_ALREADY_CLAIMED", ErrorClass.Ok, RetryPolicy.None, Presentation.None),
             R(409, "INBOX_NOT_AVAILABLE", ErrorClass.Rejected, RetryPolicy.None, Presentation.None),
+            R(409, "INBOX_BAD_GRANT", ErrorClass.Rejected, RetryPolicy.None, Presentation.None),
+            R(409, "AGE_GATE_LOCKED", ErrorClass.Rejected, RetryPolicy.None, Presentation.Modal),
             R(409, "PROVIDER_ALREADY_LINKED", ErrorClass.Rejected, RetryPolicy.None, Presentation.Modal),
             R(409, "BANNER_CLOSED", ErrorClass.Rejected, RetryPolicy.None, Presentation.Modal),
             R(409, "SKU_NOT_AVAILABLE", ErrorClass.Rejected, RetryPolicy.None, Presentation.Modal),
+            R(410, "INBOX_EXPIRED", ErrorClass.Rejected, RetryPolicy.None, Presentation.None),
+            R(413, "SAVE_TOO_LARGE", ErrorClass.Rejected, RetryPolicy.None, Presentation.Modal),
             R(426, "CLIENT_TOO_OLD", ErrorClass.Rejected, RetryPolicy.None, Presentation.Block),
             R(429, "RATE_LIMITED", ErrorClass.Retryable, RetryPolicy.Backoff, Presentation.None),
             R(429, "DUNGEON_SEED_CAP", ErrorClass.Rejected, RetryPolicy.None, Presentation.Modal),
             R(429, "EXPORT_RATE_LIMITED", ErrorClass.Rejected, RetryPolicy.None, Presentation.Modal),
             R(503, "MAINTENANCE", ErrorClass.Maintenance, RetryPolicy.PollConfig, Presentation.Block),
             R(503, "SUMMON_DISABLED", ErrorClass.Rejected, RetryPolicy.None, Presentation.Modal),
+            R(503, "DUNGEONS_DISABLED", ErrorClass.Rejected, RetryPolicy.None, Presentation.Modal),
             R(503, "STORE_UNAVAILABLE", ErrorClass.Retryable, RetryPolicy.ReceiptRetry, Presentation.None),
             R(400, "RECEIPT_INVALID", ErrorClass.Rejected, RetryPolicy.None, Presentation.Modal),
             R(500, SRV_5XX, ErrorClass.ServerError, RetryPolicy.Once, Presentation.ToastThenModal),
@@ -120,6 +137,8 @@ namespace HeroCat.Runtime.Errors
             R(0, SAVE_CORRUPT, ErrorClass.Conflict, RetryPolicy.None, Presentation.ChoiceModal),
             R(0, SAVE_TOO_NEW, ErrorClass.Fatal, RetryPolicy.None, Presentation.Fatal),
             R(0, CONTENT_CORRUPT, ErrorClass.Fatal, RetryPolicy.None, Presentation.Fatal),
+            R(0, LOGOUT_UNSYNCED, ErrorClass.Conflict, RetryPolicy.None, Presentation.ChoiceModal),
+            R(0, LOGOUT_OFFLINE, ErrorClass.Conflict, RetryPolicy.None, Presentation.ChoiceModal),
             // Status-rule fallbacks with a generic key (an unknown code must still never show raw).
             R(0, REQUEST_REJECTED, ErrorClass.Rejected, RetryPolicy.None, Presentation.Modal),
             R(0, SRV_UNEXPECTED, ErrorClass.ServerError, RetryPolicy.None, Presentation.ToastThenModal),

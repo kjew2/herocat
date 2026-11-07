@@ -11,9 +11,8 @@ namespace HeroCat.Runtime.Content
     /// <summary>
     /// The storage half of 09 section 10.3 (steps 4, 6 and 8), which issue #212 owns: CDN download into a staging area,
     /// promotion to <c>persistentDataPath/content/&lt;version&gt;/</c>, the cold-boot list. <see cref="ContentUpdater"/>
-    /// (issue #144) drives it and does the validation and the hot-or-cold decision in between.
-    /// TODO(#212): the CDN implementation (manifest sha256 against <c>config.content.sha256</c>, per-file download, the
-    /// <c>&lt;version&gt;.tmp</c> rename, CONTENT_CACHE_KEEP pruning). <see cref="MemoryContentStaging"/> is the test double.
+    /// (issue #144) drives it and does the validation and the hot-or-cold decision in between. The device implementation is
+    /// HeroCat.Remote's <c>CdnContentStaging</c> over <see cref="ContentCache"/>; <see cref="MemoryContentStaging"/> is the test double.
     /// </summary>
     public interface IContentStaging
     {
@@ -113,7 +112,7 @@ namespace HeroCat.Runtime.Content
         /// <param name="running">The sim's content: its Version is the floor, its BuildTier the tier a candidate is built for.</param>
         /// <param name="runningManifest">The running set's manifest, for the hot-apply table diff; null makes every bundle cold-boot only.</param>
         /// <param name="clientVersion">This build's semver for E903 and step 3; null skips both (bots, tools).</param>
-        /// <param name="log">Each error that ruled a bundle out (the <c>content_update_failed</c> report). Thread pool.</param>
+        /// <param name="log">Each error that ruled a bundle out (diagnostics; analytics uses <see cref="Failed"/>). Thread pool.</param>
         public ContentUpdater(IContentStaging staging, ContentDb running, ManifestDto runningManifest, string clientVersion,
                               Action<ContentError> log = null)
         {
@@ -146,6 +145,13 @@ namespace HeroCat.Runtime.Content
 
         /// <summary>The hot set once applied; null before.</summary>
         public HotContentSet Applied { get; private set; }
+
+        /// <summary>
+        /// Once per bundle ruled out, after its staged copy is discarded: the offered version and its first error (09 section
+        /// 10.3 step 5's <c>content_update_failed</c>, issue #298). Raised on the thread pool; BootFlow posts it to the main
+        /// thread before tracking.
+        /// </summary>
+        public event Action<string, ContentError> Failed;
 
         /// <summary>Raised by <see cref="TryApplyHot"/> on the main thread with the swapped tables.</summary>
         public event Action<HotContentSet> HotApplied;
@@ -246,6 +252,9 @@ namespace HeroCat.Runtime.Content
                 _hot = null;
             }
             if (_log != null) foreach (var e in errors) _log(e);
+            var first = errors != null && errors.Count > 0 ? errors[0] : new ContentError("E900", version, "no error reported");
+            try { Failed?.Invoke(version, first); }
+            catch (Exception) { /* a reporting failure must not fault the staging task (Check never faults) */ }
         }
 
         /// <summary>

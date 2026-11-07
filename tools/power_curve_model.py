@@ -100,10 +100,9 @@ COMPANION_FALLBACK = {"mix": [("DAMAGE", 0.50), ("BUFF_ATK", 0.20), ("BUFF_GOLD"
 # The Fish Coin curve is settled at 50 * f (#165).
 DUNGEON_FALLBACK = {"tickets_per_day": 2, "floor_stage_step": 20, "floors": 40,
                     "FISH_COIN": 50.0, "ROCK_CANDY": 10.0, "EXP_KILLS": 300}
-# 06 section 1 / 00 decision 15: weeklies and achievements pay about 0.15 skill and 0.15 companion tickets a day.
-# The weekly share is content now (w_bonus_all_skill / w_bonus_all_companion, 1 a week each); the achievement share is not.
-# TODO(#171): derive both from quests_weekly + achievements rows once achievements ship. The weapon ticket is content.
-SUMMON_TICKETS_FALLBACK = {"SKILL": 0.15, "COMPANION": 0.15}
+# 06 section 1 / 00 decision 15: skill and companion tickets come from the weekly complete-all bonus (about 0.15 a day
+# each). Derived from the quests_weekly ticket rows (w_bonus_all_skill / w_bonus_all_companion, 1 a week each) in
+# Params._load_quests; achievements pay only diamonds (06 section 5.4, issue #267). The weapon ticket is the daily gift.
 # 06 section 5.4 achievement ladders as (goal, [(target, diamonds), ...]). TODO(#171): read content/achievements.json
 # once it ships (the table is preferred whenever it exists).
 ACHIEVEMENTS_FALLBACK = [
@@ -211,14 +210,15 @@ class Params:
             self.fallbacks.append("dungeons: 06 section 6.3 formulas 50f / 10f / 300 kills (content has no dungeons table)")
         for k, v in DUNGEON_FALLBACK.items():
             c[f"DUNGEON_{k}"] = v
-        if not m0:
-            for b, v in SUMMON_TICKETS_FALLBACK.items():
-                c[f"TICKETS_PER_DAY[{b}]"] = v
-            c["TICKETS_PER_DAY[WEAPON]"] = c["DAILY_GIFT_WEAPON_TICKETS"]
-            self.fallbacks.append("skill/companion tickets: 06 section 1 'about 0.15 a day' (no achievements table, TODO(#171))")
         c["ROCK_CANDY_PER_DAY"] = None   # None = dungeon income per 06; a number replaces it (--rock-candy-per-day)
         c["FISH_COIN_PER_DAY"] = None
         self._load_quests(db, tier_ok)
+        if not m0:
+            # 06 section 1 income: each weekly row paying a ticket, credited flat as if claimed every week (06 section 5.3).
+            for b in ("SKILL", "COMPANION"):
+                c[f"TICKETS_PER_DAY[{b}]"] = sum(r["reward_amount"] for r in self.quests_weekly
+                                                 if r["reward_currency"] == TICKET[b]) / WEEK_DAYS
+            c["TICKETS_PER_DAY[WEAPON]"] = c["DAILY_GIFT_WEAPON_TICKETS"]
 
         grants = [g for row in db.table("tutorial_steps") if tier_ok(row) for g in (row["grants"] or [])]
         c["TUTORIAL_DIAMONDS"] = sum(g["amount"] for g in grants if g.get("currency") == "DIAMOND")

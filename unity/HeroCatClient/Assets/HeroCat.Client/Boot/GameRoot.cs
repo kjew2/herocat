@@ -105,7 +105,7 @@ namespace HeroCat.Client.Boot
             }
         }
 
-        /// <summary>The bundled content (01 section 8.1 step 1). TODO(#212): a verified cached newer bundle goes first.</summary>
+        /// <summary>The bundled content (01 section 8.1 step 1). TODO(#315): a verified cached newer bundle goes first (ContentCache.LoadPreferred).</summary>
         ContentDb LoadBundledContent()
         {
             if (_content != null) return _content;
@@ -127,7 +127,11 @@ namespace HeroCat.Client.Boot
                 _session = ClientSession.Start(new Func<ContentDb>[] { LoadBundledContent },
                                                (db, state, wrapClock) => Backend.Create(dataDir, db, state, wrapClock), _cmdlog,
                                                clientVersion: Application.version,
-                                               options: new ClientOptions { Localizer = _loc, Prefs = _prefs, BuildHash = Application.buildGUID });
+                                               options: new ClientOptions
+                                               {
+                                                   Localizer = _loc, Prefs = _prefs, BuildHash = Application.buildGUID,
+                                                   Platform = Application.platform == RuntimePlatform.IPhonePlayer ? StoreLink.Ios : StoreLink.Android,
+                                               });
             }
             catch (Exception e)
             {
@@ -145,6 +149,7 @@ namespace HeroCat.Client.Boot
                 return;
             }
             _session.Vm.Error.Log = code => Debug.LogWarning("HeroCat: SCR_ERROR replaced " + code);
+            _session.Vm.OpenUrl = OpenStore;   // the mid-session CLIENT_TOO_OLD block's [Update] (01 section 8.12 step 3)
             try { _ui = UiRoot.Create(transform, _session.Vm); }
             catch (Exception e)
             {
@@ -172,7 +177,7 @@ namespace HeroCat.Client.Boot
                     StartSession();
                     break;
                 case ErrorAction.UpdateApp:
-                    Application.OpenURL("market://details?id=" + Application.identifier);   // TODO(#141): per-platform store URL
+                    OpenStore(_session?.BootStoreUrl);
                     break;
                 case ErrorAction.ResetProfile:
                     _session?.DeleteProfile();
@@ -182,6 +187,13 @@ namespace HeroCat.Client.Boot
                     Debug.Log("HeroCat: contact support with id " + _session?.Boot.Error?.SupportId);
                     break;
             }
+        }
+
+        /// <summary>Config's <c>storeUrls</c> page for this platform, else the Play Store page by bundle id.</summary>
+        static void OpenStore(string url)
+        {
+            // TODO(#141): the iOS fallback needs the App Store id; config's storeUrls covers it until then.
+            Application.OpenURL(string.IsNullOrEmpty(url) ? "market://details?id=" + Application.identifier : url);
         }
 
         void TearDownViews()

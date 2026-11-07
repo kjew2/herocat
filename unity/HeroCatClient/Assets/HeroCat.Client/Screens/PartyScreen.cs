@@ -90,6 +90,10 @@ namespace HeroCat.Client.Screens
                 Anchor(r.Anchor, brt);
                 y += 136;
             }
+            var research = Btn("Research", 752, y + 8, 288, 96, h.Research.OnTap, 0x37474F, UiKit.Caption);   // MVP entry (07 section 4.4)
+            UiKit.LabelOf(research).text = Vm.Localizer.Text(UiKeys.PartyResearch);
+            h.Research.Visible.Bind(new ActiveSink(research.gameObject));
+            y += 112;
             SetContentHeight(y + 32);
         }
 

@@ -151,6 +151,29 @@ namespace HeroCat.Runtime.Tests
         }
 
         [Test]
+        public void LimitBreak_ThroughTheRunner_IsOneRowPerRank_WithTheKindRarityRankAndCost()   // 04 section 13, issue #163
+        {
+            var s = TestSession.Open();
+            var db = s.Sim.Db;
+            string w = db.TutorialWeaponId;
+            var rarity = db.Weapons[w].Rarity;
+            long perRank = db.Rarities[rarity].LimitBreakCost;
+            s.Sim.State.Wallet.RockCandy = perRank * 3;   // test setup only: ranks 1 and 2 cost 1x and 2x
+            int from = s.Analytics.Events.Count;
+            Assert.That(s.Runner.Issue(new LimitBreak(w)).Ok, Is.True);
+            Assert.That(s.Runner.Issue(new LimitBreak(w)).Ok, Is.True);
+            Assert.That(s.Runner.Issue(new LimitBreak(w)).Ok, Is.False, "cannot afford rank 3: no row");
+            s.Runner.PublishDrained();
+            var rows = s.Analytics.Events.Skip(from).Where(e => e.Name == "limit_break").ToList();
+            Assert.That(rows, Has.Count.EqualTo(2));
+            AssertProps(rows[0], new Dictionary<string, object>
+            {
+                ["banner"] = "WEAPON", ["itemId"] = w, ["rarity"] = rarity.ToString(), ["rankAfter"] = 1, ["rockCandySpent"] = perRank,
+            });
+            Assert.That((rows[1].Props["rankAfter"], rows[1].Props["rockCandySpent"]), Is.EqualTo((2, perRank * 2)));
+        }
+
+        [Test]
         public void TypedFeatureEvents_UseKnownNames_AndCamelCaseProps_WithoutEnvelopeFields()
         {
             var all = new AnalyticsEvent[]
@@ -164,6 +187,10 @@ namespace HeroCat.Runtime.Tests
                                            new[] { new AnalyticsEvents.SummonResultRow("w", Rarity.COMMON, true, 0, 1, 0, false) }, 0, false, "LOCAL", 1),
                 new AnalyticsEvents.ItemAcquired(Banner.WEAPON, "w", Rarity.COMMON, true, 1, 0, 1, "SUMMON", "r"),
                 new AnalyticsEvents.ItemEquipped(Banner.SKILL, 1, null, "s", false),
+                new AnalyticsEvents.LimitBreak(Banner.WEAPON, "w", Rarity.COMMON, 1, 10),
+                new AnalyticsEvents.SummonReconciled("r", Banner.WEAPON, Currency.DIAMOND, 100, 90),
+                new AnalyticsEvents.InboxClaimed("i", "MAIL", new[] { new GrantLine("currency", "DIAMOND", 5) }, false, 3),
+                new AnalyticsEvents.ContentUpdateFailed("2099.01.01", "E900", "skills.json"),
                 new AnalyticsEvents.FishRelease(1, 2, 1, 1, false),
                 new AnalyticsEvents.FishMerge(1, new[] { new AnalyticsEvents.FishLevelCount(2, 1) }, 1, new[] { 2 }, true, false),
                 new AnalyticsEvents.FishDiscovered(2, 1), new AnalyticsEvents.FishDiscard(1, 0.5, 3),

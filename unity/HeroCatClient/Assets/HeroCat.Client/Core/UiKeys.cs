@@ -18,6 +18,7 @@ namespace HeroCat.Client.Core
         public const string NeedMore = "scr.common.need_more";            // "Need {0} more"
         public const string Back = "scr.common.back";
         public const string Close = "scr.common.close";
+        public const string FeatureDisabled = "scr.common.feature_disabled";   // a kill switch is off (01 section 8.12 step 1)
 
         // SCR_BOOT
         public const string BootTitle = "scr.boot.title";
@@ -57,6 +58,15 @@ namespace HeroCat.Client.Core
             _ => TabShop,
         };
 
+        // SCR_MAIN maintenance banner (01 section 8.12 step 4, 08 section 8.4)
+        public const string MaintActive = "scr.main.maint_active";            // "Maintenance: back in {0}"
+        public const string MaintActiveOpen = "scr.main.maint_active_open";   // no end announced
+        public const string MaintScheduled = "scr.main.maint_scheduled";      // "Maintenance starts in {0}"
+
+        // SCR_SETTINGS content update row (01 section 8.12 step 2, 09 section 10.3 step 3)
+        public const string SettingsUpdateReady = "scr.settings.update_ready";
+        public const string SettingsUpdateApp = "scr.settings.update_app";
+
         // Fish Board
         public const string FishRelease = "scr.main.fish_release", FishReleaseMax = "scr.main.fish_release_max", FishMergeAll = "scr.main.fish_merge_all";
         public const string FishTankEmpty = "scr.main.fish_tank_empty", FishBoardFull = "scr.main.fish_board_full",
@@ -88,6 +98,21 @@ namespace HeroCat.Client.Core
         public const string PartyBuyLevels = "scr.party.buy_levels";        // "Buy {0} levels for {1}"
         public const string PartyLoadout = "scr.party.loadout";
         public const string PartyAwakenGate = "scr.party.awaken_gate";   // "Reach stage {0}"
+        public const string PartyResearch = "scr.party.research";             // "Research >"
+
+        // SCR_RESEARCH (07 section 4.9; issue #181)
+        public const string ResearchTitle = "scr.research.title";
+        public const string ResearchFishCoins = "scr.research.fish_coins";     // "{0} Fish Coins"
+        public const string ResearchLevel = "scr.research.level";              // "Lv {0}/{1}"
+        public const string ResearchBuy = "scr.research.buy";
+        public const string ResearchMax = "scr.research.max";
+        public const string ResearchMaxLevel = "scr.research.max_level";       // a maxed row's disabled reason
+        public const string ResearchNodeLocked = "scr.research.node_locked";   // "Unlocks at Awakening {0}"
+        public const string ResearchPerSec = "scr.research.per_sec";           // "{0}/s"
+        public const string ResearchHours = "scr.research.hours";              // "{0}h"
+        public const string ResearchCoachTank = "scr.research.coach_tank";
+        public const string ResearchEntry = "scr.main.research";               // the Fish Board button
+        public const string CompanionsResearch = "scr.companions.research";    // "Research +"
 
         // collections
         public const string WeaponsTitle = "scr.weapons.title", SkillsTitle = "scr.skills.title";
@@ -197,5 +222,39 @@ namespace HeroCat.Client.Core
         };
 
         public const string ResetTitle = "scr.confirm.reset_title", ResetBody = "scr.confirm.reset_body";
+
+        // SCR_QUESTS (07 section 4.15; issue #183)
+        public const string QuestsTitle = "scr.quests.title";
+        public const string QuestsTabDaily = "scr.quests.tab_daily", QuestsTabWeekly = "scr.quests.tab_weekly",
+                            QuestsTabAchievements = "scr.quests.tab_achievements";
+        public const string QuestsDailyProgress = "scr.quests.daily_progress";     // "Daily progress {0} / {1}"
+        public const string QuestsWeeklyProgress = "scr.quests.weekly_progress";   // "Weekly progress {0} / {1}"
+        public const string QuestsBonus = "scr.quests.bonus";                      // "{0} done: +{1}"
+        public const string QuestsProgress = "scr.quests.progress";                // "{0} / {1}"
+        public const string QuestsClaim = "scr.quests.claim", QuestsClaimed = "scr.quests.claimed", QuestsDone = "scr.quests.done",
+                            QuestsGo = "scr.quests.go";
+        public const string QuestsClaimAll = "scr.quests.claim_all";               // "Claim all ({0})"
+        public const string QuestsRungs = "scr.quests.rungs";                      // "{0} / {1} rungs"
+        public const string QuestsExpiresSoon = "scr.quests.expires_soon";
+        public const string QuestsToastClaimed = "scr.quests.toast_claimed";       // "+{0} {1}"
+        public const string QuestsToastReset = "scr.quests.toast_reset";
+
+        public static string QuestsTabKey(QuestKind k) => k switch
+        {
+            QuestKind.DAILY => QuestsTabDaily,
+            QuestKind.WEEKLY => QuestsTabWeekly,
+            _ => QuestsTabAchievements,
+        };
+
+        // SCR_STAGE_SELECT (07 section 4.14; issue #183)
+        public const string StageSelectTitle = "scr.stage_select.title";
+        public const string StageSelectHighest = "scr.stage_select.highest";                   // "Highest cleared: {0}"
+        public const string StageSelectFrontier = "scr.stage_select.frontier";                 // "Frontier: {0}"
+        public const string StageSelectFrontierWalled = "scr.stage_select.frontier_walled";    // "Frontier: {0} (walled)"
+        public const string StageSelectChapter = "scr.stage_select.chapter";                   // "Chapter {0} ({1}-{2})"
+        public const string StageSelectFarming = "scr.stage_select.farming";                   // "Farming: {0}"
+        public const string StageSelectReturn = "scr.stage_select.return";
+        public const string StageSelectChallenge = "scr.stage_select.challenge";
+        public const string StageSelectOfflineNote = "scr.stage_select.offline_note";
     }
 }

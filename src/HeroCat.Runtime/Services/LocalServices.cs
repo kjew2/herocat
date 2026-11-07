@@ -146,7 +146,7 @@ namespace HeroCat.Runtime.Services
             if (lines == null) throw new ServiceException(ErrorClass.Rejected, "RECEIPT_INVALID", "unknown sku " + request.Sku, 400);
             string inboxId = "iap_" + (request.TransactionId ?? request.RequestId);
             _inbox.Add(new InboxItem(inboxId, new InboxGrantPayload(inboxId, lines, CurrencyReason.IAP), InboxRules.NeverExpires,
-                                     _clock.NowServerSeconds, Type: "IAP"));
+                                     _clock.NowServerSeconds, Type: "IAP", CreatedAtServerSeconds: _clock.NowServerSeconds));
             if (request.TransactionId != null) _granted[request.TransactionId] = inboxId;
             return Task.FromResult(new ReceiptResult(ReceiptResult.GRANTED, inboxId));
         }

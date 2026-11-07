@@ -53,6 +53,9 @@ namespace HeroCat.Runtime
         public const int CLOUD_UPLOAD_MIN_SEC = 60;
         public const int CLOCK_JUMP_WARN_SEC = 300;
 
+        /// <summary>09 section 10.3 step 8: cached content versions kept on device (the newest; the one in use is never deleted).</summary>
+        public const int CONTENT_CACHE_KEEP = 2;
+
         // ---------------------------------------------------------------- flows (7, 8.5, 8.8, 8.9, 8.13)
 
         public const int SUMMON_PREROLL_MS = 800;
@@ -86,6 +89,9 @@ namespace HeroCat.Runtime
 
         /// <summary>02 section 2: offline queue cap; past it the oldest events are dropped.</summary>
         public const int ANALYTICS_QUEUE_MAX = 10000;
+
+        /// <summary>02 section 14.2: foreground seconds between background uploads of the queue (pause and quit also upload).</summary>
+        public const int ANALYTICS_UPLOAD_SEC = 60;
 
         /// <summary>06 section 13: KILL and BOSS <c>currency_changed</c> deltas are summed per currency over this window.</summary>
         public const int CURRENCY_AGG_SEC = 60;

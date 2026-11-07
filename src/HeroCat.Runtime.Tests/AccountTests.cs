@@ -27,8 +27,11 @@ namespace HeroCat.Runtime.Tests
         sealed class FakeAccount : IAccountService
         {
             public readonly ITokenStore Tokens;
-            public int Logouts, Deletes;
+            public int Logouts, Deletes, ConfirmedAttempts;
             public bool DeleteFails;
+
+            /// <summary>How many of the next confirmed-logout POSTs fail (offline); each failure keeps the tokens.</summary>
+            public int ServerFailures;
             public SignInResult Next = new SignInResult(SignInStatus.SignedIn, Player);
             public Exception Throw;
 
@@ -36,6 +39,7 @@ namespace HeroCat.Runtime.Tests
 
             public Guid PlayerId => Tokens.Load()?.PlayerId ?? Guid.Empty;
             public bool HasSession => Tokens.Load()?.HasSession ?? false;
+            public bool IsLinked => Tokens.Load()?.Linked ?? false;
 
             public Task<SignInResult> SignInAsync(CancellationToken ct = default)
             {
@@ -46,6 +50,20 @@ namespace HeroCat.Runtime.Tests
             public Task<bool> LogoutAsync(CancellationToken ct = default)
             {
                 Logouts++;
+                bool delivered = ServerFailures <= 0;   // best effort: cleared whatever the POST answered
+                if (!delivered) ServerFailures--;
+                Tokens.Clear();
+                return Task.FromResult(delivered);
+            }
+
+            public Task<bool> TryConfirmedLogoutAsync(CancellationToken ct = default)
+            {
+                ConfirmedAttempts++;
+                if (ServerFailures > 0)
+                {
+                    ServerFailures--;
+                    return Task.FromResult(false);
+                }
                 Tokens.Clear();
                 return Task.FromResult(true);
             }
@@ -61,10 +79,11 @@ namespace HeroCat.Runtime.Tests
             public event Action<SignInResult> SessionLost { add { } remove { } }
         }
 
-        static SecureTokenStore SignedInTokens()
+        /// <param name="linked">False (default): an unlinked guest, whose logout needs the server's confirmation (00 decision 119).</param>
+        static SecureTokenStore SignedInTokens(bool linked = false)
         {
             var t = new SecureTokenStore(new MemorySecureStore());
-            t.Save(new AuthTokens { PlayerId = Player, AccessToken = "a", RefreshToken = "r1.x", AccessExpiresAt = 99 });
+            t.Save(new AuthTokens { PlayerId = Player, AccessToken = "a", RefreshToken = "r1.x", AccessExpiresAt = 99, Linked = linked });
             return t;
         }
 
@@ -88,7 +107,7 @@ namespace HeroCat.Runtime.Tests
                 var t = new AuthTokens
                 {
                     PlayerId = Player, AccessToken = "eyJ.a.b", RefreshToken = "r1.abc", AccessExpiresAt = 1_793_670_800,
-                    PendingGuestRequestId = "0123456789abcdef0123456789abcdef",
+                    PendingGuestRequestId = "0123456789abcdef0123456789abcdef", RegisteredKeyId = "00112233aabbccdd",
                 };
                 store.Save(t);
                 Assert.That(new SecureTokenStore(secure).Load(), Is.EqualTo(t), "another process reads the same record");
@@ -113,6 +132,34 @@ namespace HeroCat.Runtime.Tests
             var k = DeviceKey.LoadOrCreate(secure);
             Assert.That(k, Has.Length.EqualTo(32));
             Assert.That(DeviceKey.LoadOrCreate(new FileSecureStore(Path.Combine(Dir, "secure"))), Is.EqualTo(k));
+        }
+
+        [Test]
+        public void TheDeviceKey_IsHmacKeyBytesOfCsprngOutput_AndAWrongLengthOneIsReplaced()   // 02 section 10.1
+        {
+            var a = DeviceKey.Create();
+            var b = DeviceKey.Create();
+            Assert.That(a, Has.Length.EqualTo(DeviceKey.KeyBytes).And.Length.EqualTo(32), "HMAC_KEY_BYTES");
+            Assert.That(a, Is.Not.EqualTo(b));
+            Assert.That(a.Distinct().Count(), Is.GreaterThan(8), "not a constant fill");
+
+            var secure = new MemorySecureStore();
+            secure.Set(DeviceKey.Key, new byte[16]);
+            var k = DeviceKey.LoadOrCreate(secure);
+            Assert.That(k, Has.Length.EqualTo(32));
+            Assert.That(secure.Get(DeviceKey.Key), Is.EqualTo(k));
+        }
+
+        [Test]
+        public void TheKeyId_IsTheFirst16HexOfSha256_StableAndDistinct()
+        {
+            var key = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
+            string want;
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+                want = string.Concat(sha.ComputeHash(key).Take(8).Select(x => x.ToString("x2")));
+            Assert.That(DeviceKey.KeyId(key), Is.EqualTo(want));
+            Assert.That(DeviceKey.KeyId(key), Does.Match("^[0-9a-f]{16}$"));
+            Assert.That(DeviceKey.KeyId(DeviceKey.Create()), Is.Not.EqualTo(want));
         }
 
         // ------------------------------------------------------------------------------------------- archive
@@ -177,7 +224,7 @@ namespace HeroCat.Runtime.Tests
             var flow = new AccountFlow(account, new SaveArchive(Dir), new FakeClock(TestContent.T0));
             int asked = 0;
 
-            var r = flow.LogoutAsync(_ => Task.FromResult(false), () => { asked++; return Task.FromResult(false); }).GetAwaiter().GetResult();
+            var r = flow.LogoutAsync(_ => Task.FromResult(false), () => { asked++; return Task.FromResult(false); }, () => throw new AssertionException("not asked")).GetAwaiter().GetResult();
 
             Assert.That(r.Outcome, Is.EqualTo(LogoutOutcome.Cancelled));
             Assert.That(asked, Is.EqualTo(1));
@@ -193,7 +240,7 @@ namespace HeroCat.Runtime.Tests
             var account = new FakeAccount(SignedInTokens());
             var flow = new AccountFlow(account, new SaveArchive(Dir), new FakeClock(TestContent.T0));
 
-            var r = flow.LogoutAsync(_ => throw new IOException("disk"), () => Task.FromResult(true)).GetAwaiter().GetResult();
+            var r = flow.LogoutAsync(_ => throw new IOException("disk"), () => Task.FromResult(true), () => throw new AssertionException("not asked")).GetAwaiter().GetResult();
 
             Assert.That(r, Is.EqualTo(new LogoutResult(LogoutOutcome.LoggedOut, Uploaded: false, ServerRevoked: true, Archived: true)));
             Assert.That(account.Tokens.Load(), Is.Null);
@@ -205,12 +252,87 @@ namespace HeroCat.Runtime.Tests
         public void Logout_AfterASuccessfulUpload_DoesNotAsk()
         {
             WriteSave();
-            var account = new FakeAccount(SignedInTokens());
+            var account = new FakeAccount(SignedInTokens(linked: true));
             var flow = new AccountFlow(account, new SaveArchive(Dir), new FakeClock(TestContent.T0));
-            var r = flow.LogoutAsync(_ => Task.FromResult(true), () => throw new AssertionException("not asked")).GetAwaiter().GetResult();
+            var r = flow.LogoutAsync(_ => Task.FromResult(true), () => throw new AssertionException("not asked"), () => throw new AssertionException("not asked")).GetAwaiter().GetResult();
             Assert.That(r.Outcome, Is.EqualTo(LogoutOutcome.LoggedOut));
             Assert.That(r.Uploaded, Is.True);
             Assert.That(account.Logouts, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Logout_AnUnlinkedGuest_WhoseLogoutPostFails_AsksRetry_AndRetryLogsOut()   // 00 decision 119
+        {
+            WriteSave();
+            var account = new FakeAccount(SignedInTokens()) { ServerFailures = 2 };
+            var flow = new AccountFlow(account, new SaveArchive(Dir), new FakeClock(TestContent.T0));
+            int asked = 0;
+            bool tokensHeldWhileAsked = true;
+
+            var r = flow.LogoutAsync(_ => Task.FromResult(true), () => throw new AssertionException("not asked"),
+                                     () => { asked++; tokensHeldWhileAsked &= account.Tokens.Load()?.RefreshToken == "r1.x"; return Task.FromResult(true); })
+                        .GetAwaiter().GetResult();
+
+            Assert.That(asked, Is.EqualTo(2), "LOGOUT_OFFLINE after each failed POST");
+            Assert.That(tokensHeldWhileAsked, Is.True, "a failed POST keeps the tokens");
+            Assert.That(account.ConfirmedAttempts, Is.EqualTo(3));
+            Assert.That(account.Logouts, Is.Zero, "the best-effort logout is never used for an unlinked guest");
+            Assert.That(r, Is.EqualTo(new LogoutResult(LogoutOutcome.LoggedOut, Uploaded: true, ServerRevoked: true, Archived: true)));
+            Assert.That(account.Tokens.Load(), Is.Null);
+            Assert.That(File.Exists(Path.Combine(Dir, "saves." + Player.ToString("D") + ".archived", "slot0.sav")), Is.True);
+        }
+
+        [Test]
+        public void Logout_AnUnlinkedGuest_WhoseLogoutPostFails_Cancel_KeepsTokensAndSaves()   // 00 decision 119
+        {
+            WriteSave();
+            var account = new FakeAccount(SignedInTokens()) { ServerFailures = 1 };
+            var flow = new AccountFlow(account, new SaveArchive(Dir), new FakeClock(TestContent.T0));
+            int asked = 0;
+
+            var r = flow.LogoutAsync(_ => Task.FromResult(true), () => throw new AssertionException("not asked"), () => { asked++; return Task.FromResult(false); })
+                        .GetAwaiter().GetResult();
+
+            Assert.That(r, Is.EqualTo(new LogoutResult(LogoutOutcome.ServerUnreachable, Uploaded: true, ServerRevoked: false, Archived: false)));
+            Assert.That(asked, Is.EqualTo(1));
+            Assert.That(account.Logouts, Is.Zero);
+            Assert.That(account.Tokens.Load().RefreshToken, Is.EqualTo("r1.x"), "still signed in");
+            Assert.That(account.HasSession, Is.True);
+            Assert.That(File.Exists(Path.Combine(SavesDir, "slot0.sav")), Is.True, "nothing archived");
+            Assert.That(Directory.Exists(Path.Combine(Dir, "saves." + Player.ToString("D") + ".archived")), Is.False);
+        }
+
+        [Test]
+        public void Logout_AnUnlinkedGuest_AfterLogoutUnsyncedLogOutAnyway_StillNeedsTheServer()   // the upload step runs first
+        {
+            var account = new FakeAccount(SignedInTokens()) { ServerFailures = 1 };
+            var flow = new AccountFlow(account, null, new FakeClock(TestContent.T0));
+            var order = new System.Collections.Generic.List<string>();
+
+            var r = flow.LogoutAsync(_ => Task.FromResult(false), () => { order.Add("unsynced"); return Task.FromResult(true); },
+                                     () => { order.Add("offline"); return Task.FromResult(false); })
+                        .GetAwaiter().GetResult();
+
+            Assert.That(order, Is.EqualTo(new[] { "unsynced", "offline" }));
+            Assert.That(r.Outcome, Is.EqualTo(LogoutOutcome.ServerUnreachable));
+            Assert.That(account.HasSession, Is.True);
+        }
+
+        [Test]
+        public void Logout_ALinkedAccount_WhoseLogoutPostFails_StillLogsOutLocally()   // 00 decision 119: unchanged for linked
+        {
+            WriteSave();
+            var account = new FakeAccount(SignedInTokens(linked: true)) { ServerFailures = 99 };
+            var flow = new AccountFlow(account, new SaveArchive(Dir), new FakeClock(TestContent.T0));
+
+            var r = flow.LogoutAsync(_ => Task.FromResult(true), () => throw new AssertionException("not asked"), () => throw new AssertionException("not asked")).GetAwaiter().GetResult();
+
+            Assert.That(r.Outcome, Is.EqualTo(LogoutOutcome.LoggedOut));
+            Assert.That(r.Archived, Is.True);
+            Assert.That(r.ServerRevoked, Is.False);
+            Assert.That(account.ConfirmedAttempts, Is.Zero);
+            Assert.That(account.Logouts, Is.EqualTo(1));
+            Assert.That(account.Tokens.Load(), Is.Null);
         }
 
         [Test]
@@ -223,7 +345,7 @@ namespace HeroCat.Runtime.Tests
             var hang = new TaskCompletionSource<bool>();
             bool asked = false;
 
-            var r = flow.LogoutAsync(ct => { seen = ct; return hang.Task; }, () => { asked = true; return Task.FromResult(false); })
+            var r = flow.LogoutAsync(ct => { seen = ct; return hang.Task; }, () => { asked = true; return Task.FromResult(false); }, () => throw new AssertionException("not asked"))
                         .GetAwaiter().GetResult();
 
             Assert.That(waited, Is.EqualTo(TimeSpan.FromSeconds(RuntimeConfig.LOGOUT_UPLOAD_TIMEOUT_S)));

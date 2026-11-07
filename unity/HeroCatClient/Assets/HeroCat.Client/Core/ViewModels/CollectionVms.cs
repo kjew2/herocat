@@ -487,9 +487,13 @@ namespace HeroCat.Client.Core
             BudgetLine = c.Label();
             AutoEquip = c.Button();
             AutoEquip.Label.Set(UiKeys.SkillsAutoEquip);
+            Research = new ResearchEntryVm(c, toastWhenLocked: false);
         }
 
         public Bindable<SlotLook>[] Slots => PartySlots;
+
+        /// <summary>The MP line's "(Research +)" (MVP, 07 section 4.7): opens SCR_RESEARCH.</summary>
+        public readonly ResearchEntryVm Research;
 
         /// <summary>Each slot's own MP pool (03 section 2.4).</summary>
         public readonly BarFill[] SlotMp;
@@ -523,6 +527,7 @@ namespace HeroCat.Client.Core
         protected override void RefreshExtra(Simulation sim)
         {
             FillPartySlots(sim);
+            Research.Refresh(sim);
             var db = C.Db;
             var st = sim.State;
             var p = sim.Query.Power;

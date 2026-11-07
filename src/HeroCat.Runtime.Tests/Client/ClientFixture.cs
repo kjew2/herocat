@@ -17,9 +17,9 @@ namespace HeroCat.Runtime.Tests
 
         public double Now => S.Mono.Ticks / (double)S.Mono.Frequency;
 
-        public static ClientFixture Open(Action<GameState> setup = null, GameVmOptions options = null)
+        public static ClientFixture Open(Action<GameState> setup = null, GameVmOptions options = null, HeroCat.Sim.Content.ContentDb content = null)
         {
-            var f = new ClientFixture { S = TestSession.Open() };
+            var f = new ClientFixture { S = TestSession.Open(content: content) };
             setup?.Invoke(f.S.Sim.State);
             f.S.Sim.Query.MarkDirty();
             f.S.Sim.Advance(0);   // re-takes the snapshot after the scripted state

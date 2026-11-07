@@ -111,7 +111,7 @@ Band budget: 120 + 800 + 100 + 640 + 160 = 1,820 rp. The remaining 100 rp of a 1
 - A screen is a uGUI prefab with a `ScreenBase` subclass. `Bind(vm)` resolves references once; `Refresh()` writes only changed values through change-only setters (`NumberLabel`, `IntLabel`, `TextKeyLabel`, `BarFill`, `BadgeDot`); `OnEvent(Event e)` handles the events listed per screen.
 - View-models live in `HeroCat.Client.Core` (`Assets/HeroCat.Client/Core/`, section 16), one class per screen named `<Screen>Vm` (`MainVm`, `PartyVm`, ...). They are plain C#, no `UnityEngine`. They are filled from `Simulation.Snapshot()` after any tick that ran and from events as they drain (01).
 - A view-model field listed as `bind` is read-only display; `cmd` means the element sends that `Command` through `Commands.Send(cmd)`; a rejection comes back as `ApplyResult.Reject(code, reason)` (01's `RejectCode` category plus a reason from the owning spec's closed list, issue #11) and renders as 01's `Reject` presentation (issue #30): a button shake plus a short toast anchored under the pressed button with the localized reason `reject.<reason_lower>`; the category only picks the toast styling. `err.<code_lower>.title` / `.body` keys are for 01's error taxonomy (`SCR_ERROR`), not for rejections. Codes and reasons stay UPPER_SNAKE as 01 section 7 and the owning specs list them (08's wire codes, issue #30); the client lowercases them when it builds the key (`NOT_ENOUGH_GOLD` -> `reject.not_enough_gold`, `NET_OFFLINE` -> `err.net_offline.title`), because 09's key pattern is lowercase (issue #248).
-- States every screen implements unless the section says otherwise: **Loading** (skeleton rows, shimmer, no spinner longer than 2 s before a retry link), **Empty** (illustration key + one-line copy + the primary action that fills it), **Error** (inline card from 01 taxonomy with Retry), **Locked** (greyed content, lock icon, unlock condition text, no interaction), **First-time** (one coach-mark overlay pointing at the primary action, shown once, stored in `ClientPrefs.SeenCoachMarks`).
+- States every screen implements unless the section says otherwise: **Loading** (skeleton rows, shimmer, no spinner longer than 2 s before a retry link), **Empty** (illustration key + one-line copy + the primary action that fills it), **Error** (inline card from 01 taxonomy with Retry), **Locked** (greyed content, lock icon, unlock condition text, no interaction: a tap only toasts the condition; one shared helper, Core's `LockedVm` with `Locked` and `Condition` plus `Tap()`, and the view-side `LockedBinding`, issue #180), **First-time** (one coach-mark overlay pointing at the primary action, shown once, stored in `ClientPrefs.SeenCoachMarks`).
 - `ClientPrefs` (issue #47) is a Runtime store, a local JSON file next to the save, never cloud-synced and never in `GameState`. It holds everything in this spec that does not change a game number: seen coach marks, new-item badges (issue #7), sort/filter and Training-step choices, and the `SCR_SETTINGS` toggles. Losing it on reinstall is acceptable.
 - Locked conditions come from the 09 `feature_unlocks` table (issue #45), the same rows the sim's rejections read, so a Locked state and the sim always agree. The table's MVP seed: Research at Awakening rank 1 of any slot (`AWAKEN_RANK >= 1` reads the highest slot rank; 00 decisions 11 and 109), Quests at stage 10, Dungeons at stage 30 (row `DUNGEONS`); Companions (banner and all `PARTY_SLOTS` slots, 04) and Shop are never locked. No party slot is ever locked, at any tier.
 - Slot mode (00 decision 109): `SCR_WEAPONS`, `SCR_SKILLS` and `SCR_COMPANIONS` take an optional `TargetSlot` arg (0-4). Pushed from a `SCR_PARTY` slot card they open in slot mode: a 64 rp banner under the title row reads "Equipping slot {n}: {companion}" with an `[x]` that clears the mode, the selected panel's `[Equip]` sends straight into `TargetSlot`, and an accepted equip pops back to `SCR_PARTY`. Opened from the tab bar (no `TargetSlot`), `[Equip]` opens the slot picker: five rows (slot number, occupant companion icon, the slot's current item of this kind), the slot that already holds the item marked "here". `SCR_ITEM_DETAIL` uses the same picker. Slot numbers shown to the player are 1-5; commands carry 0-4.
@@ -170,7 +170,7 @@ Purpose: account pick on first launch and after logout; skipped when a guest or 
 | Platform buttons | `Auth.LinkOrSignIn(provider)`; only the platform's own provider is shown |
 | Legal links | open in-app browser; `TitleVm.AgeGateRequired` (08 compliance) shows a birth-year picker modal before any sign-in |
 
-States: Loading during the auth round-trip (buttons disabled, spinner on the pressed one). Error inline under the buttons (`err.<code_lower>.*` for 01's auth codes, e.g. `err.provider_already_linked.title`; issues #30, #248). Conflict: when the cloud save and the local save differ, the 02 conflict modal is shown here before `SCR_MAIN` with both saves' stage, Party Level, server time and a `[Keep this device]` / `[Use cloud]` pair.
+States: Loading during the auth round-trip (buttons disabled, spinner on the pressed one). Error inline under the buttons (`err.<code_lower>.*` for 01's auth codes, e.g. `err.provider_already_linked.title`; issues #30, #248). Conflict: when the cloud save and the local save differ, the 02 conflict modal is shown here before `SCR_MAIN` (00 decision 118) with 02 section 9.4's cards and labels: "This device" / "Other device", each with stage, party level, diamonds, total pulls, highest fish and last played, the rule's winner preselected as "Recommended". A conflict found mid-session waits for `SCR_MAIN` idle instead.
 
 ### 4.3 `SCR_MAIN` (Full root, M0)
 
@@ -183,9 +183,9 @@ Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them
 | Stage 240  Ch.5  v        kills 9/10   WALL  |
 |                    (boss)                    |
 |                    ~~~~~~                    |
-|            HP |==========       | 1.2M       |
-|            T  |======           | 17s        |
-| DPS 3.72K  +12.3K  +9.8K crit!               |  damage numbers float here
+|            HP |=============    | 1.99M      |
+|            T  |=========        | 17s        |
+| DPS 35.5K  +7.10K  +12.4K crit!              |  damage numbers float here
 |            (c4)[sk4]     (c5)[sk5]          |  back row: slots 4-5, behind
 |            |=== |        |==  |             |  MP bar inside each cell
 |    (c1)[sk1]     (c2)[sk2]     (c3)[ -- ]   |  front row: slots 1-3
@@ -204,16 +204,18 @@ Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them
 +----------------------------------------------+
 ```
 
+Sketch values: the walled frontier boss at the day-1 target stage 240 (00 section 6.6), with `HP0 * HP_G^240 * BOSS_HP_MULT` = 20 x 1.04^240 x 10 = 2.45M HP, 13 s into its `BOSS_TIME_TICKS` (30 s) against a party DPS of 35.5K, so 1.99M is left and the boss needs about 2.45M / (35.5K x 30 s) = 2.3x; the DPS is close to the bot's day-1 median (`tools/power_curve_model.py`), and a hit is about a fifth of it.
+
 | Element | `MainVm` field (bind) or command | Notes |
 |---|---|---|
 | Gold chip | `Wallet.Gold` | suffix ladder; pulses on increase from `BOSS`/`OFFLINE` only, not per kill |
 | Diamond chip | `Wallet.Diamond` | pulses on any increase |
 | Fish Coin chip | `Wallet.FishCoin` | |
-| Rock Candy chip (MVP) | `Wallet.RockCandy` | shown once `Progress.HighestCleared >= AWAKEN_STAGES[0]` |
+| Rock Candy chip (MVP) | `Wallet.RockCandy`, `RockCandyLock` | shown in every build with Awakening rows; Locked (rule 8: shown, never hidden) until `Progress.HighestCleared >= AWAKEN_STAGES[0]`, the condition reading `scr.party.awaken_gate` ("Reach stage {AWAKEN_STAGES[0]}"); the gate has no `feature_unlocks` row (issue #180) |
 | Avatar | `Profile.AvatarId` | tap: push `SCR_PROFILE` |
-| Inbox icon | `Inbox.UnclaimedCount` badge | tap: push `SCR_INBOX` |
+| Inbox icon | `Inbox.UnclaimedCount` badge | tap: push `SCR_INBOX`; the count is Runtime's `InboxFlow.BadgeCount` (06 rule 9.5), injected as the snapshot's `PendingInboxCount` (issue #180) |
 | Settings gear | | tap: push `SCR_SETTINGS` |
-| Stage label | snapshot `Stage`, `Chapter`, `SelectedStage` (02 `Combat.Selected`; issue #254) | tap: push `SCR_STAGE_SELECT` (MVP; M0 no-op); while farming a side stage it reads "Farming 235 · frontier 240" (issue #35) |
+| Stage label | snapshot `Stage`, `Chapter`, `SelectedStage` (02 `Combat.Selected`; issue #254) | tap: push `SCR_STAGE_SELECT` (MVP; issue #183), except in a dungeon run; while farming a side stage it reads "Farming 235 · frontier 240" (issue #35) |
 | Kill counter | `Combat.KillsInStage / KILLS_PER_STAGE` | red when `IsWalled` |
 | WALL badge | `Combat.IsWalled` | |
 | Enemy sprite, HP bar | `Combat.EnemyId`, `EnemyIsBoss`, `EnemyHp`, `EnemyMaxHp` | HP bar text "1.2M / 1.7M" |
@@ -225,17 +227,20 @@ Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them
 | Skill icon x5 | `Party.Slots[i].Skill`: `IconId`, `CooldownPct`, `IsEmpty` | 88 rp icon with a 112 rp hit rect, under its slot's MP bar; tap: push `SCR_ITEM_DETAIL`; long-press (P1 manual cast) |
 | Tap on viewport | `cmd TapZap(count)` | taps accumulated this frame, at most `TAP_ZAP_MAX_PER_SEC`; extra taps still play the tap VFX but send nothing |
 | Boss button | `Combat.IsWalled`, `Combat.BossClearable`, `Combat.NeedDpsRatio` | `cmd AttemptBoss`; label "Boss: need ~2.3x" or "Boss: clearable" (green border) |
-| Shortcut pills | `Badges.QuestsClaimable`, `Badges.DungeonTicketsUnused`, `Badges.InboxUnclaimed` | push the respective screen |
+| Shortcut pills | `Badges.QuestsClaimable`, `Badges.DungeonTicketsUnused`, `Badges.InboxUnclaimed` | push the respective screen; the Quests and Dungeons pills take their tab's route, so before the gate they toast its condition |
 | Tank gauge | `Fish.TankCount / Fish.TankCap`, `Fish.NextFishSec` | |
 | Release / Release max | `Fish.CanRelease` | `cmd ReleaseFish` / `cmd ReleaseMax` (one sim command, 05 section 6.1; issue #11) |
 | Merge all | `Fish.MergeAllCount` (pairs available) | `cmd MergeAll` (one sim command; pair order is 05's `MergeAll` contract) |
 | Grid cells | `Fish.Cells[20]`: `Level` (0 empty), `IsSelected`, `IsNew`, `IsDropTarget` | interaction in section 5 |
-| Research button (MVP) | `Badges.ResearchAffordable` dot | push `SCR_RESEARCH` |
-| Tab bar | `Badges.*` per tab | replace top Full screen |
+| Research button (MVP) | `Badges.ResearchAffordable` dot, `ResearchLock`, `ResearchVisible` | push `SCR_RESEARCH`; Locked before the `RESEARCH` row; shown only when content has Research nodes; drawn at the bottom of the free strip right of the grid (the tank column has no room for a fourth 112 rp button) |
+| Tab bar | `Badges.*` per tab, `TabLocks[]` | replace top Full screen. Dots: Party none (never for Training), Collection `NewCollectibles` (weapons, skills and companions), Summon none, Dungeons `DungeonTicketsUnused`, Quests `QuestsClaimable`, Shop `DailyGiftFree`; `TabDisabled[]` greys the Shop tab while `shopEnabled` is off and the Dungeons tab while `dungeonsEnabled` is off (01 section 8.12 step 1), and a tap toasts `scr.common.feature_disabled` instead of opening it (a locked tab keeps its lock toast); the Dungeons pill goes through the same tap |
+| Maintenance banner | `Maintenance`: `Visible`, `Active`, `Line`, `Message`, `MessageVisible` | under the stage label, over the combat band; fed once per server second from `ConfigRefresher.Banner(now)`. During a window `scr.main.maint_active` ("Maintenance: back in {0}", `Countdown` to `until`) or `scr.main.maint_active_open` when the window has no end; from `MAINT_ANNOUNCE_S` before an announced window (`active: false`, future `until`; 08 section 8.4) `scr.main.maint_scheduled` ("Maintenance starts in {0}"). Config's `messageKey` is a second line, shown only when sent. It never blocks play (issue #299) |
 
 Events `SCR_MAIN` reacts to: `EnemySpawned` (new sprite, HP full), `HitLanded` / `SkillCast` / `CompanionAbilityUsed` / `FishMissileHit` (number), `EnemyKilled` (death VFX, gold burst toward chip), `StageCleared` (stage label pulse), `BossFailed` (WALL badge in, boss button in, toast with need ratio), `BossCleared` (green flash, first-clear diamond toast if `FirstClearGranted`), `LevelUp` (Party Level: all five sprites flash, "Party Lv 32" float), `FishReleased` (cell pop-in), `FishMerged` (merge VFX, missile launch toward enemy), `FishDiscovered` (discovery card overlay 1.5 s with coins), `QuestCompleted` (Quests badge), `DayRolledOver` (toast, badges), `Awakened(slot, rank)` (that slot's aura swaps and a full-width card names the slot and companion over the combat viewport, combat keeps running), `StageCapReached` (toast), `OfflineRewardComputed` (push `SCR_OFFLINE_REWARD`). Login diamonds are auto-granted on the first tick of the day (`CurrencyChanged(DIAMOND, LOGIN)`, issue #20) and toast "+{LOGIN_DIAMONDS} diamonds: daily login" with the `DayRolledOver` toast.
 
-States: Loading never (boot covers it). First-time: `SCR_TUTORIAL` overlay. Error: 01's `Offline` banner is drawn as the non-blocking `SCR_ERROR` card in the action strip position (MVP), keeping the combat viewport clear while the sim keeps running offline (issue #30). Locked elements: Rock Candy chip, stage label tap, the Research button and the Dungeons/Quests tabs before their `feature_unlocks` condition (issue #45) show a lock glyph and a toast naming the condition; the HUD Fish Coin chip still opens `SCR_RESEARCH`, which shows its Locked state. The Shop tab is never locked.
+`HitLanded`, `SkillCast` and `CompanionAbilityUsed` are outside the sim's default `CombatEventMask` (03 section 2.1, issue #160); the client opts in by setting `CombatEvents = CombatEventMask.All` (`GameViewModel.cs`); bots and the server leave them off.
+
+States: Loading never (boot covers it). First-time: `SCR_TUTORIAL` overlay. Error: 01's `Offline` banner is drawn as the non-blocking `SCR_ERROR` card in the action strip position (MVP), keeping the combat viewport clear while the sim keeps running offline (issue #30). Mid-session `CLIENT_TOO_OLD` (01 section 8.12 step 3; issue #299): once a landed config gates the client out, `ClientUpdateGateVm` waits for `SCR_MAIN` idle (`GameViewModel.MainIdle`: `SCR_MAIN` on top, no modal open or queued, no overlay, no blocking error, no summon request or reveal running), saves, then shows the blocking `SCR_ERROR` whose only action `[Update]` opens config's `storeUrls[platform]` (`ios` / `android`; the client falls back to its own store link when config names none). Another error never replaces it for more than a frame; a later config that lifts the gate takes it down. Locked elements: Rock Candy chip, the Research button and the Dungeons/Quests tabs before their `feature_unlocks` condition (issue #45) show a lock glyph and a toast naming the condition; the HUD Fish Coin chip still opens `SCR_RESEARCH`, which shows its Locked state. The Shop tab and the stage label tap are never locked (`SCR_STAGE_SELECT` has no `feature_unlocks` row; with nothing cleared it shows only the frontier chip).
 
 ### 4.4 `SCR_PARTY` (Full, M0; 00 decision 109)
 
@@ -246,9 +251,9 @@ Purpose: all gold and Rock Candy sinks on the party: party-wide Training per sta
 | <  Party                       DPS 3.72K     |
 | (sqr) Party Lv 32 |=======    | 4.2K / 9.8K  |
 | Slot 1 (Tabby)  [wpn Tuna] [sk Fish Rain]    |
-|   Awakening I  MP |====  | 120   [ Awaken ]  |  MVP: Awakening
+|   Awakening I  MP |====  | 120   Reach 150   |  MVP: Awakening
 | Slot 2 (Mittens) [wpn --]  [sk Claw]         |
-|   Awakening -  MP |==    |  60   Reach 50    |
+|   Awakening -  MP |==    |  60   [ Awaken ]  |
 | Slot 3 ... Slot 5 (same card)                |
 | [ Auto-equip all ]                           |
 | Training              [x1] [x10] [x100] [Max]|
@@ -276,7 +281,7 @@ Purpose: all gold and Rock Candy sinks on the party: party-wide Training per sta
 
 Events: `StatTrained(stat, count, cost)` (row flash, "+5%" float), `LevelUp` (Party Level bar), `Awakened(slot, rank)` (that card's rank glyph animates), `ItemEquipped(kind, slot, id)` (that card's icon swaps), `CompanionAbilityUsed(slot, id, mpAfter)` (that card's MP bar), `CurrencyChanged(GOLD | ROCK_CANDY)` (re-evaluate `CanAfford`).
 
-States: a stat at its cap (03) shows "MAX" in place of the cost and a disabled button. Awakening before a slot's stage gate: that slot's button disabled with "Reach stage {AWAKEN_STAGES[rank]}", e.g. "Reach stage 50" for its rank I (`AWAKEN_STAGES[0]`) and "Reach stage 150" for its rank II; each slot reads its own rank, so slots can sit at different gates. At max rank: "Max rank". First-time: coach mark on ATK `[+]`. The `Max` step shows "Buy 37 levels for 3.71M" so the player knows what they are tapping. Locked: none (all five slots open from the start, 00 decision 109).
+States: a stat at its cap (03) shows "MAX" in place of the cost and a disabled button. Awakening before a slot's stage gate: that slot's button disabled with "Reach stage {AWAKEN_STAGES[rank]}", e.g. "Reach stage 50" for its rank I (`AWAKEN_STAGES[0]`) and "Reach stage 150" for its rank II; each slot reads its own rank, so slots can sit at different gates (in the sketch, at a stage between 50 and 149, slot 1 holds rank I and waits for stage 150 while slot 2 can buy its rank I). At max rank: "Max rank". First-time: coach mark on ATK `[+]`. The `Max` step shows "Buy 37 levels for 3.71M" so the player knows what they are tapping. Locked: none (all five slots open from the start, 00 decision 109).
 
 ### 4.5 `SCR_WEAPONS` (Full, M0)
 
@@ -389,7 +394,11 @@ Purpose: the Fish Coin sink (03 node list: MP pool and MP regen (each raises all
 | Row per node | `Rows[node]`: `Level`, `MaxLevel`, `CurrentText`, `NextText`, `Cost`, `CanAfford`, `AtMax`; `[Buy]` sends `cmd Research(nodeId)` |
 | Header | `Wallet.FishCoin` |
 
-Events: `ResearchLeveled(nodeId, newLevel, cost)` (row flash, tank gauge on `SCR_MAIN` updates via snapshot), `CurrencyChanged(FISH_COIN)`. Locked before Awakening rank 1 (`feature_unlocks`, 00 decision 11, issue #45; the sim rejects with `RESEARCH_LOCKED`): greyed with "Unlocks when any slot reaches Awakening I". First-time coach mark on Tank capacity.
+Events: `ResearchLeveled(nodeId, newLevel, cost)` (row flash, tank gauge on `SCR_MAIN` updates via snapshot), `CurrencyChanged(FISH_COIN)`. Locked before Awakening rank 1 (`feature_unlocks`, 00 decision 11, issue #45; the sim rejects with `RESEARCH_LOCKED`): greyed, with the row's `locked_text_key` (`feature.research.locked`, "Unlocks at Awakening 1") as the condition line and every `[Buy]` disabled with the same text. First-time coach mark on Tank capacity.
+
+As built (issue #181): `ResearchVm` (client `Core/`) reads every number from the sim's `ResearchRules` (03 section 6), so a row and the sim's accept or reject always agree. Rows are every node of the tier (all eight, `res_atk` included) ordered by the `research` table's `layout_row`, then `layout_col` (Tank capacity first). `CurrentText` and `NextText` are `ResearchRules.EffectAt(node, level)` and `level + 1` in the effect's unit: `+5.0%` for `res_atk` and `res_gold_gain`, the pool for `res_mp_pool`, `4.0/s` (`scr.research.per_sec`) for `res_mp_regen`, the cap for `res_tank_cap` and `res_fish_cap`, `5.6s` for `res_tank_refill` (whole ticks, floor applied), `26h` (`scr.research.hours`) for `res_offline_cap`; `NextText` is empty at max. `Cost` shows the unrounded charge rounded up. A disabled `[Buy]` names its reason, first match wins: the Locked text; "Unlocks at Awakening {n}" (`scr.research.node_locked`) for a node whose `unlock_awaken_rank` is above the highest slot rank; "Max level" with the button reading "MAX"; "Need {n} more" (the shortfall rounded up). The header is `Wallet.FishCoin` floored. The coach mark (`ClientPrefs.SeenCoachMarks` id `research.tank_cap`) shows on the first visit after the unlock, never in the Locked state, and any tap (or a Buy) dismisses it for good. In a tier without Research rows (M0) the screen is unreachable: every entry point below toasts the lock text instead (`scr.common.coming_soon` when the tier has no `RESEARCH` row).
+
+Entry points: the HUD Fish Coin chip, `SCR_PARTY`'s `[Research >]` and `SCR_COMPANIONS`' `(Research +)` push `SCR_RESEARCH` even before the gate (it shows its Locked state); the Fish Board `[Research]` shows the lock glyph before the gate and toasts the condition instead (section 4.3). The Fish Board, Party and Companions entries are hidden in a tier without Research rows.
 
 ### 4.10 `SCR_SUMMON` (Full, M0)
 
@@ -480,7 +489,7 @@ Purpose: the three daily dungeons and the Tower card (P1).
 | Reset countdown | `SecondsToRollover` (from `IClock`, 06 section 4) |
 | Card x3 | `Cards[d]`: `Tickets`, `TicketsPerDay`, `BestFloor`, `NextFloor`, `NextReward` (currency, amount), `Clearable` (06 `PreviewDungeon`), `NeedDpsRatio`, `Locked` |
 | Challenge | `cmd StartDungeon(d, NextFloor)`; pushes `SCR_DUNGEON_RUN`; disabled with reason when `!Clearable` or `Tickets == 0` |
-| Sweep | `cmd SweepDungeon(d)`; disabled when `BestFloor == 0` or `Tickets == 0`; shows reward inline |
+| Sweep | `cmd SweepDungeon(d)` through `DungeonFlow.Sweep`; disabled when `BestFloor == 0` or `Tickets == 0`, and refused with `FEATURE_DISABLED` while `dungeonsEnabled` is off (00 decision 114); shows reward inline |
 | Floor picker (long-press Challenge) | modal list of cleared floors to replay for the spectacle; rewards equal the floor's |
 
 Events: `DungeonCleared`, `DungeonFailed`, `DungeonFloorFirstCleared`, `DayRolledOver` (tickets refresh), `CurrencyChanged(TICKET_*)`.
@@ -496,7 +505,7 @@ Purpose: the fixed fight. Replaces the combat viewport region; the HUD stays. Th
 | Fish Coin Dungeon · Floor 5                  |
 |                    (floor boss)              |
 |            HP |======           | 40%        |
-|            T  |=====            | 14s        |
+|            T  |================ | 28s        |
 | DPS 3.72K                                    |
 |            (c4)          (c5)               |  party formation as SCR_MAIN
 |    (c1)          (c2)          (c3)         |
@@ -506,6 +515,8 @@ Purpose: the fixed fight. Replaces the combat viewport region; the HUD stays. Th
 +----------------------------------------------+
 ```
 
+Sketch values: floor 5 is the stage-100 boss (`DUNGEON_FLOOR_STAGE_STEP` 20), 20 x 1.04^100 x 10 = 10.1K HP, so at 3.72K DPS 40% is left 1.6 s in; the ladder (06 section 6.2) trails the frontier, so dungeon fights are short.
+
 | Element | `DungeonRunVm` field |
 |---|---|
 | Title | `Dungeon`, `Floor` |
@@ -513,7 +524,7 @@ Purpose: the fixed fight. Replaces the combat viewport region; the HUD stays. Th
 | Skip fight | runs the remaining ticks headlessly in one frame (no player input can change the outcome, issue #40) and shows the result card |
 | Result card | `Outcome` (Cleared / Failed), `RewardText`, `RemainingHpPct`; `[Collect]` pops to `SCR_DUNGEONS`; a clear debits one ticket, a fail costs nothing (00 decision 16, issue #42); on Cleared with another ticket, `[Next floor]` sends `cmd StartDungeon(d, floor + 1)` if `Clearable` |
 
-Events: `DungeonStarted`, `HitLanded`, `SkillCast`, `CompanionAbilityUsed`, `DungeonCleared`, `DungeonFailed`, `DungeonAbandoned`. Back button: same as Skip fight.
+Events: `DungeonStarted`, `HitLanded`, `SkillCast`, `CompanionAbilityUsed`, `DungeonCleared`, `DungeonFailed`, `DungeonAbandoned`. `HitLanded`, `SkillCast` and `CompanionAbilityUsed` are opt-in events the client masks in (section 4.3). Back button: same as Skip fight.
 
 ### 4.14 `SCR_STAGE_SELECT` (Modal, MVP)
 
@@ -532,10 +543,10 @@ Purpose: farm a cleared side stage (an easier stage for `GOLD_GAIN`-tuned kill r
 
 | Element | `StageSelectVm` field or command |
 |---|---|
-| Chapter dropdown | `Chapters[]` (`CHAPTER_WIDTH` groups up to `Progress.HighestCleared`) |
-| Stage chips | `Stages[]`: `Number`, `IsBoss`, `IsFrontier`, `IsSelected`, `Cleared`; tap: `cmd SelectStage(n)` for `n <= Progress.HighestCleared` (02's meaning: highest stage of any kind completed, issue #35); tapping the frontier chip equals Return |
+| Chapter dropdown | `Chapters[]` (`CHAPTER_WIDTH` groups up to the chapter of `max(Progress.HighestCleared, frontier)`, so the frontier chip is always reachable); opens on the chapter of the stage being fought (issue #183) |
+| Stage chips | `Stages[]`: `Number`, `IsBoss`, `IsFrontier`, `IsSelected`, `Cleared`, for the chosen chapter's stages up to the frontier (no chip above it); tap: `cmd SelectStage(n)` for `n <= Progress.HighestCleared` (02's meaning: highest stage of any kind completed, issue #35); tapping the frontier chip equals Return; the modal stays open so the "Farming: n" line confirms the pick |
 | Return to frontier | `cmd SelectStage(null)`; shown while snapshot `SelectedStage != null` |
-| Challenge boss | `cmd AttemptBoss` for the frontier boss only (only when walled) |
+| Challenge boss | `cmd AttemptBoss` for the frontier boss only (only when walled); an accepted attempt closes the modal so the fight is visible (issue #183) |
 
 Rules the modal makes visible: offline gold and EXP use the frontier `Combat.Stage` (06 section 7.1), the Dungeons unlock reads `Progress.HighestCleared` and first-clear diamonds read `Progress.HighestFirstClearBoss`, never the selected stage (06, 03 and 02; issue #35), so a lower stage is never a loophole; the modal says "Rewards for offline time use your highest stage". Events: `StageChanged` (from `SelectStage`), `StageCleared`; the selected stage is read from the snapshot (`SelectedStage`, which mirrors 02 `Combat.Selected`; null = frontier; issue #254), there is no `StageSelected` event (issue #11).
 
@@ -564,9 +575,11 @@ Rules the modal makes visible: offline gold and EXP use the frontier `Combat.Sta
 | Claim | `cmd ClaimQuest(id)`; Claim all: `cmd ClaimAllQuests(tab)` with a summary toast "+140 diamonds". `d_login` pays nothing (login diamonds are auto-granted on rollover, issue #20): its row shows "done" with no Claim button and only counts toward the bonus rows |
 | Achievements tab | one row per ladder showing the lowest unclaimed rung and "3 / 11 rungs" (`Simulation.AchievementRows()`, `ClaimedRungs(ladder)`, 06 section 5.4); a fully claimed ladder drops out |
 
-Events: `QuestCompleted` (row state swap, badge), `QuestClaimed`, `QuestsBulkClaimed` (toast), `DayRolledOver` / `WeekRolledOver` (full refresh; a toast "Missions reset" if the screen is open).
+Events: `QuestCompleted` (row state swap, badge), `QuestClaimed`, `QuestsBulkClaimed` (toast, one "+{n} {currency}" part per currency, comma-joined), `DayRolledOver` / `WeekRolledOver` (full refresh; a toast "Missions reset" if the screen is open, once when both roll together).
 
-States: Locked before its `feature_unlocks` condition (stage 10, after the first boss; issue #45). Empty daily list cannot occur. Forfeit warning: 60 minutes before rollover, rows with `COMPLETED` state show an amber "expires soon" caption (06 Open question 2).
+Rows (issue #183): the bonus rows (`DAILIES_COMPLETED` on Daily, `WEEKLIES_COMPLETED` on Weekly) are drawn only as the bar's chips (tap claims), never as list rows; the bar counts the tab's other rows that are `COMPLETED` or `CLAIMED`. `[Go >]` routes by goal: kills, boss, stage and fish goals to `SCR_MAIN`; summon and collection goals to `SCR_SUMMON`; Training, Party Level and Awakening goals to `SCR_PARTY`; dungeon goals to `SCR_DUNGEONS`; login and bonus goals have no Go.
+
+States: Locked before its `feature_unlocks` condition (stage 10, after the first boss; issue #45). Empty daily list cannot occur. Forfeit warning: `UI_QUEST_EXPIRY_WARN_SEC` (60 minutes) before rollover, rows with `COMPLETED` state show an amber "expires soon" caption (06 Open question 2): Daily rows before the day rollover, Weekly rows before the week rollover (Monday 00:00 UTC), never on Achievements (they never reset). The clock is the sim's virtual server time, the same one that rolls the day (issue #183).
 
 ### 4.16 `SCR_SHOP` (Full, MVP)
 
@@ -693,7 +706,7 @@ States: unowned item shows "Not owned" and no Equip or Limit break. Rune slots (
 
 | Element | `SettingsVm` field or command |
 |---|---|
-| Account block | `Account.Provider`, `PlayerIdShort`, `Linked[]`; `Auth.Link(provider)`, `Auth.Logout()` (01 logout flow: upload save, clear token, `SCR_TITLE`) |
+| Account block | `Account.Provider`, `PlayerIdShort`, `Linked[]`; `Auth.Link(provider)`, `Auth.Logout()` (01 logout flow: upload save, clear token, `SCR_TITLE`). `[Log out]` first opens `SCR_CONFIRM` (`scr.confirm.logout_title`): with a linked provider the body is `scr.confirm.logout_body`; for a guest with no linked provider (`Linked[]` empty) it is `scr.confirm.logout_guest_body`, which warns that logout abandons the account, since the server releases the device and the next start makes a new guest (00 decision 117). For that guest the logout completes only once the server confirms it: if `POST /auth/logout` fails, the choice modal `LOGOUT_OFFLINE` (`err.logout_offline.title` / `.body`, buttons `scr.error.retry` / `scr.confirm.cancel`) keeps the player signed in on `SCR_SETTINGS`; Retry sends it again, Cancel closes the modal with nothing changed (00 decision 119). A linked account logs out locally even when the POST fails |
 | Notification toggles | `ClientPrefs.Notify*` (local OS scheduling; MVP: tank full, dungeon reset; P1: missions expiring) |
 | Language | `ClientPrefs.Locale` from the shipped locales (09 `meta.ship_locales`; hidden while only `en` ships, issue #57); applies on the next screen push without restart |
 | Accessibility toggles | `ClientPrefs.Sound`, `Music`, `Haptics`, `ReducedMotion`, `LargeText` (section 11) |
@@ -703,6 +716,7 @@ Every toggle on this screen lives in `ClientPrefs` (issue #47): local to the dev
 | Restore purchases | `Iap.Restore()`; result toast |
 | Delete account | `SCR_CONFIRM` with typed "DELETE" field (08 GDPR flow), then `Account.Delete()` and `SCR_TITLE` |
 | Version caption | `ClientVersion`, `ContentVersion`, `SaveSchemaVersion`, `BuildHash`; long-press copies diagnostics |
+| Content update row | `UpdateVisible`, `UpdateLine` from `ContentUpdater` (01 section 8.12 step 2): `scr.settings.update_ready` ("Update ready, restarts on next launch") while `UpdateReady` (a verified bundle pending for the next cold boot), `scr.settings.update_app` ("Update the app for new content") while the offered bundle needs a newer client (09 section 10.3 step 3); hidden otherwise and without a `ContentUpdater` (Local mode). Built first, with the rest of the screen in issue #185 (issue #299) |
 
 States: offline shows account actions disabled with "Needs connection". Dev builds add a Debug section (01: grant currency, set stage, clock offset, run N hours, export/import save), compiled out of release.
 
@@ -856,7 +870,7 @@ Music: one combat loop per chapter skin, ducked 50% under modals, off during a r
 ## 10. Design rules
 
 1. **One-tap reach.** From `SCR_MAIN`, every primary sink (Train, Summon, Release/Merge, Dungeons, Quests claim, Shop) is one tap; every secondary (Research, Awakening, equip) is two.
-2. **Red-dot policy.** A dot means "a free thing is waiting": claimable quest, unused dungeon ticket, unclaimed inbox item, affordable Research node, new collectible unseen, free daily gift. Never for "you could spend money" or for affordable Training (that would be permanent). Dots clear when the thing is claimed or seen, never on a timer.
+2. **Red-dot policy.** A dot means "a free thing is waiting": claimable quest, unused dungeon ticket, unclaimed inbox item, affordable Research node, new collectible unseen, free daily gift. Never for "you could spend money" or for affordable Training (that would be permanent). Dots clear when the thing is claimed or seen, never on a timer. As built (`BadgesVm`, issue #180): every count is recomputed from state on each refresh, so a dot clears in the refresh after the claim; a quest counts in any kind (daily, weekly, achievement) while `COMPLETED`; tickets count every dungeon's balance; Research counts the nodes `ResearchRules.CanResearch` accepts; the daily gift counts while `Shop.DailyGiftClaimed` is false. A thing behind a locked `feature_unlocks` gate or a kill switch that is off shows no dot, because it cannot be taken; the Locked state names the condition instead.
 3. **Toasts.** One at a time, bottom of the content area above the tab bar, except rejection toasts, which anchor under the pressed button (01 `Reject`, issue #30); 2 s (4 s for L/M acquisitions), identical consecutive toasts collapse with "x3". Toasts never carry actions; anything actionable is a card or a modal.
 4. **Modals.** Never two at once; requests queue and show in order after the current one closes. A modal never covers the combat viewport while `EnemyIsBoss` is true: `SCR_OFFLINE_REWARD`, `SCR_INBOX`, `SCR_STAGE_SELECT`, `SCR_PROFILE`, `SCR_ITEM_DETAIL` and `SCR_CONFIRM` wait for the boss fight to end or shift down to the Fish Board region if invoked by the player during a boss. Mandatory modals (`SCR_OFFLINE_REWARD`) are the only non-dismissible ones.
 5. **Loading.** Skeletons, not spinners, for lists; a spinner only on the pressed button. Nothing blocks the sim. After 2 s a Retry link appears; after 10 s the 01 error card.
@@ -991,7 +1005,7 @@ Pixel sprites are animated frame by frame. There is no skeletal rig, because rot
 - **Addressables groups**: `always` (`SCR_MAIN`, HUD, tab bar, fish atlas, `ui_icons`, `ui_frames`, chapter 1 skin, `party_battle`), one group per Full screen prefab + its atlas, `chapters` (one bundle per chapter skin, downloaded ahead when the player enters the previous chapter), `audio_sfx`, `audio_music` (one bundle per loop), `collection_icons` (three icon atlases, loaded on first collection screen).
 - **Input**: Input System package; `TapZap` from a full-viewport `IPointerClickHandler` behind the combat UI; Fish Board drag through `IBeginDragHandler` / `IDragHandler` / `IEndDragHandler` on cells; back button via `Keyboard.current.escapeKey`.
 - **Safe area**: one `SafeAreaFitter` on the root `RectTransform`; bands are children with fixed heights and the combat band `flexibleHeight = 1`. Details in section 17.2.
-- **Localization**: `TextKeyLabel` component holds the key; a locale change re-resolves every live label through an event. A hot-applied content swap (00's four tables: `localization`, `shop_products`, `shop_packages`, `inbox_templates`; issue #54) re-resolves labels the same way and makes `ShopVm` and `InboxVm` re-read their rows. Fonts: one TMP font asset with fallback chain `latin -> ja -> ko -> zh-Hans`.
+- **Localization**: `TextKeyLabel` component holds the key; a locale change re-resolves every live label through an event. A hot-applied content swap (00's four tables: `localization`, `shop_products`, `shop_packages`, `inbox_templates`; issue #54) re-resolves labels the same way and makes `ShopVm` and `InboxVm` re-read their rows. As built (issue #299): the `GameViewModel` calls `ContentUpdater.TryApplyHot` each frame while a hot bundle is ready, at a safe point (no modal, no blocking error, not in a boss), and publishes the swapped `HotContentSet` on `VmContext.HotContent` / `VmContext.HotContentApplied`, which `ShopVm` and `InboxVm` read and subscribe to when they land (#184). Kill switches are read through `VmContext.Flags` at every refresh. Fonts: one TMP font asset with fallback chain `latin -> ja -> ko -> zh-Hans`.
 - **Dev tooling**: `Debug` section in `SCR_SETTINGS` compiled under `HEROCAT_CHEATS` (section 17.3); a `UiStateCatalog` scene that instantiates every screen in every state (empty, loading, error, locked, first-time) for screenshot review and pseudo-localization builds.
 
 ## 17. Unity project setup, builds and device QA

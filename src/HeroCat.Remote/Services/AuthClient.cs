@@ -19,6 +19,24 @@ namespace HeroCat.Remote.Services
         public const string Refresh = "/auth/refresh";        // POST, auth none, not idempotent (rotation) -> 200
         public const string Logout = "/auth/logout";          // POST, jwt, idempotent -> 204
         public const string AccountDelete = "/account/delete"; // POST, jwt+device, idempotent -> {"graceUntil"}
+        public const string Devices = "/devices";             // POST, jwt, idempotent -> 204 (registers or rotates the device key)
+    }
+
+    /// <summary>Outcome of <see cref="AuthClient.EnsureDeviceRegisteredAsync"/>.</summary>
+    public enum DeviceRegistration
+    {
+        /// <summary>The server holds this install's current key for the session's player.</summary>
+        Registered,
+
+        /// <summary>No session yet: <c>POST /auth/guest</c> registers the key when it creates one.</summary>
+        NoSession,
+
+        /// <summary>
+        /// The server refused with a final answer (<c>403 KEY_ROTATION_NOT_ALLOWED</c>, <c>409 DEVICE_ALREADY_BOUND</c>, ...).
+        /// Not retried again in this process for this session and key; uploads go ahead and the server records
+        /// <c>hmacValid = false</c> (02 section 5.1: an HMAC mismatch is never a rejection).
+        /// </summary>
+        Refused,
     }
 
     /// <summary>Construction options of <see cref="AuthClient"/>; the defaults are production values.</summary>
@@ -58,8 +76,16 @@ namespace HeroCat.Remote.Services
     /// (issue #273): the server rotates the family's live token and answers a fresh pair. A 401 (<c>TOKEN_REUSED</c>,
     /// <c>TOKEN_REVOKED</c>, <c>TOKEN_EXPIRED</c>, <c>UNAUTHENTICATED</c>) or <c>403 DEVICE_MISMATCH</c> ends the session:
     /// the tokens are cleared and <see cref="SessionLost"/> fires.</item>
+    /// <item><b>Device registration</b> (<c>POST /devices</c>, 02 section 10.1): the server must hold this install's HMAC
+    /// key before a save upload, or every upload is flagged <c>HMAC_INVALID</c>. The guest call registers it; the tokens
+    /// record the registered key's <see cref="DeviceKey.KeyId"/>, and <see cref="EnsureDeviceRegisteredAsync"/> sends
+    /// <c>POST /devices</c> when the current key is not the recorded one (a key replaced after the guest call, tokens from a
+    /// build before this record). Idempotent: the same request id is reused for the same session and key until it lands,
+    /// and the server answers the same key again with 204. The cloud save awaits it before each upload. TODO(#196): a
+    /// <c>/auth/link-login</c> success registers the key too and should store <c>RegisteredKeyId</c> like the guest call.</item>
     /// <item><b>Logout</b>: one best-effort <c>POST /auth/logout {refreshToken}</c>, then the tokens are cleared whatever
-    /// the answer (the server's 204 also covers an unknown token).</item>
+    /// the answer (the server's 204 also covers an unknown token). An unlinked guest uses
+    /// <see cref="TryConfirmedLogoutAsync"/> instead, which keeps the tokens unless the server confirmed (00 decision 119).</item>
     /// <item><b>Delete</b>: <c>POST /account/delete {}</c>; tokens are cleared only on success.</item>
     /// </list>
     /// Linking (<c>/auth/link</c>, <c>/auth/link-login</c>, <c>/auth/merge</c>) is issue #196. Thread-safe.
@@ -69,6 +95,7 @@ namespace HeroCat.Remote.Services
         readonly ApiClient _client;
         readonly ITokenStore _store;
         readonly byte[] _deviceKey;
+        readonly string _keyId;
         readonly string _deviceId;
         readonly AuthClientOptions _o;
         readonly IMonoClock _mono;
@@ -78,6 +105,8 @@ namespace HeroCat.Remote.Services
         AuthTokens _tokens;
         Task<SignInResult> _refreshing;
         Task<SignInResult> _guesting;
+        Task<DeviceRegistration> _registering;
+        string _registerFor, _registerRequestId, _refusedFor;   // scoped "{playerId}:{keyId}"
 
         public AuthClient(ApiClient client, ITokenStore store, byte[] deviceKey, AuthClientOptions options = null)
         {
@@ -86,6 +115,7 @@ namespace HeroCat.Remote.Services
             if (deviceKey == null || deviceKey.Length != DeviceKey.KeyBytes)
                 throw new ArgumentException($"the device key is {DeviceKey.KeyBytes} bytes (02 section 10)", nameof(deviceKey));
             _deviceKey = (byte[])deviceKey.Clone();
+            _keyId = DeviceKey.KeyId(_deviceKey);
             if (!Guid.TryParse(client.Options.DeviceId, out var device) || device == Guid.Empty)
                 throw new ArgumentException("ApiClientOptions.DeviceId must be the install id (a GUID)", nameof(client));
             _deviceId = device.ToString("D");
@@ -105,6 +135,16 @@ namespace HeroCat.Remote.Services
         public Guid PlayerId => Volatile.Read(ref _tokens)?.PlayerId ?? Guid.Empty;
 
         public bool HasSession => Volatile.Read(ref _tokens)?.HasSession ?? false;
+
+        /// <summary>The session's account has a linked provider (<see cref="AuthTokens.Linked"/>); false without a session.</summary>
+        public bool IsLinked
+        {
+            get
+            {
+                var t = Volatile.Read(ref _tokens);
+                return t != null && t.HasSession && t.Linked;
+            }
+        }
 
         /// <summary>The access token's expiry (unix seconds), 0 when none.</summary>
         public long AccessExpiresAt => Volatile.Read(ref _tokens)?.AccessExpiresAt ?? 0;
@@ -159,7 +199,9 @@ namespace HeroCat.Remote.Services
                 {
                     if (TryReadTokens(r.Body, out string access, out string refresh, out long exp, out _))
                     {
-                        Store(presented with { AccessToken = access, RefreshToken = refresh, AccessExpiresAt = exp });
+                        // a registration that finished meanwhile keeps its record
+                        string registered = Volatile.Read(ref _tokens)?.RegisteredKeyId ?? presented.RegisteredKeyId;
+                        Store(presented with { AccessToken = access, RefreshToken = refresh, AccessExpiresAt = exp, RegisteredKeyId = registered });
                         return new SignInResult(SignInStatus.SignedIn, presented.PlayerId);
                     }
                     code = ErrorClassifier.SRV_UNEXPECTED;   // the server rotated, but the pair is unreadable: like a lost response
@@ -208,7 +250,7 @@ namespace HeroCat.Remote.Services
             {
                 if (!TryReadTokens(r.Body, out string access, out string refresh, out long exp, out Guid player) || player == Guid.Empty)
                     return Offline(pending, ErrorClassifier.SRV_UNEXPECTED);
-                Store(new AuthTokens { PlayerId = player, AccessToken = access, RefreshToken = refresh, AccessExpiresAt = exp });
+                Store(new AuthTokens { PlayerId = player, AccessToken = access, RefreshToken = refresh, AccessExpiresAt = exp, RegisteredKeyId = _keyId });
                 return new SignInResult(SignInStatus.SignedIn, player, NewAccount: true);
             }
 
@@ -220,7 +262,8 @@ namespace HeroCat.Remote.Services
                 TrySave(dropped);
                 Volatile.Write(ref _tokens, dropped);
             }
-            // DEVICE_ALREADY_BOUND: this install has an account but no tokens for it (they were lost or logged out).
+            // DEVICE_ALREADY_BOUND: this install has an account but no tokens for it (lost, or a logout whose POST /auth/logout
+            // never reached the server; a delivered logout releases the device, 00 decision 117).
             if (e.Code == "DEVICE_ALREADY_BOUND") return new SignInResult(SignInStatus.SignInRequired, Guid.Empty, Code: e.Code);
             return Offline(pending, e.Code);
         }
@@ -251,21 +294,107 @@ namespace HeroCat.Remote.Services
             return !string.IsNullOrEmpty(access) && !string.IsNullOrEmpty(refresh);
         }
 
+        // ------------------------------------------------------------------------------------- device registration (02 section 10.1)
+
+        /// <summary>
+        /// Makes sure the server holds this install's HMAC key for the session's player: nothing to do when the tokens
+        /// record this key as registered, else <c>POST /devices {deviceId, deviceKey, model, os, clientVersion}</c> (08
+        /// section 2.2), shared with any call already running. Throws <see cref="ServiceException"/> on a transient failure
+        /// (offline, timeout, 5xx, 429, 401) once the ApiClient's retries are spent: the caller waits and asks again later,
+        /// and the retry reuses the request id. <paramref name="ct"/> is not observed (the record must be stored).
+        /// </summary>
+        public Task<DeviceRegistration> EnsureDeviceRegisteredAsync(CancellationToken ct = default)
+        {
+            var t = Volatile.Read(ref _tokens);
+            if (t == null || !t.HasSession) return Task.FromResult(DeviceRegistration.NoSession);
+            if (t.RegisteredKeyId == _keyId) return Task.FromResult(DeviceRegistration.Registered);
+            string scope = t.PlayerId.ToString("N") + ":" + _keyId;
+            lock (_lock)
+            {
+                if (_refusedFor == scope) return Task.FromResult(DeviceRegistration.Refused);
+                if (_registering == null || _registering.IsCompleted) _registering = Task.Run(() => RegisterCoreAsync(t.PlayerId, scope));
+                return _registering;
+            }
+        }
+
+        async Task<DeviceRegistration> RegisterCoreAsync(Guid player, string scope)
+        {
+            string requestId;
+            lock (_lock)
+            {
+                if (_registerFor != scope)
+                {
+                    _registerFor = scope;
+                    _registerRequestId = ApiRequest.NewRequestId();
+                }
+                requestId = _registerRequestId;
+            }
+            var body = new JObject
+            {
+                ["deviceId"] = _deviceId,
+                ["deviceKey"] = Convert.ToBase64String(_deviceKey),
+                ["clientVersion"] = _client.Options.ClientVersion,
+            };
+            AddIfSet(body, "model", _o.Model);
+            AddIfSet(body, "os", _o.Os);
+            var r = await _client.SendAsync<JToken>(ApiRequest.Mutation(HttpMethod.Post, AuthRoutes.Devices, body, requestId), CancellationToken.None)
+                                 .ConfigureAwait(false);
+            if (!r.Ok && (IsTransient(r.Error) || r.Status == 401)) throw r.ToServiceException();
+
+            AuthTokens marked = null;
+            lock (_lock)
+            {
+                _registerFor = _registerRequestId = null;
+                if (!r.Ok)
+                {
+                    _refusedFor = scope;
+                    return DeviceRegistration.Refused;
+                }
+                var now = Volatile.Read(ref _tokens);
+                if (now != null && now.HasSession && now.PlayerId == player)
+                {
+                    marked = now with { RegisteredKeyId = _keyId };
+                    Volatile.Write(ref _tokens, marked);
+                }
+            }
+            if (marked != null) TrySave(marked);
+            return DeviceRegistration.Registered;
+        }
+
         // ------------------------------------------------------------------------------------- logout, delete (8.13)
 
         public async Task<bool> LogoutAsync(CancellationToken ct = default)
         {
             var t = Volatile.Read(ref _tokens);
-            bool revoked = false;
-            if (t != null && t.HasSession)
-            {
-                var req = ApiRequest.Mutation(HttpMethod.Post, AuthRoutes.Logout, new JObject { ["refreshToken"] = t.RefreshToken },
-                                              ApiRequest.NewRequestId()) with { NoRetry = true };
-                var r = await _client.SendAsync<JToken>(req, ct).ConfigureAwait(false);
-                revoked = r.Ok;
-            }
+            bool revoked = t != null && t.HasSession && await PostLogoutAsync(t, ct).ConfigureAwait(false);
             Clear();
             return revoked;
+        }
+
+        /// <summary>
+        /// 00 decision 119: one <c>POST /auth/logout</c>; the tokens are cleared only on the server's 204 (true). A failure
+        /// keeps them, so the player stays signed in and can retry. True, with nothing sent, when no session is held.
+        /// </summary>
+        public async Task<bool> TryConfirmedLogoutAsync(CancellationToken ct = default)
+        {
+            var t = Volatile.Read(ref _tokens);
+            if (t == null || !t.HasSession)
+            {
+                Clear();
+                return true;
+            }
+            if (!await PostLogoutAsync(t, ct).ConfigureAwait(false)) return false;
+            Clear();   // the family is revoked: a refresh that rotated it meanwhile is unusable too
+            return true;
+        }
+
+        /// <summary>One attempt (no backoff schedule); the refresh token names the family to revoke.</summary>
+        async Task<bool> PostLogoutAsync(AuthTokens t, CancellationToken ct)
+        {
+            var req = ApiRequest.Mutation(HttpMethod.Post, AuthRoutes.Logout, new JObject { ["refreshToken"] = t.RefreshToken },
+                                          ApiRequest.NewRequestId()) with { NoRetry = true };
+            var r = await _client.SendAsync<JToken>(req, ct).ConfigureAwait(false);
+            return r.Ok;
         }
 
         public async Task<long> DeleteAccountAsync(CancellationToken ct = default)

@@ -1,0 +1,219 @@
+{
+  "description": "Alarm definitions as code (specs/10 section 10, the single alarm catalog; specs/08 sections 9.4 and 9.5; issue #210). One entry per row of the specs/10 section 10 table: 'alarm' and 'severity' as the table writes them, 'runbook' its RB-* id (specs/10 section 9). Each condition says where it is evaluated: 'prometheus' (PromQL over the server's specs/08 section 9.4 metrics, scraped by the collector), 'logs' (CloudWatch Logs Insights over the structured JSON log fields of section 9.4), 'sql' (a query the alerting job runs on Postgres), 'analytics' (the events warehouse), 'job' (raised by a worker job), 'cloudwatch' (AWS-managed metrics), 'crashlytics', 'budget' (AWS Budgets / cost anomaly) and 'rollout' (the staged rollout controller). HeroCat.Server.Tests (AlarmCatalogTests) fails when a table row is missing here, a runbook or severity differs, or a prometheus expression names a metric outside section 9.4. Thresholds are the table's; change them there first.",
+  "recordingRules": [
+    {
+      "record": "summon_lplus_rate_5m",
+      "expr": "sum by (banner) (rate(summon_pulls_total{rarity=~\"L|M\"}[5m])) / sum by (banner) (rate(summon_pulls_total[5m]))",
+      "note": "specs/08 section 9.4 'gauge (derived)': the realised L+ share per banner over 5 minutes, for the realised rates dashboard"
+    }
+  ],
+  "alarms": [
+    {
+      "id": "api_5xx", "alarm": "API 5xx", "severity": "P1", "runbook": "RB-API-5XX",
+      "conditions": [
+        { "severity": "P1", "source": "prometheus", "for": "5m",
+          "expr": "sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m])) > 0.01" }
+      ]
+    },
+    {
+      "id": "summon_latency", "alarm": "Summon latency", "severity": "P1", "runbook": "RB-LATENCY",
+      "conditions": [
+        { "severity": "P1", "source": "prometheus", "for": "5m",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{route=\"post/summon/pull\"}[5m]))) > 0.5" }
+      ]
+    },
+    {
+      "id": "save_latency", "alarm": "Save latency", "severity": "P2", "runbook": "RB-LATENCY",
+      "conditions": [
+        { "severity": "P2", "source": "prometheus", "for": "5m",
+          "expr": "histogram_quantile(0.99, sum by (le) (rate(http_request_duration_seconds_bucket{route=\"put/save\"}[5m]))) > 0.8" }
+      ]
+    },
+    {
+      "id": "auth_failures", "alarm": "Auth failures", "severity": "P1", "runbook": "RB-AUTH",
+      "conditions": [
+        { "severity": "P1", "source": "prometheus", "for": "10m",
+          "expr": "sum(rate(http_requests_total{status=~\"401|403\"}[10m])) / sum(rate(http_requests_total[10m])) > 0.05" }
+      ]
+    },
+    {
+      "id": "odds_drift", "alarm": "Odds drift", "severity": "P1", "runbook": "RB-SUMMON-RATES",
+      "conditions": [
+        { "severity": "P1", "source": "job", "every": "1h",
+          "expr": "realised-rate job: per banner level and rarity, the observed share of summon_log rows lies outside the Wilson score interval (ODDS_ALARM_Z = 3) around the published rate, on the trailing 1 h, 24 h and 7 d windows",
+          "note": "a Wilson interval per banner level needs the summon_log rows (banner level is not a metric label); issue #59, specs/08 acceptance 22" }
+      ]
+    },
+    {
+      "id": "summon_errors", "alarm": "Summon errors", "severity": "P2", "runbook": "RB-CLIENT-BALANCE",
+      "conditions": [
+        { "severity": "P2", "source": "prometheus", "for": "15m",
+          "expr": "sum(rate(http_requests_total{route=\"post/summon/pull\",status=\"402\"}[15m])) / sum(rate(http_requests_total{route=\"post/summon/pull\"}[15m])) > 0.2",
+          "note": "402 is INSUFFICIENT_FUNDS, the only 402 of /summon/pull" }
+      ]
+    },
+    {
+      "id": "iap_validation_failures", "alarm": "IAP validation failures", "severity": "P1", "runbook": "RB-IAP",
+      "conditions": [
+        { "severity": "P1", "source": "prometheus", "for": "30m",
+          "expr": "sum(rate(iap_validate_total{status=\"RECEIPT_INVALID\"}[30m])) / sum(rate(iap_validate_total[30m])) > 0.05" },
+        { "severity": "P1", "source": "prometheus",
+          "expr": "sum(increase(iap_validate_total{status=\"STORE_UNAVAILABLE\"}[5m])) > 10" }
+      ]
+    },
+    {
+      "id": "receipt_backlog", "alarm": "Receipt backlog", "severity": "P1", "runbook": "RB-IAP",
+      "conditions": [
+        { "severity": "P1", "source": "sql", "for": "10m",
+          "expr": "unprocessed store notifications (App Store notifications v2, Play RTDN) > 100",
+          "note": "the notification queue's table comes with issue #203" }
+      ]
+    },
+    {
+      "id": "iap_grant_gap", "alarm": "IAP grant gap", "severity": "P1", "runbook": "RB-IAP",
+      "conditions": [
+        { "severity": "P1", "source": "sql", "for": "30m",
+          "expr": "share of purchases granted in the last 30 min with no inbox_items row > 0.005" },
+        { "severity": "P1", "source": "sql",
+          "expr": "select count(*) from purchases where status = 'pending' and created_at < now() - interval '10 minutes' > 0" }
+      ]
+    },
+    {
+      "id": "refund_spike", "alarm": "Refund spike", "severity": "P2", "runbook": "RB-REFUND",
+      "conditions": [
+        { "severity": "P2", "source": "prometheus",
+          "expr": "sum(increase(iap_webhook_total{type=\"REFUND\"}[24h])) > 3 * quantile_over_time(0.5, (sum(increase(iap_webhook_total{type=\"REFUND\"}[24h])))[7d:1d])" }
+      ]
+    },
+    {
+      "id": "duplicate_grant", "alarm": "Duplicate grant", "severity": "P1", "runbook": "RB-DUPLICATE-GRANT",
+      "conditions": [
+        { "severity": "P1", "source": "sql",
+          "expr": "select request_id from diamond_ledger where request_id is not null group by request_id having count(*) > 1" }
+      ]
+    },
+    {
+      "id": "save_conflicts", "alarm": "Save conflicts", "severity": "P2", "runbook": "RB-SAVE-CONFLICT",
+      "conditions": [
+        { "severity": "P2", "source": "logs", "window": "1h",
+          "expr": "filter route = \"put/save\" | stats sum(code = \"SAVE_CONFLICT\") / count(*) as share | filter share > 0.05",
+          "note": "the code is a log field; http_requests_total's 409 also counts SAVE_STALE and SAVE_ROLLED_BACK" }
+      ]
+    },
+    {
+      "id": "save_rejections", "alarm": "Save rejections", "severity": "P1", "runbook": "RB-SAVE-CORRUPT",
+      "conditions": [
+        { "severity": "P1", "source": "logs", "window": "1h",
+          "expr": "filter route = \"put/save\" | stats sum(code = \"SAVE_MALFORMED\") / count(*) as share | filter share > 0.001" }
+      ]
+    },
+    {
+      "id": "save_corruption", "alarm": "Save corruption", "severity": "P1", "runbook": "RB-SAVE-CORRUPT",
+      "conditions": [
+        { "severity": "P1", "source": "analytics", "window": "1h",
+          "expr": "count(events where name = 'save_corrupt') / count(events where name = 'boot_ms') > 0.001" }
+      ]
+    },
+    {
+      "id": "plausibility_spike", "alarm": "Plausibility spike", "severity": "P2", "runbook": "RB-ANTICHEAT",
+      "conditions": [
+        { "severity": "P2", "source": "prometheus",
+          "expr": "sum(increase(save_flags_total[1h])) / sum(increase(save_upload_bytes_count[1h])) > 0.01" }
+      ]
+    },
+    {
+      "id": "plausibility_flood", "alarm": "Plausibility flood", "severity": "P1", "runbook": "RB-ANTICHEAT",
+      "conditions": [
+        { "severity": "P1", "source": "prometheus", "expr": "sum(increase(save_flags_total{severity=\"certain\"}[1h])) > 50" }
+      ]
+    },
+    {
+      "id": "rollbacks", "alarm": "Rollbacks", "severity": "P1", "runbook": "RB-ANTICHEAT",
+      "conditions": [
+        { "severity": "P1", "source": "prometheus", "expr": "sum(increase(moderation_actions_total{action=\"rollback\"}[1h])) > 20" }
+      ]
+    },
+    {
+      "id": "crash_free", "alarm": "Crash-free", "severity": "P1", "runbook": "RB-CLIENT-CRASH",
+      "conditions": [
+        { "severity": "P1", "source": "crashlytics", "window": "1h",
+          "expr": "crash-free sessions < 99.0% on any client version with > 500 sessions" }
+      ]
+    },
+    {
+      "id": "content_update_failures", "alarm": "Content update failures", "severity": "P2", "runbook": "RB-CONFIG",
+      "conditions": [
+        { "severity": "P2", "source": "analytics", "window": "30m",
+          "expr": "count(events where name = 'content_update_failed') / count(events where name = 'boot_ms') > 0.01" }
+      ]
+    },
+    {
+      "id": "boot_time", "alarm": "Boot time", "severity": "P2", "runbook": "RB-CONFIG",
+      "conditions": [
+        { "severity": "P2", "source": "analytics", "window": "1h",
+          "expr": "p95(boot_ms.totalMs) on the mid device class > 6000" }
+      ]
+    },
+    {
+      "id": "cdn", "alarm": "CDN", "severity": "P1", "runbook": "RB-CONFIG",
+      "conditions": [
+        { "severity": "P1", "source": "cloudwatch", "expr": "CloudFront 4xxErrorRate on content/* > 0.5%" }
+      ]
+    },
+    {
+      "id": "config", "alarm": "Config", "severity": "- / P1", "runbook": "RB-CONFIG",
+      "conditions": [
+        { "severity": "notify", "source": "prometheus", "expr": "changes(max(config_active_version)[5m:]) > 0" },
+        { "severity": "P1", "source": "logs", "expr": "filter code = \"CONTENT_HASH_MISMATCH\" | stats count(*) as n | filter n > 0" }
+      ]
+    },
+    {
+      "id": "db", "alarm": "DB", "severity": "P1", "runbook": "RB-DB",
+      "conditions": [
+        { "severity": "P1", "source": "prometheus", "expr": "max(db_pool_in_use) > 0.8 * 100",
+          "note": "100 is Npgsql's default Maximum Pool Size; keep it in step with the connection string" },
+        { "severity": "P1", "source": "cloudwatch", "expr": "RDS: pool exhaustion events > 0, ReplicaLag > 10 s, CPUUtilization > 80% for 10 min, disk used > 80%" },
+        { "severity": "P1", "source": "prometheus", "expr": "min by (table) (db_partition_horizon_days{table=~\"diamond_ledger|summon_log\"}) < 31",
+          "note": "one month-partition period" },
+        { "severity": "P1", "source": "prometheus", "expr": "min by (table) (db_partition_horizon_days{table=\"events\"}) < 1",
+          "note": "one day-partition period" }
+      ]
+    },
+    {
+      "id": "redis", "alarm": "Redis", "severity": "P2 / P1", "runbook": "RB-REDIS",
+      "conditions": [
+        { "severity": "P2", "source": "cloudwatch", "expr": "ElastiCache DatabaseMemoryUsagePercentage > 80% or Evictions > 0" },
+        { "severity": "P1", "source": "cloudwatch", "expr": "ElastiCache primary failover event" }
+      ]
+    },
+    {
+      "id": "worker", "alarm": "Worker", "severity": "P2", "runbook": "RB-WORKER",
+      "conditions": [
+        { "severity": "P2", "source": "prometheus", "expr": "sum by (job) (increase(worker_job_failures_total{job=\"idempotency_purge\"}[3h])) >= 3",
+          "note": "hourly job: three failed passes in a row" },
+        { "severity": "P2", "source": "prometheus", "expr": "sum by (job) (increase(worker_job_failures_total{job=~\"inbox_purge|partitions\"}[72h])) >= 3",
+          "note": "daily jobs: three failed days (the partition job's same-day retry counts as one more failure)" },
+        { "severity": "P2", "source": "sql", "for": "15m", "expr": "mail_blasts.sent_count unchanged for 15 min while the blast is sending",
+          "note": "mail blasts come with issue #208" }
+      ]
+    },
+    {
+      "id": "cert_key_expiry", "alarm": "Certificate / key expiry", "severity": "P2", "runbook": "RB-SECRETS",
+      "conditions": [
+        { "severity": "P2", "source": "cloudwatch", "expr": "ACM DaysToExpiry < 14; Apple .p8 or JWT signing key rotation due in < 14 days (Secrets Manager rotation metadata)" }
+      ]
+    },
+    {
+      "id": "cost", "alarm": "Cost", "severity": "P2", "runbook": "RB-COST",
+      "conditions": [
+        { "severity": "P2", "source": "budget", "expr": "daily spend > 1.5 x the 7-day average" }
+      ]
+    },
+    {
+      "id": "rollout_halt", "alarm": "Rollout halt", "severity": "-", "runbook": null, "runbookFrom": "the triggering P1",
+      "conditions": [
+        { "severity": "notify", "source": "rollout", "expr": "any P1 alarm firing while a staged rollout is in progress freezes rolloutPct" }
+      ]
+    }
+  ]
+}

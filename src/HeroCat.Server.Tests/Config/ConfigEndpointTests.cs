@@ -104,10 +104,10 @@ public sealed class ConfigEndpointTests
         int first = await ConfigHost.PublishAndActivate(_client, ConfigHost.Payload(_host.Cdn));
         int second = await ConfigHost.Publish(_client, ConfigHost.Payload(_host.Cdn, version: "2026.11.17"));
 
-        var row = await store.GetAsync("dev", second, CancellationToken.None);
+        var row = await store.GetAsync(_host.Env, second, CancellationToken.None);
         Assert.That(row!.Active, Is.False);
         Assert.That(row.CreatedBy, Is.EqualTo("ops@herocat.example"));
-        Assert.That((await store.GetActiveAsync("dev", CancellationToken.None))!.Id, Is.EqualTo(first));
+        Assert.That((await store.GetActiveAsync(_host.Env, CancellationToken.None))!.Id, Is.EqualTo(first));
 
         using (var a = await _client.SendAsync(ConfigHost.Admin($"/v1/admin/config/{second}/activate", new { })))
         {
@@ -121,8 +121,8 @@ public sealed class ConfigEndpointTests
 
         // Rollback is activating the previous id.
         await (await _client.SendAsync(ConfigHost.Admin($"/v1/admin/config/{first}/activate", new { }))).Content.ReadAsStringAsync();
-        Assert.That((await store.GetActiveAsync("dev", CancellationToken.None))!.Id, Is.EqualTo(first));
-        Assert.That((await store.GetAsync("dev", second, CancellationToken.None))!.Active, Is.False, "one active row");
+        Assert.That((await store.GetActiveAsync(_host.Env, CancellationToken.None))!.Id, Is.EqualTo(first));
+        Assert.That((await store.GetAsync(_host.Env, second, CancellationToken.None))!.Active, Is.False, "one active row");
     }
 
     [Test]
@@ -153,7 +153,7 @@ public sealed class ConfigEndpointTests
             Assert.That(d.GetProperty("field").GetString(), Is.EqualTo("defaultContent"));
             Assert.That(d.GetProperty("actual").ValueKind, Is.EqualTo(JsonValueKind.Null));
         }
-        Assert.That((await _host.Services.GetRequiredService<IConfigStore>().GetActiveAsync("dev", CancellationToken.None))!.Id, Is.EqualTo(first));
+        Assert.That((await _host.Services.GetRequiredService<IConfigStore>().GetActiveAsync(_host.Env, CancellationToken.None))!.Id, Is.EqualTo(first));
     }
 
     [Test]

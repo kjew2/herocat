@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using HeroCat.Runtime.Content;
 using HeroCat.Runtime.Errors;
+using HeroCat.Runtime.Save;
+using HeroCat.Runtime.Services;
 using HeroCat.Runtime.Session;
 using HeroCat.Runtime.Summons;
 using HeroCat.Sim;
@@ -24,6 +27,12 @@ namespace HeroCat.Client.Core
         public SummonFlow Summon { get; set; }
 
         public string SaveDescription { get; set; } = "";
+
+        /// <summary>BootResult.ContentUpdates: drives SCR_SETTINGS' update row and the hot apply; null without one.</summary>
+        public ContentUpdater ContentUpdates { get; set; }
+
+        /// <summary>The <c>storeUrls</c> key of this platform (<see cref="StoreLink.Ios"/> or <see cref="StoreLink.Android"/>).</summary>
+        public string Platform { get; set; }
     }
 
     /// <summary>
@@ -43,6 +52,11 @@ namespace HeroCat.Client.Core
         readonly Constants _k;
         readonly List<IDisposable> _subs = new List<IDisposable>();
         readonly Func<double> _now;
+        readonly ContentUpdater _updates;
+        readonly string _platform;
+        readonly Func<bool> _mainIdle, _blockSave;
+        MaintenanceInfo _bannerSrc;
+        long _bannerSec = long.MinValue;
         bool _dirty, _saveRequested, _inSend, _detailDirty = true;
 
         public GameViewModel(SessionRunner runner, OffsetClock clock, GameVmOptions options = null)
@@ -68,13 +82,28 @@ namespace HeroCat.Client.Core
             Weapons = new WeaponsVm(Context);
             Skills = new SkillsVm(Context);
             Companions = new CompanionsVm(Context);
+            Research = new ResearchVm(Context);
             ItemDetail = new ItemDetailVm(Context);
             SummonResult = new SummonResultVm(Context);
             Summon = new SummonVm(Context, options.Summon ?? ((b, n, p) => _runner.SummonAsync(b, n, p)), SummonResult);
             SummonResult.Summon = Summon;
             OfflineReward = new OfflineRewardVm(Context);
+            Quests = new QuestsVm(Context);
+            StageSelect = new StageSelectVm(Context);
             Confirm = new ConfirmVm(Localizer, Router);
             Error = new ErrorVm(Localizer, Router);
+            UpdateGate = new ClientUpdateGateVm(Error);
+            _updates = options.ContentUpdates;
+            _platform = options.Platform;
+            Settings = new SettingsVm(Context, _updates);
+            _mainIdle = () => MainIdle;
+            _blockSave = () => _runner.SaveNow(SaveTrigger.Pause);
+            if (_updates != null) _updates.HotApplied += OnHotApplied;
+            Error.OnAction = a =>
+            {
+                if (a == ErrorAction.UpdateApp) OpenUrl?.Invoke(UpdateGate.StoreUrl);
+                else ErrorActions?.Invoke(a);
+            };
 
             Router.EnemyIsBoss = () => Main.Combat.IsBoss;
             Router.RevealRunning = () => SummonResult.Running;
@@ -97,6 +126,7 @@ namespace HeroCat.Client.Core
         {
             foreach (var s in _subs) s.Dispose();
             _subs.Clear();
+            if (_updates != null) _updates.HotApplied -= OnHotApplied;
         }
 
         public ILocalizer Localizer { get; }
@@ -114,12 +144,37 @@ namespace HeroCat.Client.Core
         public WeaponsVm Weapons { get; }
         public SkillsVm Skills { get; }
         public CompanionsVm Companions { get; }
+        public ResearchVm Research { get; }
         public ItemDetailVm ItemDetail { get; }
         public SummonVm Summon { get; }
         public SummonResultVm SummonResult { get; }
         public OfflineRewardVm OfflineReward { get; }
+        public QuestsVm Quests { get; }
+        public StageSelectVm StageSelect { get; }
         public ConfirmVm Confirm { get; }
         public ErrorVm Error { get; }
+
+        /// <summary>The mid-session CLIENT_TOO_OLD block (01 section 8.12 step 3).</summary>
+        public ClientUpdateGateVm UpdateGate { get; }
+
+        /// <summary>SCR_SETTINGS (only its content update row so far).</summary>
+        public SettingsVm Settings { get; }
+
+        /// <summary>
+        /// SCR_MAIN on top with nothing over it and no flow in flight: no modal (open or queued), no overlay, no blocking
+        /// error, no summon request or reveal running. The CLIENT_TOO_OLD block waits for it (01 section 8.12 step 3).
+        /// </summary>
+        public bool MainIdle => Router.TopFull.Id == ScreenIds.Main && Router.Modal == null && Router.QueuedModals == 0 &&
+                                Router.Overlays.Count == 0 && Router.BlockingError == null && !Summon.InFlight && !SummonResult.Running;
+
+        /// <summary>
+        /// Opens a URL (the Unity layer sets it to Application.OpenURL). [Update] on the CLIENT_TOO_OLD block calls it with
+        /// <see cref="ClientUpdateGateVm.StoreUrl"/>, which is null when config names no store page for this platform.
+        /// </summary>
+        public Action<string> OpenUrl { get; set; }
+
+        /// <summary>SCR_ERROR's actions other than [Update] and [Later] (Retry, Reset profile, Contact support).</summary>
+        public Action<ErrorAction> ErrorActions { get; set; }
 
         public string SaveDescription { get; }
         public string ContentVersion => _sim.Db.Version;
@@ -155,17 +210,22 @@ namespace HeroCat.Client.Core
         /// </summary>
         public void Refresh()
         {
-            var s = _sim.GetSnapshot();
+            // Runtime's inbox count (Snapshot.PendingInboxCount is Runtime's to set, 01 section 2.7): the HUD badge and pill.
+            var s = _sim.GetSnapshot().WithPendingInboxCount(_runner.Inbox.BadgeCount);
             double now = _now();
-            int newCount = Prefs.NewCount(Banner.WEAPON) + Prefs.NewCount(Banner.SKILL);
+            int newCount = Prefs.NewCount(Banner.WEAPON) + Prefs.NewCount(Banner.SKILL) + Prefs.NewCount(Banner.COMPANION);
             Main.Refresh(_sim, s, now, newCount);
             string top = Router.TopFull.Id;
             if (top == ScreenIds.Party) Party.Refresh(_sim, s);
             else if (top == ScreenIds.Weapons) Weapons.Refresh(_sim);
             else if (top == ScreenIds.Skills) Skills.Refresh(_sim);
             else if (top == ScreenIds.Companions) Companions.Refresh(_sim);
+            else if (top == ScreenIds.Research) Research.Refresh(_sim);
             else if (top == ScreenIds.Summon) Summon.Refresh(_sim);
+            else if (top == ScreenIds.Quests) Quests.Refresh(_sim);
+            else if (top == ScreenIds.Settings) Settings.Refresh();
             var modal = Router.Modal;
+            if (modal != null && modal.Id == ScreenIds.StageSelect) StageSelect.Refresh(_sim, s);
             if (modal != null && modal.Id == ScreenIds.ItemDetail && (_detailDirty || ItemDetail.Dirty))
             {
                 _detailDirty = false;
@@ -185,7 +245,48 @@ namespace HeroCat.Client.Core
             Main.Board.Update(now);
             Summon.Poll();
             if (Router.IsOpen(ScreenIds.SummonResult)) SummonResult.Update(now, _sim);
+            LiveOps();
             Router.Update();
+        }
+
+        /// <summary>
+        /// The remote-config outputs of 01 section 8.12 (issue #299): the maintenance banner once per server second, the
+        /// CLIENT_TOO_OLD block once SCR_MAIN is idle, and a ready hot bundle at a safe point (no modal, not in a boss).
+        /// Allocation-free while there is nothing to show.
+        /// </summary>
+        void LiveOps()
+        {
+            var rf = _runner.Config;
+            var m = rf?.Current?.Maintenance;
+            if (m != null && (m.Active || m.UntilServerSeconds > 0))
+            {
+                long sec = _runner.Services.Clock.NowServerSeconds;
+                if (sec != _bannerSec || !ReferenceEquals(m, _bannerSrc))
+                {
+                    _bannerSec = sec;
+                    _bannerSrc = m;
+                    Main.Maintenance.Show(ConfigRefresher.BannerFor(m, sec));
+                    _dirty = true;
+                }
+            }
+            else if (_bannerSrc != null || Main.Maintenance.Current != null)
+            {
+                _bannerSrc = null;
+                _bannerSec = long.MinValue;
+                Main.Maintenance.Show(null);
+            }
+
+            if (UpdateGate.Poll(rf, _mainIdle, _blockSave, _platform)) _dirty = true;
+
+            if (_updates != null && _updates.State == ContentUpdateState.HotReady)
+                _updates.TryApplyHot(Router.Modal == null && Router.BlockingError == null && !Main.Combat.IsBoss);
+        }
+
+        void OnHotApplied(HotContentSet set)
+        {
+            _dirty = true;
+            Context.PublishHotContent(set);
+            Settings.Refresh();
         }
 
         void OnScreenShown(ScreenEntry e)
@@ -202,7 +303,10 @@ namespace HeroCat.Client.Core
                     break;
                 case ScreenIds.Weapons: Weapons.Invalidate(); break;
                 case ScreenIds.Skills: Skills.Invalidate(); break;
+                case ScreenIds.Settings: Settings.Refresh(); break;
                 case ScreenIds.Companions: Companions.Invalidate(); break;
+                case ScreenIds.Quests: Quests.Invalidate(); break;
+                case ScreenIds.StageSelect: StageSelect.OnShown(); break;
             }
             if (e.Type == ScreenType.Full) Main.Board.Cancel();
         }
@@ -229,7 +333,9 @@ namespace HeroCat.Client.Core
             Weapons.OnEvent(e);
             Skills.OnEvent(e);
             Companions.OnEvent(e);
+            Research.OnEvent(e);
             Summon.OnEvent(e);
+            Quests.OnEvent(e, Router.TopFull.Id == ScreenIds.Quests);
             switch (e)
             {
                 case ItemAcquired _:

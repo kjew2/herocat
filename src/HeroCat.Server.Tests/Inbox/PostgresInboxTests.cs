@@ -38,7 +38,13 @@ public sealed class PostgresInboxTests
     Guid _player;
 
     [OneTimeSetUp]
-    public async Task CreateDatabase() => _db = await ScratchDatabase.CreateAsync("herocat_inbox");
+    public async Task CreateDatabase()
+    {
+        _db = await ScratchDatabase.CreateAsync("herocat_inbox");
+        // A claim's currency_changed rows are stamped with the fake clock's day (specs/08 section 3.5), which may be outside
+        // the migration's partition horizon.
+        await _db.ExecAsync("select ensure_partitions('events', 'day', @t, @t)", ("t", T0));
+    }
 
     [OneTimeTearDown]
     public async Task DropDatabase()
@@ -145,6 +151,19 @@ public sealed class PostgresInboxTests
 
     Task<long> DiamondRows(Guid id) => _db.CountAsync("select count(*) from diamond_ledger where ref_type = 'inbox_item' and ref_id = @r", ("r", id.ToString("D")));
     Task<long> TicketRows(Guid id) => _db.CountAsync("select count(*) from ticket_ledger where ref_type = 'inbox_item' and ref_id = @r", ("r", id.ToString("D")));
+    /// <summary>The server-side <c>currency_changed</c> rows of an item: (currency, delta, balanceAfter, reason), by currency then balance.</summary>
+    async Task<(string, long, long, string)[]> ServerEvents(Guid id)
+    {
+        await using var cmd = _db.DataSource.CreateCommand(
+            "select props->>'currency', (props->>'delta')::bigint, (props->>'balanceAfter')::bigint, props->>'reason' from events " +
+            "where name = 'currency_changed' and source = 'server' and props->>'refId' = @r order by 1, 3");
+        cmd.Parameters.AddWithValue("r", id.ToString("D"));
+        var rows = new List<(string, long, long, string)>();
+        await using var r = await cmd.ExecuteReaderAsync();
+        while (await r.ReadAsync()) rows.Add((r.GetString(0), r.GetInt64(1), r.GetInt64(2), r.GetString(3)));
+        return rows.ToArray();
+    }
+
     Task<long> Claimed(Guid id) => _db.CountAsync("select count(*) from inbox_items where inbox_item_id = @i and claimed_at is not null", ("i", id));
     Task<long> DiamondBalance() => _db.CountAsync("select coalesce(sum(delta), 0) from diamond_ledger where player_id = @p", ("p", _player));
 
@@ -223,13 +242,32 @@ public sealed class PostgresInboxTests
         Assert.That(await DiamondRows(id), Is.EqualTo(1));
         Assert.That(await _db.CountAsync("select count(*) from diamond_ledger where ref_id = @r and delta = 300 and reason = 'MAIL' and request_id = @rid",
                                          ("r", id.ToString("D")), ("rid", rid)), Is.EqualTo(1));
-        Assert.That(await _db.CountAsync("select count(*) from ticket_ledger where ref_id = @r and ticket = 'TICKET_SUMMON_WEAPON' and delta = 5 and reason = 'MAIL'",
-                                         ("r", id.ToString("D"))), Is.EqualTo(1));
+        Assert.That(await _db.CountAsync(
+            "select count(*) from ticket_ledger where ref_id = @r and ticket = 'TICKET_SUMMON_WEAPON' and delta = 5 and reason = 'MAIL' and request_id = @rid",
+            ("r", id.ToString("D")), ("rid", rid)), Is.EqualTo(1));
+        // One server-side currency_changed per ledger line (specs/08 section 3.5; issue #296); Rock Candy is the client's to report.
+        Assert.That(await ServerEvents(id), Is.EqualTo(new[] { ("DIAMOND", 300L, 1300L, "MAIL"), ("TICKET_SUMMON_WEAPON", 5L, 5L, "MAIL") }));
         Assert.That(await _db.CountAsync("select count(*) from inbox_items where inbox_item_id = @i and claimed_request_id = @rid and claimed_at = @t",
                                          ("i", id), ("rid", rid), ("t", T0)), Is.EqualTo(1));
         Assert.That(await _db.CountAsync("select count(*) from ticket_ledger where ticket = 'ROCK_CANDY'"), Is.Zero, "Rock Candy has no server ledger");
 
         Assert.That((await Ok(await List())).GetProperty("items").GetArrayLength(), Is.Zero, "a claimed item leaves the list");
+    }
+
+    [Test]
+    public async Task Item_lines_are_claimed_and_returned_for_the_client_with_no_ledger_row()   // 00 decision 116, issue #271
+    {
+        var id = await Seed("[{\"kind\":\"item\",\"id\":\"weapon_m_01\",\"amount\":2},{\"kind\":\"currency\",\"id\":\"DIAMOND\",\"amount\":10}]",
+                            kind: "admin");
+        var b = await Ok(await Claim(id));
+        var lines = b.GetProperty("grants").EnumerateArray().Select(l => (l.GetProperty("kind").GetString(), l.GetProperty("id").GetString(),
+                                                                           l.GetProperty("amount").GetInt64())).ToList();
+        Assert.That(lines, Is.EqualTo(new[] { ("item", "weapon_m_01", 2L), ("currency", "DIAMOND", 10L) }));
+        Assert.That(await Claimed(id), Is.EqualTo(1));
+        Assert.That(await DiamondRows(id), Is.EqualTo(1), "only the currency line has a ledger row");
+        Assert.That(await _db.CountAsync("select count(*) from ticket_ledger where ref_id = @r", ("r", id.ToString("D"))), Is.Zero);
+        Assert.That(await _db.CountAsync("select count(*) from granted_items where player_id = @p and item_id = 'weapon_m_01' and amount = 2 and source_ref = @r",
+                                         ("p", _player), ("r", id.ToString("D"))), Is.EqualTo(1), "ITEM_WITHOUT_PULL's ledger (specs/08 section 7)");
     }
 
     [TestCase("iap", "IAP")]
@@ -291,16 +329,18 @@ public sealed class PostgresInboxTests
         var expired = await Seed(Diamonds(1), expiresAt: T0);
         await Error(await Claim(expired), HttpStatusCode.Gone, InboxErrors.INBOX_EXPIRED);
 
-        // TODO(#271): item lines are refused until the client can apply them.
+        // An item line must name a weapon, skill or companion of the content, with a positive amount (00 decision 116).
         var item = await Seed("[{\"kind\":\"currency\",\"id\":\"DIAMOND\",\"amount\":5},{\"kind\":\"item\",\"id\":\"wpn_017\",\"amount\":1}]");
-        await Error(await Claim(item), HttpStatusCode.Conflict, InboxErrors.INBOX_ITEM_GRANT_UNSUPPORTED);
+        await Error(await Claim(item), HttpStatusCode.Conflict, InboxErrors.INBOX_BAD_GRANT);
+        var noCopies = await Seed("[{\"kind\":\"item\",\"id\":\"weapon_c_01\",\"amount\":0}]");
+        await Error(await Claim(noCopies), HttpStatusCode.Conflict, InboxErrors.INBOX_BAD_GRANT);
 
         var bad = await Seed("[{\"kind\":\"currency\",\"id\":\"NOT_A_CURRENCY\",\"amount\":5}]");
         await Error(await Claim(bad), HttpStatusCode.Conflict, InboxErrors.INBOX_BAD_GRANT);
         var negative = await Seed(Diamonds(-5));
         await Error(await Claim(negative), HttpStatusCode.Conflict, InboxErrors.INBOX_BAD_GRANT);
 
-        foreach (var id in new[] { other, expired, item, bad, negative }) Assert.That(await Claimed(id), Is.Zero);
+        foreach (var id in new[] { other, expired, item, noCopies, bad, negative }) Assert.That(await Claimed(id), Is.Zero);
         Assert.That(await _db.CountAsync("select count(*) from diamond_ledger where player_id = @p", ("p", _player)), Is.Zero);
         Assert.That(await _db.CountAsync("select count(*) from granted_items where player_id = @p", ("p", _player)), Is.Zero);
 
@@ -320,6 +360,29 @@ public sealed class PostgresInboxTests
     }
 
     // ---- POST /inbox/claim-all ----
+
+    [Test]
+    public async Task Claim_all_writes_every_ticket_row_under_its_request_id_with_running_balances_in_the_events()
+    {
+        // Issue #294: several ticket rows of one request (two lines of one item, and two items) all carry the request id.
+        string twoLines = "[{\"kind\":\"currency\",\"id\":\"TICKET_SUMMON_SKILL\",\"amount\":2},{\"kind\":\"currency\",\"id\":\"TICKET_SUMMON_SKILL\",\"amount\":3}]";
+        var first = await Seed(twoLines, createdAt: T0.AddMinutes(-20));
+        var second = await Seed("[{\"kind\":\"currency\",\"id\":\"TICKET_SUMMON_SKILL\",\"amount\":4}]", kind: "admin", createdAt: T0.AddMinutes(-10));
+        await _db.ExecAsync("insert into ticket_ledger (player_id, ticket, delta, reason) values (@p, 'TICKET_SUMMON_SKILL', 10, 'QUEST')", ("p", _player));
+        string rid = NewId();
+
+        var b = await Ok(await ClaimAll(rid));
+        Assert.That(b.GetProperty("balances").GetProperty("TICKET_SUMMON_SKILL").GetInt64(), Is.EqualTo(19));
+        Assert.That(await _db.CountAsync("select count(*) from ticket_ledger where player_id = @p and request_id = @rid and ref_type = 'inbox_item'",
+                                         ("p", _player), ("rid", rid)), Is.EqualTo(3));
+        Assert.That(await ServerEvents(first), Is.EqualTo(new[] { ("TICKET_SUMMON_SKILL", 2L, 12L, "MAIL"), ("TICKET_SUMMON_SKILL", 3L, 15L, "MAIL") }));
+        Assert.That(await ServerEvents(second), Is.EqualTo(new[] { ("TICKET_SUMMON_SKILL", 4L, 19L, "ADMIN") }));
+
+        using var replay = await ClaimAll(rid);
+        Assert.That(replay.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+        Assert.That(await _db.CountAsync("select count(*) from events where source = 'server' and props->>'refId' in (@a, @b)",
+                                         ("a", first.ToString("D")), ("b", second.ToString("D"))), Is.EqualTo(3), "a replay writes no second event");
+    }
 
     [Test]
     public async Task Claim_all_over_60_items_claims_the_50_oldest()
@@ -358,7 +421,7 @@ public sealed class PostgresInboxTests
                     Is.EqualTo(new[] { a, expiring, item, tickets }.Select(g => g.ToString("D"))), "a row expired 10 days ago is not reported");
         Assert.That(rows[1].EnumerateObject().Select(p => p.Name), Is.EquivalentTo(new[] { "inboxItemId", "code" }));
         Assert.That(rows[1].GetProperty("code").GetString(), Is.EqualTo(InboxErrors.INBOX_EXPIRED));
-        Assert.That(rows[2].GetProperty("code").GetString(), Is.EqualTo(InboxErrors.INBOX_ITEM_GRANT_UNSUPPORTED));
+        Assert.That(rows[2].GetProperty("code").GetString(), Is.EqualTo(InboxErrors.INBOX_BAD_GRANT), "wpn_017 is not a content id");
         Assert.That(rows[3].GetProperty("reason").GetString(), Is.EqualTo("MAIL"));
         Assert.That(b.GetProperty("balances").EnumerateObject().Select(p => (p.Name, p.Value.GetInt64())),
                     Is.EquivalentTo(new[] { ("DIAMOND", 10L), ("TICKET_SUMMON_SKILL", 3L) }));
@@ -506,7 +569,7 @@ public sealed class InboxUnitTests
         Assert.That(InboxErrors.Status(InboxErrors.INBOX_EXPIRED), Is.EqualTo(410));
         Assert.That(InboxErrors.Status(InboxErrors.INBOX_ALREADY_CLAIMED), Is.EqualTo(409));
         Assert.That(InboxErrors.Status(InboxErrors.INBOX_NOT_AVAILABLE), Is.EqualTo(409));
-        Assert.That(InboxErrors.INBOX_ITEM_GRANT_UNSUPPORTED, Is.EqualTo(HeroCat.Sim.Commands.InboxRejectReasons.INBOX_ITEM_GRANT_UNSUPPORTED));
+        Assert.That(InboxErrors.INBOX_BAD_GRANT, Is.EqualTo(HeroCat.Sim.Commands.InboxRejectReasons.INBOX_BAD_GRANT));
         Assert.That(InboxStore.ClaimAllMax, Is.EqualTo(HeroCat.Runtime.Services.InboxRules.ClaimAllMax));
         Assert.That(InboxStore.LedgerTickets, Is.EquivalentTo(new[] { "TICKET_SUMMON_WEAPON", "TICKET_SUMMON_SKILL", "TICKET_SUMMON_COMPANION", "TICKET_SUMMON_RUNE" }));
     }
