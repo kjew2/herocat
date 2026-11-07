@@ -80,6 +80,19 @@ chapter.09.name,Dreamland 9,,,,24,false,
 chapter.10.name,Dreamland 10,,,,24,false,
 chapter.11.name,Dreamland 11,,,,24,false,
 chapter.12.name,Dreamland 12,,,,24,false,
+currency.diamond.name,Diamonds,,,,24,false,
+currency.fish_coin.name,Fish Coins,,,,24,false,
+currency.gold.name,Gold,,,,24,false,
+currency.guild_coin.name,Guild Coins,,,,24,false,
+currency.party_exp.name,Party EXP,,,,24,false,
+currency.rock_candy.name,Rock Candy,,,,24,false,
+currency.ticket_exp.name,EXP Dungeon Tickets,,,,40,false,
+currency.ticket_fish_coin.name,Fish Coin Dungeon Tickets,,,,40,false,
+currency.ticket_rock_candy.name,Rock Candy Dungeon Tickets,,,,40,false,
+currency.ticket_summon_companion.name,Companion Summon Tickets,,,,40,false,
+currency.ticket_summon_rune.name,Rune Summon Tickets,,,,40,false,
+currency.ticket_summon_skill.name,Skill Summon Tickets,,,,40,false,
+currency.ticket_summon_weapon.name,Weapon Summon Tickets,,,,40,false,
 err.account_banned.body,This account has been suspended. Contact support to appeal.,,,,0,false,
 err.account_banned.title,Account suspended,,,,32,false,
 err.banner_closed.body,This summon is no longer available.,,,,0,false,
@@ -360,6 +373,23 @@ scr.offline_reward.rewards_capped,Rewards for {0} (capped at {1}),,,,48,false,07
 scr.offline_reward.stage,Farmed stage {0} at {1}/s,,,,40,false,07 M0 screens
 scr.offline_reward.tank,Magic Tank refilled (+{0} fish),,,,40,false,07 M0 screens
 scr.offline_reward.title,Welcome back!,,,,28,false,07 M0 screens
+scr.quests.bonus,{0} done: +{1},,,,24,false,07 MVP screens
+scr.quests.claim,Claim,,,,16,false,07 MVP screens
+scr.quests.claim_all,Claim all ({0}),,,,24,false,07 MVP screens
+scr.quests.claimed,Claimed,,,,16,false,07 MVP screens
+scr.quests.daily_progress,Daily progress {0} / {1},,,,40,false,07 MVP screens
+scr.quests.done,Done,,,,16,false,07 MVP screens
+scr.quests.expires_soon,Expires soon,,,,24,false,07 MVP screens
+scr.quests.go,Go >,,,,12,false,07 MVP screens
+scr.quests.progress,{0} / {1},,,,24,false,07 MVP screens
+scr.quests.rungs,{0} / {1} rungs,,,,24,false,07 MVP screens
+scr.quests.tab_achievements,Achievements,,,,16,false,07 MVP screens
+scr.quests.tab_daily,Daily,,,,16,false,07 MVP screens
+scr.quests.tab_weekly,Weekly,,,,16,false,07 MVP screens
+scr.quests.title,Quests,,,,28,false,07 MVP screens
+scr.quests.toast_claimed,+{0} {1},,,,48,false,07 MVP screens
+scr.quests.toast_reset,Missions reset,,,,32,false,07 MVP screens
+scr.quests.weekly_progress,Weekly progress {0} / {1},,,,40,false,07 MVP screens
 scr.skills.auto_equip,Auto-equip,,,,18,false,07 M0 screens
 scr.skills.cast_buff,buff,,,,10,false,07 M0 screens
 scr.skills.cast_dot,damage over time,,,,18,false,07 M0 screens
@@ -367,6 +397,15 @@ scr.skills.cast_instant,instant,,,,10,false,07 M0 screens
 scr.skills.slots,Slots (auto-cast in order),,,,28,false,07 M0 screens
 scr.skills.stats,DPS {0} · CD {1} · {2},,,,48,false,07 M0 screens
 scr.skills.title,Skills,,,,28,false,07 M0 screens
+scr.stage_select.challenge,Challenge boss,,,,28,false,07 MVP screens
+scr.stage_select.chapter,Chapter {0} ({1}-{2}),,,,32,false,07 MVP screens
+scr.stage_select.farming,Farming: {0},,,,24,false,07 MVP screens
+scr.stage_select.frontier,Frontier: {0},,,,32,false,07 MVP screens
+scr.stage_select.frontier_walled,Frontier: {0} (walled),,,,32,false,07 MVP screens
+scr.stage_select.highest,Highest cleared: {0},,,,32,false,07 MVP screens
+scr.stage_select.offline_note,Rewards for offline time use your highest stage,,,,60,false,07 MVP screens
+scr.stage_select.return,Return to frontier,,,,28,false,07 MVP screens
+scr.stage_select.title,Stages,,,,28,false,07 MVP screens
 scr.summon.banner_level,Banner Lv {0},,,,18,false,07 M0 screens
 scr.summon.guarantee,{0}x: at least one {1} guaranteed,,,,60,false,07 M0 screens
 scr.summon.pity,Pity {0} / {1},,,,18,false,07 M0 screens
