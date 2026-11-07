@@ -359,6 +359,7 @@ namespace HeroCat.Client.Screens
             BoardButton("Release", 156, b.Release, b.OnRelease, FishBoardVm.AnchorRelease);
             BoardButton("ReleaseMax", 296, b.ReleaseMax, b.OnReleaseMax, FishBoardVm.AnchorReleaseMax);
             _mergeAllBtn = BoardButton("MergeAll", 436, b.MergeAll, b.OnMergeAll, FishBoardVm.AnchorMergeAll);
+            BuildResearchButton();
 
             // 5 x 4 grid, 176 rp cells with 8 rp gaps (912 rp wide).
             var gridImg = UiKit.Panel("Grid", _board, Palette.Panel, 1f, raycast: true);
@@ -415,6 +416,22 @@ namespace HeroCat.Client.Screens
             _discoveryText = UiKit.Text("Text", _discovery, UiKit.Title, 0x121212, TextAlignmentOptions.Center, bold: true);
             UiKit.Fill(_discoveryText.rectTransform, 16, 16, 16, 16);
             _discovery.gameObject.SetActive(false);
+        }
+
+        /// <summary>The tank column's [Research] (MVP, 07 section 4.3): lock glyph before the gate; the vm toasts or pushes.</summary>
+        void BuildResearchButton()
+        {
+            var entry = Vm.Main.Research;
+            var btn = UiKit.Button("Research", _board, entry.OnTap, 0x37474F, UiKit.Micro);
+            var rt = btn.GetComponent<RectTransform>();
+            UiKit.Place(rt, 8, 556, 144, 76);
+            UiKit.LabelOf(btn).text = Vm.Localizer.Text(UiKeys.ResearchEntry);
+            var lockGlyph = UiKit.Text("Lock", rt, UiKit.Caption, Palette.Muted, TextAlignmentOptions.MidlineRight);
+            UiKit.Fill(lockGlyph.rectTransform, 4, 4, 4, 40);
+            lockGlyph.text = "\u2298";   // the tab bar's placeholder lock glyph (07 section 15.1)
+            entry.Locked.Bind(new ActiveSink(lockGlyph.gameObject));
+            entry.Visible.Bind(new ActiveSink(btn.gameObject));
+            Anchor("main.research", rt);
         }
 
         RectTransform BoardButton(string name, float y, ButtonState state, UnityEngine.Events.UnityAction tap, string anchor)

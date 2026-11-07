@@ -68,6 +68,7 @@ namespace HeroCat.Client.Core
             Weapons = new WeaponsVm(Context);
             Skills = new SkillsVm(Context);
             Companions = new CompanionsVm(Context);
+            Research = new ResearchVm(Context);
             ItemDetail = new ItemDetailVm(Context);
             SummonResult = new SummonResultVm(Context);
             Summon = new SummonVm(Context, options.Summon ?? ((b, n, p) => _runner.SummonAsync(b, n, p)), SummonResult);
@@ -114,6 +115,7 @@ namespace HeroCat.Client.Core
         public WeaponsVm Weapons { get; }
         public SkillsVm Skills { get; }
         public CompanionsVm Companions { get; }
+        public ResearchVm Research { get; }
         public ItemDetailVm ItemDetail { get; }
         public SummonVm Summon { get; }
         public SummonResultVm SummonResult { get; }
@@ -164,6 +166,7 @@ namespace HeroCat.Client.Core
             else if (top == ScreenIds.Weapons) Weapons.Refresh(_sim);
             else if (top == ScreenIds.Skills) Skills.Refresh(_sim);
             else if (top == ScreenIds.Companions) Companions.Refresh(_sim);
+            else if (top == ScreenIds.Research) Research.Refresh(_sim);
             else if (top == ScreenIds.Summon) Summon.Refresh(_sim);
             var modal = Router.Modal;
             if (modal != null && modal.Id == ScreenIds.ItemDetail && (_detailDirty || ItemDetail.Dirty))
@@ -229,6 +232,7 @@ namespace HeroCat.Client.Core
             Weapons.OnEvent(e);
             Skills.OnEvent(e);
             Companions.OnEvent(e);
+            Research.OnEvent(e);
             Summon.OnEvent(e);
             switch (e)
             {

@@ -65,7 +65,8 @@ namespace HeroCat.Client.Core
 
         public void OnGoldChip() => _c.Router?.Replace(ScreenIds.Party);
         public void OnDiamondChip() => _c.LockedToast("SHOP");
-        public void OnFishCoinChip() => _c.LockedToast("RESEARCH");
+        /// <summary>Opens SCR_RESEARCH even before its gate (the screen shows its Locked state; 07 section 4.3).</summary>
+        public void OnFishCoinChip() => ResearchVm.Open(_c, toast: false);
         public void OnRockCandyChip() => _c.Router?.Replace(ScreenIds.Party);
         public void OnAvatar() => _c.Toast(UiKeys.ComingSoon, ToastStyle.Reject);
         public void OnInbox() => _c.Toast(UiKeys.ComingSoon, ToastStyle.Reject);
@@ -344,6 +345,7 @@ namespace HeroCat.Client.Core
             Hud = new HudVm(c);
             Combat = new CombatVm(c);
             Board = new FishBoardVm(c);
+            Research = new ResearchEntryVm(c, toastWhenLocked: true);
             for (int i = 0; i < TabBadges.Length; i++) TabBadges[i] = new BadgeDot();
             for (int i = 0; i < TabLocked.Length; i++) TabLocked[i] = new Flag();
         }
@@ -351,6 +353,9 @@ namespace HeroCat.Client.Core
         public readonly HudVm Hud;
         public readonly CombatVm Combat;
         public readonly FishBoardVm Board;
+
+        /// <summary>The Fish Board's [Research] (MVP, 07 section 4.3): lock glyph and condition toast before the gate.</summary>
+        public readonly ResearchEntryVm Research;
 
         public readonly BadgeDot QuestsPill = new BadgeDot();
         public readonly BadgeDot DungeonsPill = new BadgeDot();
@@ -368,6 +373,7 @@ namespace HeroCat.Client.Core
             Hud.Refresh(sim, s);
             Combat.Refresh(sim, s, now);
             Board.Refresh(sim, s);
+            Research.Refresh(sim);
             QuestsPill.Set(0);
             DungeonsPill.Set(0);
             InboxPill.Set(s.PendingInboxCount);

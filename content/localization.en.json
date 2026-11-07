@@ -1227,6 +1227,58 @@
       "text": "Training"
     },
     {
+      "key": "scr.companions.research",
+      "text": "Research +"
+    },
+    {
+      "key": "scr.main.research",
+      "text": "Research"
+    },
+    {
+      "key": "scr.party.research",
+      "text": "Research >"
+    },
+    {
+      "key": "scr.research.title",
+      "text": "Research"
+    },
+    {
+      "key": "scr.research.fish_coins",
+      "text": "{0} Fish Coins"
+    },
+    {
+      "key": "scr.research.level",
+      "text": "Lv {0}/{1}"
+    },
+    {
+      "key": "scr.research.buy",
+      "text": "Buy"
+    },
+    {
+      "key": "scr.research.max",
+      "text": "MAX"
+    },
+    {
+      "key": "scr.research.max_level",
+      "text": "Max level"
+    },
+    {
+      "key": "scr.research.node_locked",
+      "text": "Unlocks at Awakening {0}"
+    },
+    {
+      "key": "scr.research.per_sec",
+      "text": "{0}/s"
+    },
+    {
+      "key": "scr.research.hours",
+      "text": "{0}h"
+    },
+    {
+      "key": "scr.research.coach_tank",
+      "text": "Spend Fish Coins here: a bigger tank holds more fish while you are away."
+    },
+    {
       "key": "scr.item_detail.at_max",
       "text": "Max level"
     },

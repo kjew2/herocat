@@ -138,5 +138,39 @@ namespace HeroCat.Sim
 
         /// <summary>The effective offline cap in hours, OFFLINE_CAP_H + 2 h per res_offline_cap level (00 decision 12; 36 h at level 6).</summary>
         public static double OfflineCapH(ContentDb db, GameState s) => PowerFormula.OfflineCapH(db, s);
+
+        /// <summary>
+        /// The value <paramref name="node"/>'s effect has with <paramref name="level"/> levels bought, as the rules above
+        /// compute it from the state (SCR_RESEARCH's current -> next text, 07 section 4.9; issue #181): RESEARCH_PCT and
+        /// GOLD_MULT the bonus fraction (0.05 per level), MP_POOL the pool max, MP_REGEN MP per second, TANK_CAP the cap,
+        /// TANK_REFILL the refill period in seconds (whole ticks, floor applied), FISH_CAP the fish level cap, OFFLINE_CAP
+        /// hours. The level is clamped to 0..max_level. ResearchTests pins each against the live rule.
+        /// </summary>
+        public static double EffectAt(ContentDb db, ResearchDef node, int level)
+        {
+            if (level < 0) level = 0;
+            if (level > node.MaxLevel) level = node.MaxLevel;
+            double total = level == 0 ? 0.0 : node.EffectPerLevel * level;
+            var k = db.Constants;
+            switch (node.Effect)
+            {
+                case ResearchEffect.MP_POOL: return k.MpPool0 + total;
+                case ResearchEffect.MP_REGEN: return k.MpRegen0 + total;
+                case ResearchEffect.TANK_CAP: return db.Tank.Cap0 + (int)Math.Round(total, MidpointRounding.AwayFromZero);
+                case ResearchEffect.TANK_REFILL:
+                {
+                    double seconds = db.Tank.RefillS0 - total;
+                    if (seconds < db.Tank.RefillFloorS) seconds = db.Tank.RefillFloorS;
+                    return Math.Round(seconds * k.TickHz, MidpointRounding.AwayFromZero) / k.TickHz;
+                }
+                case ResearchEffect.FISH_CAP:
+                {
+                    int cap = k.FishMaxLvl0 + (int)Math.Round(total, MidpointRounding.AwayFromZero);
+                    return cap > db.FishLevels.Count ? db.FishLevels.Count : cap;
+                }
+                case ResearchEffect.OFFLINE_CAP: return k.OfflineCapH + total;
+                default: return total;   // RESEARCH_PCT, GOLD_MULT: the bonus fraction
+            }
+        }
     }
 }

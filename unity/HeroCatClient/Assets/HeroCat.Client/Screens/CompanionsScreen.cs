@@ -17,7 +17,10 @@ namespace HeroCat.Client.Screens
         {
             var c = Vm.Companions;
             BuildChips();
-            c.MpLine.Bind(Line("Mp", 136, UiKit.Body).Sink());
+            c.MpLine.Bind(Line("Mp", 136, UiKit.Body, Palette.Text, 24, 760).Sink());
+            var research = Btn("Research", 800, 128, 240, 64, c.Research.OnTap, Palette.PanelRaised, UiKit.Caption);   // "(Research +)", MVP
+            UiKit.LabelOf(research).text = Vm.Localizer.Text(UiKeys.CompanionsResearch);
+            c.Research.Visible.Bind(new ActiveSink(research.gameObject));
             var budget = Line("Budget", 192, UiKit.Caption, Palette.Muted);
             c.BudgetLine.Bind(budget.Sink());
             c.OverBudget.Bind(new ActionFlagSink(over => budget.color = UiKit.C(over ? Palette.Bad : Palette.Muted)));

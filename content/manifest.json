@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "content_version": "2026.11.02.9",
+  "content_version": "2026.11.07",
   "min_client_version": "0.2.0",
   "source_revision": "2026-11-01 m0 skeleton, spec 00 seed values (agent)",
   "hot_apply": false,
@@ -149,11 +149,11 @@
   "localization": {
     "en": {
       "file": "localization.en.json",
-      "rows": 689,
-      "sha256": "e6a3cb1acae4ae63a140a452f52a847ce3a71189933703b0a04cf0aec7ebe5cc"
+      "rows": 702,
+      "sha256": "537e025b45aa781472101373d4e38392f18d4be356766e93df71205b48d97452"
     }
   },
-  "content_hash": "323fdcd36cd1b288b0a78bc3867760bdfefcd9ec89f737b0b307aac72af02a52",
+  "content_hash": "d95133aae3ff53fd3124eb366fd5c5f7c0e1999c737c949d04b9890b62038e61",
   "s_constants": [
     "BASE_HP",
     "BOSS_ROCK_CANDY_P",

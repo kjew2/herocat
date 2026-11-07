@@ -305,6 +305,19 @@ scr.party.step_max,Max,,,,18,false,07 M0 screens
 scr.party.step_n,x{0},,,,18,false,07 M0 screens
 scr.party.title,Party,,,,28,false,07 M0 screens
 scr.party.training,Training,,,,28,false,07 M0 screens
+scr.companions.research,Research +,,,,18,false,07 MVP screens
+scr.main.research,Research,,,,18,false,07 MVP screens
+scr.party.research,Research >,,,,18,false,07 MVP screens
+scr.research.title,Research,,,,28,false,07 MVP screens
+scr.research.fish_coins,{0} Fish Coins,,,,28,false,07 MVP screens
+scr.research.level,Lv {0}/{1},,,,18,false,07 MVP screens
+scr.research.buy,Buy,,,,18,false,07 MVP screens
+scr.research.max,MAX,,,,18,false,07 MVP screens
+scr.research.max_level,Max level,,,,18,false,07 MVP screens
+scr.research.node_locked,Unlocks at Awakening {0},,,,28,false,07 MVP screens
+scr.research.per_sec,{0}/s,,,,18,false,07 MVP screens
+scr.research.hours,{0}h,,,,18,false,07 MVP screens
+scr.research.coach_tank,Spend Fish Coins here: a bigger tank holds more fish while you are away.,,,,120,false,07 MVP screens
 scr.item_detail.at_max,Max level,,,,28,false,07 M0 screens
 scr.item_detail.compare,Equipped weapon: ATK {0},,,,60,false,07 M0 screens
 scr.item_detail.compare_button,Compare,,,,18,false,07 M0 screens
