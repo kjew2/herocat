@@ -1,5 +1,5 @@
 # herocat run v3
-# bot=greedy-f2p seed=7 days=30 diamonds=content content=2026.11.07.3/f2cbc9cf
+# bot=greedy-f2p seed=7 days=30 diamonds=content content=2026.11.07.4/fe401437
 day stage highest partyL        dps       gold diaEarn diaSpent pulls lplus    rarity fishLvl   fishCoin wall1 longWallH     hash
   1   190     189     94   9.24e+03   1.85e+03    1730     1000    10     0      EPIC      10   1.21e+04   130      11.3 5b763290
   2   240     239    133   6.69e+04   3.08e+04    1880     1000    10     0      EPIC      10   1.43e+04   130      14.0 8a1bf6da

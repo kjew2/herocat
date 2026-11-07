@@ -2612,339 +2612,339 @@
     },
     {
       "key": "companion.c_01.desc",
-      "text": "A common damage companion."
+      "text": "Woodcutter. Swings an axe bigger than she is."
     },
     {
       "key": "companion.c_01.name",
-      "text": "Common Companion 1"
+      "text": "Hazel"
     },
     {
       "key": "companion.c_02.desc",
-      "text": "A common damage companion."
+      "text": "Tavern girl. Her frying pan has ended a lot of bar fights."
     },
     {
       "key": "companion.c_02.name",
-      "text": "Common Companion 2"
+      "text": "Tilly"
     },
     {
       "key": "companion.c_03.desc",
-      "text": "A common damage companion."
+      "text": "Apprentice mage. Her fireballs usually go where she aims them."
     },
     {
       "key": "companion.c_03.name",
-      "text": "Common Companion 3"
+      "text": "Mina"
     },
     {
       "key": "companion.c_04.desc",
-      "text": "A common damage companion."
+      "text": "Fisher girl. Her enchanted lure sends a water spout into the enemy."
     },
     {
       "key": "companion.c_04.name",
-      "text": "Common Companion 4"
+      "text": "Rue"
     },
     {
       "key": "companion.c_05.desc",
-      "text": "A common damage companion."
+      "text": "Blacksmith's apprentice. She tests her hammers on monsters."
     },
     {
       "key": "companion.c_05.name",
-      "text": "Common Companion 5"
+      "text": "Koko"
     },
     {
       "key": "companion.c_06.desc",
-      "text": "A common damage companion."
+      "text": "Shepherd. Her sling never misses."
     },
     {
       "key": "companion.c_06.name",
-      "text": "Common Companion 6"
+      "text": "Wren"
     },
     {
       "key": "companion.c_07.desc",
-      "text": "A common damage companion."
+      "text": "Lamplighter. Her lantern fires bolts of light."
     },
     {
       "key": "companion.c_07.name",
-      "text": "Common Companion 7"
+      "text": "Dot"
     },
     {
       "key": "companion.c_08.desc",
-      "text": "A common damage companion."
+      "text": "Gravedigger. Her ghost friend dives at the enemy."
     },
     {
       "key": "companion.c_08.name",
-      "text": "Common Companion 8"
+      "text": "Sable"
     },
     {
       "key": "companion.c_09.desc",
-      "text": "A common damage companion."
+      "text": "Hedge witch. She pelts the enemy with thornberries."
     },
     {
       "key": "companion.c_09.name",
-      "text": "Common Companion 9"
+      "text": "Juniper"
     },
     {
       "key": "companion.c_10.desc",
-      "text": "A common attack-buff companion."
+      "text": "Gate guard. She holds the line so the party can strike harder."
     },
     {
       "key": "companion.c_10.name",
-      "text": "Common Companion 10"
+      "text": "Greta"
     },
     {
       "key": "companion.c_11.desc",
-      "text": "A common attack-buff companion."
+      "text": "Temple novice. Her bell rings the party back into the fight."
     },
     {
       "key": "companion.c_11.name",
-      "text": "Common Companion 11"
+      "text": "Poppy"
     },
     {
       "key": "companion.c_12.desc",
-      "text": "A common attack-buff companion."
+      "text": "Dockhand. Her anchor shield steadies the party so they strike harder."
     },
     {
       "key": "companion.c_12.name",
-      "text": "Common Companion 12"
+      "text": "Brina"
     },
     {
       "key": "companion.c_13.desc",
-      "text": "A common attack-buff companion."
+      "text": "Militia drummer. Her beat drives the party to strike harder."
     },
     {
       "key": "companion.c_13.name",
-      "text": "Common Companion 13"
+      "text": "Nell"
     },
     {
       "key": "companion.c_14.desc",
-      "text": "A common gold-buff companion."
+      "text": "Peddler. She haggles every fight for more gold."
     },
     {
       "key": "companion.c_14.name",
-      "text": "Common Companion 14"
+      "text": "Penny"
     },
     {
       "key": "companion.c_15.desc",
-      "text": "A common gold-buff companion."
+      "text": "Street fiddler. Her tunes earn the party more gold."
     },
     {
       "key": "companion.c_15.name",
-      "text": "Common Companion 15"
+      "text": "Lark"
     },
     {
       "key": "companion.c_16.desc",
-      "text": "A common gold-buff companion."
+      "text": "Spice seller. Her curry sells for gold."
     },
     {
       "key": "companion.c_16.name",
-      "text": "Common Companion 16"
+      "text": "Clove"
     },
     {
       "key": "companion.c_17.desc",
-      "text": "A common mana companion."
+      "text": "Village nurse. Her tea refills the party's mana."
     },
     {
       "key": "companion.c_17.name",
-      "text": "Common Companion 17"
+      "text": "Faye"
     },
     {
       "key": "companion.c_18.desc",
-      "text": "A common mana companion."
+      "text": "Library page. Her books hold the secret to refilling the party's mana."
     },
     {
       "key": "companion.c_18.name",
-      "text": "Common Companion 18"
+      "text": "Bea"
     },
     {
       "key": "companion.r_01.desc",
-      "text": "A rare damage companion."
+      "text": "Fencer. Her rapier strikes three times faster than the eye."
     },
     {
       "key": "companion.r_01.name",
-      "text": "Rare Companion 1"
+      "text": "Kestrel"
     },
     {
       "key": "companion.r_02.desc",
-      "text": "A rare damage companion."
+      "text": "Fire-dancer. Her flaming poi roll a wheel of fire into the enemy."
     },
     {
       "key": "companion.r_02.name",
-      "text": "Rare Companion 2"
+      "text": "Ember"
     },
     {
       "key": "companion.r_03.desc",
-      "text": "A rare damage companion."
+      "text": "Tide witch. She uncorks the sea and drops a wave on the enemy."
     },
     {
       "key": "companion.r_03.name",
-      "text": "Rare Companion 3"
+      "text": "Isolde"
     },
     {
       "key": "companion.r_04.desc",
-      "text": "A rare damage companion."
+      "text": "Death knight. Her halberd brings a tower of shadow down on the enemy."
     },
     {
       "key": "companion.r_04.name",
-      "text": "Rare Companion 4"
+      "text": "Rook"
     },
     {
       "key": "companion.r_05.desc",
-      "text": "A rare mana companion."
+      "text": "Tea sage. Her brew refills the party's mana."
     },
     {
       "key": "companion.r_05.name",
-      "text": "Rare Companion 5"
+      "text": "Saffron"
     },
     {
       "key": "companion.r_06.desc",
-      "text": "A rare damage companion."
+      "text": "Highland brawler. Her claymore sweep flattens the enemy."
     },
     {
       "key": "companion.r_06.name",
-      "text": "Rare Companion 6"
+      "text": "Thistle"
     },
     {
       "key": "companion.r_07.desc",
-      "text": "A rare damage companion."
+      "text": "Hex witch. She and her cat curse the enemy with a hex bolt."
     },
     {
       "key": "companion.r_07.name",
-      "text": "Rare Companion 7"
+      "text": "Mara"
     },
     {
       "key": "companion.r_08.desc",
-      "text": "A rare damage companion."
+      "text": "Shrine maiden. Her paper cranes dive at the enemy and burst into light."
     },
     {
       "key": "companion.r_08.name",
-      "text": "Rare Companion 8"
+      "text": "Hana"
     },
     {
       "key": "companion.r_09.desc",
-      "text": "A rare attack-buff companion."
+      "text": "Shieldmaiden. Her frost ward rallies the party to strike harder."
     },
     {
       "key": "companion.r_09.name",
-      "text": "Rare Companion 9"
+      "text": "Astrid"
     },
     {
       "key": "companion.r_10.desc",
-      "text": "A rare attack-buff companion."
+      "text": "Swan knight. Her grace lifts the whole party to strike harder."
     },
     {
       "key": "companion.r_10.name",
-      "text": "Rare Companion 10"
+      "text": "Odette"
     },
     {
       "key": "companion.r_11.desc",
-      "text": "A rare attack-buff companion."
+      "text": "Forest warden. Her living armour shields the party, so they strike harder."
     },
     {
       "key": "companion.r_11.name",
-      "text": "Rare Companion 11"
+      "text": "Gwen"
     },
     {
       "key": "companion.r_12.desc",
-      "text": "A rare gold-buff companion."
+      "text": "Card dealer. The deck is always stacked her way, so the party earns more gold."
     },
     {
       "key": "companion.r_12.name",
-      "text": "Rare Companion 12"
+      "text": "Lottie"
     },
     {
       "key": "companion.r_13.desc",
-      "text": "A rare gold-buff companion."
+      "text": "Harbour songstress. Her songs bring cargo home, so the party earns more gold."
     },
     {
       "key": "companion.r_13.name",
-      "text": "Rare Companion 13"
+      "text": "Cadence"
     },
     {
       "key": "companion.r_14.desc",
-      "text": "A rare mana companion."
+      "text": "Forest priestess. Her sap lantern refills the party's mana."
     },
     {
       "key": "companion.r_14.name",
-      "text": "Rare Companion 14"
+      "text": "Maple"
     },
     {
       "key": "companion.e_01.desc",
-      "text": "An epic damage companion."
+      "text": "Mercenary. Her burning greatsword cleaves through the enemy."
     },
     {
       "key": "companion.e_01.name",
-      "text": "Epic Companion 1"
+      "text": "Scarlett"
     },
     {
       "key": "companion.e_02.desc",
-      "text": "An epic damage companion."
+      "text": "Ice sorceress. Her frost lance shatters on the enemy."
     },
     {
       "key": "companion.e_02.name",
-      "text": "Epic Companion 2"
+      "text": "Mireille"
     },
     {
       "key": "companion.e_03.desc",
-      "text": "An epic damage companion."
+      "text": "Kunoichi. She vanishes and strikes from the shadows with twin kunai."
     },
     {
       "key": "companion.e_03.name",
-      "text": "Epic Companion 3"
+      "text": "Akane"
     },
     {
       "key": "companion.e_04.desc",
-      "text": "An epic damage companion."
+      "text": "Sun oracle. Her mirrors focus sunlight into a searing beam."
     },
     {
       "key": "companion.e_04.name",
-      "text": "Epic Companion 4"
+      "text": "Celeste"
     },
     {
       "key": "companion.e_05.desc",
-      "text": "An epic damage companion."
+      "text": "Poison alchemist. Her vials burst into toxic blooms on the enemy."
     },
     {
       "key": "companion.e_05.name",
-      "text": "Epic Companion 5"
+      "text": "Belladonna"
     },
     {
       "key": "companion.e_06.desc",
-      "text": "An epic attack-buff companion."
+      "text": "Parade captain. Her war horn drives the whole party to strike harder."
     },
     {
       "key": "companion.e_06.name",
-      "text": "Epic Companion 6"
+      "text": "Dahlia"
     },
     {
       "key": "companion.e_07.desc",
-      "text": "An epic attack-buff companion."
+      "text": "Amazon queen. Her shield-slam rallies the party to strike harder."
     },
     {
       "key": "companion.e_07.name",
-      "text": "Epic Companion 7"
+      "text": "Rhea"
     },
     {
       "key": "companion.e_08.desc",
-      "text": "An epic gold-buff companion."
+      "text": "Heiress. Fortune follows her, so the party earns more gold."
     },
     {
       "key": "companion.e_08.name",
-      "text": "Epic Companion 8"
+      "text": "Gilda"
     },
     {
       "key": "companion.e_09.desc",
-      "text": "An epic mana companion."
+      "text": "Lotus priestess. Her spring water refills the party's mana."
     },
     {
       "key": "companion.e_09.name",
-      "text": "Epic Companion 9"
+      "text": "Iris"
     },
     {
       "key": "companion.e_10.desc",
-      "text": "An epic mana companion."
+      "text": "Elven druid. The forest answers her and refills the party's mana."
     },
     {
       "key": "companion.e_10.name",
-      "text": "Epic Companion 10"
+      "text": "Elowen"
     },
     {
       "key": "companion.l_01.desc",
@@ -2964,11 +2964,11 @@
     },
     {
       "key": "companion.l_03.desc",
-      "text": "A legendary damage companion."
+      "text": "Dragon-blooded duelist. Her lava-edged greatsword splits the ground under the enemy."
     },
     {
       "key": "companion.l_03.name",
-      "text": "Legendary Companion 3"
+      "text": "Carmine"
     },
     {
       "key": "companion.l_04.desc",
@@ -2980,19 +2980,19 @@
     },
     {
       "key": "companion.l_05.desc",
-      "text": "A legendary gold-buff companion."
+      "text": "Pirate queen. Her crew strips every fight for treasure, so the party earns more gold."
     },
     {
       "key": "companion.l_05.name",
-      "text": "Legendary Companion 5"
+      "text": "Marisol"
     },
     {
       "key": "companion.l_06.desc",
-      "text": "A legendary mana companion."
+      "text": "Fox spirit sage. Her foxfire lanterns refill the party's mana."
     },
     {
       "key": "companion.l_06.name",
-      "text": "Legendary Companion 6"
+      "text": "Shiori"
     },
     {
       "key": "companion.m_01.desc",
@@ -3004,11 +3004,11 @@
     },
     {
       "key": "companion.m_02.desc",
-      "text": "A mythic attack-buff companion."
+      "text": "War goddess. When she raises her spear of light, the whole party strikes harder."
     },
     {
       "key": "companion.m_02.name",
-      "text": "Mythic Companion 2"
+      "text": "Astraea"
     },
     {
       "key": "dungeon.dungeon_fish.name",
