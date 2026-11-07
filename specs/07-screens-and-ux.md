@@ -183,9 +183,9 @@ Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them
 | Stage 240  Ch.5  v        kills 9/10   WALL  |
 |                    (boss)                    |
 |                    ~~~~~~                    |
-|            HP |==========       | 1.2M       |
-|            T  |======           | 17s        |
-| DPS 3.72K  +12.3K  +9.8K crit!               |  damage numbers float here
+|            HP |=============    | 1.99M      |
+|            T  |=========        | 17s        |
+| DPS 35.5K  +7.10K  +12.4K crit!              |  damage numbers float here
 |            (c4)[sk4]     (c5)[sk5]          |  back row: slots 4-5, behind
 |            |=== |        |==  |             |  MP bar inside each cell
 |    (c1)[sk1]     (c2)[sk2]     (c3)[ -- ]   |  front row: slots 1-3
@@ -203,6 +203,8 @@ Purpose: the game. Combat on top, Fish Board below, HUD and tab bar framing them
 | Party | Collection | Summon | Dungeons | Quests | Shop |
 +----------------------------------------------+
 ```
+
+Sketch values: the walled frontier boss at the day-1 target stage 240 (00 section 6.6), with `HP0 * HP_G^240 * BOSS_HP_MULT` = 20 x 1.04^240 x 10 = 2.45M HP, 13 s into its `BOSS_TIME_TICKS` (30 s) against a party DPS of 35.5K, so 1.99M is left and the boss needs about 2.45M / (35.5K x 30 s) = 2.3x; the DPS is close to the bot's day-1 median (`tools/power_curve_model.py`), and a hit is about a fifth of it.
 
 | Element | `MainVm` field (bind) or command | Notes |
 |---|---|---|
@@ -246,9 +248,9 @@ Purpose: all gold and Rock Candy sinks on the party: party-wide Training per sta
 | <  Party                       DPS 3.72K     |
 | (sqr) Party Lv 32 |=======    | 4.2K / 9.8K  |
 | Slot 1 (Tabby)  [wpn Tuna] [sk Fish Rain]    |
-|   Awakening I  MP |====  | 120   [ Awaken ]  |  MVP: Awakening
+|   Awakening I  MP |====  | 120   Reach 150   |  MVP: Awakening
 | Slot 2 (Mittens) [wpn --]  [sk Claw]         |
-|   Awakening -  MP |==    |  60   Reach 50    |
+|   Awakening -  MP |==    |  60   [ Awaken ]  |
 | Slot 3 ... Slot 5 (same card)                |
 | [ Auto-equip all ]                           |
 | Training              [x1] [x10] [x100] [Max]|
@@ -276,7 +278,7 @@ Purpose: all gold and Rock Candy sinks on the party: party-wide Training per sta
 
 Events: `StatTrained(stat, count, cost)` (row flash, "+5%" float), `LevelUp` (Party Level bar), `Awakened(slot, rank)` (that card's rank glyph animates), `ItemEquipped(kind, slot, id)` (that card's icon swaps), `CompanionAbilityUsed(slot, id, mpAfter)` (that card's MP bar), `CurrencyChanged(GOLD | ROCK_CANDY)` (re-evaluate `CanAfford`).
 
-States: a stat at its cap (03) shows "MAX" in place of the cost and a disabled button. Awakening before a slot's stage gate: that slot's button disabled with "Reach stage {AWAKEN_STAGES[rank]}", e.g. "Reach stage 50" for its rank I (`AWAKEN_STAGES[0]`) and "Reach stage 150" for its rank II; each slot reads its own rank, so slots can sit at different gates. At max rank: "Max rank". First-time: coach mark on ATK `[+]`. The `Max` step shows "Buy 37 levels for 3.71M" so the player knows what they are tapping. Locked: none (all five slots open from the start, 00 decision 109).
+States: a stat at its cap (03) shows "MAX" in place of the cost and a disabled button. Awakening before a slot's stage gate: that slot's button disabled with "Reach stage {AWAKEN_STAGES[rank]}", e.g. "Reach stage 50" for its rank I (`AWAKEN_STAGES[0]`) and "Reach stage 150" for its rank II; each slot reads its own rank, so slots can sit at different gates (in the sketch, at a stage between 50 and 149, slot 1 holds rank I and waits for stage 150 while slot 2 can buy its rank I). At max rank: "Max rank". First-time: coach mark on ATK `[+]`. The `Max` step shows "Buy 37 levels for 3.71M" so the player knows what they are tapping. Locked: none (all five slots open from the start, 00 decision 109).
 
 ### 4.5 `SCR_WEAPONS` (Full, M0)
 
@@ -496,7 +498,7 @@ Purpose: the fixed fight. Replaces the combat viewport region; the HUD stays. Th
 | Fish Coin Dungeon · Floor 5                  |
 |                    (floor boss)              |
 |            HP |======           | 40%        |
-|            T  |=====            | 14s        |
+|            T  |================ | 28s        |
 | DPS 3.72K                                    |
 |            (c4)          (c5)               |  party formation as SCR_MAIN
 |    (c1)          (c2)          (c3)         |
@@ -505,6 +507,8 @@ Purpose: the fixed fight. Replaces the combat viewport region; the HUD stays. Th
 |                               [ Skip fight ] |
 +----------------------------------------------+
 ```
+
+Sketch values: floor 5 is the stage-100 boss (`DUNGEON_FLOOR_STAGE_STEP` 20), 20 x 1.04^100 x 10 = 10.1K HP, so at 3.72K DPS 40% is left 1.6 s in; the ladder (06 section 6.2) trails the frontier, so dungeon fights are short.
 
 | Element | `DungeonRunVm` field |
 |---|---|
