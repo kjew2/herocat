@@ -44,7 +44,16 @@ D is the control: it shows what the artist's current style looks like once it fo
 
 ## 4. Prompts
 
-Each prompt is the shared base plus one style block. They are written for a general text-to-image tool; adjust the syntax for the tool you use. Make 4 images per variant, and keep the seed fixed across variants where the tool allows it.
+Each prompt is the shared base plus one style block. They are written for a general text-to-image tool; adjust the syntax for the tool you use. Keep the seed fixed across variants where the tool allows it.
+
+Generate in two rounds (issue #321):
+
+1. **Round 1:** 1 image per variant (5 images). Drop the variants that are clearly wrong.
+2. **Round 2:** 4 images each for the 2 or 3 survivors, so each gets a fair shot at one clean image.
+
+One image per variant is too few to judge a style, since a single sample can fail by chance (hands, a cropped parasol). Twenty up front spends most of the tries on styles that are already out.
+
+**Tool for this run:** OpenAI image generation (`gpt-image-2`). It has no seed setting, so variants also differ in pose and face. To hold her design steady, pass the owner's concept images as reference images. They are our own art, so this keeps to the rule above. Its portrait size is 2:3 (1024 x 1536), so cover-crop to 9:16 and keep extra margin at the sides for the parasol.
 
 **Base (every variant):**
 
