@@ -41,7 +41,9 @@ namespace HeroCat.Runtime.Account
     /// </list>
     /// Platform sign-in (<c>/auth/link-login</c>) and the linked-elsewhere choice (<c>PROVIDER_ALREADY_LINKED</c> +
     /// <c>/auth/merge</c>, two SaveSummary cards) are issue #196; they extend <see cref="IAccountService"/> and this flow.
-    /// The caller stops the session (<c>SessionRunner.OnQuit</c>) once the upload step is done and before the archive.
+    /// The caller stops the session (<c>SessionRunner.OnQuit</c>) through the <c>beforeArchive</c> delegate of
+    /// <see cref="LogoutAsync"/>, which runs only once the logout is committed (issue #323): a Cancel on either modal
+    /// leaves the session running.
     /// </summary>
     public sealed class AccountFlow
     {
@@ -74,9 +76,16 @@ namespace HeroCat.Runtime.Account
         /// <see cref="LOGOUT_UNSYNCED"/> and returns true for "Log out anyway". <paramref name="confirmRetry"/> shows
         /// <see cref="LOGOUT_OFFLINE"/> when an unlinked guest's <c>POST /auth/logout</c> was not confirmed and returns true
         /// for "Retry", false for "Cancel" (<see cref="LogoutOutcome.ServerUnreachable"/>). It runs after the upload step.
+        /// <paramref name="beforeArchive"/> (optional) stops the session (<c>SessionRunner.OnQuit</c>): it runs once the
+        /// logout is committed (the server confirmed, or the tokens were cleared locally) and before <c>saves/</c> is
+        /// archived, so the session's last write lands in the archive and nothing writes into <c>saves/</c> after it. It
+        /// never runs for <see cref="LogoutOutcome.Cancelled"/> or <see cref="LogoutOutcome.ServerUnreachable"/>, where the
+        /// session keeps going (issue #323). If it throws, the saves are still archived (the tokens are already gone) and
+        /// the exception propagates.
         /// </summary>
         public async Task<LogoutResult> LogoutAsync(Func<CancellationToken, Task<bool>> saveAndUpload, Func<Task<bool>> confirmUnsynced,
-                                                    Func<Task<bool>> confirmRetry, CancellationToken ct = default)
+                                                    Func<Task<bool>> confirmRetry, Action beforeArchive = null,
+                                                    CancellationToken ct = default)
         {
             if (saveAndUpload == null) throw new ArgumentNullException(nameof(saveAndUpload));
             if (confirmUnsynced == null) throw new ArgumentNullException(nameof(confirmUnsynced));
@@ -106,7 +115,9 @@ namespace HeroCat.Runtime.Account
                 try { revoked = await _account.LogoutAsync(ct).ConfigureAwait(false); }
                 catch (ServiceException) { revoked = false; }
             }
-            bool archived = _archive != null && _archive.Archive(player, _clock.NowServerSeconds);
+            bool archived = false;
+            try { beforeArchive?.Invoke(); }
+            finally { archived = _archive != null && _archive.Archive(player, _clock.NowServerSeconds); }
             return new LogoutResult(LogoutOutcome.LoggedOut, uploaded, revoked, archived);
         }
 

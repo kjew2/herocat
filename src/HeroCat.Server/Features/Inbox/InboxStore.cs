@@ -273,15 +273,15 @@ public sealed class InboxStore
     {
         readonly ServerEconomyEvents _events;
         readonly Guid _player;
-        readonly int _ageGate;
+        readonly EconomyAccount _account;
         readonly Dictionary<string, long> _balance = new(StringComparer.Ordinal);
         readonly List<EventRow> _rows = new();
 
-        ClaimWrites(ServerEconomyEvents events, Guid player, int ageGate)
+        ClaimWrites(ServerEconomyEvents events, Guid player, EconomyAccount account)
         {
             _events = events;
             _player = player;
-            _ageGate = ageGate;
+            _account = account;
         }
 
         /// <summary>The summon tickets the claim wrote to <c>ticket_ledger</c>.</summary>
@@ -289,9 +289,8 @@ public sealed class InboxStore
 
         public static async Task<ClaimWrites> StartAsync(ServerEconomyEvents events, DbConnection c, DbTransaction tx, Guid player, CancellationToken ct)
         {
-            await using var cmd = c.Command("inbox.age_gate", "select age_gate from accounts where player_id = @p", tx, ("p", player));
-            object? age = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
-            return new ClaimWrites(events, player, age is null or DBNull ? 0 : Convert.ToInt32(age));
+            var account = await ServerEconomyEvents.AccountAsync(c, tx, player, ct).ConfigureAwait(false);
+            return new ClaimWrites(events, player, account ?? EconomyAccount.Unknown);
         }
 
         /// <summary>Records the event of a ledger line already inserted in this transaction.</summary>
@@ -302,7 +301,7 @@ public sealed class InboxStore
                 : await BalanceAsync(c, tx, _player, currency, ct).ConfigureAwait(false);   // the first read already holds this line
             _balance[currency] = after;
             if (currency != nameof(Currency.DIAMOND)) Touched.Add(currency);
-            _rows.Add(_events.CurrencyChanged(_player, _ageGate, currency, delta, after, reason, refId));
+            _rows.Add(_events.CurrencyChanged(_player, _account,currency, delta, after, reason, refId));
         }
 
         public Task WriteEventsAsync(DbConnection c, DbTransaction tx, CancellationToken ct) =>

@@ -32,7 +32,8 @@ namespace HeroCat.Remote.Services
     /// </list>
     /// Content failures throw <see cref="ContentBuildException"/> with the 09 section 8 code, so ContentUpdater's failure
     /// report (<c>content_update_failed</c>) carries it; a failed fetch throws <see cref="ServiceException"/> with the
-    /// ApiClient's code (after its 5.2 retries). Runs on the thread pool.
+    /// ApiClient's code (after its 5.2 retries), which ContentUpdater retries at the next config when it is retryable
+    /// (issue #316). Runs on the thread pool.
     /// </summary>
     public sealed class CdnContentStaging : IContentStaging
     {

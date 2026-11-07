@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using HeroCat.Remote.Api;
 using HeroCat.Remote.Services;
@@ -249,6 +250,53 @@ namespace HeroCat.Remote.Tests
             Assert.That(log, Has.Count.EqualTo(1));
             Assert.That(AnyTemp(), Is.False);
             Assert.That(cache.Versions(), Is.Empty);
+        }
+
+        [Test]
+        public void ACdnOutage_AfterTheRetries_IsRetriedAtTheNextConfig_NotReported()   // issue #316
+        {
+            var b = Publish(V, touch: "skills");
+            bool down = true;
+            var cdn = Cdn(b);
+            var skills = b.Files["skills.json"];
+            cdn.On("GET", "/content/" + V + "/skills.json", _ => down ? new FakeReply(502, "<html>bad gateway</html>") : new FakeReply(200, bytes: skills));
+            var cache = Cache();
+            var log = new List<ContentError>();
+            var u = Updater(cdn, cache, log);
+            int failed = 0;
+            u.Failed += (v, e) => Interlocked.Increment(ref failed);
+            Stage(u, b.Pointer);
+
+            Assert.That(u.State, Is.EqualTo(ContentUpdateState.Idle), "not Failed: the bundle was never judged");
+            Assert.That(failed, Is.Zero, "no content_update_failed");
+            Assert.That(log, Is.Empty);
+            Assert.That(AnyTemp(), Is.False, "the partial download is deleted");
+            Assert.That(cache.Versions(), Is.Empty);
+
+            down = false;
+            Stage(u, b.Pointer);
+            Assert.That(u.State, Is.EqualTo(ContentUpdateState.PendingColdBoot));
+            Assert.That(cache.Versions(), Is.EqualTo(new[] { V }));
+            Assert.That(failed, Is.Zero);
+        }
+
+        [Test]
+        public void OfflineAtBoot_IsRetriedAtTheNextConfig()   // issue #316
+        {
+            var b = Publish(V);
+            var cdn = Cdn(b);
+            cdn.Then(Enumerable.Range(0, 50).Select(_ => FakeFault.Drop).ToArray());
+            var log = new List<ContentError>();
+            var u = Updater(cdn, Cache(), log);
+            Stage(u, b.Pointer);
+            Assert.That(u.State, Is.EqualTo(ContentUpdateState.Idle));
+            Assert.That(log, Is.Empty);
+            Assert.That(cdn.PendingFaults, Is.GreaterThan(0), "the ApiClient gave up before the network came back");
+
+            while (cdn.PendingFaults > 0) Stage(u, b.Pointer);
+            Stage(u, b.Pointer);
+            Assert.That(u.State, Is.EqualTo(ContentUpdateState.PendingColdBoot));
+            Assert.That(log, Is.Empty);
         }
 
         [Test]
