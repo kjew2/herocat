@@ -16,6 +16,12 @@ These images are exploration only. They set direction for the artist and never s
 
 > Style: crisp clean cel shading with two-tone shadows, fine thin lineart, cool airy lighting with a strong white rim light, high detail on the face and costume, soft atmospheric depth in the background, polished modern anime gacha splash art.
 
+## Alternate style: E, blend
+
+Pilot variant E, kept for comparison with the house style (owner, 2026-11-07). The violet accent is Yuki-specific in the pilot, so here it is each character's own accent. Run it with `--style e`; the files are named `<name>_e<k>.jpg`.
+
+> Style: clean cel-shaded anime face and skin with fine lines, slightly bolder outer silhouette line, flat graphic shapes and subtle halftone in the background, one dramatic light source with deep shadows and a glowing accent in her signature colour, polished and high contrast.
+
 ## Avoid
 
 > Avoid: text, letters, kanji, watermark, logo, frame, border, UI elements, name banners, extra fingers, malformed hands, cropped head, multiple characters, chibi, bandages, scars, nudity.
