@@ -108,7 +108,7 @@ public sealed class DbQueryMetricsTests
         Assert.That(names.GroupBy(n => n).Where(g => g.Count() > 1).Select(g => g.Key), Is.Empty, "names are unique");
     }
 
-    sealed class FakeConnection : DbConnection
+    internal sealed class FakeConnection : DbConnection
     {
         public bool Throw;
         [AllowNull] public override string ConnectionString { get; set; } = "";
