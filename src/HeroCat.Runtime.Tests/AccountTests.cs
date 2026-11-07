@@ -355,6 +355,69 @@ namespace HeroCat.Runtime.Tests
         }
 
         [Test]
+        public void Logout_StopsTheSession_OnceCommitted_AndBeforeTheArchive()   // issue #323
+        {
+            foreach (bool linked in new[] { false, true })
+            {
+                if (Directory.Exists(SavesDir)) Directory.Delete(SavesDir, true);
+                WriteSave();
+                var account = new FakeAccount(SignedInTokens(linked)) { ServerFailures = linked ? 1 : 0 };
+                var flow = new AccountFlow(account, new SaveArchive(Dir), new FakeClock(TestContent.T0));
+                int stops = 0;
+                bool tokensGoneWhenStopped = false;
+
+                var r = flow.LogoutAsync(_ => Task.FromResult(true), () => throw new AssertionException("not asked"),
+                                         () => throw new AssertionException("not asked"),
+                                         beforeArchive: () =>
+                                         {
+                                             stops++;
+                                             tokensGoneWhenStopped = account.Tokens.Load() == null;
+                                             WriteSave("slot0.sav", "quit");   // SessionRunner.OnQuit's last save
+                                         })
+                            .GetAwaiter().GetResult();
+
+                Assert.That(r.Outcome, Is.EqualTo(LogoutOutcome.LoggedOut));
+                Assert.That(stops, Is.EqualTo(1));
+                Assert.That(tokensGoneWhenStopped, Is.True, "the logout is committed before the session stops (linked: " + linked + ")");
+                string archived = Path.Combine(Dir, "saves." + Player.ToString("D") + ".archived", "slot0.sav");
+                Assert.That(File.ReadAllText(archived), Is.EqualTo("quit"), "the session's last save is archived");
+                Assert.That(Directory.GetFileSystemEntries(SavesDir), Is.Empty);
+            }
+        }
+
+        [Test]
+        public void Logout_CancelledOnEitherModal_LeavesTheSessionRunning()   // issue #323
+        {
+            Action stop = () => throw new AssertionException("the session must keep running");
+
+            var unsynced = new AccountFlow(new FakeAccount(SignedInTokens()), null, new FakeClock(TestContent.T0));
+            var r1 = unsynced.LogoutAsync(_ => Task.FromResult(false), () => Task.FromResult(false), () => throw new AssertionException("not asked"), stop)
+                             .GetAwaiter().GetResult();
+            Assert.That(r1.Outcome, Is.EqualTo(LogoutOutcome.Cancelled));
+
+            var offline = new AccountFlow(new FakeAccount(SignedInTokens()) { ServerFailures = 1 }, null, new FakeClock(TestContent.T0));
+            var r2 = offline.LogoutAsync(_ => Task.FromResult(true), () => throw new AssertionException("not asked"), () => Task.FromResult(false), stop)
+                            .GetAwaiter().GetResult();
+            Assert.That(r2.Outcome, Is.EqualTo(LogoutOutcome.ServerUnreachable));
+        }
+
+        [Test]
+        public void Logout_WhoseSessionStopThrows_StillArchives_AndRethrows()   // issue #323: the tokens are already gone
+        {
+            WriteSave();
+            var account = new FakeAccount(SignedInTokens());
+            var flow = new AccountFlow(account, new SaveArchive(Dir), new FakeClock(TestContent.T0));
+
+            Assert.That(() => flow.LogoutAsync(_ => Task.FromResult(true), () => throw new AssertionException("not asked"),
+                                               () => throw new AssertionException("not asked"),
+                                               () => throw new InvalidOperationException("stop"))
+                                  .GetAwaiter().GetResult(),
+                        Throws.InvalidOperationException);
+            Assert.That(account.Tokens.Load(), Is.Null);
+            Assert.That(File.Exists(Path.Combine(Dir, "saves." + Player.ToString("D") + ".archived", "slot0.sav")), Is.True);
+        }
+
+        [Test]
         public void DeleteAccount_WipesSavesAndTokens_OnlyWhenTheServerAccepts()
         {
             WriteSave();
