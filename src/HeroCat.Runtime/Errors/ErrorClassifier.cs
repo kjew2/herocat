@@ -80,6 +80,12 @@ namespace HeroCat.Runtime.Errors
         public const string LOGOUT_UNSYNCED = "LOGOUT_UNSYNCED";
 
         /// <summary>
+        /// Logout's choice modal when an unlinked guest's <c>POST /auth/logout</c> was not confirmed ([Retry] / [Cancel];
+        /// 01 section 8.13 step 2, 00 decision 119).
+        /// </summary>
+        public const string LOGOUT_OFFLINE = "LOGOUT_OFFLINE";
+
+        /// <summary>
         /// Not an error class (00 decision 103): no readable save copy means quarantine and a new profile (02 section 8.3),
         /// then a one-time <see cref="Notice"/> and the <c>save_corrupt_all</c> analytics event. Not in <see cref="Table"/>.
         /// </summary>
@@ -132,6 +138,7 @@ namespace HeroCat.Runtime.Errors
             R(0, SAVE_TOO_NEW, ErrorClass.Fatal, RetryPolicy.None, Presentation.Fatal),
             R(0, CONTENT_CORRUPT, ErrorClass.Fatal, RetryPolicy.None, Presentation.Fatal),
             R(0, LOGOUT_UNSYNCED, ErrorClass.Conflict, RetryPolicy.None, Presentation.ChoiceModal),
+            R(0, LOGOUT_OFFLINE, ErrorClass.Conflict, RetryPolicy.None, Presentation.ChoiceModal),
             // Status-rule fallbacks with a generic key (an unknown code must still never show raw).
             R(0, REQUEST_REJECTED, ErrorClass.Rejected, RetryPolicy.None, Presentation.Modal),
             R(0, SRV_UNEXPECTED, ErrorClass.ServerError, RetryPolicy.None, Presentation.ToastThenModal),

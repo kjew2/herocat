@@ -139,6 +139,13 @@ namespace HeroCat.Runtime.Account
         /// </summary>
         public string RegisteredKeyId { get; init; }
 
+        /// <summary>
+        /// The account has a linked platform provider (<c>linked</c> in <c>tokens.json</c>; absent: false). The guest call
+        /// stores false; TODO(#196): <c>/auth/link</c> and <c>/auth/link-login</c> success store true. Decides whether a
+        /// logout needs the server's confirmation (00 decision 119).
+        /// </summary>
+        public bool Linked { get; init; }
+
         public bool HasSession => !string.IsNullOrEmpty(RefreshToken);
     }
 
@@ -183,6 +190,7 @@ namespace HeroCat.Runtime.Account
                     AccessExpiresAt = o["accessExpiresAt"]?.Type == JTokenType.Integer ? (long)o["accessExpiresAt"] : 0,
                     PendingGuestRequestId = (string)o["pendingGuestRequestId"],
                     RegisteredKeyId = (string)o["registeredKeyId"],
+                    Linked = o["linked"]?.Type == JTokenType.Boolean && (bool)o["linked"],
                 };
             }
             catch (Exception e) when (e is JsonException || e is FormatException || e is InvalidCastException || e is ArgumentException)
@@ -203,6 +211,7 @@ namespace HeroCat.Runtime.Account
                 ["accessExpiresAt"] = t.AccessExpiresAt,
                 ["pendingGuestRequestId"] = t.PendingGuestRequestId,
                 ["registeredKeyId"] = t.RegisteredKeyId,
+                ["linked"] = t.Linked,
             };
             _store.Set(Key, Utf8.GetBytes(o.ToString(Formatting.None)));
         }
