@@ -656,6 +656,9 @@ def scripted(name, b, st, us, mode="pull", force=False, note=""):
             "expect": res, "expectState": {"pity": st.pity, "exp": st.exp, "totalPulls": st.total}}
 
 
+BANNERS_WITH_LEVELS = ("WEAPON", "SKILL", "COMPANION")
+
+
 def build_vectors(content_dir, mc_pulls):
     w = Banner(content_dir, "WEAPON")
     s = Banner(content_dir, "SKILL")
@@ -763,6 +766,15 @@ def build_vectors(content_dir, mc_pulls):
                               "guaranteeFire": (1 - eplus(w, r)) ** (w.guarantee_batch - 1)},
                    "tolerancePp": {"lplus": 0.1, "mythic": 0.03, "cre": 0.3, "guaranteeFire": 0.5}})
 
+    # 08 section 4.5: the `effective` block /summon/rates and the odds export serve, per banner (identical at every
+    # level: levels never touch L or M, and the guarantee only forces E). The server computes it with the same closed
+    # form and HeroCat.Server.Tests pins it to these numbers, so the endpoint serves what this model prints (issue #200).
+    effective = {}
+    for bid in BANNERS_WITH_LEVELS:
+        b = Banner(content_dir, bid)
+        pn = pity_numbers(b)
+        effective[bid] = {"lplusPerPullAveraged": pn["lplus"], "expectedPullsToLplus": pn["expected"], "p99PullsToLplus": pn["p99"]}
+
     manifest = json.load(open(os.path.join(content_dir, "manifest.json"), encoding="utf-8"))
     return {
         "format": VECTORS_FORMAT,
@@ -772,7 +784,8 @@ def build_vectors(content_dir, mc_pulls):
                        "Pull10 (mode pull10), compare each result and the banner state after. Rows: one Pull from pity and exp "
                        "= threshold(level) - exp_per_pull. Monte Carlo: stream seed 7 from counter 0, banner exp held so each "
                        "pull rolls at 'level'; then pulls/10 ten-pulls on a fresh stream of the same seed, each from pity 0 "
-                       "and exp = threshold(level); guaranteeFired counts ten-pulls whose slots 1-9 had no E+.",
+                       "and exp = threshold(level); guaranteeFired counts ten-pulls whose slots 1-9 had no E+. effective: per banner, "
+                       "the pity closed form /summon/rates serves (specs/08 section 4.5).",
         "regenerate": "python3 tools/gacha_model.py --vectors --out Fixtures/Summon/vectors.json",
         "contentVersion": manifest["content_version"],
         "contentHash": manifest["content_hash"],
@@ -785,6 +798,7 @@ def build_vectors(content_dir, mc_pulls):
         "rows": rows,
         "batches": batches,
         "monteCarlo": mc,
+        "effective": effective,
     }
 
 

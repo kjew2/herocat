@@ -30,6 +30,9 @@ public interface IContentSets
     /// <summary>The newest held set (what <c>/summon/state</c> derives banner levels with).</summary>
     ContentDb Active { get; }
 
+    /// <summary>Every held set, oldest first (the realised-rate job resolves logged rate table hashes against them).</summary>
+    IReadOnlyList<ContentDb> All { get; }
+
     ContentDb Resolve(string version);
 }
 
@@ -53,6 +56,8 @@ public sealed class DirectoryContentSets : IContentSets
     }
 
     public ContentDb Active => _sets.Value[^1];
+
+    public IReadOnlyList<ContentDb> All => _sets.Value;
 
     public ContentDb Resolve(string version)
     {

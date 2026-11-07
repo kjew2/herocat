@@ -49,6 +49,8 @@ public static class ServerHost
                 return 0;
             case ServerRole.Migrate:
                 return await MigrateAsync(rest).ConfigureAwait(false);
+            case ServerRole.ExportOdds:
+                return await ExportOddsAsync(rest).ConfigureAwait(false);
             default:
                 throw new ArgumentOutOfRangeException(nameof(role));
         }
@@ -88,6 +90,7 @@ public static class ServerHost
         builder.Services.AddHostedService<IdempotencyPurgeService>();
         builder.Services.AddHostedService<InboxPurgeService>();
         builder.Services.AddHostedService<PartitionMaintenanceService>();
+        builder.Services.AddRateDriftJob();
         return builder.Build();
     }
 
@@ -146,6 +149,31 @@ public static class ServerHost
             Console.Error.WriteLine("migrate: " + e.Message);
             return 1;
         }
+    }
+
+    /// <summary><c>--export-odds [--out PATH]</c>: the odds export of the newest held content set, to PATH or stdout.</summary>
+    static async Task<int> ExportOddsAsync(string[] args)
+    {
+        string? outPath;
+        string[] rest;
+        try { (outPath, rest) = OddsExport.ParseArgs(args); }
+        catch (ArgumentException e)
+        {
+            Console.Error.WriteLine("error: " + e.Message);
+            return 2;
+        }
+        var builder = Host.CreateApplicationBuilder(rest);
+        builder.Services.AddSummonContent();
+        using var host = builder.Build();
+        string text = OddsExport.Serialize(OddsExport.Build(host.Services.GetRequiredService<IContentSets>().Active));
+        if (outPath == null) await Console.Out.WriteAsync(text).ConfigureAwait(false);
+        else
+        {
+            string? dir = Path.GetDirectoryName(Path.GetFullPath(outPath));
+            if (dir != null) Directory.CreateDirectory(dir);
+            await File.WriteAllTextAsync(outPath, text).ConfigureAwait(false);
+        }
+        return 0;
     }
 
     public static async Task<IReadOnlyList<MigrationScript>> ApplyMigrationsAsync(IServiceProvider services, CancellationToken ct)
