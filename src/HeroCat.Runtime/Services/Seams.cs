@@ -183,9 +183,26 @@ namespace HeroCat.Runtime.Services
             return list;
         }
 
-        /// <summary>06 rule 9.5: the HUD badge, the count of available unclaimed items.</summary>
-        public static int BadgeCount(IEnumerable<InboxItem> items, long nowServerSec, ICollection<string> claimedIds) =>
-            Available(items, nowServerSec, claimedIds).Count;
+        /// <summary>
+        /// 06 rule 9.5: the HUD badge, the count of available unclaimed items. Allocation-free for a list: the client reads
+        /// it on every refresh (07 section 10 rule 2, AC 12).
+        /// </summary>
+        public static int BadgeCount(IEnumerable<InboxItem> items, long nowServerSec, ICollection<string> claimedIds)
+        {
+            if (items == null) return 0;
+            int n = 0;
+            if (items is IReadOnlyList<InboxItem> list)
+            {
+                for (int k = 0; k < list.Count; k++)
+                    if (Claimable(list[k], nowServerSec, claimedIds)) n++;
+                return n;
+            }
+            foreach (var i in items) if (Claimable(i, nowServerSec, claimedIds)) n++;
+            return n;
+        }
+
+        static bool Claimable(InboxItem i, long nowServerSec, ICollection<string> claimedIds) =>
+            IsAvailable(i, nowServerSec) && (claimedIds == null || !claimedIds.Contains(i.Id));
 
         /// <summary>
         /// The Wallet reason a grant of this item type carries when the server does not name one (01 section 2.5):
