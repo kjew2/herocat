@@ -93,7 +93,7 @@ public sealed class PostgresSaveTests
             Task.FromResult(Sign ? new Uri($"https://{bucket}.s3.example/{key}?X-Amz-Expires={(int)lifetime.TotalSeconds}") : null);
     }
 
-    sealed record Player(Guid Id, Guid Device, byte[] Key, string Access);
+    sealed record Player(Guid Id, Guid Device, byte[] Key, string Access, string? Refresh = null);
 
     static string NewId() => Guid.NewGuid().ToString("N");
 
@@ -108,7 +108,8 @@ public sealed class PostgresSaveTests
         using var resp = await _client.SendAsync(r);
         Assert.That(resp.StatusCode, Is.EqualTo(HttpStatusCode.Created), await resp.Content.ReadAsStringAsync());
         var b = JsonDocument.Parse(await resp.Content.ReadAsStringAsync()).RootElement;
-        return new Player(b.GetProperty("playerId").GetGuid(), device, key, b.GetProperty("accessToken").GetString()!);
+        return new Player(b.GetProperty("playerId").GetGuid(), device, key, b.GetProperty("accessToken").GetString()!,
+                          b.GetProperty("refreshToken").GetString());
     }
 
     /// <summary>A second device of the same player (link-login is #196): its row and key, and a token for it.</summary>
@@ -356,6 +357,26 @@ public sealed class PostgresSaveTests
         (resp, body) = await Upload(p, 2, etag, SaveEnvelope.Encode(SaveUnitTests.Body(p.Id, p.Device, 2), null));
         Assert.That(resp.StatusCode, Is.EqualTo(HttpStatusCode.OK), body.ToString());
         Assert.That(Flags(body), Is.EqualTo(new[] { SaveFlags.HMAC_INVALID }));
+    }
+
+    [Test]
+    public async Task After_logout_the_old_access_token_no_longer_finds_the_released_device_key()   // issue #322, 00 decision 117
+    {
+        var p = await Guest();
+        string etag = await UploadOk(p, 1, "*");
+
+        var logout = new HttpRequestMessage(HttpMethod.Post, "/v1/auth/logout");
+        Headers(logout, p.Device.ToString("D"), NewId(), p.Access);
+        logout.Content = new StringContent(JsonSerializer.Serialize(new { refreshToken = p.Refresh }), Encoding.UTF8, "application/json");
+        using (var r = await _client.SendAsync(logout))
+            Assert.That(r.StatusCode, Is.EqualTo(HttpStatusCode.NoContent), await r.Content.ReadAsStringAsync());
+
+        // The access token stays valid until it expires, but a save signed with the released device's key no longer verifies.
+        var (resp, body) = await Upload(p, 2, etag);
+        Assert.That(resp.StatusCode, Is.EqualTo(HttpStatusCode.OK), body.ToString());
+        Assert.That(Flags(body), Is.EqualTo(new[] { SaveFlags.HMAC_INVALID }));
+        Assert.That(await _db.CountAsync("select count(*) from saves where player_id = @p and save_seq = 2 and not hmac_valid", ("p", p.Id)),
+                    Is.EqualTo(1));
     }
 
     [Test]

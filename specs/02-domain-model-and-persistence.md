@@ -1389,7 +1389,7 @@ create table dungeon_progress (
 create index on dungeon_seeds (player_id, kind, day_key);
 ```
 
-**Device release on logout** (`0010`; 00 decision 117, issue #293): `POST /auth/logout` revokes the device's refresh family and sets `devices.released_at`, so the device's next `POST /auth/guest` makes a new guest instead of answering `409 DEVICE_ALREADY_BOUND` (08 section 2.2). The row is not deleted, because `saves` and `refresh_tokens` reference it; `/auth/guest` rebinds a released row to the new guest (new `player_id` and `hmac_key_enc`, `released_at` back to null). Shown verbatim, as its file:
+**Device release on logout** (`0010`; 00 decision 117, issue #293): `POST /auth/logout` revokes the device's refresh family and sets `devices.released_at`, so the device's next `POST /auth/guest` makes a new guest instead of answering `409 DEVICE_ALREADY_BOUND` (08 section 2.2). The row is not deleted, because `saves` and `refresh_tokens` reference it; `/auth/guest` rebinds a released row to the new guest (new `player_id` and `hmac_key_enc`, `released_at` back to null). Until then a released row's key verifies nothing: `PUT /save` ignores it, so an upload with the logged-out player's unexpired access token is recorded `hmac_valid = false` (08 section 3.1 step 2, issue #322). Shown verbatim, as its file:
 
 ```sql
 -- 0010_device_release.sql (specs/02 section 12 "Device release on logout"; 00 decision 117, issue #293): POST /auth/logout

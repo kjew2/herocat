@@ -59,10 +59,15 @@ public sealed class SaveStore
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
-    /// <summary>The device's HMAC key at rest (<c>devices.hmac_key_enc</c>), if the device is this player's.</summary>
+    /// <summary>
+    /// The device's HMAC key at rest (<c>devices.hmac_key_enc</c>), if the device is this player's and logout has not
+    /// released it (<c>devices.released_at</c>, 00 decision 117): a logged-out player's access token, still valid until it
+    /// expires, no longer verifies uploads under the released device's key (issue #322).
+    /// </summary>
     public static async Task<byte[]?> DeviceKeyEncAsync(DbConnection c, DbTransaction tx, Guid playerId, Guid deviceId, CancellationToken ct)
     {
-        await using var cmd = c.Command("select hmac_key_enc from devices where device_id = @d and player_id = @p", tx, ("d", deviceId), ("p", playerId));
+        await using var cmd = c.Command("select hmac_key_enc from devices where device_id = @d and player_id = @p and released_at is null", tx,
+            ("d", deviceId), ("p", playerId));
         return await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false) as byte[];
     }
 
