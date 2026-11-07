@@ -62,7 +62,7 @@ flowchart TB
 
 | Rule | Enforced by |
 |---|---|
-| `HeroCat.Sim` references nothing but `netstandard2.1`. No `UnityEngine`, `System.IO`, `System.Net`, `Newtonsoft`, `System.Reflection`, `System.DateTime`/`DateTimeOffset.Now`, `Stopwatch`, `Math.Pow/Exp/Log`. | `HeroCat.Sim.csproj` has no package references; a CI source grep (10) fails the build on any of the banned identifiers. |
+| `HeroCat.Sim` references nothing but `netstandard2.1`. No `UnityEngine`, `System.IO`, `System.Net`, `Newtonsoft`, `System.Reflection`, `System.DateTime`/`DateTimeOffset.Now`, `Stopwatch`, `Math.Pow/Exp/Log`. | `HeroCat.Sim.csproj` has no package references; a CI source grep (10; `tools/check_sim_purity.py`, run by `check.sh --pr`) fails the build on any of the banned identifiers; `PurityTests.SimAssembly_ReferencesOnlyNetstandard` checks that the built `HeroCat.Sim.dll` references only `netstandard`. |
 | `HeroCat.Runtime` references `HeroCat.Sim` and `Newtonsoft.Json`. No `UnityEngine`. | asmdef in Unity marks it `noEngineReferences: true`; the .NET csproj has no Unity reference. |
 | `HeroCat.Client` references `HeroCat.Sim` and `HeroCat.Runtime` as local UPM packages (`com.herocat.sim`, `com.herocat.runtime` in `unity/HeroCatClient/Packages/manifest.json`, both `file:` references to `src/`). | Unity asmdef `references`. |
 | Screens never reference `GameState` or `Simulation`. They reference a `ViewModel`. | asmdef split: `HeroCat.Client.Screens` references `HeroCat.Client.ViewModels` only; `ViewModels` references Runtime + Sim. |

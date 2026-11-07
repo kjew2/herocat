@@ -32,7 +32,14 @@ namespace HeroCat.Sim.Tests
         }
 
         [Test]
-        public void OnlyTheLedger_WritesABalance()   // issue #106: no sim code writes a balance except through Apply
+        public void SimAssembly_ReferencesOnlyNetstandard()   // 01 AC 1: the built HeroCat.Sim.dll (Release in check.sh)
+        {
+            var refs = typeof(Simulation).Assembly.GetReferencedAssemblies().Select(a => a.Name).ToList();
+            Assert.That(refs, Is.EqualTo(new[] { "netstandard" }));
+        }
+
+        [Test]
+        public void OnlyTheLedger_WritesABalance()  // issue #106: no sim code writes a balance except through Apply
         {
             var assign = new Regex(@"Wallet\.(Gold|Diamond|FishCoin|RockCandy|GuildCoin)\s*([+\-*/]?=)(?!=)|\.(DungeonTicket|SummonTicket)\[[^\]]+\]\s*[+\-]?=(?!=)");
             var hits = (from f in SimSources()
