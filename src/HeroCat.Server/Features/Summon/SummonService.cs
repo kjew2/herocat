@@ -8,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace HeroCat.Server.Features.Summon;
 
-/// <summary>Summon metrics (specs/08 section 9.4). The OpenTelemetry export is #210.</summary>
+/// <summary>Summon metrics (specs/08 section 9.4), exported with the rest of <see cref="Observability.MetricCatalog"/>.</summary>
 public static class SummonMetrics
 {
     public const string PullsTotal = "summon_pulls_total";

@@ -41,7 +41,7 @@ public sealed class IdempotencyPurgeService : BackgroundService
         using var timer = new PeriodicTimer(Interval, _clock);
         do
         {
-            try { await PurgeOnceAsync(stoppingToken).ConfigureAwait(false); }
+            try { await Observability.WorkerJobMetrics.TimeAsync("idempotency_purge", PurgeOnceAsync, stoppingToken).ConfigureAwait(false); }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { return; }
             catch (Exception e) { _log.LogError(e, "idempotency purge failed; retrying next hour"); }
         }

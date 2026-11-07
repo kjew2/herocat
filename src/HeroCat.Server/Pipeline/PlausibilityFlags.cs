@@ -1,6 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-
 namespace HeroCat.Server.Pipeline;
 
 /// <summary>A plausibility flag (specs/08 section 7.2 table: code and severity) raised against a player.</summary>
@@ -30,8 +27,8 @@ public sealed class LoggingPlausibilityFlagSink : IPlausibilityFlagSink
     // TODO(#206): hand flags to the action matrix (moderation_actions, bans) instead of only logging them.
     public Task RaiseAsync(PlausibilityFlag flag, CancellationToken ct)
     {
-        string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(flag.PlayerId.ToString("D"))))[..16].ToLowerInvariant();
-        _log.LogWarning("plausibility flag {Code} ({Severity}) on player {PlayerIdHash}", flag.Code, flag.Severity, hash);
+        _log.LogWarning("plausibility flag {FlagCode} ({Severity}) on player {PlayerIdHash}", flag.Code, flag.Severity,
+                        Observability.LogFields.PlayerIdHash(flag.PlayerId));
         return Task.CompletedTask;
     }
 }

@@ -22,7 +22,7 @@ public interface IDistributedLock
     Task<ILockLease?> TryAcquireAsync(string key, TimeSpan ttl, TimeSpan maxWait, CancellationToken ct);
 }
 
-/// <summary>Lock metrics (specs/08 section 9.4). The OpenTelemetry export is #210.</summary>
+/// <summary>Lock metrics (specs/08 section 9.4), exported with the rest of <see cref="Observability.MetricCatalog"/>.</summary>
 public static class LockMetrics
 {
     public const string WaitSeconds = "redis_lock_wait_seconds";

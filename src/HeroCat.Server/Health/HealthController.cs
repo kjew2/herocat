@@ -10,7 +10,7 @@ namespace HeroCat.Server.Health;
 /// <summary>
 /// <c>GET /health</c>: liveness for the load balancer, and the version the compat matrix reads (specs/10 section 6.3:
 /// "image tag, /health body"). Outside <c>/v1</c> (it is not a client route) and touches no database, so a Postgres or
-/// Redis outage does not take every task out of the target group; dependency readiness comes with observability (#210).
+/// Redis outage does not take every task out of the target group. TODO(gap: dependency readiness): no readiness probe yet.
 /// The <c>sim</c> block calls into the referenced HeroCat.Sim assembly, so a server built against a broken Sim fails here.
 /// </summary>
 [ApiController]
