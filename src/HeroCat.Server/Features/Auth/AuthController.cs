@@ -149,7 +149,10 @@ public sealed partial class AuthController : ControllerBase
         }
     }
 
-    /// <summary>Revokes the family of the given refresh token (this device's session only). 204 also for an unknown token.</summary>
+    /// <summary>
+    /// Revokes the family of the given refresh token (this device's session only) and releases the token's device, so its
+    /// next <c>/auth/guest</c> makes a new guest (00 decision 117). 204 also for an unknown token, which changes nothing.
+    /// </summary>
     [HttpPost("v1/auth/logout"), Auth(AuthPolicy.Jwt), RateLimit(10), Idempotent]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Logout(LogoutRequest request, CancellationToken ct)

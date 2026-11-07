@@ -30,7 +30,8 @@ namespace HeroCat.Client.Boot
 #if HEROCAT_BACKEND_REMOTE
             // No deployed server yet: the offline handler makes every ApiClient call fail as NET_OFFLINE, so the game runs
             // on the device clock with local saves and a queued upload. A real build drops Handler (platform HttpClientHandler)
-            // and sets BaseUrl per environment, ContentVersion and Credentials (AuthClient, #148).
+            // and sets BaseUrl per environment, ContentVersion and Credentials (AuthClient, #148), plus options.AnalyticsSalt and
+            // options.SessionId (BootOptions.SessionId) so Wire builds the analytics sink (specs/02 section 14.2 item 8, #297).
             var api = new ApiClientOptions
             {
                 Handler = new OfflineHandler(),

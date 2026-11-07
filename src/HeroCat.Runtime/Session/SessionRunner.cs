@@ -62,6 +62,12 @@ namespace HeroCat.Runtime.Session
         public double AutosaveIntervalSec { get; set; } = RuntimeConfig.AUTOSAVE_INTERVAL_SEC;
         public double WallClockSyncSec { get; set; } = RuntimeConfig.WALL_CLOCK_SYNC_SEC;
 
+        /// <summary>
+        /// ANALYTICS_UPLOAD_SEC (02 section 14.2): foreground seconds between interval uploads of the analytics queue, for a
+        /// sink that implements IAnalyticsUpload. Zero or negative disables it (pause and quit still flush).
+        /// </summary>
+        public double AnalyticsUploadSec { get; set; } = RuntimeConfig.ANALYTICS_UPLOAD_SEC;
+
         /// <summary>TICK_BUDGET_MS; zero or negative disables the budget (01 AC 4 runs with it disabled).</summary>
         public double TickBudgetMs { get; set; } = RuntimeConfig.TICK_BUDGET_MS;
 
@@ -87,7 +93,7 @@ namespace HeroCat.Runtime.Session
         Queue<Command> _pending = new Queue<Command>();
         Queue<Command> _running = new Queue<Command>();
         double _accTicks;
-        long _lastMono, _lastSaveMono, _lastClockSyncMono;
+        long _lastMono, _lastSaveMono, _lastClockSyncMono, _lastUploadMono;
         bool _dirty, _started, _clockAnomalyReported;
         SummonFlow _summons;
         readonly IClockResync _resync;
@@ -111,7 +117,7 @@ namespace HeroCat.Runtime.Session
             _tickHz = sim.Db.Constants.TickHz;
             if (log != null) sim.CommandLog = log;
             long now = _mono.Ticks;
-            _lastMono = _lastSaveMono = _lastClockSyncMono = now;
+            _lastMono = _lastSaveMono = _lastClockSyncMono = _lastUploadMono = now;
             // 01 section 8.2 step 2: a clock sync may land on any thread; OnFrame handles it on the main thread.
             _resync = services.Clock as IClockResync;
             if (_resync != null) _resync.Resynced += PostClockSync;
@@ -130,6 +136,10 @@ namespace HeroCat.Runtime.Session
         /// <summary>The inbox list / claim flow of 01 section 8.9 step 6 over this runner (issue #176).</summary>
         public HeroCat.Runtime.Inbox.InboxFlow Inbox => _inbox ??= new HeroCat.Runtime.Inbox.InboxFlow(this);
         HeroCat.Runtime.Inbox.InboxFlow _inbox;
+
+        /// <summary>The dungeon start and sweep flow of 01 section 8.8 (issue #146).</summary>
+        public HeroCat.Runtime.Dungeons.DungeonFlow Dungeons => _dungeons ??= new HeroCat.Runtime.Dungeons.DungeonFlow(this);
+        HeroCat.Runtime.Dungeons.DungeonFlow _dungeons;
 
         /// <summary>
         /// The config cadence of 01 section 8.12 (issue #144), set by BootFlow: updated every frame and told about resumes.
@@ -204,7 +214,7 @@ namespace HeroCat.Runtime.Session
         public void Start()
         {
             _started = true;
-            SyncAndCatchUp();
+            SyncAndCatchUp(coldBoot: true);
         }
 
         /// <summary>One rendered frame (01 section 3.1). Returns the ticks run.</summary>
@@ -228,7 +238,7 @@ namespace HeroCat.Runtime.Session
             {
                 _accTicks = 0;
                 EndSession(AnalyticsEvents.SessionEnd.GAP, prevMono);   // the session ended at the last frame before the freeze
-                SyncAndCatchUp();
+                SyncAndCatchUp(coldBoot: false);   // reopens the session with a warm session_start
                 return 0;
             }
 
@@ -270,6 +280,11 @@ namespace HeroCat.Runtime.Session
             _bus.Publish(_sim.DrainEvents());
 
             if (_dirty && (mono - _lastSaveMono) / (double)_mono.Frequency >= _opt.AutosaveIntervalSec) SaveNow(SaveTrigger.Periodic);
+            if (_opt.AnalyticsUploadSec > 0 && (mono - _lastUploadMono) / (double)_mono.Frequency >= _opt.AnalyticsUploadSec)
+            {
+                _lastUploadMono = mono;
+                (_svc.Analytics as IAnalyticsUpload)?.Upload();   // background; the aggregation windows stay open (06 section 13)
+            }
             return n;
         }
 
@@ -296,6 +311,7 @@ namespace HeroCat.Runtime.Session
             SaveNow(SaveTrigger.Pause);
             EndSession(AnalyticsEvents.SessionEnd.PAUSE, _mono.Ticks);
             _svc.Analytics?.Flush();
+            _lastUploadMono = _mono.Ticks;
         }
 
         /// <summary>App back in the foreground (01 section 8.2): re-anchor, catch-up compute, save.</summary>
@@ -303,8 +319,9 @@ namespace HeroCat.Runtime.Session
         {
             IsPaused = false;
             _accTicks = 0;
+            _lastUploadMono = _mono.Ticks;   // the interval counts foreground time; the pause just flushed
             _summons?.OnResume();
-            SyncAndCatchUp();
+            SyncAndCatchUp(coldBoot: false);
             Config?.OnResume();   // 01 section 8.12 step 1: config is re-fetched on every resume
         }
 
@@ -413,8 +430,12 @@ namespace HeroCat.Runtime.Session
             _svc.Analytics?.Track("clock_anomaly", new Dictionary<string, object> { ["kind"] = "backwards", ["seconds"] = seconds });
         }
 
-        /// <summary>02 section 14.3: a session opens at boot, resume and gap recovery (after the catch-up), once.</summary>
-        void OpenSession(long mono)
+        /// <summary>
+        /// 02 section 14.3: a session opens at boot, resume and gap recovery (after the catch-up), once. A warm open (resume,
+        /// gap) sends <c>session_start</c> with <c>coldBoot = false</c> so it pairs with the previous session_end (issue #298);
+        /// the cold one is BootFlow's, sent at SCR_MAIN with the boot timings.
+        /// </summary>
+        void OpenSession(long mono, bool coldBoot, double catchUpMs)
         {
             if (_sessionOpen) return;
             _sessionOpen = true;
@@ -422,6 +443,9 @@ namespace HeroCat.Runtime.Session
             _sessionStage = _sim.State.Combat.Stage;
             _sessionKills = _sim.State.Stats.Kills;
             _sessionTicks = TotalTicks;
+            if (coldBoot) return;
+            var pending = _sim.State.Offline.Pending;   // as at boot: the pending record after this catch-up (summed)
+            _svc.Analytics?.Track(new AnalyticsEvents.SessionStart(pending?.ElapsedSec ?? 0, pending?.CreditedSec ?? 0, ColdBoot: false, catchUpMs));
         }
 
         /// <summary>
@@ -437,8 +461,9 @@ namespace HeroCat.Runtime.Session
                                                                  TotalTicks - _sessionTicks, trigger));
         }
 
-        void SyncAndCatchUp()
+        void SyncAndCatchUp(bool coldBoot)
         {
+            long t0 = _mono.Ticks;
             long now = _svc.Clock.NowServerSeconds;
             // 02 section 11.3: a resume behind the catch-up anchor credits nothing (the sim never moves the anchor back).
             long behind = _sim.State.Time.LastTickServerTime - now;
@@ -449,7 +474,7 @@ namespace HeroCat.Runtime.Session
             SaveNow(SaveTrigger.Resume);
             _lastMono = _mono.Ticks;
             _lastClockSyncMono = _lastMono;
-            OpenSession(_lastMono);
+            OpenSession(_lastMono, coldBoot, (_lastMono - t0) * 1000.0 / _mono.Frequency);
             // 01 section 8.2 step 1: the catch-up above used the extrapolated time; the sync is fired, not awaited (issue
             // #149). Its result lands through IClockResync.Resynced on a later frame, where OnClockSynced credits a jump
             // over CLOCK_JUMP_WARN_SEC as the second catch-up window (step 2). It never throws.

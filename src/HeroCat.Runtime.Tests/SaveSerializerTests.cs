@@ -37,6 +37,35 @@ namespace HeroCat.Runtime.Tests
         }
 
         [Test]
+        public void WithADeviceKey_TheHeaderCarriesHmacSha256OfTheBody_VerifiedOnlyByThatKey()   // 02 section 10.1, acceptance 4
+        {
+            var keyA = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
+            var keyB = Enumerable.Range(33, 32).Select(i => (byte)i).ToArray();
+            var bytes = SaveSerializer.Encode(Sample(), keyA);
+            int nl = Array.IndexOf(bytes, (byte)'\n');
+            string header = Encoding.ASCII.GetString(bytes, 0, nl);
+            Assert.That(header, Does.Match(@" hmac=[0-9a-f]{64}$"));
+            byte[] body = bytes.Skip(nl + 1).ToArray();
+            string want;
+            using (var h = new System.Security.Cryptography.HMACSHA256(keyA)) want = string.Concat(h.ComputeHash(body).Select(b => b.ToString("x2")));
+            Assert.That(header, Does.EndWith(" hmac=" + want));
+
+            var a = SaveSerializer.Decode(bytes, keyA);
+            Assert.That(a.HmacPresent && a.HmacValid, Is.True);
+            var b2 = SaveSerializer.Decode(bytes, keyB);
+            Assert.That(b2.HmacPresent, Is.True);
+            Assert.That(b2.HmacValid, Is.False, "a mismatch loads, flagged (never a reject)");
+            Assert.That(b2.Body.ToString(), Is.EqualTo(a.Body.ToString()));
+            var noKey = SaveSerializer.Decode(bytes);
+            Assert.That(noKey.HmacPresent, Is.True);
+            Assert.That(noKey.HmacValid, Is.False, "nothing to verify against");
+
+            var local = SaveSerializer.Decode(SaveSerializer.Encode(Sample()), keyA);
+            Assert.That(local.HmacPresent, Is.False, "hmac=- (Local mode)");
+            Assert.That(local.HmacValid, Is.False);
+        }
+
+        [Test]
         public void EveryField_RoundTrips_ToAValueEqualState()   // acceptance 1
         {
             var s = Sample();

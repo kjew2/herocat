@@ -1,8 +1,10 @@
 using System.Diagnostics.Metrics;
+using HeroCat.Server.Features.Analytics;
 using HeroCat.Server.Infrastructure;
 using HeroCat.Server.Infrastructure.Redis;
 using HeroCat.Server.Pipeline;
 using HeroCat.Sim.Content;
+using HeroCat.Sim.Economy;
 using HeroCat.Sim.State;
 using Microsoft.AspNetCore.Mvc;
 
@@ -23,8 +25,8 @@ public static class SummonMetrics
 /// The <c>POST /summon/pull</c> handler (specs/08 section 4.3, issue #199). The idempotency middleware has already
 /// replayed or refused a known request id; this takes the per-player Redis lock, resolves the client's content set,
 /// and in one transaction locks the account and the banner's pity row, charges diamonds or tickets, runs the Sim's pull
-/// algorithm with CSPRNG uniforms, writes one <c>summon_log</c> row per pull, the ledger row and the pity row, and
-/// stores the final idempotency row, so a retry after commit replays the same bytes.
+/// algorithm with CSPRNG uniforms, writes one <c>summon_log</c> row per pull, the ledger row with its server-side
+/// <c>currency_changed</c> event (specs/08 section 3.5) and the pity row, and stores the final idempotency row, so a retry after commit replays the same bytes.
 /// </summary>
 public sealed class SummonService
 {
@@ -33,11 +35,13 @@ public sealed class SummonService
     readonly ISummonConfigSource _config;
     readonly SummonLock _lock;
     readonly IUniformSourceFactory _uniforms;
+    readonly ServerEconomyEvents _events;
     readonly TimeProvider _clock;
 
     public SummonService(SummonStore store, IContentSets content, ISummonConfigSource config, SummonLock summonLock, IUniformSourceFactory uniforms,
-                         TimeProvider clock)
+                         ServerEconomyEvents events, TimeProvider clock)
     {
+        _events = events;
         _store = store;
         _content = content;
         _config = config;
@@ -73,8 +77,8 @@ public sealed class SummonService
 
         await using var c = await _store.OpenAsync(ct).ConfigureAwait(false);
         await using var tx = await c.BeginTransactionAsync(ct).ConfigureAwait(false);
-        if (!await SummonStore.LockAccountAsync(c, tx, player, ct).ConfigureAwait(false))
-            throw ApiException.Of(ErrorCodes.UNAUTHENTICATED, "No account for this token.");
+        int ageGate = await SummonStore.LockAccountAsync(c, tx, player, ct).ConfigureAwait(false)
+            ?? throw ApiException.Of(ErrorCodes.UNAUTHENTICATED, "No account for this token.");
         var pity = await SummonStore.LockPityAsync(c, tx, player, banner, ct).ConfigureAwait(false);
 
         // 06 rule, tickets first: a diamond pull while holding enough tickets is a stale client. Checked before the funds
@@ -110,6 +114,11 @@ public sealed class SummonService
 
         if (charged == Currency.DIAMOND) diamonds -= cost;
         else tickets -= cost;
+        await ServerEconomyEvents.WriteAsync(c, tx, new[]
+        {
+            _events.CurrencyChanged(player, ageGate, charged.ToString(), -cost, charged == Currency.DIAMOND ? diamonds : tickets,
+                                    nameof(CurrencyReason.SUMMON), requestId),
+        }, ct).ConfigureAwait(false);
         var body = new SummonPullResponse(
             requestId, banner.ToString(), count,
             roll.Results.Select(r => new SummonPullDto(r.ItemId, RarityCodes.Of(r.Rarity), r.IsNew, r.LevelBefore, r.LevelAfter, r.CopiesAfter,

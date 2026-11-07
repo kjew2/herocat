@@ -125,10 +125,74 @@ namespace HeroCat.Runtime.Tests
             var outcomes = s.Runner.Inbox.ClaimAllAsync().GetAwaiter().GetResult();
             Assert.That(outcomes.Select(o => (o.InboxItemId, o.Ok, o.ErrorCode)), Is.EqualTo(new[]
             {
-                ("ibx_a", true, (string)null), ("ibx_b", true, null), ("ibx_c", false, InboxRejectReasons.INBOX_ITEM_GRANT_UNSUPPORTED),
+                ("ibx_a", true, (string)null), ("ibx_b", true, null), ("ibx_c", false, InboxRejectReasons.INBOX_BAD_GRANT),
             }));
             Assert.That(s.Sim.State.Wallet.Diamond, Is.EqualTo(dia + 300));
             Assert.That(s.Runner.Inbox.ClaimAllAsync().GetAwaiter().GetResult(), Is.Empty, "nothing left to claim");
+        }
+
+        [Test]
+        public void ACreditedClaim_TracksOneInboxClaimed_WithEveryField_BulkOnlyForClaimAll()   // 06 section 13, issue #177
+        {
+            var s = TestSession.Open();
+            var inbox = LocalInbox(s);
+            long now = s.Clock.NowServerSeconds;
+            inbox.Add(Item("ibx_iap", 2400, type: "IAP") with { CreatedAtServerSeconds = now - 600 });
+            inbox.Add(Item("ibx_a", 100) with { CreatedAtServerSeconds = now - 7200 });
+            inbox.Add(Item("ibx_b", 200));   // the list did not say when it was created
+            var flow = s.Runner.Inbox;
+            flow.RefreshAsync().GetAwaiter().GetResult();
+            s.Clock.Advance(5);
+
+            Assert.That(flow.ClaimAsync("ibx_iap").GetAwaiter().GetResult().Applied, Is.True);
+            var one = s.Analytics.Events.Single(e => e.Name == "inbox_claimed");
+            Assert.That(one.Props.Keys, Is.EquivalentTo(new[] { "itemId", "type", "grants", "bulk", "ageSec" }));
+            Assert.That((one.Props["itemId"], one.Props["type"], one.Props["bulk"], one.Props["ageSec"]), Is.EqualTo(("ibx_iap", "IAP", false, (object)605L)));
+            var grants = (List<Dictionary<string, object>>)one.Props["grants"];
+            Assert.That(grants.Single(), Is.EquivalentTo(new Dictionary<string, object> { ["kind"] = "currency", ["id"] = "DIAMOND", ["amount"] = 2400L }));
+
+            Assert.That(flow.ClaimAsync("ibx_iap").GetAwaiter().GetResult().Applied, Is.False);
+            Assert.That(s.Analytics.Count("inbox_claimed"), Is.EqualTo(1), "a reconciled double claim credits nothing and tracks nothing");
+
+            flow.ClaimAllAsync().GetAwaiter().GetResult();
+            var bulk = s.Analytics.Events.Where(e => e.Name == "inbox_claimed").Skip(1).ToList();
+            Assert.That(bulk.Select(e => (e.Props["itemId"], e.Props["type"], e.Props["bulk"], e.Props["ageSec"])), Is.EqualTo(new[]
+            {
+                ((object)"ibx_a", (object)"MAIL", (object)true, (object)7205L), ("ibx_b", "MAIL", true, null),
+            }));
+        }
+
+        [Test]
+        public void AnItemGrant_AddsCopies_AndTracksOneItemAcquiredPerLine_WithMailAndTheClaimRequestId()   // 00 decision 116, issue #271
+        {
+            var s = TestSession.Open();
+            var svc = new FlakyInbox(new InboxItem("ibx_w", new InboxGrantPayload("ibx_w", new[]
+            {
+                new GrantLine("item", "weapon_m_01", 2), new GrantLine("item", "weapon_m_01", 1),
+            }, CurrencyReason.ADMIN), InboxRules.NeverExpires));
+            var flow = new InboxFlow(svc, () => s.Sim.State, s.Runner.Issue, () => s.Clock.NowServerSeconds, new FakeMonoClock(),
+                                     analytics: s.Analytics, content: () => s.Sim.Db);
+            var o = flow.ClaimAsync("ibx_w").GetAwaiter().GetResult();
+            Assert.That((o.Ok, o.Applied), Is.EqualTo((true, true)));
+            Assert.That(s.Sim.State.Weapons.Items["weapon_m_01"].Copies, Is.EqualTo(3));
+            var rows = s.Analytics.Events.Where(e => e.Name == "item_acquired" && (string)e.Props["acquireReason"] == "MAIL").ToList();
+            var db = s.Sim.Db;
+            Assert.That(rows.Select(e => (e.Props["itemId"], e.Props["isNew"], e.Props["copiesAfter"], e.Props["levelBefore"], e.Props["levelAfter"],
+                                          e.Props["acquireReason"], e.Props["requestId"])), Is.EqualTo(new[]
+            {
+                ((object)"weapon_m_01", (object)true, (object)2, (object)0, (object)db.DupeLevel(2), (object)"MAIL", (object)svc.RequestIds.Single()),
+                ("weapon_m_01", false, 3, db.DupeLevel(2), db.DupeLevel(3), "MAIL", svc.RequestIds.Single()),
+            }));
+        }
+
+        [Test]
+        public void AClaimOfAnUnlistedItem_HasNoTypeOrAge()
+        {
+            var s = TestSession.Open();
+            LocalInbox(s).Add(Item("ibx_x", 50) with { CreatedAtServerSeconds = s.Clock.NowServerSeconds });
+            Assert.That(s.Runner.Inbox.ClaimAsync("ibx_x").GetAwaiter().GetResult().Applied, Is.True);   // no RefreshAsync first
+            var e = s.Analytics.Events.Single(x => x.Name == "inbox_claimed");
+            Assert.That((e.Props["type"], e.Props["ageSec"]), Is.EqualTo(((object)null, (object)null)));
         }
 
         /// <summary>A server that fails as offline <see cref="Failures"/> times, then claims; it records every requestId.</summary>

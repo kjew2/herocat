@@ -7,7 +7,9 @@ using HeroCat.Runtime.Save;
 using HeroCat.Runtime.Services;
 using HeroCat.Runtime.Session;
 using HeroCat.Sim.Commands;
+using HeroCat.Sim.Content;
 using HeroCat.Sim.State;
+using HeroCat.Sim.Summons;
 
 namespace HeroCat.Runtime.Inbox
 {
@@ -47,6 +49,8 @@ namespace HeroCat.Runtime.Inbox
         readonly Action _afterApply;
         readonly Func<TimeSpan, CancellationToken, Task> _delay;
         readonly Random _jitter;
+        readonly IAnalytics _analytics;
+        readonly Func<ContentDb> _content;
         readonly Dictionary<string, string> _requestIds = new Dictionary<string, string>(StringComparer.Ordinal);
         string _claimAllRequestId;
         List<InboxItem> _items = new List<InboxItem>();
@@ -54,15 +58,21 @@ namespace HeroCat.Runtime.Inbox
         /// <summary>The session's flow: its inbox service, the live state, Issue, and a publish plus save after each grant.</summary>
         public InboxFlow(SessionRunner runner)
             : this(runner?.Services.Inbox, () => runner.Sim.State, runner.Issue, () => runner.Services.Clock.NowServerSeconds, runner.Mono,
-                   () => { runner.PublishDrained(); runner.SaveNow(SaveTrigger.Inbox); })
+                   () => { runner.PublishDrained(); runner.SaveNow(SaveTrigger.Inbox); }, analytics: runner?.Services.Analytics,
+                   content: () => runner.Sim.Db)
         {
         }
 
         /// <param name="delay">Waits between retries (tests pass one that advances a fake monotonic clock).</param>
         /// <param name="jitter">Full-jitter source for the backoff (01 section 5.2).</param>
+        /// <param name="analytics">Where 06 section 13's <c>inbox_claimed</c> goes; null sends nothing.</param>
+        /// <param name="content">The sim's content, for the <c>item_acquired</c> rows of item lines; null sends none of them.</param>
         public InboxFlow(IInboxService service, Func<GameState> state, Func<Command, ApplyResult> issue, Func<long> nowServerSeconds,
-                         IMonoClock mono, Action afterApply = null, Func<TimeSpan, CancellationToken, Task> delay = null, Random jitter = null)
+                         IMonoClock mono, Action afterApply = null, Func<TimeSpan, CancellationToken, Task> delay = null, Random jitter = null,
+                         IAnalytics analytics = null, Func<ContentDb> content = null)
         {
+            _analytics = analytics;
+            _content = content;
             _svc = service ?? throw new ArgumentNullException(nameof(service));
             _state = state ?? throw new ArgumentNullException(nameof(state));
             _issue = issue ?? throw new ArgumentNullException(nameof(issue));
@@ -119,7 +129,7 @@ namespace HeroCat.Runtime.Inbox
                 return InboxClaimOutcome.Fail(inboxItemId, e.Code, retryable);
             }
             _requestIds.Remove(inboxItemId);
-            var outcome = ApplyGrant(inboxItemId, result.Grant);
+            var outcome = ApplyGrant(inboxItemId, result.Grant, bulk: false, requestId);
             if (outcome.Applied) _afterApply?.Invoke();
             return outcome;
         }
@@ -149,7 +159,7 @@ namespace HeroCat.Runtime.Inbox
                     outcomes.Add(InboxClaimOutcome.Fail(row.InboxItemId, row.ErrorCode, false));
                     continue;
                 }
-                var o = ApplyGrant(row.InboxItemId, row.Grant);
+                var o = ApplyGrant(row.InboxItemId, row.Grant, bulk: true, requestId);
                 applied |= o.Applied;
                 outcomes.Add(o);
             }
@@ -157,18 +167,70 @@ namespace HeroCat.Runtime.Inbox
             return outcomes;
         }
 
-        /// <summary>Applies a confirmed grant unless the id is already claimed (01 section 8.9 step 6).</summary>
-        InboxClaimOutcome ApplyGrant(string inboxItemId, InboxGrantPayload grant)
+        /// <summary>
+        /// Applies a confirmed grant unless the id is already claimed (01 section 8.9 step 6). A grant this call credits
+        /// sends 06 section 13's <c>inbox_claimed</c> (a reconciled double claim credits nothing and sends nothing), then one
+        /// 04 section 13 <c>item_acquired</c> per item line (acquireReason MAIL, this claim's requestId; 00 decision 116).
+        /// </summary>
+        InboxClaimOutcome ApplyGrant(string inboxItemId, InboxGrantPayload grant, bool bulk, string requestId)
         {
+            var listed = inboxItemId == null ? null : _items.Find(i => i.Id == inboxItemId);   // before Forget drops it
             Forget(inboxItemId);
             if (grant == null) return InboxClaimOutcome.Fail(inboxItemId, InboxRejectReasons.INBOX_BAD_GRANT, false);
             if (grant.InboxItemId != inboxItemId) grant = grant with { InboxItemId = inboxItemId };
             if (_state().Inbox.ClaimedIds.Contains(inboxItemId))
                 return new InboxClaimOutcome(inboxItemId, true, false, null, false, grant);
+            var before = CopiesBefore(grant);
             var r = _issue(new ApplyInboxGrant(grant));
-            if (r.Ok) return new InboxClaimOutcome(inboxItemId, true, true, null, false, grant);
+            if (r.Ok)
+            {
+                TrackClaimed(inboxItemId, grant, listed, bulk);
+                TrackItems(grant, before, requestId);
+                return new InboxClaimOutcome(inboxItemId, true, true, null, false, grant);
+            }
             if (r.Reason == InboxRejectReasons.INBOX_ALREADY_APPLIED) return new InboxClaimOutcome(inboxItemId, true, false, null, false, grant);
             return InboxClaimOutcome.Fail(inboxItemId, r.Reason, false);
+        }
+
+        void TrackClaimed(string inboxItemId, InboxGrantPayload grant, InboxItem listed, bool bulk)
+        {
+            if (_analytics == null) return;
+            long? age = listed != null && listed.CreatedAtServerSeconds > 0 ? Math.Max(0, _now() - listed.CreatedAtServerSeconds) : (long?)null;
+            _analytics.Track(new AnalyticsEvents.InboxClaimed(inboxItemId, listed?.Type, grant.Lines, bulk, age));
+        }
+
+        /// <summary>The copies held of each item line's id before the grant (null when no analytics or content to read them).</summary>
+        Dictionary<string, int> CopiesBefore(InboxGrantPayload grant)
+        {
+            var db = _content?.Invoke();
+            if (_analytics == null || db == null || grant.Lines == null) return null;
+            Dictionary<string, int> copies = null;
+            foreach (var line in grant.Lines)
+            {
+                if (line == null || line.Kind != HeroCat.Sim.Simulation.GrantKindItem || line.Id == null || !CollectionRules.TryKindOf(db, line.Id, out var kind)) continue;
+                copies ??= new Dictionary<string, int>(StringComparer.Ordinal);
+                if (copies.ContainsKey(line.Id)) continue;
+                CollectionRules.For(_state(), kind).Items.TryGetValue(line.Id, out var item);
+                copies[line.Id] = item != null ? Math.Max(0, item.Copies) : 0;
+            }
+            return copies;
+        }
+
+        /// <summary>One item_acquired per applied item line, the copies walked in line order as the sim applied them.</summary>
+        void TrackItems(InboxGrantPayload grant, Dictionary<string, int> copies, string requestId)
+        {
+            var db = _content?.Invoke();
+            if (copies == null || db == null) return;
+            int max = PullAlgorithm.MaxCopies(db);
+            foreach (var line in grant.Lines)
+            {
+                if (line == null || line.Kind != HeroCat.Sim.Simulation.GrantKindItem || !copies.TryGetValue(line.Id, out int had)) continue;
+                CollectionRules.TryKindOf(db, line.Id, out var kind);
+                int after = (int)Math.Min(max, had + Math.Min(line.Amount, max));
+                copies[line.Id] = after;
+                _analytics.Track(new AnalyticsEvents.ItemAcquired(kind, line.Id, CollectionRules.RarityOf(db, kind, line.Id), had == 0, after,
+                                                                  db.DupeLevel(had), db.DupeLevel(after), AnalyticsEvents.ItemAcquired.MAIL, requestId));
+            }
         }
 
         async Task<T> WithRetry<T>(Func<Task<T>> call, CancellationToken ct)

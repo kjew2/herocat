@@ -88,7 +88,7 @@ namespace HeroCat.Runtime.Tests
                 var t = new AuthTokens
                 {
                     PlayerId = Player, AccessToken = "eyJ.a.b", RefreshToken = "r1.abc", AccessExpiresAt = 1_793_670_800,
-                    PendingGuestRequestId = "0123456789abcdef0123456789abcdef",
+                    PendingGuestRequestId = "0123456789abcdef0123456789abcdef", RegisteredKeyId = "00112233aabbccdd",
                 };
                 store.Save(t);
                 Assert.That(new SecureTokenStore(secure).Load(), Is.EqualTo(t), "another process reads the same record");
@@ -113,6 +113,34 @@ namespace HeroCat.Runtime.Tests
             var k = DeviceKey.LoadOrCreate(secure);
             Assert.That(k, Has.Length.EqualTo(32));
             Assert.That(DeviceKey.LoadOrCreate(new FileSecureStore(Path.Combine(Dir, "secure"))), Is.EqualTo(k));
+        }
+
+        [Test]
+        public void TheDeviceKey_IsHmacKeyBytesOfCsprngOutput_AndAWrongLengthOneIsReplaced()   // 02 section 10.1
+        {
+            var a = DeviceKey.Create();
+            var b = DeviceKey.Create();
+            Assert.That(a, Has.Length.EqualTo(DeviceKey.KeyBytes).And.Length.EqualTo(32), "HMAC_KEY_BYTES");
+            Assert.That(a, Is.Not.EqualTo(b));
+            Assert.That(a.Distinct().Count(), Is.GreaterThan(8), "not a constant fill");
+
+            var secure = new MemorySecureStore();
+            secure.Set(DeviceKey.Key, new byte[16]);
+            var k = DeviceKey.LoadOrCreate(secure);
+            Assert.That(k, Has.Length.EqualTo(32));
+            Assert.That(secure.Get(DeviceKey.Key), Is.EqualTo(k));
+        }
+
+        [Test]
+        public void TheKeyId_IsTheFirst16HexOfSha256_StableAndDistinct()
+        {
+            var key = Enumerable.Range(1, 32).Select(i => (byte)i).ToArray();
+            string want;
+            using (var sha = System.Security.Cryptography.SHA256.Create())
+                want = string.Concat(sha.ComputeHash(key).Take(8).Select(x => x.ToString("x2")));
+            Assert.That(DeviceKey.KeyId(key), Is.EqualTo(want));
+            Assert.That(DeviceKey.KeyId(key), Does.Match("^[0-9a-f]{16}$"));
+            Assert.That(DeviceKey.KeyId(DeviceKey.Create()), Is.Not.EqualTo(want));
         }
 
         // ------------------------------------------------------------------------------------------- archive

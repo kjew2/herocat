@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using HeroCat.Runtime.Boot;
@@ -214,6 +215,29 @@ namespace HeroCat.Runtime.Tests
             Assert.That(r.ContentUpdates.Version, Is.EqualTo(newest));
             Assert.That(r.Sim.Db, Is.SameAs(db0), "the sim's ContentDb is the same object after a refresh announcing a newer bundle");
             Assert.That(r.Runner.Sim.Db, Is.SameAs(db0));
+        }
+
+        [Test]
+        public void ABadBundle_TracksOneContentUpdateFailed_OnTheMainThread()   // 09 section 10.3 step 5, issue #298 item 3
+        {
+            const string bad = "2099.01.01";
+            var staging = new MemoryContentStaging();
+            staging.Cdn[bad] = Bundles.Make(bad, corrupt: true, touch: "skills");
+            var o = Boot(new ScriptedConfig(ScriptedConfig.Cfg(content: Bundles.Pointer(bad))), new FakeMonoClock());
+            o.Runner.Dispatcher = new MainThreadDispatcher();
+            o.ContentUpdates = db => new ContentUpdater(staging, db, Bundles.RunningManifest, null);
+            var r = BootFlow.Run(o);
+            Assert.That(r.ContentUpdates.Check(r.Config).Wait(10000), Is.True);
+            Assert.That(r.ContentUpdates.State, Is.EqualTo(ContentUpdateState.Failed));
+            var analytics = (MemoryAnalytics)r.Services.Analytics;
+            Assert.That(analytics.Count("content_update_failed"), Is.Zero, "posted, not tracked on the staging thread");
+            r.Runner.OnFrame();
+            var e = analytics.Events.Single(x => x.Name == "content_update_failed");
+            var first = r.ContentUpdates.LastErrors[0];
+            Assert.That(e.Props, Is.EquivalentTo(new Dictionary<string, object> { ["version"] = bad, ["code"] = first.Code, ["location"] = first.Location }));
+            Assert.That(r.ContentUpdates.Check(r.Config).IsCompleted, Is.True);
+            r.Runner.OnFrame();
+            Assert.That(analytics.Count("content_update_failed"), Is.EqualTo(1), "a failed version is not retried, so not reported again");
         }
 
         [Test]

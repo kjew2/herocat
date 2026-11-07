@@ -106,6 +106,22 @@ namespace HeroCat.Runtime.Tests
         }
 
         [Test]
+        public void Failed_IsRaisedOncePerBadBundle_WithItsFirstError()   // 09 section 10.3 step 5, issue #298
+        {
+            var staging = new MemoryContentStaging();
+            staging.Cdn[V] = Bundles.Make(V, corrupt: true, touch: "skills");
+            var u = Updater(staging);
+            var seen = new List<(string, ContentError)>();
+            u.Failed += (v, e) => { lock (seen) seen.Add((v, e)); };
+            u.Failed += (v, e) => throw new InvalidOperationException("a broken reporter");
+            Assert.That(u.Check(Offer(V)).Wait(10000), Is.True, "a throwing handler does not fault the staging task");
+            Assert.That(u.Check(Offer(V)).IsCompleted, Is.True);
+            Assert.That(seen, Has.Count.EqualTo(1));
+            Assert.That(seen[0].Item1, Is.EqualTo(V));
+            Assert.That((seen[0].Item2.Code, seen[0].Item2.Location), Is.EqualTo((u.LastErrors[0].Code, u.LastErrors[0].Location)));
+        }
+
+        [Test]
         public void ADownloadFailure_LeavesTheRunningContent()
         {
             var staging = new MemoryContentStaging();   // the fake CDN has nothing

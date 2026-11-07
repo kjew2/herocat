@@ -95,6 +95,8 @@ currency.ticket_summon_skill.name,Skill Summon Tickets,,,,40,false,
 currency.ticket_summon_weapon.name,Weapon Summon Tickets,,,,40,false,
 err.account_banned.body,This account has been suspended. Contact support to appeal.,,,,0,false,
 err.account_banned.title,Account suspended,,,,32,false,
+err.age_gate_locked.body,Your age setting can't be changed in the game. Contact support if it is wrong.,,,,0,false,
+err.age_gate_locked.title,Can't change this,,,,32,false,
 err.banner_closed.body,This summon is no longer available.,,,,0,false,
 err.banner_closed.title,Summon closed,,,,32,false,
 err.client_too_old.body,A new version is available. Update the game to keep playing.,,,,0,false,
@@ -103,14 +105,28 @@ err.content_corrupt.body,The game data is damaged. Reinstall the game or contact
 err.content_corrupt.title,Game data damaged,,,,32,false,
 err.content_too_old.body,New game data is available. Restart the game to download it.,,,,0,false,
 err.content_too_old.title,Update needed,,,,32,false,
+err.display_name_blocked.body,That name isn't allowed. Try a different one.,,,,0,false,
+err.display_name_blocked.title,Name not allowed,,,,32,false,
+err.dungeon_locked.body,Clear the floor before this one first.,,,,0,false,
+err.dungeon_locked.title,Floor locked,,,,32,false,
 err.dungeon_seed_cap.body,You've started too many dungeon runs. Try again later.,,,,0,false,
 err.dungeon_seed_cap.title,Try again later,,,,32,false,
+err.dungeons_disabled.body,Dungeons are paused for a moment. Try again later.,,,,0,false,
+err.dungeons_disabled.title,Dungeons paused,,,,32,false,
 err.export_rate_limited.body,You've requested your data recently. Try again later.,,,,0,false,
 err.export_rate_limited.title,Try again later,,,,32,false,
 err.iap_pending.body,Your purchase is waiting for approval. It will arrive when it is approved.,,,,0,false,
 err.iap_pending.title,Purchase pending,,,,32,false,
+err.inbox_bad_grant.body,This reward couldn't be read. Contact support if it stays in your inbox.,,,,0,false,
+err.inbox_bad_grant.title,Can't claim this reward,,,,32,false,
+err.inbox_expired.body,This reward expired before it was claimed.,,,,0,false,
+err.inbox_expired.title,Reward expired,,,,32,false,
+err.inbox_not_found.body,This reward is no longer in your inbox.,,,,0,false,
+err.inbox_not_found.title,Reward not found,,,,32,false,
 err.insufficient_funds.body,You don't have enough diamonds for this.,,,,0,false,
 err.insufficient_funds.title,Not enough diamonds,,,,32,false,
+err.logout_unsynced.body,"Your latest progress couldn't be saved to the cloud. If you log out now, it stays only on this device.",,,,0,false,
+err.logout_unsynced.title,Progress not saved,,,,32,false,
 err.maintenance.body,The game is under maintenance. Please come back soon.,,,,0,false,
 err.maintenance.title,Maintenance,,,,32,false,
 err.net_offline.body,Check your connection. Your progress is saved on this device.,,,,0,false,
@@ -129,6 +145,8 @@ err.save_corrupt.body,Your save on this device can't be read. Restore it from th
 err.save_corrupt.title,Save can't be read,,,,32,false,
 err.save_rolled_back.body,Your progress was restored to an earlier point.,,,,0,false,
 err.save_rolled_back.title,Progress restored,,,,32,false,
+err.save_too_large.body,Your save couldn't be uploaded. Your progress is safe on this device. Contact support.,,,,0,false,
+err.save_too_large.title,Cloud save failed,,,,32,false,
 err.save_too_new.body,Your save is from a newer version. Update the game to keep playing.,,,,0,false,
 err.save_too_new.title,Update required,,,,32,false,
 err.sku_not_available.body,This offer is not available right now.,,,,0,false,
@@ -214,7 +232,6 @@ reject.exchange_limit_reached,Daily limit reached,,,,48,false,
 reject.fish_at_level_cap,Already the highest level,,,,48,false,
 reject.inbox_already_applied,Already claimed,,,,48,false,
 reject.inbox_bad_grant,This reward could not be read,,,,48,false,
-reject.inbox_item_grant_unsupported,Update the game to claim this reward,,,,48,false,
 reject.invalid_count,Invalid amount,,,,48,false,
 reject.invalid_stat,Unknown stat,,,,48,false,
 reject.invalid_target,Invalid target,,,,48,false,
@@ -298,6 +315,9 @@ scr.confirm.cancel,Cancel,,,,18,false,07 M0 screens
 scr.confirm.cost,"{0}: {1}, balance after {2}",,,,60,false,07 M0 screens
 scr.confirm.exit_body,Press back again to quit.,,,,160,false,07 M0 screens
 scr.confirm.exit_title,Exit Whisker Hero?,,,,28,false,07 M0 screens
+scr.confirm.logout_body,You can sign back in with your linked account.,,,,160,false,
+scr.confirm.logout_guest_body,"This guest account is not linked. If you log out, you can't get it back, even on this device.",,,,160,false,
+scr.confirm.logout_title,Log out?,,,,28,false,
 scr.confirm.ok,Confirm,,,,18,false,07 M0 screens
 scr.confirm.reset_body,This deletes your progress on this device.,,,,160,false,07 M0 screens
 scr.confirm.reset_title,Reset profile?,,,,28,false,07 M0 screens
@@ -740,3 +760,9 @@ reject.dungeon_floor_not_unlocked,Clear the previous floor first,,,,48,false,
 reject.boss_attempt_in_progress,Finish the boss fight first,,,,48,false,
 reject.nothing_to_sweep,Clear a floor first to sweep,,,,48,false,
 reject.invalid_dungeon,Unknown dungeon,,,,48,false,
+scr.common.feature_disabled,Temporarily unavailable. Try again later.,,,,48,false,07 live ops (01 section 8.12; issue #299)
+scr.main.maint_active,Maintenance: back in {0},,,,48,false,07 live ops (01 section 8.12; issue #299)
+scr.main.maint_active_open,Maintenance in progress,,,,48,false,07 live ops (01 section 8.12; issue #299)
+scr.main.maint_scheduled,Maintenance starts in {0},,,,48,false,07 live ops (01 section 8.12; issue #299)
+scr.settings.update_ready,"Update ready, restarts on next launch",,,,48,false,07 live ops (01 section 8.12; issue #299)
+scr.settings.update_app,Update the app for new content,,,,48,false,07 live ops (01 section 8.12; issue #299)

@@ -387,6 +387,14 @@
       "text": "Account suspended"
     },
     {
+      "key": "err.age_gate_locked.body",
+      "text": "Your age setting can't be changed in the game. Contact support if it is wrong."
+    },
+    {
+      "key": "err.age_gate_locked.title",
+      "text": "Can't change this"
+    },
+    {
       "key": "err.banner_closed.body",
       "text": "This summon is no longer available."
     },
@@ -419,12 +427,36 @@
       "text": "Update needed"
     },
     {
+      "key": "err.display_name_blocked.body",
+      "text": "That name isn't allowed. Try a different one."
+    },
+    {
+      "key": "err.display_name_blocked.title",
+      "text": "Name not allowed"
+    },
+    {
+      "key": "err.dungeon_locked.body",
+      "text": "Clear the floor before this one first."
+    },
+    {
+      "key": "err.dungeon_locked.title",
+      "text": "Floor locked"
+    },
+    {
       "key": "err.dungeon_seed_cap.body",
       "text": "You've started too many dungeon runs. Try again later."
     },
     {
       "key": "err.dungeon_seed_cap.title",
       "text": "Try again later"
+    },
+    {
+      "key": "err.dungeons_disabled.body",
+      "text": "Dungeons are paused for a moment. Try again later."
+    },
+    {
+      "key": "err.dungeons_disabled.title",
+      "text": "Dungeons paused"
     },
     {
       "key": "err.export_rate_limited.body",
@@ -443,12 +475,44 @@
       "text": "Purchase pending"
     },
     {
+      "key": "err.inbox_bad_grant.body",
+      "text": "This reward couldn't be read. Contact support if it stays in your inbox."
+    },
+    {
+      "key": "err.inbox_bad_grant.title",
+      "text": "Can't claim this reward"
+    },
+    {
+      "key": "err.inbox_expired.body",
+      "text": "This reward expired before it was claimed."
+    },
+    {
+      "key": "err.inbox_expired.title",
+      "text": "Reward expired"
+    },
+    {
+      "key": "err.inbox_not_found.body",
+      "text": "This reward is no longer in your inbox."
+    },
+    {
+      "key": "err.inbox_not_found.title",
+      "text": "Reward not found"
+    },
+    {
       "key": "err.insufficient_funds.body",
       "text": "You don't have enough diamonds for this."
     },
     {
       "key": "err.insufficient_funds.title",
       "text": "Not enough diamonds"
+    },
+    {
+      "key": "err.logout_unsynced.body",
+      "text": "Your latest progress couldn't be saved to the cloud. If you log out now, it stays only on this device."
+    },
+    {
+      "key": "err.logout_unsynced.title",
+      "text": "Progress not saved"
     },
     {
       "key": "err.maintenance.body",
@@ -521,6 +585,14 @@
     {
       "key": "err.save_rolled_back.title",
       "text": "Progress restored"
+    },
+    {
+      "key": "err.save_too_large.body",
+      "text": "Your save couldn't be uploaded. Your progress is safe on this device. Contact support."
+    },
+    {
+      "key": "err.save_too_large.title",
+      "text": "Cloud save failed"
     },
     {
       "key": "err.save_too_new.body",
@@ -863,10 +935,6 @@
       "text": "This reward could not be read"
     },
     {
-      "key": "reject.inbox_item_grant_unsupported",
-      "text": "Update the game to claim this reward"
-    },
-    {
       "key": "reject.invalid_count",
       "text": "Invalid amount"
     },
@@ -1197,6 +1265,18 @@
     {
       "key": "scr.confirm.exit_title",
       "text": "Exit Whisker Hero?"
+    },
+    {
+      "key": "scr.confirm.logout_body",
+      "text": "You can sign back in with your linked account."
+    },
+    {
+      "key": "scr.confirm.logout_guest_body",
+      "text": "This guest account is not linked. If you log out, you can't get it back, even on this device."
+    },
+    {
+      "key": "scr.confirm.logout_title",
+      "text": "Log out?"
     },
     {
       "key": "scr.confirm.ok",
@@ -2965,6 +3045,30 @@
     {
       "key": "reject.invalid_dungeon",
       "text": "Unknown dungeon"
+    },
+    {
+      "key": "scr.common.feature_disabled",
+      "text": "Temporarily unavailable. Try again later."
+    },
+    {
+      "key": "scr.main.maint_active",
+      "text": "Maintenance: back in {0}"
+    },
+    {
+      "key": "scr.main.maint_active_open",
+      "text": "Maintenance in progress"
+    },
+    {
+      "key": "scr.main.maint_scheduled",
+      "text": "Maintenance starts in {0}"
+    },
+    {
+      "key": "scr.settings.update_ready",
+      "text": "Update ready, restarts on next launch"
+    },
+    {
+      "key": "scr.settings.update_app",
+      "text": "Update the app for new content"
     }
   ]
 }

@@ -61,7 +61,10 @@ public static class ServerHost
     public static WebApplication BuildApi(string[] args)
     {
         var builder = WebApplication.CreateBuilder(args);
+        // The key secrets (specs/08 section 9.3, issue #272): only the api holds keys.
+        builder.Configuration.AddHeroCatSecrets();
         AddCore(builder.Services, builder.Configuration, ServerRole.Api);
+        builder.Services.AddHostedService<SigningKeyRotationService>();
         builder.Services.AddControllers();
         builder.Services
             .AddAuthFeature()
@@ -130,6 +133,11 @@ public static class ServerHost
                 : ActivatorUtilities.CreateInstance<RedisDistributedLock>(sp));
         services.AddSingleton<SummonLock>();
         // Built on first use, so a process without keys still starts and serves /health (specs/08 section 9.3).
+        services.AddSingleton<IDataKeyUnwrapper>(sp =>
+        {
+            var o = sp.GetRequiredService<IOptions<ServerOptions>>().Value.Secrets;
+            return o.Provider == SecretProviders.Aws ? new AwsKmsDataKeyUnwrapper(o) : new NoDataKeyUnwrapper();
+        });
         services.AddSingleton(sp => new Lazy<ServerKeyRing>(() => ServerKeyRing.Create(sp)));
         services.AddSingleton(sp => sp.GetRequiredService<Lazy<ServerKeyRing>>().Value);
         services.AddSingleton(sp => new SecretProtector(sp.GetRequiredService<Lazy<ServerKeyRing>>()));

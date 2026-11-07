@@ -16,11 +16,9 @@ public static class InboxErrors
     /// <summary>410: <c>expires_at</c> reached before the claim.</summary>
     public const string INBOX_EXPIRED = "INBOX_EXPIRED";
     /// <summary>
-    /// 409: the item carries an item line (<c>kind: item</c>), which the client's <c>ApplyInboxGrant</c> cannot apply
-    /// until #271 decides how; the item stays unclaimed and nothing is written.
+    /// 409: a grant line that is not a known currency, or an item line whose id is not a weapon, skill or companion of the
+    /// active content, or whose amount is not a positive whole number (a server data error, logged).
     /// </summary>
-    public const string INBOX_ITEM_GRANT_UNSUPPORTED = "INBOX_ITEM_GRANT_UNSUPPORTED";
-    /// <summary>409: a grant line that is not a known currency with a positive whole amount (a server data error, logged).</summary>
     public const string INBOX_BAD_GRANT = "INBOX_BAD_GRANT";
 
     public static int Status(string code) => code switch

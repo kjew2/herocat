@@ -22,11 +22,16 @@ Depends on: 00 (all constants and names), 02 (`GameState` fields this spec reads
 ```csharp
 public sealed partial class Simulation
 {
-    public Simulation(IContentDb content, GameState state, IEventSink events);
-    public void Tick();                 // exactly one tick, TICK_HZ per second of game time
-    public void Advance(int ticks);     // Tick() repeated; commands cannot interleave
+    public Simulation(GameState state, ContentDb db);
+    public ApplyResult Apply(Command cmd);          // validate, mutate, emit; a reject changes nothing (01 section 2.2)
+    public void Advance(int ticks);                 // runs `ticks` ticks (1 / TICK_HZ s each); commands cannot interleave
+    public IReadOnlyList<Event> DrainEvents();      // moves the events buffered since the last drain out
+    public Snapshot GetSnapshot();                  // taken at the end of the last Advance or Apply
+    public CombatEventMask CombatEvents { get; set; } = CombatEventMask.Default;   // which per-tick combat events are emitted
 }
 ```
+
+There is no public `Tick()`: one tick is the private body of `Advance`, written `Tick()` below. Events go into the sim's own buffer (capacity `EVENT_BUFFER_MAX`, kills coalesced past `EVENT_COALESCE_AT`, 01 section 2.3) and the caller drains it; there is no event sink. `CombatEventMask` (section 1 goal 4, criterion 19) gates the per-tick cosmetic events before they are allocated: `Default` is `EnemySpawned | FishMissileHit | TapZapped`; `HitLanded`, `SkillCast` and `CompanionAbilityUsed` are opt-in (the client sets `All`, 07 section 4.3), and `None` is the null sink. Milestone events (kills, stage, boss, currency) are never masked, and masking changes no state.
 
 Order inside one tick. The order is a contract: tests in 10 assert it, and the server re-simulator (08) relies on it.
 

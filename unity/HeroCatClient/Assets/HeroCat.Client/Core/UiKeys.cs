@@ -18,6 +18,7 @@ namespace HeroCat.Client.Core
         public const string NeedMore = "scr.common.need_more";            // "Need {0} more"
         public const string Back = "scr.common.back";
         public const string Close = "scr.common.close";
+        public const string FeatureDisabled = "scr.common.feature_disabled";   // a kill switch is off (01 section 8.12 step 1)
 
         // SCR_BOOT
         public const string BootTitle = "scr.boot.title";
@@ -56,6 +57,15 @@ namespace HeroCat.Client.Core
             MainTab.Quests => TabQuests,
             _ => TabShop,
         };
+
+        // SCR_MAIN maintenance banner (01 section 8.12 step 4, 08 section 8.4)
+        public const string MaintActive = "scr.main.maint_active";            // "Maintenance: back in {0}"
+        public const string MaintActiveOpen = "scr.main.maint_active_open";   // no end announced
+        public const string MaintScheduled = "scr.main.maint_scheduled";      // "Maintenance starts in {0}"
+
+        // SCR_SETTINGS content update row (01 section 8.12 step 2, 09 section 10.3 step 3)
+        public const string SettingsUpdateReady = "scr.settings.update_ready";
+        public const string SettingsUpdateApp = "scr.settings.update_app";
 
         // Fish Board
         public const string FishRelease = "scr.main.fish_release", FishReleaseMax = "scr.main.fish_release_max", FishMergeAll = "scr.main.fish_merge_all";

@@ -59,7 +59,7 @@ public sealed class AnalyticsController : ControllerBase
         int.TryParse(HttpContext.User.FindFirstValue(Caller.AgeClaim), NumberStyles.Integer, CultureInfo.InvariantCulture, out int age);
         var ctx = new IngestContext(
             AnalyticsEventRules.HashPlayerId(player, _options.Analytics.RequireSalt()), AnalyticsEventRules.EnvelopeAgeGate(age),
-            _options.Analytics.RequireEnv(), now,
+            _options.RequireEnv(), now,
             TimeSpan.FromDays(limits.AnalyticsEventMaxAgeDays > 0 ? limits.AnalyticsEventMaxAgeDays : 30),
             TimeSpan.FromSeconds(limits.ClockMaxSkewAcceptSeconds > 0 ? limits.ClockMaxSkewAcceptSeconds : 120),
             limits.AnalyticsPropsMaxBytes > 0 ? limits.AnalyticsPropsMaxBytes : 4096);

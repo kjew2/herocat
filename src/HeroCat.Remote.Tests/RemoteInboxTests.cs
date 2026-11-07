@@ -79,6 +79,7 @@ namespace HeroCat.Remote.Tests
             Assert.That(items.Select(i => (i.Id, i.Type)), Is.EqualTo(new[] { ("ibx_iap", "IAP"), ("ibx_comp", "COMPENSATION"), ("ibx_pkg2", "PACKAGE_DAILY") }));
             var iap = items[0];
             Assert.That(iap.ExpiresAtServerSeconds, Is.EqualTo(InboxRules.NeverExpires), "IAP never expires (expiresAt null)");
+            Assert.That(items.Select(i => i.CreatedAtServerSeconds), Is.EqualTo(new[] { 1793670000L, 1793600000L, 1793600000L }), "inbox_claimed.ageSec");
             Assert.That(iap.Args["sku"], Is.EqualTo("dia_3"));
             Assert.That((iap.TitleKey, iap.BodyKey), Is.EqualTo(("inbox.iap.title", "inbox.iap.body")));
             Assert.That(iap.Grant.Reason, Is.EqualTo(CurrencyReason.IAP));

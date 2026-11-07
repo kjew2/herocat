@@ -99,7 +99,7 @@ public static GameServices Build(BackendMode mode, ServicesOptions o)   // o: da
         Receipts = new ReceiptClient(api),
         Config   = new ConfigClient(api, cacheDir),
         Dungeons = new DungeonSeedClient(api),                       // POST /dungeon/seed
-        Analytics = new AnalyticsSinks(api),                         // Firebase + backend economy events (08); flushed in 3.1
+        Analytics = new AnalyticsSinks(api),                         // Firebase + backend economy events (08); flushed in 3.1 and 3.3
     };
 }
 ```
@@ -287,6 +287,8 @@ public sealed record InboxGrantPayload(string InboxItemId, GrantLine[] Lines, Cu
 public sealed record GrantLine(string Kind, string Id, long Amount);   // Kind: "currency" | "item"
 ```
 
+An item line (`Kind = "item"`, 00 decision 116) is `Amount` copies of the weapon, skill or companion `Id`; the banner comes from `CollectionRules.TryKindOf` (ids are table-prefixed). `ApplyInboxGrant` applies it through the summon item path: copies up to `DUPE_LVL_CUM[^1]` (160), each copy past it converted to the rarity's `DUPE_OVERFLOW_ROCK_CANDY` with the grant's reason, exactly as `ApplySummonResult` converts a pull; one `ItemAcquired` per line (`IsNew`, `LevelBefore`/`LevelAfter` from the copies, `OverflowRockCandy` the line's total); a new item's `FirstAcquiredServerTime` is the claim's virtual server time. The `OWN_*` achievements of each banner touched run, and weapon auto-equip runs when a weapon line was granted; quests do not count a grant (it is not a `SUMMON`). An unknown id or an amount outside `[1, 2^31 - 1]` rejects the whole grant `INBOX_BAD_GRANT`.
+
 This payload is the only summon contract (issue #13); 04 and 08 use it. `ApplySummonResult` is the only summon mutator in both modes (issue #6): it adds items and Rock Candy overflow, sets pity and banner level/EXP, and performs the debit. In Local mode it rejects `CannotAfford` if `Debits` are not covered, subtracts them, and sets `summon_<banner>.Counter = StreamCounterAfter` (so 00 contract 2's `Counter == 3 * TotalPulls` holds and a replay of the logged command is exact). In Remote mode it applies `Debits`, then replaces those balances with `BalancesAfter`, because the server ledger wins (00 section 4); if the local balance minus `Debits` disagreed with the server balance, Runtime emits the `summon_reconciled` analytics event (04 section 13).
 
 ### 2.6 Command log
@@ -339,6 +341,8 @@ public sealed class SessionRunner
         bus.Publish(sim.DrainEvents());
 
         if (dirty && (mono - lastSaveMono) / (double)MonoClock.Frequency >= AUTOSAVE_INTERVAL_SEC) SaveNow(SaveTrigger.Periodic);
+        if ((mono - lastUploadMono) / (double)MonoClock.Frequency >= ANALYTICS_UPLOAD_SEC)   // 02 section 14.2: upload only,
+        {   (svc.Analytics as IAnalyticsUpload)?.Upload(); lastUploadMono = mono; }        // no flush hook (06 section 13 windows stay open)
     }
 
     public void OnPause()  { SaveNow(SaveTrigger.Pause); svc.Analytics.Flush(); }
@@ -411,7 +415,7 @@ The client requests `Screen.sleepTimeout = NeverSleep` while on `SCR_MAIN` (idle
 | HTTP (`ApiClient`) | `async`/`await` on the thread pool via `HttpClient`; continuations marshalled back to main thread by Unity's `SynchronizationContext` | IO never blocks a frame. |
 | Cloud save upload | Thread pool; reads an already-encoded `byte[]`, never `GameState` | No shared mutable state crosses threads. |
 | Content bundle download and hash check | Thread pool, then an atomic swap on main thread at a safe point (section 8.12) | |
-| Analytics sink | Main thread enqueue, thread-pool flush | |
+| Analytics sink | Main thread enqueue, thread-pool flush and upload (`OnPause`, `OnQuit`, every `ANALYTICS_UPLOAD_SEC` of foreground time; 02 section 14.2) | |
 | Bot harness | One thread per bot, each with its own `Simulation` and `FakeClock` | Sim instances share nothing but the immutable `ContentDb`. |
 
 Rule: nothing off the main thread holds a reference to `GameState` or `Simulation`. Background work receives copies (`byte[]`, records) and returns results that are turned into commands on the main thread.
@@ -467,8 +471,11 @@ Responses are classified by `(status, code)`, code first (issue #30). 08's wire 
 | n/a | (timeout, `HTTP_TIMEOUT_S = 10`) | `Timeout` | Only if `Idempotent` | `NET_TIMEOUT`. |
 | 401 | `TOKEN_EXPIRED` | `AuthExpired` | Refresh token once (`POST /auth/refresh`), replay the request once | A second 401 -> `SCR_TITLE`. |
 | 401 | `UNAUTHENTICATED`, `TOKEN_REVOKED`, `TOKEN_REUSED` | `AuthExpired` | No | Clear tokens, `SCR_TITLE`. |
+| 400 | `DISPLAY_NAME_BLOCKED` | `Rejected` | No | Modal; the name field keeps the text. |
 | 402 | `INSUFFICIENT_FUNDS` | `Rejected` | No | Refresh balances; modal. |
 | 403 | `ACCOUNT_BANNED` | `Fatal` | No | Full screen with the appeal url from the body. |
+| 403 | `DUNGEON_LOCKED` | `Rejected` | No | Modal; the dungeon intent is dropped (8.8). |
+| 404, 410, 409 | `INBOX_NOT_FOUND`, `INBOX_EXPIRED`, `INBOX_BAD_GRANT` | `Rejected` (silent) | No | The row leaves the list (`InboxFlow` forgets it; the next list refresh agrees); `SCR_INBOX` may show the row's `err.*` line. |
 | 409 | `IDEMPOTENCY_IN_FLIGHT` | `Retryable` | After `retryAfterSec`, same `requestId` | None visible. |
 | 409 | `PAYMENT_MISMATCH` | `Rejected` (silent) | No | Refresh balances and re-quote (8.5.2 step 1); nothing charged. |
 | 409 | `SAVE_CONFLICT` | `Conflict` | No | Resolve per 02 section 9.3 (8.10). |
@@ -478,12 +485,15 @@ Responses are classified by `(status, code)`, code first (issue #30). 08's wire 
 | 409 | `INBOX_ALREADY_CLAIMED` | `Ok` (success-equivalent) | No | Apply the carried grants if the id is not in `Inbox.ClaimedIds` (8.9 step 6). |
 | 409 | `INBOX_NOT_AVAILABLE` | `Rejected` (silent) | No | Scheduled portion not yet available (08 section 3.2, issue #51); refresh the inbox list. |
 | 409 | `PROVIDER_ALREADY_LINKED` | `Rejected` | No | Account choice flow (8.13 step 4). |
+| 409 | `AGE_GATE_LOCKED` | `Rejected` | No | Modal. |
+| 413 | `SAVE_TOO_LARGE` | `Rejected` | No | Modal with the support id; the local save is kept. |
 | 409 | `BANNER_CLOSED`, `SKU_NOT_AVAILABLE` | `Rejected` | No | Modal. |
 | 426 | `CLIENT_TOO_OLD` | `Rejected` | No | Update-only block with store link. |
 | 429 | `RATE_LIMITED` | `Retryable` | Honour `retryAfterSec`, else backoff | None visible until retries are exhausted. |
 | 429 | `DUNGEON_SEED_CAP`, `EXPORT_RATE_LIMITED` | `Rejected` | No | Modal. |
 | 503 | `MAINTENANCE` | `Maintenance` | Poll `/config` every `MAINT_POLL_S` | Block screen (section 7). |
 | 503 | `SUMMON_DISABLED` | `Rejected` | No | Re-fetch config; the kill switch disables the button (8.12). |
+| 503 | `DUNGEONS_DISABLED` | `Rejected` | No | Re-fetch config; the kill switch disables the Dungeons tab and its buttons (8.12; issue #307). |
 | 503 | `STORE_UNAVAILABLE` | `Retryable` | Keep the pending receipt; `RECEIPT_RETRY_S` | None visible (8.9 step 4). |
 | 400 | `RECEIPT_INVALID` | `Rejected` | No | 8.9 step 4. |
 | 408, 425, 429, 502, 503, 504 | any other | `Retryable` | Honour `retryAfterSec` / `Retry-After` if present, else backoff schedule | |
@@ -526,7 +536,7 @@ Every user-visible failure maps to one of these classes. The class picks the pre
 | `Offline` | Non-blocking card in the action-strip position (07), auto-hides on reconnect; keeps the combat viewport clear | `NET_OFFLINE` | Automatic. |
 | `Timeout` / `ServerError` | Toast "Could not reach the server. Retrying..." then modal after retries exhausted with Retry / Later | `NET_TIMEOUT` (a summon timeout uses it too; there is no `SUMMON_TIMEOUT`), `SRV_5XX` | Button. |
 | `Rejected` (server) | Modal with a specific message | `INSUFFICIENT_FUNDS`, `RECEIPT_INVALID`, `PROVIDER_ALREADY_LINKED`, `CLIENT_TOO_OLD`, `CONTENT_TOO_OLD`, `BANNER_CLOSED`, `SUMMON_DISABLED`; client-side `IAP_PENDING` (store reports a deferred payment; the pending receipt is kept, 8.9) | Depends; `CLIENT_TOO_OLD` has only "Update". |
-| `Conflict` | Dedicated choice modal: the conflict modal (02 section 9.4) for `SAVE_CONFLICT`; [Restore from cloud] / [Reset profile] for `SAVE_CORRUPT` (local save unreadable, a cloud or backup copy exists); a rollback notice for `SAVE_ROLLED_BACK` | `SAVE_CONFLICT`, `SAVE_CORRUPT`, `SAVE_ROLLED_BACK` | Player chooses (rollback: acknowledge). |
+| `Conflict` | Dedicated choice modal: the conflict modal (02 section 9.4) for `SAVE_CONFLICT`; [Restore from cloud] / [Reset profile] for `SAVE_CORRUPT` (local save unreadable, a cloud or backup copy exists); a rollback notice for `SAVE_ROLLED_BACK`; [Log out anyway] / [Cancel] for client-side `LOGOUT_UNSYNCED` (8.13 step 1) | `SAVE_CONFLICT`, `SAVE_CORRUPT`, `SAVE_ROLLED_BACK`, `LOGOUT_UNSYNCED` | Player chooses (rollback: acknowledge). |
 | `Maintenance` | Full-screen block on `SCR_BOOT`/`SCR_TITLE` with the message from config and an ETA | `MAINTENANCE` | Automatic poll every `MAINT_POLL_S = 60`. |
 | `Fatal` | Full-screen with support id; app cannot continue | `SAVE_TOO_NEW`, `CONTENT_CORRUPT`, `ACCOUNT_BANNED` (appeal url) | Reinstall / contact support. |
 
@@ -804,10 +814,10 @@ sequenceDiagram
     F->>F: requestId; Pending.Dungeon = {requestId, kind, floor}; Save
     F->>API: {requestId, kind, floor, clientContentVersion}
     API-->>F: {seed, grantId, expiresAt}
-    F->>Sim: Apply(StartDungeon{kind, floor, seed, grantId})
+    F->>F: Pending = null
+    F->>Sim: Apply(StartDungeon{kind, floor, seed, grantId}); Save
     Sim->>Run: DungeonStarted; main-loop ticks run the fight on the temporary `dungeon_run` stream
     Sim->>F: DungeonCleared{kind, floor, rewards} (debits one ticket) or DungeonFailed (costs nothing)
-    F->>F: Pending = null; Save
     F->>API: (next save upload carries Dungeons.RecentRuns for seed correlation, 08)
 ```
 
@@ -815,8 +825,10 @@ sequenceDiagram
 2. Seeds come from the `IDungeonSeedService` seam (issue #25). MVP (`DungeonSeedClient`): `POST /dungeon/seed` returns a server seed bound to `(playerId, kind, floor, dayKey)` with `expiresAt = now + DUNGEON_SEED_TTL_S = 600`. The server records the issue in `dungeon_seeds` so the save upload can be checked (08). M0: `LocalDungeonSeedService` reads the next `dungeon` stream draw without advancing it and returns it with `localSeed = true`; `Apply(StartDungeon)` then consumes that one draw, so the service never writes state (as for summons, issue #6) and bots and M0 work without a server.
 3. `StartDungeon` (sim; ticked run model, issue #42): reject with 06 section 6.2's reasons: `(Locked, DUNGEON_LOCKED)` before the dungeon unlock, `(Locked, DUNGEON_FLOOR_NOT_UNLOCKED)` for a floor not yet unlocked, `(CannotAfford, NOT_ENOUGH_TICKET_<kind>)` without a ticket (for example `NOT_ENOUGH_TICKET_FISH_COIN`; issue #244), `(NotAvailable, DUNGEON_RUN_IN_PROGRESS)` if a run is already active, `(NotAvailable, BOSS_ATTEMPT_IN_PROGRESS)` during a boss fight. Else validate only: no ticket is spent at start (00 decision 16). Swap the combat context to the dungeon fight (`Combat.Mode = Dungeon`, 02 `Combat.DungeonRun`), reseed a *temporary* `dungeon_run` stream with the server seed (the persistent `dungeon` stream is untouched in MVP). `SCR_DUNGEON_RUN` replaces the combat viewport. The Fish Board is hidden and frozen for the run (issue #40): passive `FISH_BOARD_DPS_PCT` only, no fish missiles or Tap Zap, the tank keeps refilling, and board commands are rejected while `Combat.Mode == Dungeon` (05 owns the reason).
 4. The fight is one boss enemy per floor from `dungeon_floors` (09; `DungeonRun.EnemyIndex` is always 0 in MVP) run by the normal tick loop for at most `BOSS_TIME_TICKS`. Outcome `DungeonCleared` debits one ticket (`Wallet.Apply(-1, DUNGEON)`), grants the floor's reward table through `Wallet.Apply(..., DUNGEON)` and updates `Dungeons.BestFloor[kind]`; `DungeonFailed` grants nothing and costs nothing (00 decision 16). Either way the run is appended to `Dungeons.RecentRuns` (`{GrantId, Kind, Floor, Cleared}`, 02; issue #52) and `Combat.Mode = Stage` resumes at the same stage and kills.
-5. Sweep: `SweepDungeon(kind)` grants `RewardOf(kind, BestFloor)` instantly with no fight and debits one ticket; no seed needed (deterministic by content). Rejected `(NotAvailable, NOTHING_TO_SWEEP)` when `BestFloor == 0` (06). Works offline.
+5. Sweep: `SweepDungeon(kind)` grants `RewardOf(kind, BestFloor)` instantly with no fight and debits one ticket; no seed needed (deterministic by content). Rejected `(NotAvailable, NOTHING_TO_SWEEP)` when `BestFloor == 0` (06). Works offline. Blocked, like a new run, while the `dungeonsEnabled` kill switch is off (00 decision 114).
 6. Failure: seed request offline -> `NET_OFFLINE` banner, nothing spent. Seed request times out -> retry same `requestId`; the server replays the same seed. App dies mid-run -> on load `Combat.Mode == Dungeon` with a run in progress is abandoned (02 recovery rule P16): mode reset, nothing to refund because no ticket was spent. The server sees a seed issued with no matching `RecentRuns` entry and ignores it (expiry). Validation is correlation only in MVP (08 `DUNGEON_WITHOUT_SEED`; no replay, issue #52): the server matches `RecentRuns` clears to issued seeds, and soft-currency rewards stay bounded by 08's `GOLD_DELTA_BOUND` and `RESEARCH_WITHOUT_COINS` checks.
+
+As built (issue #146): `HeroCat.Runtime.Dungeons.DungeonFlow` (`SessionRunner.Dungeons`). `StartAsync(kind, floor)` refuses with the step 1 preconditions (`CheckStart`, the sim's own reasons, in the sim's order) and with `FEATURE_DISABLED` while `dungeonsEnabled` is off, before any intent or request. The intent is cleared together with `Apply(StartDungeon)`, not at the run's end: from then on the run is `Combat.DungeonRun` (P16 recovers a kill), and no save taken during a run carries Runtime bookkeeping that a command-log replay (08 section 7.3) cannot reproduce. A failure of the seed request that is retryable (offline, timeout, 5xx, `RATE_LIMITED`) keeps the intent and spends nothing; starting the same kind and floor again re-sends its `requestId`, so the server replays the same seed and a kill before the seed arrives cannot re-roll it. Another kind or floor replaces the intent, and P17 drops a stale one. A refusal (`DUNGEON_SEED_CAP`, `DUNGEON_LOCKED`, `CONTENT_TOO_OLD`, ...) drops the intent. A replayed grant whose `expiresAt` has passed is dropped and one fresh request is made. `Sweep(kind)` issues `SweepDungeon` and saves; it needs no service, so it works offline. While `dungeonsEnabled` is off it refuses with `(NotAvailable, FEATURE_DISABLED)` before issuing anything, so the kill switch stops every dungeon reward, sweeps included (00 decision 114; the sim never reads kill switches). The P16 abandon is tracked as `dungeon_run{outcome: abandoned}` by the save load. Remote mode uses `HeroCat.Remote.Services.DungeonSeedClient`.
 
 ### 8.9 IAP purchase -> receipt validation -> inbox -> claim
 
@@ -938,10 +950,10 @@ sequenceDiagram
 1. Config is fetched at boot (8.1 step 2) and re-fetched every `CONFIG_REFRESH_S = 1800` in the foreground and on every resume. Kill switches (`shopEnabled`, `summonEnabled[banner]`, `dungeonsEnabled`, `cloudSaveEnabled`, `adsEnabled`) apply **immediately**: a view-model reads `IConfigService.Flags` and disables the button with `FEATURE_DISABLED`. A kill switch never touches `GameState`.
 2. Content bundles apply **only at the next cold boot**, never mid-session (sibling 08 section 7 rule 1): kill times, catch-up arithmetic and the wall condition would change under a running sim. The downloaded bundle is validated (manifest hash, per-table hash, 09 validator) on the thread pool and marked ready; `SCR_SETTINGS` shows "Update ready, restarts on next launch". Exception: a bundle whose manifest sets `hot_apply: true` is swapped at a safe point (no modal open, not in a boss). The exporter (09) sets it only when the diff touches nothing but the four hot-apply tables of 00 contract 3: `localization`, `shop_products`, `shop_packages`, `inbox_templates` (issue #54). None is read by the sim; the Shop and Inbox view-models re-read their tables on swap. The manifest bool is the single source; config's `hotApplyTables` (08) only echoes the exporter's constant and the client does not act on it.
 3. `minClientVersion` above the running client -> `CLIENT_TOO_OLD` full block with store link, checked at boot and at every config refresh (a mid-session block waits for `SCR_MAIN` idle and saves first).
-4. Rollout buckets are computed by the server only (issue #31): `GET /config` returns the version for the caller's bucket when the request carries a valid JWT, and the non-rollout default otherwise. The client never hashes `playerId`; `rolloutPct` and `inBucket` in the response are informational. A guest with `playerId = null` gets the default until its first auth. `maintenance: {active, message, until}` blocks at boot and shows a banner mid-session with a countdown; at `until` the client re-fetches config.
+4. Rollout buckets are computed by the server only (issue #31): `GET /config` returns the version for the caller's bucket when the request carries a valid JWT, and the non-rollout default otherwise. The client never hashes `playerId`; `rolloutPct` and `inBucket` in the response are informational. A guest with `playerId = null` gets the default until its first auth. `maintenance: {active, messageKey, until}` (`messageKey` is a localization key, 08 section 6.1) blocks at boot and shows a banner mid-session with a countdown; at `until` the client re-fetches config.
 5. Server-side minimum content version per client version (09) means an old client is never handed a bundle it cannot parse.
 
-As built (issue #144): `RemoteConfigService` (HeroCat.Remote) is the `ConfigClient`: one `GET /config` attempt, never retried, bounded by `CONFIG_FETCH_TIMEOUT_S` (and `BootFlow` waits no longer than that whatever the service does); a good answer is cached under `persistentDataPath/config/` with its `serverTime`, and the cache counts as fresh while `|now - fetchedAt| < CONFIG_CACHE_MAX_AGE_S`. Only a live answer blocks boot for maintenance; a cached `maintenance.active` does not (offline play continues through a window, 08 section 8.4), while a cached `minClientVersion` still gates. `ConfigRefresher` (Runtime) runs the cadence from `SessionRunner.OnFrame`/`OnResume`: every `CONFIG_REFRESH_S`, every resume, every `MAINT_POLL_S` while maintenance is active and once at `until`; the maintenance banner shows during the window and from `MAINT_ANNOUNCE_S` before an announced one. `ContentUpdater` (Runtime) validates a downloaded bundle (manifest, per-table sha256, `E903`, `ContentDb.Build`) on the thread pool over the `IContentStaging` seam whose CDN implementation is issue #212, discards a failing one (not re-downloaded that session) and treats a bundle as hot only when its manifest sets `hot_apply` and its tables differ from the running set's only in the four allowlist tables; the hot tables reach the client as a `HotContentSet` beside the sim's `ContentDb`. A kill-switched banner refuses in `SummonFlow` before any intent is saved (`SummonError.Disabled`) and its buttons show `err.summon_disabled.title`.
+As built (issue #144): `RemoteConfigService` (HeroCat.Remote) is the `ConfigClient`: one `GET /config` attempt, never retried, bounded by `CONFIG_FETCH_TIMEOUT_S` (and `BootFlow` waits no longer than that whatever the service does); a good answer is cached under `persistentDataPath/config/` with its `serverTime`, and the cache counts as fresh while `|now - fetchedAt| < CONFIG_CACHE_MAX_AGE_S`. Only a live answer blocks boot for maintenance; a cached `maintenance.active` does not (offline play continues through a window, 08 section 8.4), while a cached `minClientVersion` still gates. `ConfigRefresher` (Runtime) runs the cadence from `SessionRunner.OnFrame`/`OnResume`: every `CONFIG_REFRESH_S`, every resume, every `MAINT_POLL_S` while maintenance is active and once at `until`; the maintenance banner shows during the window and from `MAINT_ANNOUNCE_S` before an announced one. `ContentUpdater` (Runtime) validates a downloaded bundle (manifest, per-table sha256, `E903`, `ContentDb.Build`) on the thread pool over the `IContentStaging` seam whose CDN implementation is issue #212, discards a failing one (not re-downloaded that session) and treats a bundle as hot only when its manifest sets `hot_apply` and its tables differ from the running set's only in the four allowlist tables; the hot tables reach the client as a `HotContentSet` beside the sim's `ContentDb`. A kill-switched banner refuses in `SummonFlow` before any intent is saved (`SummonError.Disabled`) and its buttons show `err.summon_disabled.title`. The client side (issue #299; 07 sections 4.3, 4.20 and 16): the maintenance banner and the Shop and Dungeons kill switches on `SCR_MAIN`, the mid-session `CLIENT_TOO_OLD` block with config's `storeUrls`, `SCR_SETTINGS`' update row, and the hot apply at a safe point published to the Shop and Inbox view-models. A kill-switched tab toasts `scr.common.feature_disabled`; `FEATURE_DISABLED` is not a wire code in section 7.
 
 ### 8.13 Logout and account switch
 
@@ -966,13 +978,14 @@ sequenceDiagram
     Boot->>U: SCR_TITLE: Sign in with Apple / Google / continue as guest
 ```
 
+0. The player confirms first (07 section 4.20 `SCR_CONFIRM`); for a guest with no linked provider the confirmation warns that logout abandons the account (00 decision 117): the server releases the device on `POST /auth/logout`, so the next `/auth/guest` from this device makes a new guest, and nothing can sign back into the old one.
 1. Logout requires the current save to be uploaded (await up to `LOGOUT_UPLOAD_TIMEOUT_S = 10`). If it fails, the modal `LOGOUT_UNSYNCED` warns that unsynced progress on this device will be unavailable on other devices and offers "Log out anyway" / "Cancel".
 2. Tokens are cleared from secure storage; the local save directory is archived under the old `playerId` (not deleted) for `ARCHIVE_KEEP_DAYS = 30` so a mistaken logout is recoverable from `SCR_TITLE` ("Found a local save for another account").
 3. `SCR_TITLE` sign-in: Apple / Google Play Games -> `POST /auth/link-login`; the server returns the `playerId` for that platform account. Boot continues at 8.1 step 4 with no local save, so the cloud copy is downloaded.
 4. Linking a guest to a platform account that already owns a different `playerId` is the `409 PROVIDER_ALREADY_LINKED` case (`details.otherSummary`, 08): the modal shows both `SaveSummary` cards (this device's guest vs the account's cloud save) and the player picks which to keep. The loser is archived server-side (08).
 5. Delete account (`SCR_SETTINGS`): `POST /account/delete` -> server starts the GDPR flow (02 section 13.2); the client wipes local saves and tokens and restarts.
 
-As built (issue #148): `HeroCat.Runtime.Account.AccountFlow` runs steps 1, 2 and 5 engine-free; the screens pass the save-and-upload and the `LOGOUT_UNSYNCED` modal as delegates, and stop the session before the archive. An upload that throws, fails or outlasts `LOGOUT_UPLOAD_TIMEOUT_S` asks the modal; "Cancel" changes nothing. `POST /auth/logout` is one attempt (no backoff schedule) and the tokens are cleared whatever it answers, since the family is unusable once the client forgets it. `SaveArchive` moves `saves/` in one rename to `saves.<playerId>.archived/` (a local guest that never connected archives under `Guid.Empty`; a second archive of the same player replaces the first) and stamps it with the clock's unix seconds in an `archived_at` file, which boot step 4 prunes by (`ARCHIVE_KEEP_DAYS`), like the quarantine purge, not by file mtimes. `SaveArchive.Restore` moves an archive back only into an empty `saves/`. Account deletion wipes `saves/` and that player's archive only after the server accepts. Steps 3-4 (`/auth/link-login`, `/auth/merge`) are issue #196.
+As built (issue #148): `HeroCat.Runtime.Account.AccountFlow` runs steps 1, 2 and 5 engine-free; the screens pass the save-and-upload and the `LOGOUT_UNSYNCED` modal as delegates, and stop the session before the archive. An upload that throws, fails or outlasts `LOGOUT_UPLOAD_TIMEOUT_S` asks the modal; "Cancel" changes nothing. `POST /auth/logout` is one attempt (no backoff schedule) and the tokens are cleared whatever it answers, since the family is unusable once the client forgets it. A delivered logout also releases the device on the server (00 decision 117); one that never arrives leaves it bound, so the next `/auth/guest` is `DEVICE_ALREADY_BOUND` and the client opens `SCR_TITLE`. `SaveArchive` moves `saves/` in one rename to `saves.<playerId>.archived/` (a local guest that never connected archives under `Guid.Empty`; a second archive of the same player replaces the first) and stamps it with the clock's unix seconds in an `archived_at` file, which boot step 4 prunes by (`ARCHIVE_KEEP_DAYS`), like the quarantine purge, not by file mtimes. `SaveArchive.Restore` moves an archive back only into an empty `saves/`. Account deletion wipes `saves/` and that player's archive only after the server accepts. Steps 3-4 (`/auth/link-login`, `/auth/merge`) are issue #196.
 
 ## Open questions
 

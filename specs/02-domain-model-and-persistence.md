@@ -47,6 +47,7 @@ Engineering constants in `HeroCat.Runtime.SaveConfig` (code, not `ContentDb`; mi
 | `RETENTION_INACTIVE_DAYS` | 730 | S | Inactive accounts purged after 2 years. |
 | `ANALYTICS_BATCH_MAX` | 100 | I | Events per upload batch. |
 | `ANALYTICS_QUEUE_MAX` | 10000 | I | Offline queue cap, oldest dropped. |
+| `ANALYTICS_UPLOAD_SEC` | 60 | S | Foreground seconds between interval uploads of the analytics queue (14.2); pause and quit also upload. |
 | `PENDING_STALE_DAYS` | 7 | S | `Pending.Summon` / `Pending.Dungeon` older than this is cleared on load (6.4 P17). |
 | `SAVE_HISTORY_KEEP` | 10 | S | Server-side blobs kept per player for support rollback (9.2, 13). |
 | `DUNGEON_RECENT_RUNS_MAX` | 30 | S | `Dungeons.RecentRuns` length (issue #52). Covers a day of seeds (`DUNGEON_SEEDS_PER_DAY` 10 x 3 kinds, 08) between uploads. A sim constant (`HeroCat.Sim`), since the run-end code trims the list. |
@@ -513,7 +514,7 @@ A real day-9 save, abbreviated only in repeated collection entries. 41 KB format
     }
   },
   "Dungeons": { "BestFloor": [9, 6, 8], "EntriesToday": [1, 1, 0], "SweepsToday": [0, 1, 0],
-                "RecentRuns": [ { "GrantId": "dgr_01HZX9", "Kind": "FISH_COIN", "Floor": 9, "Cleared": true },
+                "RecentRuns": [ { "GrantId": "5b1e2c7a-9d40-4f3e-8a61-2c0d7e9f4b13", "Kind": "FISH_COIN", "Floor": 9, "Cleared": true },
                                 { "GrantId": "dgr_01HZXA", "Kind": "ROCK_CANDY", "Floor": 7, "Cleared": false } ] },
   "Shop": { "DailyGiftClaimed": true, "ExchangeCounts": { "ex_ticket_fish": 1 } },
   "Research": { "Level": { "res_mp_pool": 3, "res_mp_regen": 2, "res_tank_cap": 4, "res_tank_refill": 2, "res_fish_cap": 1 } },
@@ -793,7 +794,7 @@ Recovery order, from best to worst outcome: (1) `slot0.sav`, (2) `slot0.prev.sav
 | `saves/slot0*.sav` | The save | Excluded from iCloud/Android auto-backup (`NSURLIsExcludedFromBackupKey`, `android:allowBackup` with exclusion rules). Cloud save is the backup; an OS-restored save on a new device would carry the old device's key and lineage and confuse conflict resolution. |
 | `install_id` | `DeviceId` GUID, created at first launch and reused; a missing or unreadable file means a new id (`InstallId.LoadOrCreate`) | Excluded. A restored install is a new device. |
 | `device_key` | 32 random bytes for HMAC (section 10) | Secure storage (Keychain / Android Keystore-wrapped), excluded from backup. |
-| `tokens.json` | JWTs, the account's `playerId` and a pending guest `requestId` (`SecureTokenStore`, issue #148) | Secure storage. Until the platform stores land (#151), editor and desktop builds use `FileSecureStore` under `{dataDir}/secure/`, which is not secure. |
+| `tokens.json` | JWTs, the account's `playerId`, a pending guest `requestId` (`SecureTokenStore`, issue #148) and the `registeredKeyId` of 10.1 (issue #150) | Secure storage. Until the platform stores land (#151), editor and desktop builds use `FileSecureStore` under `{dataDir}/secure/`, which is not secure. |
 | `profile.json` | `Profile` cache | Included; harmless. |
 | `client_prefs.json` | `ClientPrefs` (fields are 07's): new-item badges, `SeenCoachMarks`, sort/filter prefs, `TrainStep`, `Notify*`, `Locale`, `Sound`, `Music`, `Haptics`, `ReducedMotion`, `LargeText`, `TargetFps` (issue #47). Never cloud-synced, never in `GameState`; written atomically like the save (tmp + rename), and a missing or unreadable file means defaults | Included; harmless (losing it only resets NEW dots and coach marks). |
 | `config_cache.json` | last remote config | Included. |
@@ -892,11 +893,13 @@ As built (issue #153), in `HeroCat.Runtime.Save`:
 
 ### 10.1 Device key and HMAC
 
-At first launch `HeroCat.Runtime.DeviceKey.Create()` generates `HMAC_KEY_BYTES` random bytes, stores them in platform secure storage, and registers the device with `POST /devices` (08): `{deviceId, keyId, model, os, clientVersion}` plus the key itself over TLS. The key is symmetric: the client and the server hold the same bytes. The server stores it in `devices.hmac_key_enc` (envelope-encrypted, section 12). Every save header carries `hmac = HMAC-SHA256(deviceKey, body)`.
+At first launch `HeroCat.Runtime.Account.DeviceKey.LoadOrCreate(ISecureStore)` generates `HMAC_KEY_BYTES` random bytes from a CSPRNG (`DeviceKey.Create()`) and stores them in platform secure storage as `device_key` (8.4); later launches reuse them, and a stored value of the wrong length is replaced. The key is symmetric: the client and the server hold the same bytes. The server stores it in `devices.hmac_key_enc` (envelope-encrypted, section 12). Every save header carries `hmac = HMAC-SHA256(deviceKey, body)`.
+
+Registration (as built, issue #150). The key travels only over TLS and only in the bodies of 08 section 2.2's registering calls: `POST /auth/guest` registers it with the account it creates (`POST /auth/link-login` with the account it signs into, issue #196), and `POST /devices {deviceId, deviceKey, model, os, clientVersion}` registers a key the server does not hold yet. The key's id, `keyId = hex(SHA-256(key))[:16]` (`DeviceKey.KeyId`), is client-local: `tokens.json` records `registeredKeyId` for the session's player (set by the guest call and by a `/devices` 204, kept across refreshes, gone with the tokens on logout), and the AuthClient sends `POST /devices` only when the current key's id differs (a key replaced after the guest call, or tokens from a build without the record). The server never sees `keyId`; it compares the key bytes, so the same `deviceId` and key again is a 204 that only updates the metadata, and the same request id is replayed by the idempotency store. The client reuses one request id per (player, key) until the call lands. Uploads wait for it: `CloudSaveStore` awaits the registration before each `PUT /save`; a transient failure (offline, timeout, 5xx, 429, 401) keeps the upload queued and the next upload retries, while a final refusal (`403 KEY_ROTATION_NOT_ALLOWED`, `409 DEVICE_ALREADY_BOUND`, ...) is not retried in that process and lets uploads go ahead, so the server records `hmacValid = false` (5.1: never a rejection). The key never appears in logs, analytics, headers or any other request; `keyId` is what may be stored or shown outside secure storage.
 
 What it is for: the server can tell a save written by this client build on this registered device from a hand-edited blob. What it is not: protection against a rooted device, which can extract the key. The key makes casual editing fail and makes a cheater's edits attributable to a device; the plausibility checks make them detectable.
 
-Local mode (M0) has no key; `hmac=-`. Bots write no files.
+Local mode (M0) has no key; `hmac=-`. Bots write no files; the bot harness passes no key, so any save it encodes is `hmac=-`.
 
 ### 10.2 Server plausibility checks (named here, specified in 08)
 
@@ -1002,7 +1005,7 @@ As built (issues #78, #149): `ServerClock.cs` holds both clocks. `SystemClock` i
 
 All timestamps `timestamptz`, all ids `uuid` unless noted. Money is never stored as float: prices are `integer` minor units plus `char(3)` currency. Row-level comments give the owning API (08). This section owns every server table, including the server-only ones 08 reads and writes, so the GDPR delete job (13.2) can enumerate them from here (issue #53).
 
-**Migration tooling** (issue #33): the schema ships as plain versioned SQL files, `server/db/migrations/NNNN_<name>.sql` (`0001_init.sql` is the DDL below, verbatim; `0002_save_history_trim.sql` adds the 13.1 trim trigger and `0003_partitions.sql` the partitions, both described after the DDL; issue #154; a later file that changes the DDL is reproduced verbatim after it, like `0004_save_metadata.sql` and `0005_analytics_events.sql`), applied in order by a small in-house runner (`HeroCat.Server --migrate` in the deploy pipeline's pre-deploy job and in CI; `HeroCat:Database:MigrateOnStartup` also runs it at api startup, off by default; issue #192) that records applied files in a `schema_migrations` table. No EF Core migrations; queries use Npgsql/Dapper, or EF Core for queries only, never to change the schema. A migration file is immutable once merged. CI applies the set to an empty PostgreSQL 16 container (`postgres:16`, as in 10) and runs AC 16; `check.sh` runs the same job behind a "Postgres available" guard and reports it as skipped, not passed, where no Postgres or Docker exists (cloud sessions).
+**Migration tooling** (issue #33): the schema ships as plain versioned SQL files, `server/db/migrations/NNNN_<name>.sql` (`0001_init.sql` is the DDL below, verbatim; `0002_save_history_trim.sql` adds the 13.1 trim trigger and `0003_partitions.sql` the partitions, both described after the DDL; issue #154; a later file that changes the DDL is reproduced verbatim after it, like `0004_save_metadata.sql` through `0010_device_release.sql`), applied in order by a small in-house runner (`HeroCat.Server --migrate` in the deploy pipeline's pre-deploy job and in CI; `HeroCat:Database:MigrateOnStartup` also runs it at api startup, off by default; issue #192) that records applied files in a `schema_migrations` table. No EF Core migrations; queries use Npgsql/Dapper, or EF Core for queries only, never to change the schema. A migration file is immutable once merged. CI applies the set to an empty PostgreSQL 16 container (`postgres:16`, as in 10) and runs AC 16; `check.sh` runs the same job behind a "Postgres available" guard and reports it as skipped, not passed, where no Postgres or Docker exists (cloud sessions).
 
 ```sql
 create table accounts (
@@ -1272,7 +1275,7 @@ create table guild_members (guild_id uuid references guilds on delete cascade, p
 create table guild_chat (id bigserial primary key, guild_id uuid references guilds on delete cascade, player_id uuid references accounts on delete set null, body text not null, created_at timestamptz not null default now());
 ```
 
-**Trim trigger** (`0002`): `save_history_trim`, after each insert into `save_history`, deletes the player's rows beyond the newest `SAVE_HISTORY_KEEP` (newest by `uploaded_at`, then `save_seq`).
+**Trim trigger** (`0002`): `save_history_trim`, after each insert into `save_history`, deletes the player's rows beyond the newest `SAVE_HISTORY_KEEP` (newest by `uploaded_at`, then `save_seq`, then `device_id`; `0007` replaced the function when the history key gained the device).
 
 **Partitions** (`0003`; issue #154): `ensure_partitions(p_parent regclass, p_grain text, p_from timestamptz, p_until timestamptz) returns integer` creates every missing partition whose range touches `[p_from, p_until]`: UTC month ranges named `<parent>_pYYYYMM` for `p_grain = 'month'`, UTC day ranges named `<parent>_pYYYYMMDD` for `'day'`; it returns how many it created and a rerun is harmless. The migration creates the current month plus 3 months for `diamond_ledger` and `summon_log` and today plus 14 days for `events`; the worker's partition job keeps that horizon ahead of now (issue #262). There is no default partition: a row outside every partition fails its insert, so a missing partition is loud, and a new range partition never collides with rows parked in a default one. As built (issue #262): the worker's `partitions` job (`HeroCat.Server.Worker.PartitionMaintenanceService`) runs at worker start and then daily, calls `ensure_partitions` with the same horizons (`PARTITION_AHEAD_MONTHS = 3` for `diamond_ledger` and `summon_log`, `PARTITION_AHEAD_DAYS = 14` for `events`; 08 constants), and publishes each table's horizon, the days from now to the end of its last partition, as `db_partition_horizon_days{table}` (08 section 9.4), which 10 section 10's DB alarm watches. It never drops a partition (retention, 13.1, is a separate job).
 
@@ -1311,6 +1314,90 @@ alter table events
 create unique index on events (event_id, ts);
 ```
 
+**Ledger and lookup indexes** (`0006`; issue #294): `ticket_ledger`'s unique `(player_id, request_id)` index now covers only `ref_type = 'summon'`, the one ticket row a request writes at most once, so an inbox claim (several lines, or claim-all) and the `PUT /save` step 5a credit (one row per reason; 08 section 3.1) store their request id on every row. Restricting it was chosen over widening it to `(player_id, request_id, ticket, reason, ref_id)`, which would still refuse an inbox item with two lines of one ticket. The summon handler's charge insert has no `on conflict`, so nothing infers the index. `config_versions (env) where active` makes "at most one active row per environment" a constraint (activation, 08 section 6.2, clears the old row before setting the new one, under its advisory lock), and `summon_log (player_id, banner, item_id)` serves the summon handler's per-pull collection query (08 section 4.3). Shown verbatim, as its file:
+
+```sql
+-- 0006_ledger_indexes.sql (specs/02 section 12 "Ledger and lookup indexes"; issue #294). ticket_ledger's unique
+-- (player_id, request_id) index allowed one row per request, but an inbox claim with two ticket lines, claim-all and the
+-- PUT /save step 5a credit (one row per reason) write several; it now guards only the summon charge, the one row a request
+-- writes at most once. config_versions keeps at most one active row per env (activation clears the old row first, under
+-- its advisory lock), and summon_log gets the (player_id, banner, item_id) index the per-pull collection query reads.
+drop index ticket_ledger_player_id_request_id_idx;
+create unique index on ticket_ledger (player_id, request_id) where request_id is not null and ref_type = 'summon';
+create unique index on config_versions (env) where active;
+create index on summon_log (player_id, banner, item_id);
+```
+
+**Save history per device** (`0007`; issue #295): two devices of one player can upload the same `saveSeq` (an accepted `SEQ_REGRESSION`, 08 section 3.1 step 4), so the blob key is `saves/{player_id}/{save_seq}-{deviceId8}.sav` (the first 8 lowercase hex digits of the device id; the `0001` comment on `saves.blob_key` shows the earlier `{save_seq}.sav`) and the history key includes `device_id`; neither upload replaces the other. Reads use the stored `blob_key`, so a key written under the old scheme stays readable (only dev data had one). The trim function is replaced to tell rows apart by `(save_seq, device_id)`. Shown verbatim, as its file:
+
+```sql
+-- 0007_save_history_device.sql (specs/02 section 12 "Save history per device"; issue #295). Two devices of one player can
+-- upload the same saveSeq (an accepted SEQ_REGRESSION upload, specs/08 section 3.1 step 4), so a history entry is keyed by
+-- the device too, as its blob key is (saves/{playerId}/{saveSeq}-{deviceId8}.sav), and neither upload replaces the other.
+-- The trim still keeps SAVE_HISTORY_KEEP = 10 rows per player, now told apart by (save_seq, device_id).
+alter table save_history drop constraint save_history_pkey, add primary key (player_id, save_seq, device_id);
+
+create or replace function save_history_trim() returns trigger language plpgsql as $$
+begin
+  delete from save_history h
+  where h.player_id = new.player_id
+    and (h.save_seq, h.device_id) not in (
+      select k.save_seq, k.device_id from save_history k
+      where k.player_id = new.player_id
+      order by k.uploaded_at desc, k.save_seq desc, k.device_id desc
+      limit 10);
+  return null;
+end
+$$;
+```
+
+**Currency dashboard sources** (`0008`; issue #296): the server writes `currency_changed` rows for its own ledger writes (08 section 3.5) and the client reports the same changes, so `currency_daily` takes each `(currency, reason)` from one source: a server-ledger currency (`DIAMOND`, the four `TICKET_SUMMON_*`) with a server-originated reason (`IAP`, `MAIL`, `ADMIN`, `REFUND`, `SUMMON`; the reasons 08 section 3.1 step 5a excludes from client crediting) from `source = 'server'` rows, every other pair from `source = 'client'` rows. Shown verbatim, as its file:
+
+```sql
+-- 0008_currency_daily_sources.sql (specs/02 section 12 "Currency dashboard sources"; issue #296). The server writes its
+-- own currency_changed rows (source = 'server') for the ledgers it owns, and the client reports the same changes, so each
+-- (currency, reason) is counted from one source only: a server-ledger currency (DIAMOND and the four summon tickets) with a
+-- server-originated reason (IAP, MAIL, ADMIN, REFUND, SUMMON) from the server's rows, everything else from the client's.
+-- A change only the client sees, such as Rock Candy from MAIL or from a summon's overflow, stays a client row.
+drop materialized view currency_daily;
+create materialized view currency_daily as                 -- rebuilt nightly for 06's source/sink dashboards
+  select player_id_hash, day_index, props->>'currency' as currency, props->>'reason' as reason,
+         sum((props->>'delta')::double precision) as sum_delta
+  from events
+  where name = 'currency_changed'
+    and (source = 'server') = (props->>'currency' in ('DIAMOND', 'TICKET_SUMMON_WEAPON', 'TICKET_SUMMON_SKILL',
+                                                      'TICKET_SUMMON_COMPANION', 'TICKET_SUMMON_RUNE')
+                               and props->>'reason' in ('IAP', 'MAIL', 'ADMIN', 'REFUND', 'SUMMON'))
+  group by 1, 2, 3, 4;
+```
+
+**Dungeon seed correlation** (`0009`; issue #205): `POST /dungeon/seed` checks a floor against the last uploaded save's `Dungeons.BestFloor`, and `PUT /save` compares each upload's `BestFloor` with the previous upload's (08 sections 3.3 and 7.3). `dungeon_progress` holds, per player and kind, the `BestFloor` of the last upload that carried `Dungeons` (the last upload wins, lower or not), so neither route reads a save blob; it is not rewound by a rollback (08 section 7.4), so after one the unlock check may tolerate up to the rolled-back best until the next upload. Shown verbatim, as its file:
+
+```sql
+-- 0009_dungeon_progress.sql (specs/02 section 12 "Dungeon seed correlation"; issue #205): POST /dungeon/seed checks the
+-- floor against the last uploaded save's Dungeons.BestFloor, and PUT /save compares each upload's BestFloor with the
+-- previous one (specs/08 sections 3.3, 7.3). dungeon_progress keeps, per player and kind, the BestFloor of the last upload
+-- that carried Dungeons, so neither reads a save blob. The index serves the daily cap's count and the correlation.
+create table dungeon_progress (
+  player_id  uuid not null references accounts on delete cascade,
+  kind       text not null,                                -- Dungeon name: FISH_COIN | ROCK_CANDY | EXP
+  best_floor integer not null default 0,
+  save_seq   bigint not null,                              -- the upload it came from
+  updated_at timestamptz not null default now(),
+  primary key (player_id, kind)
+);
+create index on dungeon_seeds (player_id, kind, day_key);
+```
+
+**Device release on logout** (`0010`; 00 decision 117, issue #293): `POST /auth/logout` revokes the device's refresh family and sets `devices.released_at`, so the device's next `POST /auth/guest` makes a new guest instead of answering `409 DEVICE_ALREADY_BOUND` (08 section 2.2). The row is not deleted, because `saves` and `refresh_tokens` reference it; `/auth/guest` rebinds a released row to the new guest (new `player_id` and `hmac_key_enc`, `released_at` back to null). Shown verbatim, as its file:
+
+```sql
+-- 0010_device_release.sql (specs/02 section 12 "Device release on logout"; 00 decision 117, issue #293): POST /auth/logout
+-- releases this device's binding after revoking its refresh family, so the next POST /auth/guest from the device makes a
+-- new guest. The row is kept (saves and refresh_tokens reference it); a released row is rebound to the new guest.
+alter table devices add column released_at timestamptz;
+```
+
 **Idempotency rows** (as built, issue #194; 08 section 1.1): `status_code = 0` marks a row `in_flight`; any other value is the final HTTP status of the stored response. `response` is a jsonb object `{ "v": 1, "requestSha256", "contentType", "headers", "bodyBase64" }`: `requestSha256` fingerprints method, route and body (a reused id with another fingerprint is refused), and the body is base64 so the replay is byte-identical (jsonb would re-order a JSON body's keys and drop its whitespace); the `in_flight` row holds only `v` and `requestSha256`. `/auth/guest` has no player yet, so its rows use `player_id` = the first 16 bytes of `SHA-256("herocat/idempotency/device/" + lowercase deviceId)` with the RFC 9562 version-8 and variant bits set, which cannot equal a server-made (version 4) `playerId`; the 13.2 delete leaves those rows to the purge. A row older than `IDEMPOTENCY_TTL_H` counts as absent before the hourly purge deletes it.
 
 Redis structures (P1 leaderboards, MVP rate limits and sessions):
@@ -1343,6 +1430,7 @@ As built (issue #154): `HeroCat.Server.Infrastructure.Redis.RedisKeys` holds the
 | `account_exports` | Row 30 days; export object 7 days | Daily purge; S3 lifecycle on the export prefix |
 | `purchases` + raw receipts | 7 years | Tax law in several launch regions |
 | `dungeon_seeds` | 30 days | Daily purge |
+| `dungeon_progress` | While account active | Deleted with the account (13.2) |
 | `refresh_tokens` | 60 days from issue or until revoked | |
 | Inactive accounts | Purged after `RETENTION_INACTIVE_DAYS = 730` with no login | Monthly job runs the delete flow below; players with any purchase are exempt from auto-purge (the receipts obligation) and instead have the save blob removed only |
 | Analytics raw events | 25 months in the warehouse, aggregated tables indefinitely | Warehouse policy |
@@ -1369,7 +1457,7 @@ Hard delete, in one transaction per account (issue #32). The three financial tab
 1. Delete S3 objects `saves/{playerId}/*` and `exports/{playerId}/*`.
 2. **Purchaser** (any `purchases` row for the player): insert a tombstone `accounts` row with `player_id = tombstone_id`, where `tombstone_id` is the UUID made of the first 16 bytes of `sha256(player_id || server_pepper)`, `status = 'deleted'`, `display_name = ''`, `avatar_id = 'avatar_default'`, `region = 'ZZ'`, `age_gate = 0` and every other nullable column null (`on conflict do nothing`, so a rerun is harmless). Then `update purchases, summon_log, diamond_ledger set player_id = tombstone_id where player_id = ?`. This keeps referential integrity and retains the financial records without a link to the person: the legal-obligation basis under GDPR art. 17(3)(b).
 3. **Non-purchaser**: delete the player's `summon_log` and `diamond_ledger` rows (open question 8 default).
-4. `delete from accounts where player_id = ?` cascades to `account_links`, `devices`, `refresh_tokens`, `saves`, `save_history`, `inbox_items`, `banner_pity`, `ticket_ledger`, `granted_items`, `dungeon_seeds`, `account_exports`, `guild_members`, `moderation_actions`, P1 `coupon_redemptions`; `delete from idempotency where player_id = ?` (no FK).
+4. `delete from accounts where player_id = ?` cascades to `account_links`, `devices`, `refresh_tokens`, `saves`, `save_history`, `inbox_items`, `banner_pity`, `ticket_ledger`, `granted_items`, `dungeon_seeds`, `dungeon_progress`, `account_exports`, `guild_members`, `moderation_actions`, P1 `coupon_redemptions`; `delete from idempotency where player_id = ?` (no FK).
 5. Analytics: publish `player_deleted{playerIdHash}` to the warehouse; the warehouse job removes raw `events` rows for that hash within 30 days.
 6. `guild_chat.player_id` is set null by the cascade; message bodies remain (they are the guild's record, and contain no identifier).
 
@@ -1389,20 +1477,24 @@ Names snake_case; properties camelCase. The sink drops an event whose name is no
 
 ### 14.2 Offline queue
 
-The sink enqueues on the main thread and flushes on the thread pool (01 threading table). Pending events persist to `analytics/queue.ndjson` (8.4; excluded from OS backup) so they survive a kill while offline. Uploads go in batches of at most `ANALYTICS_BATCH_MAX` events; `OnPause` and `OnQuit` flush (01). The queue holds at most `ANALYTICS_QUEUE_MAX` events; past that the oldest are dropped.
+The sink enqueues on the main thread and flushes on the thread pool (01 threading table). Pending events persist to `analytics/queue.ndjson` (8.4; excluded from OS backup) so they survive a kill while offline. Uploads go in batches of at most `ANALYTICS_BATCH_MAX` events; `OnPause` and `OnQuit` flush (01), and the queue also uploads every `ANALYTICS_UPLOAD_SEC` of foreground time. The queue holds at most `ANALYTICS_QUEUE_MAX` events; past that the oldest are dropped.
 
 As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
 
 1. The file is one JSON event per line (14.1), appended per event. It may hold up to `2 * ANALYTICS_QUEUE_MAX` lines between compactions; it is rewritten (temp file, then rename) after each accepted batch and when an overflow finds it that long. A load keeps the newest `ANALYTICS_QUEUE_MAX` lines and skips a line that does not parse (a torn last line after a kill). A file error never throws: the events stay in memory.
 2. A flush first raises the sink's flush hook, so in-memory aggregates (06 section 13's `KILL`/`BOSS` window) reach the queue, then uploads on the thread pool, oldest first. Each batch's `X-Request-Id` is the first 32 hex of `sha256` of its events' `eventId`s, so a retry of the same events reuses it and a different set never does.
-3. An upload outcome is accepted (the events leave the queue), retry (offline, timeout, 5xx, 429, or the uploader threw: the flush stops and the next flush retries the same batch) or rejected (a non-retryable 4xx: the batch is dropped so it cannot block the queue). The remote uploader (Firebase for every event, the backend's `POST /analytics/events` of 08 section 3.5 for the economy ones; issue #209) waits on `ApiClient` (issue #143); a sink with no uploader keeps the events on disk. The backend answers `200` with per-event refusals (accepted), or `400` for a malformed batch (rejected).
+3. An upload outcome is accepted (the events leave the queue), retry (offline, timeout, 5xx, 429, or the uploader threw: the flush stops and the next flush retries the same batch) or rejected (a non-retryable 4xx: the batch is dropped so it cannot block the queue). A sink with no uploader keeps the events on disk. The backend answers `200` with per-event refusals (accepted), or `400` for a malformed batch (rejected).
 4. A Local build without a backend uses `NullAnalytics` and writes no queue file (01 section 1.2); bots and tests use `MemoryAnalytics` (no envelope, no files).
+5. The backend leg is `HeroCat.Remote.Services.RemoteAnalyticsUploader` over `ApiClient` (issue #297): one `POST /analytics/events` (08 section 3.5) per batch, `X-Request-Id` = the batch id of item 2, carrying the batch's economy events (14.1) byte for byte as queued, oldest first. Any `2xx` is accepted and the response's per-event `rejected` rows are final (counted, never resent). Offline, timeout, `5xx`, `408`/`425`/`429`, `409` (`IDEMPOTENCY_IN_FLIGHT`), `401`/`403` and `426` are retry, after the ApiClient's own 01 section 5.2 backoff; a client with credentials but no access token (signed out) sends nothing and retries. Any other `4xx` is rejected. Lines that are not economy events, or do not parse, are not sent and leave the queue with their batch; a batch without an economy event sends nothing. The Firebase leg, which gets every event, is not built yet (TODO(#303)), so a Remote build today records only the backend's economy events.
+6. Consent and age (08 sections 10.1, 10.2) do not gate the backend leg: economy events are recorded for every player (legitimate interest), with the server stamping `age_gate` from the token's `age` claim. Advertising-id props (`advertisingId`, `adId`, `idfa`, `idfv`, `gaid`, `aaid`) are removed from a line before it is sent, for every player. Firebase's `analytics_storage = denied` mode for `ageGate = 1` and the advertising consent belong to the Firebase leg.
+7. Uploads run on `OnPause` and `OnQuit` (a flush: the flush hook of item 2, then the upload) and every `ANALYTICS_UPLOAD_SEC` of foreground time (`SessionRunner`, through `IAnalyticsUpload.Upload`: the upload alone, without the flush hook, so 06 section 13's aggregation windows close only on their own clock, pause and quit). Background time does not count toward the interval.
+8. Composition: `RemoteGameServices.Wire` builds the sink (envelope, the queue under `{dataDir}/analytics`, the backend uploader) when `ServicesOptions.AnalyticsSalt` is set (the environment's `playerIdHash` salt, equal to the server's `HeroCat:Analytics:PlayerIdSalt`) and no `Analytics` is passed; `ServicesOptions.SessionId` is the envelope's `sessionId`. Without a salt, analytics stays `NullAnalytics`.
 
-### 14.3 Events owned here (session, save health, cloud, clock, client performance)
+### 14.3 Events owned here (session, save health, cloud, clock, client performance, content updates)
 
 | Event | Properties | Emitted by | Notes |
 |---|---|---|---|
-| `session_start` | `offlineElapsedSec`, `offlineCredited`, `coldBoot` (bool), `bootMs` | Runtime at `SCR_MAIN` shown | |
+| `session_start` | `offlineElapsedSec`, `offlineCredited`, `coldBoot` (bool), `bootMs` | Runtime at `SCR_MAIN` shown, and when a session reopens after a resume or an in-app gap | Every `session_end` has its start (issue #298). Cold boot: `BootFlow` at the handoff, `bootMs` the boot's total. Warm (`coldBoot = false`): `SessionRunner` when the session opens after the catch-up of `OnResume` or of an in-app gap (a resume while the session is still open sends nothing), `bootMs` the runner's catch-up milliseconds. The offline fields are the `Offline.Pending` record after that catch-up (the sum when a reward was already pending), 0 when none. |
 | `session_end` | `durationSec`, `stageStart`, `stageEnd`, `kills`, `ticks`, `trigger` (pause/quit/gap) | Runtime on pause/quit | `SessionRunner` (issue #274): a session opens after the catch-up of boot, resume or an in-app gap and ends once, before the analytics flush of `OnPause`/`OnQuit` (a quit right after a pause sends nothing) or at the last frame before an in-app gap. `durationSec` is monotonic foreground time; the stages are `Combat.Stage`; `kills` and `ticks` are the `Stats.Kills` and runner ticks since the open. |
 | `cloud_save_uploaded` | `saveSeq`, `sizeBytes`, `trigger`, `latencyMs`, `flags[]` | Runtime | |
 | `cloud_conflict` / `cloud_autoresolved` | 9.4 | Runtime | |
@@ -1413,6 +1505,7 @@ As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
 | `boot_ms` | `totalMs`, `contentMs`, `configMs`, `authMs`, `saveMs`, `catchUpMs`, `handoffMs` | Runtime, once per cold boot | 10 section 5's cold-boot metric with the 01 section 8.1 step breakdown (issue #261). |
 | `resume_ms` | `ms` | Runtime, once per warm resume | 10 section 5; emitted with issue #218. |
 | `perf_tick` | `p50Ms`, `p95Ms`, `maxMs`, `ticks` | Runtime, sampled once per session (not per tick) | 10 section 5's tick cost; emitted with issue #218. |
+| `content_update_failed` | `version` (the offered `content_version`), `code` (`E900`-`E903` or a 09 build rule), `location` (file or row) | Runtime, once per downloaded bundle ruled out (09 section 10.3 step 5) | `ContentUpdater.Failed` with the bundle's first error, raised on the thread pool after the staged copy is discarded; `BootFlow` posts it to the runner's `MainThreadDispatcher` and tracks it there (issue #298). A failed version is not re-downloaded in the session, so it is reported once. 10's client-health alarm reads it. |
 
 ### 14.4 Event index
 
@@ -1423,7 +1516,7 @@ As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
 | `fish_release`, `fish_merge`, `fish_discovered`, `fish_discard`, `fish_board_snapshot` | 05 section 13 |
 | `currency_changed`, `quest_completed`, `quest_claimed`, `achievement_unlocked`, `dungeon_run`, `offline_catchup`, `offline_claimed`, `day_rollover`, `daily_gift_claimed`, `exchange`, `shop_view`, `iap_initiated`, `iap_completed`, `iap_failed`, `iap_status`, `inbox_claimed` | 06 section 13 |
 | `plausibility_flag` | 08 section 7.4 |
-| `session_start`, `session_end`, `cloud_save_uploaded`, `cloud_conflict`, `cloud_autoresolved`, `save_*`, `migration_applied`, `clock_anomaly`, `player_deleted`, `profile_created`, `boot_ms`, `resume_ms`, `perf_tick` | 14.3 |
+| `session_start`, `session_end`, `cloud_save_uploaded`, `cloud_conflict`, `cloud_autoresolved`, `save_*`, `migration_applied`, `clock_anomaly`, `player_deleted`, `profile_created`, `boot_ms`, `resume_ms`, `perf_tick`, `content_update_failed` | 14.3 |
 
 07 defines no events of its own; screen-driven events (`shop_view`) are owned by the feature spec of the screen. A new event is added to its owner's section and to this index in the same change.
 
@@ -1484,6 +1577,7 @@ As built (`AnalyticsSink`, `AnalyticsQueue`, issue #155):
 | `RETENTION_INACTIVE_DAYS` | 730 | S | 13 |
 | `ANALYTICS_BATCH_MAX` | 100 | I | 14 |
 | `ANALYTICS_QUEUE_MAX` | 10000 | I | 14 |
+| `ANALYTICS_UPLOAD_SEC` | 60 | S | 14.2 |
 | `DUNGEON_RECENT_RUNS_MAX` | 30 | S | 2, 3.2 |
 | `progressScore` weights | 100 / 10 / 1 / 5 / 50 / 2000 / 20 | S | 9.1 |
 

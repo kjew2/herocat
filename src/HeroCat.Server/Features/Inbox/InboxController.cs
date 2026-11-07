@@ -45,8 +45,8 @@ public sealed class InboxController : ControllerBase
     /// Claims one item: its DIAMOND and summon-ticket lines go to the server ledgers (<c>ref_type = inbox_item</c>) and the
     /// row is marked claimed, in one transaction with the idempotency row. Errors: <c>404 INBOX_NOT_FOUND</c>,
     /// <c>409 INBOX_ALREADY_CLAIMED</c> (<c>details</c> = the original <c>{ inboxItemId, grants, reason }</c>),
-    /// <c>409 INBOX_NOT_AVAILABLE</c>, <c>410 INBOX_EXPIRED</c>, and <c>409 INBOX_ITEM_GRANT_UNSUPPORTED</c> for an item
-    /// line until #271 is decided.
+    /// <c>409 INBOX_NOT_AVAILABLE</c>, <c>410 INBOX_EXPIRED</c> and <c>409 INBOX_BAD_GRANT</c> (a malformed line). Item lines
+    /// are only returned: the client's <c>ApplyInboxGrant</c> adds the copies (00 decision 116).
     /// </summary>
     [HttpPost("v1/inbox/claim"), Auth(AuthPolicy.Jwt), RateLimit(30), Idempotent]
     [ProducesResponseType(typeof(InboxClaimResponse), StatusCodes.Status200OK)]
