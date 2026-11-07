@@ -547,7 +547,7 @@ Every runbook has a stable `RB-*` id (the link target alarms use, issue #59) and
 
 ### 9.3 Summon rate misconfiguration (`RB-SUMMON-RATES`)
 
-- **Detect**: the Odds drift alarm (section 10: observed rate per rarity and banner level outside the Wilson interval around the published rate, so the threshold scales with the pulls observed; issue #59), or `rateTableHash` served by `/summon/rates` differs from the content's. For 24 h after any `banners` or `banner_levels` change the operator watches the hourly window.
+- **Detect**: the Odds drift alarm (section 10: observed rate per rarity and banner level outside the Wilson interval around the published rate, so the threshold scales with the pulls observed; issue #59), the worker's nightly realised-rate job over the trailing 30 days (08 section 10.3, the same rule, which also fires on pulls logged with a `rate_table_hash` no held content set publishes), or `rateTableHash` served by `/summon/rates` differs from the content's. For 24 h after any `banners` or `banner_levels` change the operator watches the hourly window.
 - **Mitigate**: kill switch `summonEnabled[banner] = false` (08) within one config refresh; content rollback as in 9.1. Compute per-player impact from `summon_log` (every pull has the rate table hash it was rolled under).
 - **Communicate**: this is a regulatory matter in several markets. If published odds were higher than actual: refund the diamond difference as "pulls at the published odds" (grant the missing expected L+ as a pity-counter reduction plus diamonds), publish a notice in-game and on the store listing. If actual odds were higher than published: no clawback; note it publicly.
 - **Postmortem**: why `E037` or the server's rate hash check did not fire.
