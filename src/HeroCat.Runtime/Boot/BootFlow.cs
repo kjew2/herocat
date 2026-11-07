@@ -22,7 +22,7 @@ namespace HeroCat.Runtime.Boot
     public sealed class BootOptions
     {
         /// <summary>
-        /// Content sources in priority order (step 1): a verified cached newer bundle first (TODO(#212)), then the bundled
+        /// Content sources in priority order (step 1): a verified cached newer bundle first (ContentCache.LoadPreferred, which falls back to the bundle itself), then the bundled
         /// one. Each builds a ContentDb or throws; the first that succeeds wins. All failing is Fatal CONTENT_CORRUPT.
         /// </summary>
         public IReadOnlyList<Func<ContentDb>> Content { get; set; }

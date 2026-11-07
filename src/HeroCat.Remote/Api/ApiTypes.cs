@@ -63,9 +63,27 @@ namespace HeroCat.Remote.Api
         /// <summary>A fresh 32-hex request id for a new mutation.</summary>
         public static string NewRequestId() => Guid.NewGuid().ToString("N");
 
+        /// <summary>
+        /// A GET of an absolute <c>https://</c> URL outside 08's API: a content file on the CDN (09 section 10.2, issue #212).
+        /// It goes out bare: no Authorization and none of the 5.1 headers (the CDN is not 08's API and is told nothing about
+        /// the device), and it neither feeds the server clock nor <see cref="ApiClient.ServerReached"/>. The 5.2 retry
+        /// policy still applies; <c>T</c> = <c>byte[]</c> reads the body raw.
+        /// </summary>
+        public static ApiRequest Cdn(string url) =>
+            new ApiRequest(HttpMethod.Get, url, null, Idempotent: true, RequestId: null, RequiresAuth: false);
+
+        /// <summary>True when <see cref="Path"/> is an absolute URL (<see cref="Cdn"/>) rather than a route under the base URL.</summary>
+        public bool IsAbsolute => Path != null && Path.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+
         internal void Validate()
         {
             if (Method == null) throw new ArgumentException("Method is required", nameof(Method));
+            if (IsAbsolute)
+            {
+                if (IsMutation || RequiresAuth || !Uri.TryCreate(Path, UriKind.Absolute, out _))
+                    throw new ArgumentException("an absolute URL is an unauthenticated GET only: " + Path, nameof(Path));
+                return;
+            }
             if (string.IsNullOrEmpty(Path) || Path[0] != '/') throw new ArgumentException("Path must start with '/': " + Path, nameof(Path));
             if (IsMutation && (RequestId == null || !Hex32.IsMatch(RequestId)))
                 throw new ArgumentException($"{Method} {Path}: a mutation needs the caller's 32-hex requestId (00 section 8.13)", nameof(RequestId));

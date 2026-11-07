@@ -11,9 +11,8 @@ namespace HeroCat.Runtime.Content
     /// <summary>
     /// The storage half of 09 section 10.3 (steps 4, 6 and 8), which issue #212 owns: CDN download into a staging area,
     /// promotion to <c>persistentDataPath/content/&lt;version&gt;/</c>, the cold-boot list. <see cref="ContentUpdater"/>
-    /// (issue #144) drives it and does the validation and the hot-or-cold decision in between.
-    /// TODO(#212): the CDN implementation (manifest sha256 against <c>config.content.sha256</c>, per-file download, the
-    /// <c>&lt;version&gt;.tmp</c> rename, CONTENT_CACHE_KEEP pruning). <see cref="MemoryContentStaging"/> is the test double.
+    /// (issue #144) drives it and does the validation and the hot-or-cold decision in between. The device implementation is
+    /// HeroCat.Remote's <c>CdnContentStaging</c> over <see cref="ContentCache"/>; <see cref="MemoryContentStaging"/> is the test double.
     /// </summary>
     public interface IContentStaging
     {

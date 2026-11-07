@@ -29,7 +29,7 @@ namespace HeroCat.Runtime.Content
     /// The bundled-versus-cached gates of 09 section 10.3 as far as M0 needs them (issue #127): cold boot prefers the newest
     /// verified cached set that is newer than the bundle and whose min_client_version this client meets (step 8), and a
     /// candidate that fails any gate (E900-E903 or ContentDb.Build) is logged and skipped so the running content stays
-    /// (acceptance 16). TODO(#212): the CDN download, temp-dir install and the CONTENT_CACHE_KEEP pruning feed this.
+    /// (acceptance 16). On device <see cref="ContentCache.LoadPreferred"/> feeds it the installed versions and prunes after.
     /// </summary>
     public static class ContentSelection
     {

@@ -53,6 +53,9 @@ namespace HeroCat.Runtime
         public const int CLOUD_UPLOAD_MIN_SEC = 60;
         public const int CLOCK_JUMP_WARN_SEC = 300;
 
+        /// <summary>09 section 10.3 step 8: cached content versions kept on device (the newest; the one in use is never deleted).</summary>
+        public const int CONTENT_CACHE_KEEP = 2;
+
         // ---------------------------------------------------------------- flows (7, 8.5, 8.8, 8.9, 8.13)
 
         public const int SUMMON_PREROLL_MS = 800;
