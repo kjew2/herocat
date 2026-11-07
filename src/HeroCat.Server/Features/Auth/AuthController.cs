@@ -184,6 +184,8 @@ public sealed class DevicesController : ControllerBase
     /// player cannot squat another install's id. A device bound to another player is <c>409 DEVICE_ALREADY_BOUND</c>. A new
     /// key is accepted within 24 h of the device's first registration, or when the player's save of record came from this
     /// device with a valid HMAC under the old key; otherwise <c>403 FORBIDDEN</c> with <c>KEY_ROTATION_NOT_ALLOWED</c>.
+    /// A device that logout released is read-only until <c>/auth/guest</c> rebinds it, so the logged-out player's
+    /// unexpired access token gets <c>409 DEVICE_ALREADY_BOUND</c> and changes nothing (specs/02 section 12, issue #335).
     /// </summary>
     [HttpPost("v1/devices"), Auth(AuthPolicy.Jwt), RateLimit(5), Idempotent]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -214,7 +216,7 @@ public sealed class DevicesController : ControllerBase
 
         var device = new NewDevice(deviceId, newKeyEnc ?? _auth.ProtectDeviceKey(deviceId, key), request.Model, request.Os, request.ClientVersion);
         if (!await _store.UpsertDeviceAsync(player, device, newKeyEnc, request.PushToken, now, ct))
-            throw new ApiException(409, AuthErrors.DEVICE_ALREADY_BOUND, "This device belongs to another account.");
+            throw new ApiException(409, AuthErrors.DEVICE_ALREADY_BOUND, "This device is not bound to this account.");
         return NoContent();
     }
 }
