@@ -149,11 +149,11 @@
   "localization": {
     "en": {
       "file": "localization.en.json",
-      "rows": 695,
-      "sha256": "82fea74442e715aa35fef527b80748fe55721d6fc16518f033a3d16c5722dcb0"
+      "rows": 715,
+      "sha256": "9ffcd28faa96b1a5646a1c1fc91bd64effec7b1df9011c59744321bb79644e11"
     }
   },
-  "content_hash": "500fd807daae3b4e99ca0f29ed1145bd6d65fbf6f25a83d5df0c2132fd0a05ec",
+  "content_hash": "420173c202d4386ed12bef2a6edcf35190c1fcfca0006584391145bafc049c31",
   "s_constants": [
     "BASE_HP",
     "BOSS_ROCK_CANDY_P",

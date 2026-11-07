@@ -252,6 +252,13 @@ namespace HeroCat.Runtime.Tests
             var server = new FakeSeedServer();
             var off = Open(seeds: server, config: new SwitchedConfig(dungeons: false));
             Assert.That((Start(off).Error, Start(off).Code), Is.EqualTo((DungeonStartError.Disabled, DungeonFlow.FEATURE_DISABLED)));
+            // The kill switch blocks sweeps too (00 decision 114): nothing is issued, no ticket or reward moves.
+            off.Sim.State.Dungeons.BestFloor[(int)Fish] = 3;
+            int offTickets = Tickets(off);
+            double offCoins = off.Sim.State.Wallet.Get(Currency.FISH_COIN);
+            var swept = off.Runner.Dungeons.Sweep(Fish);
+            Assert.That((swept.Ok, swept.Code, swept.Reason), Is.EqualTo((false, RejectCode.NotAvailable, DungeonFlow.FEATURE_DISABLED)));
+            Assert.That((Tickets(off), off.Sim.State.Wallet.Get(Currency.FISH_COIN)), Is.EqualTo((offTickets, offCoins)));
 
             var t = Open(seeds: server);
             Assert.That((Start(t, 2).Error, Start(t, 2).Code), Is.EqualTo((DungeonStartError.Precondition, DungeonRejectReasons.DUNGEON_FLOOR_NOT_UNLOCKED)));

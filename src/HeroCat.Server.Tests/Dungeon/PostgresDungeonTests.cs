@@ -219,14 +219,14 @@ public sealed class PostgresDungeonTests
     }
 
     [Test]
-    public async Task The_eleventh_unexpired_seed_of_a_kind_and_day_is_DUNGEON_SEED_CAP()
+    public async Task The_eleventh_seed_of_a_kind_and_day_is_DUNGEON_SEED_CAP_expired_or_not()
     {
         var p = await Guest();
         for (int i = 0; i < 10; i++) await SeedOk(p, 1);
         AssertError(await Seed(p, 1), HttpStatusCode.TooManyRequests, DungeonErrors.DUNGEON_SEED_CAP);
         await SeedOk(p, 1, "ROCK_CANDY");   // per kind
-        _clock.Advance(TimeSpan.FromSeconds(601));   // the cap counts outstanding (unexpired) seeds (specs/08 section 3.3)
-        await SeedOk(p, 1);
+        _clock.Advance(TimeSpan.FromSeconds(601));   // expired seeds still count (specs/08 section 3.3, 00 decision 114)
+        AssertError(await Seed(p, 1), HttpStatusCode.TooManyRequests, DungeonErrors.DUNGEON_SEED_CAP);
     }
 
     [Test]

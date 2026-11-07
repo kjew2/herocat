@@ -251,7 +251,8 @@ namespace HeroCat.Remote.Services
                 TrySave(dropped);
                 Volatile.Write(ref _tokens, dropped);
             }
-            // DEVICE_ALREADY_BOUND: this install has an account but no tokens for it (they were lost or logged out).
+            // DEVICE_ALREADY_BOUND: this install has an account but no tokens for it (lost, or a logout whose POST /auth/logout
+            // never reached the server; a delivered logout releases the device, 00 decision 117).
             if (e.Code == "DEVICE_ALREADY_BOUND") return new SignInResult(SignInStatus.SignInRequired, Guid.Empty, Code: e.Code);
             return Offline(pending, e.Code);
         }

@@ -997,7 +997,7 @@ As built (issues #78, #149): `ServerClock.cs` holds both clocks. `SystemClock` i
 
 All timestamps `timestamptz`, all ids `uuid` unless noted. Money is never stored as float: prices are `integer` minor units plus `char(3)` currency. Row-level comments give the owning API (08). This section owns every server table, including the server-only ones 08 reads and writes, so the GDPR delete job (13.2) can enumerate them from here (issue #53).
 
-**Migration tooling** (issue #33): the schema ships as plain versioned SQL files, `server/db/migrations/NNNN_<name>.sql` (`0001_init.sql` is the DDL below, verbatim; `0002_save_history_trim.sql` adds the 13.1 trim trigger and `0003_partitions.sql` the partitions, both described after the DDL; issue #154; a later file that changes the DDL is reproduced verbatim after it, like `0004_save_metadata.sql` through `0008_currency_daily_sources.sql`), applied in order by a small in-house runner (`HeroCat.Server --migrate` in the deploy pipeline's pre-deploy job and in CI; `HeroCat:Database:MigrateOnStartup` also runs it at api startup, off by default; issue #192) that records applied files in a `schema_migrations` table. No EF Core migrations; queries use Npgsql/Dapper, or EF Core for queries only, never to change the schema. A migration file is immutable once merged. CI applies the set to an empty PostgreSQL 16 container (`postgres:16`, as in 10) and runs AC 16; `check.sh` runs the same job behind a "Postgres available" guard and reports it as skipped, not passed, where no Postgres or Docker exists (cloud sessions).
+**Migration tooling** (issue #33): the schema ships as plain versioned SQL files, `server/db/migrations/NNNN_<name>.sql` (`0001_init.sql` is the DDL below, verbatim; `0002_save_history_trim.sql` adds the 13.1 trim trigger and `0003_partitions.sql` the partitions, both described after the DDL; issue #154; a later file that changes the DDL is reproduced verbatim after it, like `0004_save_metadata.sql` through `0010_device_release.sql`), applied in order by a small in-house runner (`HeroCat.Server --migrate` in the deploy pipeline's pre-deploy job and in CI; `HeroCat:Database:MigrateOnStartup` also runs it at api startup, off by default; issue #192) that records applied files in a `schema_migrations` table. No EF Core migrations; queries use Npgsql/Dapper, or EF Core for queries only, never to change the schema. A migration file is immutable once merged. CI applies the set to an empty PostgreSQL 16 container (`postgres:16`, as in 10) and runs AC 16; `check.sh` runs the same job behind a "Postgres available" guard and reports it as skipped, not passed, where no Postgres or Docker exists (cloud sessions).
 
 ```sql
 create table accounts (
@@ -1379,6 +1379,15 @@ create table dungeon_progress (
   primary key (player_id, kind)
 );
 create index on dungeon_seeds (player_id, kind, day_key);
+```
+
+**Device release on logout** (`0010`; 00 decision 117, issue #293): `POST /auth/logout` revokes the device's refresh family and sets `devices.released_at`, so the device's next `POST /auth/guest` makes a new guest instead of answering `409 DEVICE_ALREADY_BOUND` (08 section 2.2). The row is not deleted, because `saves` and `refresh_tokens` reference it; `/auth/guest` rebinds a released row to the new guest (new `player_id` and `hmac_key_enc`, `released_at` back to null). Shown verbatim, as its file:
+
+```sql
+-- 0010_device_release.sql (specs/02 section 12 "Device release on logout"; 00 decision 117, issue #293): POST /auth/logout
+-- releases this device's binding after revoking its refresh family, so the next POST /auth/guest from the device makes a
+-- new guest. The row is kept (saves and refresh_tokens reference it); a released row is rebound to the new guest.
+alter table devices add column released_at timestamptz;
 ```
 
 **Idempotency rows** (as built, issue #194; 08 section 1.1): `status_code = 0` marks a row `in_flight`; any other value is the final HTTP status of the stored response. `response` is a jsonb object `{ "v": 1, "requestSha256", "contentType", "headers", "bodyBase64" }`: `requestSha256` fingerprints method, route and body (a reused id with another fingerprint is refused), and the body is base64 so the replay is byte-identical (jsonb would re-order a JSON body's keys and drop its whitespace); the `in_flight` row holds only `v` and `requestSha256`. `/auth/guest` has no player yet, so its rows use `player_id` = the first 16 bytes of `SHA-256("herocat/idempotency/device/" + lowercase deviceId)` with the RFC 9562 version-8 and variant bits set, which cannot equal a server-made (version 4) `playerId`; the 13.2 delete leaves those rows to the purge. A row older than `IDEMPOTENCY_TTL_H` counts as absent before the hourly purge deletes it.

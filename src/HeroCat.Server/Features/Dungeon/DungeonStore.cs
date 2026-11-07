@@ -59,13 +59,12 @@ public sealed class DungeonStore
         }
     }
 
-    /// <summary>Seeds of this kind and day key that have not expired at <paramref name="now"/> (the daily cap's count).</summary>
-    public static async Task<int> OutstandingAsync(DbConnection c, DbTransaction tx, Guid player, string kind, int dayKey, DateTimeOffset now,
-                                                   CancellationToken ct)
+    /// <summary>Seeds issued for this kind and day key, expired or not (the daily cap's count, 00 decision 114).</summary>
+    public static async Task<int> IssuedForDayAsync(DbConnection c, DbTransaction tx, Guid player, string kind, int dayKey, CancellationToken ct)
     {
         await using var cmd = c.Command(
-            "select count(*)::int from dungeon_seeds where player_id = @p and kind = @k and day_key = @d and expires_at > @now", tx,
-            ("p", player), ("k", kind), ("d", dayKey), ("now", now));
+            "select count(*)::int from dungeon_seeds where player_id = @p and kind = @k and day_key = @d", tx,
+            ("p", player), ("k", kind), ("d", dayKey));
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false));
     }
 

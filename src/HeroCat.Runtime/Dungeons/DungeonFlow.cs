@@ -122,7 +122,7 @@ namespace HeroCat.Runtime.Dungeons
             return null;
         }
 
-        /// <summary>True when the dungeons kill switch allows a new run (Local mode: always).</summary>
+        /// <summary>True when the dungeons kill switch allows a new run or a sweep (Local mode: always).</summary>
         public bool Enabled => _runner.Services.Config?.Flags?.DungeonsEnabled ?? true;
 
         /// <summary>SCR_DUNGEONS' Enter button: requests a seed and starts the run (class summary).</summary>
@@ -191,9 +191,14 @@ namespace HeroCat.Runtime.Dungeons
                 : (DungeonStartOutcome.Fail(DungeonStartError.StartRejected, applied.Reason), false);
         }
 
-        /// <summary>SCR_DUNGEONS' Sweep button (01 section 8.8 step 5): no seed, so it works offline. Returns the sim's result.</summary>
+        /// <summary>
+        /// SCR_DUNGEONS' Sweep button (01 section 8.8 step 5): no seed, so it works offline. Returns the sim's result, or
+        /// <c>(NotAvailable, FEATURE_DISABLED)</c> without issuing anything while the <c>dungeonsEnabled</c> kill switch is
+        /// off, so a switch pulled over a reward bug stops every dungeon reward (00 decision 114).
+        /// </summary>
         public ApplyResult Sweep(Dungeon kind)
         {
+            if (!Enabled) return ApplyResult.Reject(RejectCode.NotAvailable, FEATURE_DISABLED);
             var r = _runner.Issue(new SweepDungeon(kind));
             if (!r.Ok) return r;
             _runner.PublishDrained();

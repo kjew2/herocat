@@ -1,10 +1,12 @@
 using System.Data.Common;
 using System.Text.Json;
 using HeroCat.Server.Features.Analytics;
+using HeroCat.Server.Features.Summon;
 using HeroCat.Server.Infrastructure.Db;
 using HeroCat.Server.Pipeline;
 using HeroCat.Sim.Content;
 using HeroCat.Sim.Economy;
+using HeroCat.Sim.Summons;
 using Microsoft.AspNetCore.Mvc;
 
 namespace HeroCat.Server.Features.Inbox;
@@ -20,7 +22,7 @@ public delegate Task<IActionResult> CompleteWithin(DbConnection connection, DbTr
 /// The Inbox service's tables (specs/08 section 3.2; specs/02 section 12: <c>inbox_items</c>, <c>diamond_ledger</c>,
 /// <c>ticket_ledger</c>, <c>granted_items</c>). A claim is one transaction: the row is locked, checked, marked claimed and
 /// its currency lines written to the ledgers with their server-side <c>currency_changed</c> events (specs/08 section 3.5),
-/// and the final idempotency row commits with them.
+/// its item lines to <c>granted_items</c>, and the final idempotency row commits with them.
 /// </summary>
 public sealed class InboxStore
 {
@@ -48,12 +50,14 @@ public sealed class InboxStore
 
     readonly IDbConnectionFactory _db;
     readonly ServerEconomyEvents _events;
+    readonly IContentSets _content;
     readonly ILogger<InboxStore> _log;
 
-    public InboxStore(IDbConnectionFactory db, ServerEconomyEvents events, ILogger<InboxStore> log)
+    public InboxStore(IDbConnectionFactory db, ServerEconomyEvents events, IContentSets content, ILogger<InboxStore> log)
     {
         _db = db;
         _events = events;
+        _content = content;
         _log = log;
     }
 
@@ -184,10 +188,8 @@ public sealed class InboxStore
             _log.LogError("inbox item {InboxItemId} has a malformed grants value; refused as {Code}", row.Id, InboxErrors.INBOX_BAD_GRANT);
             return InboxErrors.INBOX_BAD_GRANT;
         }
-        // TODO(#271): item lines are refused until it is decided how the client's ApplyInboxGrant applies them.
-        if (lines.Any(l => l.Kind == GrantKindItem)) return InboxErrors.INBOX_ITEM_GRANT_UNSUPPORTED;
         foreach (var l in lines)
-            if (l.Kind != GrantKindCurrency || !IsCurrency(l.Id) || l.Amount <= 0 || l.Amount > int.MaxValue)
+            if (!(l.Kind == GrantKindCurrency ? IsCurrency(l.Id) : l.Kind == GrantKindItem && IsItem(l.Id)) || l.Amount <= 0 || l.Amount > int.MaxValue)
             {
                 _log.LogError("inbox item {InboxItemId} has a bad grant line {Kind}/{Id}/{Amount}; refused as {Code}", row.Id, l.Kind, l.Id, l.Amount,
                               InboxErrors.INBOX_BAD_GRANT);
@@ -200,9 +202,15 @@ public sealed class InboxStore
     {
         InboxErrors.INBOX_EXPIRED => "This inbox item has expired.",
         InboxErrors.INBOX_NOT_AVAILABLE => "This inbox item is not available yet.",
-        InboxErrors.INBOX_ITEM_GRANT_UNSUPPORTED => "This inbox item grants an item, which cannot be claimed yet.",
         _ => "This inbox item's grants could not be read.",
     };
+
+    /// <summary>
+    /// An item line's id: a weapon, skill or companion of the newest held content set, as the client's ApplyInboxGrant
+    /// resolves it (<c>CollectionRules.TryKindOf</c>; 00 decision 116). Ids are never deleted (09), so an older client knows it too
+    /// unless the row was added after its content; such a client refuses the grant with INBOX_BAD_GRANT.
+    /// </summary>
+    bool IsItem(string id) => !string.IsNullOrEmpty(id) && CollectionRules.TryKindOf(_content.Active, id, out _);
 
     static bool IsCurrency(string id) => Enum.TryParse<Currency>(id, ignoreCase: false, out var c) && Enum.IsDefined(c) && c.ToString() == id;
 
@@ -224,7 +232,17 @@ public sealed class InboxStore
         string refId = row.Id.ToString("D");
         foreach (var l in lines)
         {
-            if (l.Id == nameof(Currency.DIAMOND))
+            if (l.Kind == GrantKindItem)
+            {
+                // The copies the client's ApplyInboxGrant adds (00 decision 116) go to granted_items, which ITEM_WITHOUT_PULL
+                // and the summon handler's CollectionState read (specs/08 sections 3.2 and 7). Two lines of one id add up.
+                await using var ins = c.Command(
+                    "insert into granted_items (player_id, item_id, amount, source_ref) values (@p, @i, @n, @ref) " +
+                    "on conflict (player_id, item_id, source_ref) do update set amount = granted_items.amount + excluded.amount", tx,
+                    ("p", player), ("i", l.Id), ("n", (int)l.Amount), ("ref", refId));
+                await ins.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+            }
+            else if (l.Id == nameof(Currency.DIAMOND))
             {
                 // created_at is the database's clock: the row must land in a partition (specs/02 section 12).
                 await using var ins = c.Command(

@@ -483,7 +483,7 @@ Purpose: the three daily dungeons and the Tower card (P1).
 | Reset countdown | `SecondsToRollover` (from `IClock`, 06 section 4) |
 | Card x3 | `Cards[d]`: `Tickets`, `TicketsPerDay`, `BestFloor`, `NextFloor`, `NextReward` (currency, amount), `Clearable` (06 `PreviewDungeon`), `NeedDpsRatio`, `Locked` |
 | Challenge | `cmd StartDungeon(d, NextFloor)`; pushes `SCR_DUNGEON_RUN`; disabled with reason when `!Clearable` or `Tickets == 0` |
-| Sweep | `cmd SweepDungeon(d)`; disabled when `BestFloor == 0` or `Tickets == 0`; shows reward inline |
+| Sweep | `cmd SweepDungeon(d)` through `DungeonFlow.Sweep`; disabled when `BestFloor == 0` or `Tickets == 0`, and refused with `FEATURE_DISABLED` while `dungeonsEnabled` is off (00 decision 114); shows reward inline |
 | Floor picker (long-press Challenge) | modal list of cleared floors to replay for the spectacle; rewards equal the floor's |
 
 Events: `DungeonCleared`, `DungeonFailed`, `DungeonFloorFirstCleared`, `DayRolledOver` (tickets refresh), `CurrencyChanged(TICKET_*)`.
@@ -696,7 +696,7 @@ States: unowned item shows "Not owned" and no Equip or Limit break. Rune slots (
 
 | Element | `SettingsVm` field or command |
 |---|---|
-| Account block | `Account.Provider`, `PlayerIdShort`, `Linked[]`; `Auth.Link(provider)`, `Auth.Logout()` (01 logout flow: upload save, clear token, `SCR_TITLE`) |
+| Account block | `Account.Provider`, `PlayerIdShort`, `Linked[]`; `Auth.Link(provider)`, `Auth.Logout()` (01 logout flow: upload save, clear token, `SCR_TITLE`). `[Log out]` first opens `SCR_CONFIRM` (`scr.confirm.logout_title`): with a linked provider the body is `scr.confirm.logout_body`; for a guest with no linked provider (`Linked[]` empty) it is `scr.confirm.logout_guest_body`, which warns that logout abandons the account, since the server releases the device and the next start makes a new guest (00 decision 117) |
 | Notification toggles | `ClientPrefs.Notify*` (local OS scheduling; MVP: tank full, dungeon reset; P1: missions expiring) |
 | Language | `ClientPrefs.Locale` from the shipped locales (09 `meta.ship_locales`; hidden while only `en` ships, issue #57); applies on the next screen push without restart |
 | Accessibility toggles | `ClientPrefs.Sound`, `Music`, `Haptics`, `ReducedMotion`, `LargeText` (section 11) |

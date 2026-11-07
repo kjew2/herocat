@@ -14,7 +14,7 @@ public sealed class DungeonController : ControllerBase
     /// <summary>
     /// Issues a run seed for one floor. Errors: <c>400 VALIDATION</c> (kind, floor outside <c>[1, floors]</c>),
     /// <c>403 DUNGEON_LOCKED</c> (more than one floor past the last upload's <c>BestFloor + 1</c>), <c>429 DUNGEON_SEED_CAP</c>
-    /// (<c>DUNGEON_SEEDS_PER_DAY</c> unexpired seeds of this kind today), <c>503 DUNGEONS_DISABLED</c> (kill switch).
+    /// (<c>DUNGEON_SEEDS_PER_DAY</c> seeds of this kind issued today, expired or not), <c>503 DUNGEONS_DISABLED</c> (kill switch).
     /// </summary>
     [HttpPost("v1/dungeon/seed"), Auth(AuthPolicy.Jwt), RateLimit(20), RateLimit(60, RateLimitAttribute.Day), Idempotent]
     [ProducesResponseType(typeof(DungeonSeedResponse), StatusCodes.Status200OK)]

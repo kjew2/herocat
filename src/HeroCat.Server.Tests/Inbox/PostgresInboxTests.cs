@@ -254,6 +254,22 @@ public sealed class PostgresInboxTests
         Assert.That((await Ok(await List())).GetProperty("items").GetArrayLength(), Is.Zero, "a claimed item leaves the list");
     }
 
+    [Test]
+    public async Task Item_lines_are_claimed_and_returned_for_the_client_with_no_ledger_row()   // 00 decision 116, issue #271
+    {
+        var id = await Seed("[{\"kind\":\"item\",\"id\":\"weapon_m_01\",\"amount\":2},{\"kind\":\"currency\",\"id\":\"DIAMOND\",\"amount\":10}]",
+                            kind: "admin");
+        var b = await Ok(await Claim(id));
+        var lines = b.GetProperty("grants").EnumerateArray().Select(l => (l.GetProperty("kind").GetString(), l.GetProperty("id").GetString(),
+                                                                           l.GetProperty("amount").GetInt64())).ToList();
+        Assert.That(lines, Is.EqualTo(new[] { ("item", "weapon_m_01", 2L), ("currency", "DIAMOND", 10L) }));
+        Assert.That(await Claimed(id), Is.EqualTo(1));
+        Assert.That(await DiamondRows(id), Is.EqualTo(1), "only the currency line has a ledger row");
+        Assert.That(await _db.CountAsync("select count(*) from ticket_ledger where ref_id = @r", ("r", id.ToString("D"))), Is.Zero);
+        Assert.That(await _db.CountAsync("select count(*) from granted_items where player_id = @p and item_id = 'weapon_m_01' and amount = 2 and source_ref = @r",
+                                         ("p", _player), ("r", id.ToString("D"))), Is.EqualTo(1), "ITEM_WITHOUT_PULL's ledger (specs/08 section 7)");
+    }
+
     [TestCase("iap", "IAP")]
     [TestCase("package_daily", "IAP")]
     [TestCase("refund", "REFUND")]
@@ -313,16 +329,18 @@ public sealed class PostgresInboxTests
         var expired = await Seed(Diamonds(1), expiresAt: T0);
         await Error(await Claim(expired), HttpStatusCode.Gone, InboxErrors.INBOX_EXPIRED);
 
-        // TODO(#271): item lines are refused until the client can apply them.
+        // An item line must name a weapon, skill or companion of the content, with a positive amount (00 decision 116).
         var item = await Seed("[{\"kind\":\"currency\",\"id\":\"DIAMOND\",\"amount\":5},{\"kind\":\"item\",\"id\":\"wpn_017\",\"amount\":1}]");
-        await Error(await Claim(item), HttpStatusCode.Conflict, InboxErrors.INBOX_ITEM_GRANT_UNSUPPORTED);
+        await Error(await Claim(item), HttpStatusCode.Conflict, InboxErrors.INBOX_BAD_GRANT);
+        var noCopies = await Seed("[{\"kind\":\"item\",\"id\":\"weapon_c_01\",\"amount\":0}]");
+        await Error(await Claim(noCopies), HttpStatusCode.Conflict, InboxErrors.INBOX_BAD_GRANT);
 
         var bad = await Seed("[{\"kind\":\"currency\",\"id\":\"NOT_A_CURRENCY\",\"amount\":5}]");
         await Error(await Claim(bad), HttpStatusCode.Conflict, InboxErrors.INBOX_BAD_GRANT);
         var negative = await Seed(Diamonds(-5));
         await Error(await Claim(negative), HttpStatusCode.Conflict, InboxErrors.INBOX_BAD_GRANT);
 
-        foreach (var id in new[] { other, expired, item, bad, negative }) Assert.That(await Claimed(id), Is.Zero);
+        foreach (var id in new[] { other, expired, item, noCopies, bad, negative }) Assert.That(await Claimed(id), Is.Zero);
         Assert.That(await _db.CountAsync("select count(*) from diamond_ledger where player_id = @p", ("p", _player)), Is.Zero);
         Assert.That(await _db.CountAsync("select count(*) from granted_items where player_id = @p", ("p", _player)), Is.Zero);
 
@@ -403,7 +421,7 @@ public sealed class PostgresInboxTests
                     Is.EqualTo(new[] { a, expiring, item, tickets }.Select(g => g.ToString("D"))), "a row expired 10 days ago is not reported");
         Assert.That(rows[1].EnumerateObject().Select(p => p.Name), Is.EquivalentTo(new[] { "inboxItemId", "code" }));
         Assert.That(rows[1].GetProperty("code").GetString(), Is.EqualTo(InboxErrors.INBOX_EXPIRED));
-        Assert.That(rows[2].GetProperty("code").GetString(), Is.EqualTo(InboxErrors.INBOX_ITEM_GRANT_UNSUPPORTED));
+        Assert.That(rows[2].GetProperty("code").GetString(), Is.EqualTo(InboxErrors.INBOX_BAD_GRANT), "wpn_017 is not a content id");
         Assert.That(rows[3].GetProperty("reason").GetString(), Is.EqualTo("MAIL"));
         Assert.That(b.GetProperty("balances").EnumerateObject().Select(p => (p.Name, p.Value.GetInt64())),
                     Is.EquivalentTo(new[] { ("DIAMOND", 10L), ("TICKET_SUMMON_SKILL", 3L) }));
@@ -551,7 +569,7 @@ public sealed class InboxUnitTests
         Assert.That(InboxErrors.Status(InboxErrors.INBOX_EXPIRED), Is.EqualTo(410));
         Assert.That(InboxErrors.Status(InboxErrors.INBOX_ALREADY_CLAIMED), Is.EqualTo(409));
         Assert.That(InboxErrors.Status(InboxErrors.INBOX_NOT_AVAILABLE), Is.EqualTo(409));
-        Assert.That(InboxErrors.INBOX_ITEM_GRANT_UNSUPPORTED, Is.EqualTo(HeroCat.Sim.Commands.InboxRejectReasons.INBOX_ITEM_GRANT_UNSUPPORTED));
+        Assert.That(InboxErrors.INBOX_BAD_GRANT, Is.EqualTo(HeroCat.Sim.Commands.InboxRejectReasons.INBOX_BAD_GRANT));
         Assert.That(InboxStore.ClaimAllMax, Is.EqualTo(HeroCat.Runtime.Services.InboxRules.ClaimAllMax));
         Assert.That(InboxStore.LedgerTickets, Is.EquivalentTo(new[] { "TICKET_SUMMON_WEAPON", "TICKET_SUMMON_SKILL", "TICKET_SUMMON_COMPANION", "TICKET_SUMMON_RUNE" }));
     }

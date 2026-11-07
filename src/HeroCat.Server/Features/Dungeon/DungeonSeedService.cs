@@ -29,8 +29,8 @@ public sealed class CsprngDungeonSeedSource : IDungeonSeedSource
 /// <c>Dungeon</c> with a row in the client's content, <c>floor</c> in <c>[1, floors]</c>), the <c>dungeonsEnabled</c> kill
 /// switch (<c>503 DUNGEONS_DISABLED</c>, never stored, so a retry after the switch is lifted is served), then in one
 /// transaction holding the account row: the unlock against the last uploaded save (<c>floor &lt;= BestFloor + 2</c>, else
-/// <c>403 DUNGEON_LOCKED</c>) and the daily cap (<c>DUNGEON_SEEDS_PER_DAY</c> unexpired seeds of this kind and day key,
-/// else <c>429 DUNGEON_SEED_CAP</c>); then 64 CSPRNG bits go to <c>dungeon_seeds</c> with
+/// <c>403 DUNGEON_LOCKED</c>) and the daily cap (<c>DUNGEON_SEEDS_PER_DAY</c> seeds issued for this kind and day key, expired or not
+/// (00 decision 114), else <c>429 DUNGEON_SEED_CAP</c>); then 64 CSPRNG bits go to <c>dungeon_seeds</c> with
 /// <c>expires_at = now + DUNGEON_SEED_TTL_S</c>, committed with the idempotency row.
 /// </summary>
 public sealed class DungeonSeedService
@@ -93,8 +93,8 @@ public sealed class DungeonSeedService
         if (floor > best + UnlockTolerance)
             throw new ApiException(StatusCodes.Status403Forbidden, DungeonErrors.DUNGEON_LOCKED, "This floor is not unlocked yet.",
                                    new { kind = kindName, floor, bestFloor = best });
-        int outstanding = await DungeonStore.OutstandingAsync(c, tx, player, kindName, dayKey, now, ct).ConfigureAwait(false);
-        if (outstanding >= PerDay)
+        int issued = await DungeonStore.IssuedForDayAsync(c, tx, player, kindName, dayKey, ct).ConfigureAwait(false);
+        if (issued >= PerDay)
             throw new ApiException(StatusCodes.Status429TooManyRequests, DungeonErrors.DUNGEON_SEED_CAP, "Too many dungeon runs today.",
                                    new { kind = kindName, dayKey, cap = PerDay });
 

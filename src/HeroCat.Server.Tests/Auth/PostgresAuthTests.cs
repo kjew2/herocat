@@ -287,6 +287,32 @@ public sealed class PostgresAuthTests
         await AssertError(noToken, HttpStatusCode.Unauthorized, ErrorCodes.UNAUTHENTICATED);
     }
 
+    [Test]
+    public async Task Logout_releases_the_device_so_the_next_guest_is_a_new_account()   // 00 decision 117, issue #293
+    {
+        var a = await Guest();
+        var b = await Guest();
+        // Another player's token releases nothing: b's device stays bound.
+        using var notMine = await _client.SendAsync(Json(HttpMethod.Post, "/v1/auth/logout", new { refreshToken = b.Refresh }, a.Device, NewId(), a.Access));
+        Assert.That(notMine.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+        using var stillBound = await _client.SendAsync(GuestRequest(b.Device, NewKey()));
+        await AssertError(stillBound, HttpStatusCode.Conflict, "DEVICE_ALREADY_BOUND");
+
+        using var logout = await _client.SendAsync(Json(HttpMethod.Post, "/v1/auth/logout", new { refreshToken = a.Refresh }, a.Device, NewId(), a.Access));
+        Assert.That(logout.StatusCode, Is.EqualTo(HttpStatusCode.NoContent));
+        Assert.That(await _db.CountAsync("select count(*) from devices where device_id = @d and player_id = @p and released_at is not null",
+                                         ("d", Guid.Parse(a.Device)), ("p", a.PlayerId)), Is.EqualTo(1));
+
+        var again = await Guest(a.Device);
+        Assert.That(again.PlayerId, Is.Not.EqualTo(a.PlayerId), "a new guest, not the old account");
+        Assert.That(await _db.CountAsync("select count(*) from devices where device_id = @d and player_id = @p and released_at is null",
+                                         ("d", Guid.Parse(a.Device)), ("p", again.PlayerId)), Is.EqualTo(1), "the row is rebound, not duplicated");
+        using var fresh = await Refresh(again.Refresh, again.Device);
+        Assert.That(fresh.StatusCode, Is.EqualTo(HttpStatusCode.OK), "the new guest's family works on the rebound device");
+        using var bound = await _client.SendAsync(GuestRequest(a.Device, NewKey()));
+        await AssertError(bound, HttpStatusCode.Conflict, "DEVICE_ALREADY_BOUND");
+    }
+
     // ---- /devices ----
 
     async Task<HttpResponseMessage> Devices(Session s, string key, string? device = null) =>

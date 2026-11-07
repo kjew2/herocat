@@ -49,8 +49,8 @@ namespace HeroCat.Runtime.Services
 
         /// <summary>
         /// 04 section 13: one per acquired item: each summon result (AcquireReason SUMMON, RequestId the summon's) and the
-        /// non-summon grants (TUTORIAL: the profile-created weapon, RequestId null; MAIL with the inbox claim's requestId once
-        /// the sim applies inbox item lines, TODO(#271)).
+        /// non-summon grants (TUTORIAL: the profile-created weapon, RequestId null; MAIL: an inbox item line, with the inbox
+        /// claim's requestId, from InboxFlow).
         /// </summary>
         public sealed record ItemAcquired(Banner Banner, string ItemId, Rarity Rarity, bool IsNew, int CopiesAfter, int LevelBefore,
                                           int LevelAfter, string AcquireReason, string RequestId) : AnalyticsEvent

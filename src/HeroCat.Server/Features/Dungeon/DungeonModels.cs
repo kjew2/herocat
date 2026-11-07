@@ -15,7 +15,7 @@ public static class DungeonErrors
     /// <summary>403: the floor is more than one above the last uploaded save's <c>BestFloor + 1</c>.</summary>
     public const string DUNGEON_LOCKED = "DUNGEON_LOCKED";
 
-    /// <summary>429: <c>DUNGEON_SEEDS_PER_DAY</c> outstanding seeds for this kind and day key.</summary>
+    /// <summary>429: <c>DUNGEON_SEEDS_PER_DAY</c> seeds already issued for this kind and day key, expired or not.</summary>
     public const string DUNGEON_SEED_CAP = "DUNGEON_SEED_CAP";
 
     /// <summary>503: the active config's <c>killSwitches.dungeonsEnabled</c> is false (as SUMMON_DISABLED; issue #205).</summary>

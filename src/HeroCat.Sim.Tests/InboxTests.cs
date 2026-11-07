@@ -84,8 +84,79 @@ namespace HeroCat.Sim.Tests
             })
                 AssertRejectIsPure(sim, new InboxGrantPayload("a", new[] { Cur(Currency.GOLD, 1), bad }, CurrencyReason.MAIL),
                                    RejectCode.BadArgument, InboxRejectReasons.INBOX_BAD_GRANT);
-            AssertRejectIsPure(sim, new InboxGrantPayload("a", new[] { Cur(Currency.GOLD, 1), new GrantLine("item", "wpn_x", 1) }, CurrencyReason.ADMIN),
-                               RejectCode.NotAvailable, InboxRejectReasons.INBOX_ITEM_GRANT_UNSUPPORTED);
+            foreach (var bad in new[]
+            {
+                new GrantLine("item", "wpn_x", 1), new GrantLine("item", null, 1), new GrantLine("item", "weapon_c_01", 0),
+                new GrantLine("item", "weapon_c_01", -1), new GrantLine("item", "weapon_c_01", (long)int.MaxValue + 1), new GrantLine("item", "DIAMOND", 1),
+            })
+                AssertRejectIsPure(sim, new InboxGrantPayload("a", new[] { Cur(Currency.GOLD, 1), bad }, CurrencyReason.ADMIN),
+                                   RejectCode.BadArgument, InboxRejectReasons.INBOX_BAD_GRANT);
+        }
+
+        [Test]
+        public void ItemGrant_AddsCopies_EmitsOneItemAcquiredPerLine_AutoEquips_AndCountsNoQuest()   // 00 decision 116, issue #271
+        {
+            var sim = NewSim();
+            var s = sim.State;
+            Assert.That(s.Weapons.Items.ContainsKey("weapon_m_01"), Is.False);
+            long now = sim.VirtualNowServerSeconds;
+            long summonQuest = (s.Quests.Daily.Values.Sum(q => q.Progress) + s.Quests.Weekly.Values.Sum(q => q.Progress));
+            var g = new InboxGrantPayload("ibx_i", new[] { new GrantLine("item", "weapon_m_01", 3), Cur(Currency.DIAMOND, 10),
+                                                            new GrantLine("item", "comp_c_02", 1) }, CurrencyReason.ADMIN);
+            Assert.That(sim.Apply(new ApplyInboxGrant(g)).Ok, Is.True);
+            var ev = sim.DrainEvents();
+            var acquired = ev.OfType<ItemAcquired>().ToList();
+            Assert.That(acquired.Select(e => (e.Banner, e.ItemId, e.Rarity, e.IsNew, e.LevelBefore, e.OverflowRockCandy)), Is.EqualTo(new[]
+            {
+                (Banner.WEAPON, "weapon_m_01", Rarity.MYTHIC, true, 0, 0L),
+                (Banner.COMPANION, "comp_c_02", Rarity.COMMON, false, sim.Db.DupeLevel(1), 0L),
+            }));
+            var w = s.Weapons.Items["weapon_m_01"];
+            Assert.That((w.Copies, w.FirstAcquiredServerTime), Is.EqualTo((3, now)), "a new item is stamped with the claim time");
+            Assert.That(acquired[0].LevelAfter, Is.EqualTo(sim.Db.DupeLevel(3)));
+            Assert.That(s.Companions.Items["comp_c_02"].Copies, Is.EqualTo(2));
+            Assert.That(ev.OfType<ItemEquipped>().Any(e => e.Banner == Banner.WEAPON && e.ItemId == "weapon_m_01" && e.Auto), Is.True,
+                        "weapon auto-equip runs as after a summon");
+            Assert.That(s.Party.Slots.Any(x => x.Weapon == "weapon_m_01"), Is.True);
+            Assert.That((s.Quests.Daily.Values.Sum(q => q.Progress) + s.Quests.Weekly.Values.Sum(q => q.Progress)), Is.EqualTo(summonQuest), "a grant is not a summon");
+            Assert.That(s.Stats.Pulls, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void ItemGrant_RunsTheOwnAchievementLadders()   // 06 section 5.4, MVP content
+        {
+            var db = TestContent.Mvp;
+            var state = HeroCat.Runtime.Profile.ProfileFactory.Create(db, System.Guid.Empty, TestContent.T0, new System.Guid("de71ce00-0000-4000-8000-000000000001"), TestContent.Root);
+            state.Progress.HighestCleared = db.FeatureUnlocks["QUESTS"].Threshold.Value;
+            var sim = new Simulation(state, db);
+            sim.Apply(new ApplyServerTime(TestContent.T0));
+            var g = new InboxGrantPayload("ibx_a", new[] { new GrantLine("item", "weapon_m_01", 1), new GrantLine("item", "skill_c_02", 1) },
+                                          CurrencyReason.ADMIN);
+            Assert.That(sim.Apply(new ApplyInboxGrant(g)).Ok, Is.True);
+            Assert.That(sim.QuestProgressOf(db.Quest("ach_weapons_01")), Is.EqualTo(state.Weapons.Items.Count), "OWN_WEAPONS: distinct ids");
+            Assert.That(sim.QuestProgressOf(db.Quest("ach_skills_01")), Is.EqualTo(state.Skills.Items.Count), "OWN_SKILLS: distinct ids");
+        }
+
+        [Test]
+        public void ItemGrant_PastTheCap_ConvertsTheRestToRockCandy_WithTheGrantReason()   // 04 section 5.3
+        {
+            var sim = NewSim();
+            int max = sim.Db.DupeLevels[sim.Db.DupeLevels.Count - 1];
+            sim.State.Weapons.Items["weapon_l_01"] = new HeroCat.Sim.State.OwnedItem { Copies = max - 1 };
+            double rc = sim.State.Wallet.Get(Currency.ROCK_CANDY);
+            long rate = sim.Db.Rarities[Rarity.LEGENDARY].DupeOverflowRockCandy;
+            var g = new InboxGrantPayload("ibx_o", new[] { new GrantLine("item", "weapon_l_01", 4) }, CurrencyReason.MAIL);
+            Assert.That(sim.Apply(new ApplyInboxGrant(g)).Ok, Is.True);
+            var ev = sim.DrainEvents();
+            Assert.That(sim.State.Weapons.Items["weapon_l_01"].Copies, Is.EqualTo(max));
+            var a = ev.OfType<ItemAcquired>().Single();
+            Assert.That((a.IsNew, a.OverflowRockCandy, a.LevelAfter), Is.EqualTo((false, 3 * rate, sim.Db.DupeLevel(max))));
+            var cc = ev.OfType<CurrencyChanged>().Single(e => e.Currency == Currency.ROCK_CANDY);
+            Assert.That((cc.Delta, cc.Reason), Is.EqualTo((3.0 * rate, CurrencyReason.MAIL)));
+            Assert.That(sim.State.Wallet.Get(Currency.ROCK_CANDY), Is.EqualTo(rc + 3 * rate));
+
+            // A replay applies nothing twice.
+            AssertRejectIsPure(sim, g, RejectCode.AlreadyClaimed, InboxRejectReasons.INBOX_ALREADY_APPLIED);
         }
 
         [Test]
