@@ -92,7 +92,7 @@ Score each candidate 1 to 5 on: **pull excitement, readability at small sizes, f
 
 ## Result
 
-**Picked: A, clean cel** (owner, 2026-11-07, after round 1; round 2 was skipped). It is the house illustration style in `specs/07` section 15.3. The next step, clean-cel splashes for the other Legendary and Mythic companions, uses `splash-prompts.md`. Round 1 images and the lookbook link are on issue #321.
+**Picked: A, clean cel** (owner, 2026-11-07, after round 1; round 2 was skipped). It is the house illustration style in `specs/07` section 15.3. The next step, clean-cel splashes for the other Legendary and Mythic companions, uses `splash-prompts.md`. Round 1 images and the lookbook link are on issue #321. Since then, generation is text only: the design sheet used here is no longer passed to the generator (`splash-prompts.md`).
 
 ## 7. After the pick
 

@@ -10,7 +10,7 @@ These images are exploration only. They set direction for the artist and never s
 - **Framing:** head to mid-thigh, with the face in the upper third. Keep the face and figure inside the centred 810 x 1440 rp safe zone (`specs/07` section 15.2). A big prop, such as a parasol, a weapon or tails, may run off the frame edge (owner, 2026-11-07).
 - **No baked-in text:** no names, chips, frames or UI. The game draws them.
 - **Content:** Legendary and Mythic designs may be suggestive within `specs/00` decision 105. No nudity.
-- **Reference:** a character with artist art gets a greyscale design sheet, cropped to the character with the banner and chibi removed. Greyscale crops pass on the design without copying the reference's rendering (`splash-pilot.md` section 4). A character with no art yet is generated from text only.
+- **Text only** (owner, 2026-11-07): every splash is generated from its written prompt alone. Artist art and concept images are not passed to the generator, even as greyscale design sheets. Their rendering carries over (softer, rounder faces) and splits the cast into two looks. The consistency test is on issue #321 and in the lookbook. Design details from that art go into the prompt as words instead. The design sheets stay in `art/exploration/` as a record.
 
 ## House style
 
@@ -29,22 +29,29 @@ Pilot variant E, kept for comparison with the house style (owner, 2026-11-07). T
 ## Characters
 
 ### Yuki
-`comp_l_02`. Reference: `art/exploration/splash_pilot/yuki_design_sheet.png`. The pilot's base prompt is in `splash-pilot.md` section 4.
+`comp_l_02`. Artist art (not sent to the generator): `art/exploration/splash_pilot/yuki_design_sheet.png`. Based on the pilot's base prompt (`splash-pilot.md` section 4).
+
+> Vertical 9:16 head-to-mid-thigh anime character illustration for a mobile game summon screen. A young gothic shadow mage woman, very long straight black hair in a hime cut with heavy blunt bangs and side locks cut straight at the jaw, white panels in the side locks and white strands through the length, violet-grey eyes with soft red under-eye makeup and a small beauty mark, languid half-lidded expression with lips slightly parted, looking at the viewer. Cross earrings and an ear chain. Heart-and-cross black bow in her hair, a thin halo of silver thorns behind her head. Gothic jirai kei fashion: white frilled sleeveless blouse with bare shoulders and a big black collar bow pinned with a heart gem, lace choker, black high-waisted corset belt with buckled straps, short black frilled skirt with white lace layers, oversized black off-shoulder sleeves laced with white ribbon, a buckled thigh strap with a frilled garter, silver chains and small cross charms. A white plush bunny with stitched X eyes and a heart bow hangs from her belt. Standing three-quarter view, turned slightly to her left, her right hand holding a frilled black-and-white parasol over her shoulder, canopy tilted up and to the right; the canopy may run off the top or right edge. Hair and ribbons streaming to the left. Pale violet butterflies, floating crystal shards and loose ribbons around her, white lilies at the bottom edge. Background: dim gothic cathedral interior with violet stained glass, out of focus. Near-monochrome palette: black, white and silver with lavender-violet light as the only accent. Face in the upper third, character centred with margin on all sides.
 
 ### Lucy
-`comp_l_01`. Reference: `art/exploration/splash_batch/lucy_design_sheet.png`.
+`comp_l_01`. Artist art (not sent to the generator): `art/exploration/splash_batch/lucy_design_sheet.png`.
 
 > Vertical 9:16 head-to-mid-thigh anime character illustration for a mobile game summon screen. A young stargazing witch, long wavy blonde hair to her hips with one loose braid, violet eyes, calm confident half-smile looking at the viewer. A wide-brim violet witch hat with gold star trim, a white lily and a violet ribbon. White off-shoulder dress with a violet overskirt and gold trim, detached violet sleeves with white frills, a gold chain belt with amethyst charms. Her right hand holds an astrolabe staff taller than her, topped with gold rings around a glowing amethyst orb; her left hand is raised with a small starfall above her palm. Background: a night sky over distant towers, a large faint gold magic circle of crescent moons and stars behind her, out of focus. Palette violet, gold and cream with amethyst accents. Face in the upper third, character centred.
 
 ### Valeria
-`comp_l_04`. Reference: `art/exploration/splash_batch/valeria_design_sheet.png`.
+`comp_l_04`. Artist art (not sent to the generator): `art/exploration/splash_batch/valeria_design_sheet.png`.
 
 > Vertical 9:16 head-to-mid-thigh anime character illustration for a mobile game summon screen. A young paladin captain, long blonde hair in a thick braid over one shoulder, blue eyes, calm resolute expression looking at the viewer. A gold winged circlet with blue ribbons. Sculpted white plate armour with gold trim and a sapphire at the collar, a fitted cuirass with a neckline cutout, gold-edged pauldrons, a brown leather belt, white armoured thigh plates with straps, a royal blue cape with gold fleur-de-lis. Her left arm braces a large gold-and-white cross-shaped shield beside her; her right hand holds a tall lance flying a blue banner with a gold fleur-de-lis. Background: a sunlit castle courtyard with tall blue banners and a gold radiant halo-like window behind her, out of focus. Palette white, gold and royal blue. Face in the upper third, character centred.
 
 ### Seraphine
-`comp_m_01`. Reference: `art/exploration/splash_batch/seraphine_design_sheet.png`.
+`comp_m_01`. Artist art (not sent to the generator): `art/exploration/splash_batch/seraphine_design_sheet.png`.
 
 > Vertical 9:16 head-to-mid-thigh anime character illustration for a mobile game summon screen. A young death knight woman, very long silver-white hair, crimson eyes, cool unreadable expression looking at the viewer. Curling black horns with a red rose and a black crown of spikes. Black-and-gold revealing armour: a black armoured top with gold trim and chains, a bare midriff, gold-trimmed black armoured hip pieces, black gauntlets with claws, one skull pauldron, strapped black thigh-high armour. A tattered crimson cape. Her right hand holds a huge scythe over her shoulder, with a crimson blade and a skull at the head. Background: a magenta and violet mist of shadowy ghost shapes over a ruined gothic graveyard, a crimson moon, out of focus. Palette black, crimson and magenta with gold trim. Face in the upper third, character centred.
+
+### Marisol
+`comp_l_05`. Text only; no art yet.
+
+> Vertical 9:16 head-to-mid-thigh anime character illustration for a mobile game summon screen. A pirate queen, waist-length wavy black hair with a deep teal sheen and a few thin braids threaded with gold coins, sea-green eyes, a confident smirk, a beauty mark under one eye, gold hoop earrings, looking at the viewer. A wide black tricorn with gold trim, a white plume and a teal ribbon. An open long deep-teal captain's coat with gold buttons, wide gold-embroidered cuffs and flared tails, worn off the shoulders; a white ruffled blouse slipping off one shoulder under a laced black corset; a gold-and-teal sash with coin charms at her waist; short black fitted breeches; high cuffed black boots. A cutlass with a gold basket hilt on one hip and a gold spyglass on the other. Her right hand rests on the cutlass hilt; her left hand flips a gold coin. Background: the deck of a ship at sunset over a teal sea, billowing sails and rigging, gold coins spilling from an open chest, out of focus. Palette deep-sea teal, black and gold. Face in the upper third, character centred.
 
 ### Astraea
 `comp_m_02`. Text only; no art yet.

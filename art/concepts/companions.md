@@ -157,7 +157,17 @@ All of them are heroines (`specs/00` decision 104). Store art uses covered varia
 `comp_l_05`, Merchant, WATER.
 - **Hook:** a pirate queen who treats every battlefield as a treasure map; her crew has the loot counted before the dust settles.
 - **Look:** A wide tricorn with a white plume, wavy dark hair to the waist, an open long captain's coat over a laced corset and ruffled blouse that slips off one shoulder, high cuffed boots, a cutlass on one hip and a gold spyglass on the other.
+- **Hair:** waist-length wavy black hair with a deep teal sheen, a few thin braids threaded with gold coins.
+- **Outfit:**
+  - a wide black tricorn with gold trim, a white plume and a teal ribbon;
+  - an open, long deep-teal captain's coat with gold buttons, wide gold-embroidered cuffs and flared tails, worn off the shoulders;
+  - a white ruffled blouse slipping off one shoulder, under a laced black corset;
+  - a gold-and-teal sash with coin charms, short black fitted breeches, high cuffed black boots.
+- **Signature props:** a cutlass with a gold basket hilt on one hip and a gold spyglass on the other. She flips a gold coin when she's thinking.
+- **Face:** sea-green eyes, a confident smirk, a beauty mark under one eye, gold hoop earrings.
+- **Motifs:** a compass rose, waves, gold coins, rope and rigging, an open treasure chest.
 - **Palette:** Deep-sea teal, black and gold.
+- **Leave out:** real pirate flags and ship names, and any readable text on maps or coins.
 - **Ability VFX (`vfx_comp_l_05`):** A treasure chest lands with a thud, springs open and showers gold coins across the screen; the coin glint stays on the gold counter while the buff lasts.
 - **Splash:** `art_splash_comp_l_05` (decision 108).
 
