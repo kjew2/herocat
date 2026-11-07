@@ -44,16 +44,16 @@ Each row maps a mechanic from the research catalog to our system name, its tier,
 |---|---|---|---|---|
 | Star grades 1-7, stat window, stats and growth per level (§3) | **Heroes**, **Hero Sheet** | M0 | 03 | #357 |
 | Classes as data and formation roles (§3, §9.5) | **Classes**, **Roles** | M0 | 03 | #357 |
-| Summon-only classes; class change at 3★ and Lv20 (§3, §9.3) | **Classes**, **Class Change** | MVP | 03 | #357, #367 |
+| Summon-only classes; class change at 3★ and Lv20 (§3, §9.3) | **Classes**, **Class Change** | MVP (class tiers 1-2), P1 (class tier 3) | 03 | #357, #367 |
 | Stat redistribution by focus preset (§3) | **Redistribution** | MVP | 03 | #357 |
 | Status effects: Fear, Panic, Despair, Berserk, Composure, Exhaustion, poison, bleeding, frenzy, near death, hidden power (§3, §9.1) | **Statuses** | Fear M0, rest MVP, Surge and dual mind P1 | 03 | #358 |
 | Morale, stress, breakdown and stress death, intimacy and pair synergy (§3, §8) | **Inner Life** | MVP | 03 | #359 |
 | Loyalty, refusals and strikes (§3, §8) | **Inner Life** | P1 | 03 | #359 |
 | Former lives, hidden talents, seal-slot traits, memory restoration (§3, §9.1) | **Former Lives**, **Traits** | Former life M0, rest MVP, crafting trades and claimed lives P1 | 03 | #360 |
-| Levels, EXP, level cap per grade (§5) | **Levels** | M0 | 03 | #363 |
-| Synthesis and the conversion chamber (§5, §9.3) | **Synthesis**, **Conversion** | MVP | 03 | #364 |
-| Promotion by stones and recipes up to 7★ (§5, §9.3) | **Promotion** | M0 (low steps), MVP (all) | 03 | #365 |
-| Skills: training, levels, tiers, merging, evolution, awakening, skill books (§5, §9.3) | **Skills** | MVP | 03 | #366 |
+| Levels, EXP, level cap per grade (§5) | **Levels** | M0 (replay, dungeon and exploration EXP MVP) | 03 | #363 |
+| Synthesis and the conversion chamber (§5, §9.3) | **Synthesis**, **Conversion** | MVP (choosing the technique passed on P1, trait transfer P2) | 03 | #364 |
+| Promotion by stones and recipes up to 7★ (§5, §9.3) | **Promotion** | M0 (1★→2★ and 2★→3★, instant), MVP (all steps, stone crafting, the chamber) | 03 | #365 |
+| Skills: training, levels, tiers, merging, evolution, awakening, skill books (§5, §9.3) | **Skills** | M0 (data and starting skills), MVP (the rest), P1 (drills) | 03 | #366 |
 | Normal and advanced hero summons, 1x and 10x, affinity pulls (§4, §9.2) | **Hero Summon** | M0 (local), MVP (server) | 04 | #361 |
 | Equipment summon for gold (§4) | **Gear Summon** | MVP | 04 | #362 |
 | Equipment grades, slots, storage, auto-equip, durability, potions (§6) | **Gear**, **Storage**, **Consumables** | MVP | 04 | #368 |
@@ -118,7 +118,7 @@ Authority split, which every spec must respect:
 | Concern | Authority | Notes |
 |---|---|---|
 | Battles, floor progress, hero levels, statuses, deaths, inner life, lobby timers, offline catch-up | **Client sim** | Deterministic. The server can re-simulate from an earlier save and a command log for spot checks (08, #386). |
-| Synthesis, conversion, promotion and crafting rolls | **Client sim** | Each roll draws from a named stream in the save (contract 2), so results replay exactly. |
+| Promotion-stone crafting and crafting rolls | **Client sim** | Each roll draws from a named stream in the save (contract 2), so results replay exactly. Synthesis, conversion and promotion itself roll nothing (03 section 6). |
 | Hero and gear summon results | **Server** (MVP+), local `ISummonService` in M0 | The server rolls, logs and returns results. The client never holds a summon seed in MVP (decision 2). |
 | Gem balance and summon tickets | **Server** ledger (MVP+) | M0 holds them in the local `Wallet`. In Remote mode the client's balance mirrors the ledger (decision 15). |
 | Client-earned gems and tickets (quests, first clears, tutorial, login) | **Client sim**, credited to the server on upload | As decision 81, with gems in place of diamonds. |
@@ -142,18 +142,18 @@ Use these names in code, tables, specs and analytics. Singular for types, plural
 | `GameState` | The save root: everything the sim reads and writes. Holds the immutable `RngRoot` and the `ContentVersion` and `ContentHash` it was last reconciled against. Field names and shapes are 02's (#384). It is a fresh schema v1; HeroCat dev saves are not migrated (decision 33). |
 | `Summoner` | The player's in-world role. Not an entity in `GameState`: it is the player. Account-wide progress (account level, lobby, wallet) is the summoner's. |
 | `HeroDef` | A content row: one character concept from the reused cast (decision 127), with its base grade, class, former life, base stats, growth rate, traits, hidden talents, seal traits and memories (03 sections 1-2, #391). |
-| `Hero` | One owned hero: an individual instance with a `HeroUid` that never changes and a `HeroDefId`. It has its own grade, level, EXP, stats, class, skills, traits, statuses, inner-life values, gear, favourite flag and life state. Heroes are individuals, not stacked copies. Whether two heroes of the same `HeroDef` can coexist, and what a duplicate pull gives, is #344's call (#361, #364). |
+| `Hero` | One owned hero: an individual instance with a `HeroUid` that never changes and a `HeroDefId`. It has its own grade, level, EXP, stats, class, skills, traits, statuses, inner-life values, gear, favourite flag and life state. Heroes are individuals, not stacked copies. A duplicate pull is a full, separate hero (decision 148, 03 section 6.3.6). |
 | `HeroUid` | Stable id of an owned `Hero`, assigned when the hero enters the roster. Never reused, even after death, synthesis or conversion. |
 | `Roster` | All living and dead heroes the summoner owns, up to a lodging cap (06, #375). |
-| `Grade` | A hero's star grade, an integer `GRADE_MIN..GRADE_MAX` (1★ to 7★). Ordered. Shown as stars. Raised only by `Promotion` (03, #365). |
+| `Grade` | A hero's star grade, an integer `GRADE_MIN..GRADE_MAX` (1★ to 7★). Ordered. Shown as stars. Raised only by `Promotion` (03 section 6.2), at most `PROMOTE_GRADE_SPAN` grades above the hero's base grade (decision 150). |
 | `Stat` | A hero attribute: the fixed set `STR`, `INT`, `VIT` (shown as Stamina) and `AGI`, integer valued, built in core, max and current layers (03 section 1.2). Shown as current/max (research §3). |
-| `Class` | A hero's combat class. 1★ and 2★ heroes start as `NOVICE` (`NOVICE_MAX_GRADE`); some classes are summon-only (03 section 1.4). Class change is 03's (#367). |
-| `Skill` | A hero's ability, with a level and a tier. Learned, levelled, merged and evolved per 03 (#366). |
+| `Class` | A hero's combat class. 1★ and 2★ heroes start as `NOVICE` (`NOVICE_MAX_GRADE`); some classes are summon-only (03 section 1.4). Class change is 03's (section 6.5): forward only, along class tiers 0-3 (decision 151). |
+| `Skill` | A hero's ability, with a level and a tier. Learned, levelled, merged and evolved per 03 section 6.4. Known skills are capped by slots and all are active. |
 | `Trait` | A graded passive with a level, from a hero's former life, a seal slot, a revealed talent or a memory (03 section 2, #360). |
 | `Role` | A hero's formation role, `SHORT`, `MID`, `LONG` or `SUPPORT`, set by its class (03 section 1.5). 05's formation reads it. |
 | `StatFocus` | Growth weights that place a hero's stat points automatically at level-up (03 section 1.3). |
 | `Status` | A timed or conditional combat state on a combatant, such as `FEAR`: a content row in `statuses`, applied by deterministic triggers that draw no RNG (03 section 3, #358). |
-| `LifeState` | `ALIVE` or `DEAD`. A `DEAD` hero keeps its row, can't be assigned to a party and returns only through `Revive` (05, #373). Heroes consumed by synthesis or conversion leave the roster and are not `DEAD`: they can't be revived (decision 128). Whether a dead hero's death record shows in a memorial is P1 (05, #373). |
+| `LifeState` | `ALIVE` or `DEAD`. A `DEAD` hero keeps its row, can't be assigned to a party and returns only through `Revive` (05, #373). Heroes consumed by synthesis, conversion or a promotion feeder leave the roster and are not `DEAD`: they can't be revived (decision 128). A `DEAD` hero can be converted, which ends any chance of revival (decision 154). Whether a dead hero's death record shows in a memorial is P1 (05, #373). |
 | `Party` | Up to `PARTY_SIZE` heroes with an optional leader, identified by `PartyId`. A hero is in at most one party (06, #378). |
 | `Assignment` | A party's current job: a tower floor, a replay, the weekday dungeon or an exploration. While assigned, the party fights on its own, online or away (05, 06). |
 | `Tower` | The 100 floors, `TOWER_FLOORS` (05, #370). |
@@ -163,7 +163,7 @@ Use these names in code, tables, specs and analytics. Singular for types, plural
 | `Battle` | One deterministic auto-battle between assigned heroes and a floor's enemies, ticked in the main loop (05, #371). |
 | `Gear` | One owned equipment item with a `GearUid`, a `GearDefId` and a letter `GearGrade` (04, #368). |
 | `GearGrade` | Equipment grade, ordered from `F` through letter grades with sub-grades to `S` and above (04, #368; research §6, §9.4). |
-| `Item` | A stackable owned thing: materials (elemental stones, promotion materials), consumables (potions, revive items) and tickets that aren't currencies. Ids and kinds are content (04, #368; 09). |
+| `Item` | A stackable owned thing: materials (elemental stones, spirit stones, promotion stones, the star tome, class insignia), consumables (potions, revive items, skill books) and tickets that aren't currencies. Ids and kinds are content (04, #368; 09). |
 | `ReviveItem` | An `Item` that brings one `DEAD` hero back (DIV-04). Earned in play and sold for gems at a listed price (decision 126). |
 | `Facility` | A lobby building with a level, such as the summoning hall or the training hall (06, #375). |
 | `Manager` | The lobby's manager NPC: the tutorial and UI voice, who relays orders, gives tips and can execute a hero who disobeys (decision 128); its other powers are 06's (#376). Our own character, not the source's. |
@@ -171,8 +171,8 @@ Use these names in code, tables, specs and analytics. Singular for types, plural
 | `Quest` | A tracked objective with a reward. Kinds `DAILY`, `WEEKLY`, `ACHIEVEMENT`. Three-state with an explicit claim (decision 17). |
 | `Wallet` | All currency balances. Every change goes through `Wallet.Apply(CurrencyDelta, Reason)`. A debit that would go below zero is rejected and changes nothing. |
 | `Inbox` | Server-granted items awaiting a claim (IAP, mail, coupons, compensation). |
-| `Command` | A player or system intent fed to `Simulation`, named `VerbNoun`. The registry is the union of each owning spec's command table; 01 defines the base type (#388). Provisional vocabulary: Heroes (03) `LevelUpHero`, `Promote`, `Synthesize`, `Convert`, `ChangeClass`, `TrainSkill`, `ToggleFavourite`, `RedistributeStats`, `OrderRest`, `CancelRest`, `GiveGift` (P1). Gear (04) `EquipGear`, `UnequipGear`, `AutoEquip`. Tower (05) `AssignFloor`, `AssignReplay`, `Revive`. Lobby (06) `SetParty`, `SetPartyLeader`, `UpgradeFacility`, `SetResearch`, `StartExploration`, `ClaimOfflineReward`, `ClaimQuest`, `ClaimAllQuests`. Tutorial (07) `SetTutorialStep`. System commands (01; issued by Runtime, never by a screen, and logged like any other command): `ApplyServerTime`, `ComputeOfflineCatchup`, `ApplySummonResult`, `ApplyInboxGrant`. `Summon` and `ClaimInbox` stay Runtime flows that end in a system command. Rejects follow decision 43: 01's `RejectCode` plus a closed per-spec UPPER_SNAKE reason, with `NOT_ENOUGH_<CURRENCY>` for every short balance (decision 95). `Apply` never throws on bad input. |
-| `Event` | A fact emitted by the sim, named `NounPastTense`. Provisional vocabulary: `HeroAcquired`, `HeroLeveledUp`, `HeroPromoted`, `HeroesSynthesized`, `HeroConverted`, `ClassChanged`, `SkillLeveled`, `StatusApplied`, `StatusEnded`, `StatsRedistributed`, `TraitGained`, `TraitLeveled`, `SealSlotOpened`, `TalentRevealed`, `MemoryRestored`, `MoraleBandChanged`, `StressBandChanged`, `HeroBrokeDown`, `HeroRecovered`, `HeroRestOrdered`, `HeroRested`, `BondFormed`, `BondTierChanged`, `GiftGiven`, `PartyInoperable`, `HeroDied` (with a cause, `STRESS` among them), `HeroRevived`, `HeroExecuted`, `HeroRefused`, `BattleStarted`, `FloorCleared`, `FloorFirstCleared`, `MissionFailed`, `PartyWiped`, `GearAcquired`, `GearEquipped`, `FacilityUpgraded`, `ResearchLeveled`, `ExplorationReturned`, `CurrencyChanged`, `ItemChanged`, `QuestCompleted`, `QuestClaimed`, `DayRolledOver`, `WeekRolledOver`, `OfflineRewardComputed`, `OfflineRewardClaimed`, `ClockWentBackwards`, `TutorialStepChanged`. Events about one hero carry its `HeroUid`; events about a party carry its `PartyId`. |
+| `Command` | A player or system intent fed to `Simulation`, named `VerbNoun`. The registry is the union of each owning spec's command table; 01 defines the base type (#388). Provisional vocabulary: Heroes (03) `Promote`, `CraftStone`, `Synthesize`, `Convert`, `ChangeClass`, `TrainSkill`, `StopTraining`, `MergeSkills`, `EvolveSkill`, `LearnSkill`, `ForgetSkill`, `ToggleFavourite`, `RedistributeStats`, `OrderRest`, `CancelRest`, `GiveGift` (P1). Gear (04) `EquipGear`, `UnequipGear`, `AutoEquip`. Tower (05) `AssignFloor`, `AssignReplay`, `Revive`. Lobby (06) `SetParty`, `SetPartyLeader`, `UpgradeFacility`, `SetResearch`, `StartExploration`, `ClaimOfflineReward`, `ClaimQuest`, `ClaimAllQuests`. Tutorial (07) `SetTutorialStep`. System commands (01; issued by Runtime, never by a screen, and logged like any other command): `ApplyServerTime`, `ComputeOfflineCatchup`, `ApplySummonResult`, `ApplyInboxGrant`. `Summon` and `ClaimInbox` stay Runtime flows that end in a system command. Rejects follow decision 43: 01's `RejectCode` plus a closed per-spec UPPER_SNAKE reason, with `NOT_ENOUGH_<CURRENCY>` for every short balance (decision 95). `Apply` never throws on bad input. |
+| `Event` | A fact emitted by the sim, named `NounPastTense`. Provisional vocabulary: `HeroAcquired`, `HeroExpGained`, `HeroLeveledUp`, `HeroLevelCapReached`, `PromotionStarted`, `HeroPromoted`, `StonesCrafted`, `HeroesSynthesized`, `HeroConverted`, `ClassChanged`, `SkillLeveled`, `SkillLearned`, `SkillsMerged`, `SkillEvolved`, `SkillReplaced`, `SkillForgotten`, `SkillAwakened`, `SkillGrantDropped`, `TrainingStarted`, `TrainingStopped`, `StatusApplied`, `StatusEnded`, `StatsRedistributed`, `TraitGained`, `TraitLeveled`, `SealSlotOpened`, `TalentRevealed`, `MemoryRestored`, `MoraleBandChanged`, `StressBandChanged`, `HeroBrokeDown`, `HeroRecovered`, `HeroRestOrdered`, `HeroRested`, `BondFormed`, `BondTierChanged`, `GiftGiven`, `PartyInoperable`, `HeroDied` (with a cause, `STRESS` among them), `HeroRevived`, `HeroExecuted`, `HeroRefused`, `BattleStarted`, `FloorCleared`, `FloorFirstCleared`, `MissionFailed`, `PartyWiped`, `GearAcquired`, `GearEquipped`, `FacilityUpgraded`, `ResearchLeveled`, `ExplorationReturned`, `CurrencyChanged`, `ItemChanged`, `QuestCompleted`, `QuestClaimed`, `DayRolledOver`, `WeekRolledOver`, `OfflineRewardComputed`, `OfflineRewardClaimed`, `ClockWentBackwards`, `TutorialStepChanged`. Events about one hero carry its `HeroUid`; events about a party carry its `PartyId`. |
 
 ### 5.2 Currencies
 
@@ -193,7 +193,7 @@ Use these names in code, tables, specs and analytics. Singular for types, plural
 | `SCR_BOOT`, `SCR_TITLE` | Boot, login and account pick (carried) | M0, MVP |
 | `SCR_LOBBY` | Home screen: the lobby, its facilities, the manager and status alerts. Replaces HeroCat's `SCR_MAIN`. | M0 |
 | `SCR_ROSTER` | Hero list with sort, filter and favourites | M0 |
-| `SCR_HERO` | One hero's stat window: grade, level, stats, class, skills, traits, statuses, gear, history | M0 |
+| `SCR_HERO` | One hero's stat window: grade, level, stats, class, skills, traits, statuses, gear, history; its skills and class-change tabs are MVP (03 sections 6.4, 6.5) | M0 |
 | `SCR_SUMMON`, `SCR_SUMMON_RESULT` | Hero and gear banners with published odds and pity; the reveal | M0 |
 | `SCR_PARTY` | Party builder and floor assignment | M0 |
 | `SCR_TOWER` | Floor list and floor detail: mission type, hints, enemy roster, parties needed | M0 |
@@ -210,7 +210,7 @@ Use these names in code, tables, specs and analytics. Singular for types, plural
 
 Retired with HeroCat: `SCR_MAIN`, `SCR_WEAPONS`, `SCR_SKILLS`, `SCR_COMPANIONS`, `SCR_RUNES`, `SCR_DUNGEONS`, `SCR_DUNGEON_RUN`, `SCR_STAGE_SELECT`, `SCR_ITEM_DETAIL`, `SCR_GUILD`.
 
-Locked states keep the single `feature_unlocks` content table (decision 77), read by both the sim and the client. The new main condition is `FLOOR_HIGHEST >= n`, the highest floor cleared. The seed unlocks follow the source (research §7, §8): the weekday dungeon after floor 5; exploration, lobby naming and the adventure dungeon (P1) at floor 10; a new region every `REGION_EVERY` floors.
+Locked states keep the single `feature_unlocks` content table (decision 77), read by both the sim and the client. The new main condition is `FLOOR_HIGHEST >= n`, the highest floor cleared. The seed unlocks follow the source (research §7, §8): promotion from the start (the tutorial promotes a 1★); the weekday dungeon after floor 5; exploration, lobby naming, class change and the adventure dungeon (P1) at floor 10; a new region every `REGION_EVERY` floors.
 
 ## 6. Canonical constants
 
@@ -241,14 +241,19 @@ Values marked "set in #N" don't exist yet. The owning spec adds them, here and i
 |---|---|---|---|
 | `GRADE_MIN`, `GRADE_MAX` | 1, 7 | Src | Star grades 1★-7★ (research §3). |
 | `SUMMON_GRADE_MAX` | 5 | Src | The highest grade a summon can give; 6★ and 7★ come only from promotion (research §3). No grade is paid-only (DIV-03). 04 confirms it (#361). |
-| `LEVEL_CAP[g]` | 1★ 10 / 2★ 20 / 3★ 40 / 4★ 60 / 5★ 80 / 6★ 99 / 7★ above 99 | Src | 1★ is clear in the source, the rest is wiki-grade (research §5, §9.6). 7★'s cap is set in #363. |
-| `CLASS_CHANGE_GRADE`, `CLASS_CHANGE_LEVEL` | 3, 20 | Src | Research §9.3. 03 owns it (#367). |
+| `LEVEL_CAP[g]` | 1★ 10 / 2★ 20 / 3★ 40 / 4★ 60 / 5★ 80 / 6★ 99 / 7★ 120 | Src/S | 1★ is clear in the source, 2★-6★ wiki-grade (research §5, §9.6). 7★ Lv120 is `LEVEL_MAX` (decision 155, DIV-24). |
+| `PROMOTE_GRADE_SPAN` | 3 | S | A hero's top grade is `min(GRADE_MAX, base grade + 3)`: 1★ to 4★, 2★ to 5★, 3★ to 6★, 4★ and 5★ to 7★ (decision 150, DIV-28). |
+| `CLASS_CHANGE_GRADE`, `CLASS_CHANGE_LEVEL` | 3, 20 | Src | Research §9.3. The class-tier-1 gate; tiers 2 and 3 open at 4★/Lv40 and 6★/Lv80 (03 section 6.5). |
 | `STATUS_FEAR_PCT`, `STATUS_PANIC_PCT`, `STATUS_DESPAIR_PCT`, `STATUS_EXHAUSTION_PCT` | -30 / -50 / -80 / -90 | Src | All stats, while the status lasts (research §3, §9.1). 03 owns it (#358). |
 | `NOVICE_MAX_GRADE`, `STAT_COUNT`, `GROWTH_DEFAULT[g]`, `GROWTH_BONUS[g]`, `STAT_REDISTRIBUTE_GOLD_PER_LEVEL`, `HERO_AWARENESS_MAX` and the other hero-sheet constants | 03 "Constants introduced" | Src/S | Growth per level is `HeroDef.growth_rate` + `GROWTH_BONUS[g]`, seeded 4-5 a level from research §3 (#357). |
 | Trait, talent, seal-slot and memory constants (`FORMER_LIFE_START_POINTS`, `SEAL_SLOTS[g]`, `TRAIT_*`, `TALENT_*`, `BASIS_POINTS`) | 03 "Constants introduced" | Src/S | #360. |
 | The other `STATUS_*` constants (thresholds, shock, durations, clamps) | 03 "Constants introduced" | S | #358. |
 | Inner-life constants (`INNER_*`, `MORALE_*`, `STRESS_*`, `BOND_*`, `LOYALTY_*`, `GIFT_*`) | 03 "Constants introduced" | S | #359. Rule: `STRESS_GRACE_H >= OFFLINE_CAP_H`, checked by the content validator. |
-| EXP curve, promotion recipes and success rates, synthesis transfer | set in #363, #364, #365 | Src/S | Source anchors: EXP to next level 10, 20, 50, 70, 120 at Lv1, 2, 5, 9, 15; promotion success rates of 87% and 91% (research §10). |
+| Level and EXP constants (`LEVEL_START`, `LEVEL_MAX`, `EXP_CURVE_PCT[g]`, `hero_levels`, `LEVEL_CAP_BANK_LEVELS`, `KILL_EXP_*`, `EXP_FIRST_CLEAR_BP`) | 03 "Constants introduced" | Src/S | #363. Source anchors: EXP to next level 10, 20, 50, 70, 120, 150 at Lv1, 2, 5-6, 9, 15, 19 (research §5, §10). |
+| Promotion constants (`promotion_steps`, `stone_recipes`, `PROMOTION_GAIN_BP[g]`, `STONE_PITY_FAILS`, `promotion_chamber_levels`) | 03 "Constants introduced" | Src/S | #365. Stone success rates of 87% and 91% (research §10); two failures in a row guarantee the next (decision 149). |
+| Synthesis and conversion constants (`SYNTH_*`, `CONVERT_*`, `CONVERSION_YIELD[g]`, `ROSTER_MIN_LIVING`) | 03 "Constants introduced" | Src/S | #364. Six offerings at once; 3 spirit stones from a 1★ conversion (research §5, §9.3). |
+| Skill constants (`SKILL_LEVEL_CAP[g]`, `SKILL_SLOTS[g]`, `skill_tiers`, `skill_exp`, `SKILL_PLATEAU_LEVEL` and the other `SKILL_*`) | 03 "Constants introduced" | Src/S | #366. Skill cap Lv10 at 1★, plateau at Lv6 (research §5, §10). |
+| Class-change constants (`CLASS_TIER_MAX`, `CLASS_TIER_GATE[t]`, `CLASS_CHANGE_GOLD[t]`, `CLASS_CHANGE_ITEMS[t]`, `CLASS_CALLING_DISCOUNT_PCT`, `CLASS_SKILL_TIER_MAX[t]`) | 03 "Constants introduced" | S | #367. |
 
 ### 6.3 Tower and battle
 
@@ -283,7 +288,7 @@ HeroCat's power formula and its layer-share rule (decision 44) are retired with 
 ## 8. Cross-spec contracts
 
 1. **Sim is pure.** `HeroCat.Sim` has no `UnityEngine`, IO, clock, JSON, reflection or `Math.Pow/Exp/Log`. Curves are evaluated by repeated multiplication from tables. Everything that needs IO lives in `HeroCat.Runtime`.
-2. **Named RNG streams.** Each consumer owns a stream `(seed, counter)` persisted in the save. Every seed is the first 8 bytes of SHA-256(`RngRoot` ++ UTF-8 stream name), derived in Runtime. `RngRoot` is an immutable Guid set once at profile creation (decision 41). The new stream list is 01's and 05's (#388, #371). It needs at least battle, loot, promotion, synthesis, floor-variant, `inner_life` (hostility on summon, 03 section 4.5) and the two summon streams. Stats, growth, traits, talents, memories and statuses draw no RNG (03 section 5). The summon streams are drawn only by `LocalSummonService` (M0 and bots); in Remote mode their counters are ignored, not removed (decision 14). Floor variants are seeded and the same rules apply to every account (DIV-01). 05 owns the battle draw order and its invariants (decision 40, owner moved from 03).
+2. **Named RNG streams.** Each consumer owns a stream `(seed, counter)` persisted in the save. Every seed is the first 8 bytes of SHA-256(`RngRoot` ++ UTF-8 stream name), derived in Runtime. `RngRoot` is an immutable Guid set once at profile creation (decision 41). The new stream list is 01's and 05's (#388, #371). It needs at least battle, loot, promotion (promotion-stone crafting only, 03 section 6.2.4), floor-variant, `inner_life` (hostility on summon, 03 section 4.5) and the two summon streams. Stats, growth, traits, talents, memories, statuses, levels, synthesis, conversion, skills and class change draw no RNG (03 sections 5 and 6). The summon streams are drawn only by `LocalSummonService` (M0 and bots); in Remote mode their counters are ignored, not removed (decision 14). Floor variants are seeded and the same rules apply to every account (DIV-01). 05 owns the battle draw order and its invariants (decision 40, owner moved from 03).
 3. **Content is data.** Every number in section 6 is a row in a table from 09. Code receives a `ContentDb` and never a literal. Versions are `YYYY.MM.DD[.N]`; breaking changes go through `min_client_version` plus `schema_version`. Content applies at the next cold boot, except the hot-apply allowlist (decision 86). Loading a save against other content runs 02's validator (decision 88).
 4. **Save schema is versioned from v1** with forward-only migrations and a fixture per version (02). The new game starts a fresh v1 (decision 33, #384).
 5. **Commands in, events out.** The client, bots and server re-simulator only talk to the sim through `Simulation.Apply(Command)` and `Simulation.Advance(ticks)`, and only observe it through `Event`s and read-only snapshots. Server time, offline catch-up, summon results and inbox grants enter as logged system commands, so replaying the command log reproduces the state exactly.
@@ -291,7 +296,7 @@ HeroCat's power formula and its layer-share rule (decision 44) are retired with 
 7. **Server time is the only trusted time.** `IClock` with `ServerClock` (MVP) and `FakeClock` (bots, tests). Day and week keys (decision 21), offline gaps, the weekday dungeon's rotation, exploration timers and banner schedules all derive from it. A clock going backwards grants nothing twice. Offline catch-up is two-phase, as in decision 53: `ComputeOfflineCatchup` computes and stores the result, `ClaimOfflineReward` credits it, and ticks pause while `SCR_OFFLINE_REWARD` is open.
 8. **Away is the same game.** Assigned parties keep fighting while the player is away, under the same battle rules, including statuses and death (decision 123, pillar 3). Catch-up must give the same result as the equivalent online ticks, or 05 and 06 must define a deterministic catch-up that the bots prove equivalent within a stated tolerance (#371, #379). Every death that happened while away shows in the offline report.
 9. **Screens bind to view-models; view-models subscribe to events.** No screen reads `GameState` directly (decision 120).
-10. **Numbers.** Curve-valued numbers (gold, EXP, HP, damage) are `double`. Counted values (gems, tickets, item counts, levels, grades, hero stats, percentages, basis points and inner-life values) are integers. Display formatting follows decision 54.
+10. **Numbers.** Curve-valued numbers (gold, EXP, HP, damage) are `double`; EXP grants are whole numbers computed in `long` (03 section 6.1.1). Counted values (gems, tickets, item counts, levels, grades, hero stats, percentages, basis points and inner-life values) are integers. Display formatting follows decision 54.
 11. **All user-visible text is a localization key** (07, 09). Keys for errors, rejects and notices follow decision 102.
 12. **Server-sensitive operations go through an interface** with a local implementation for M0 and a documented remote contract: `IClock`, `ISummonService`, `ISaveStore`, `IInboxService`, `IReceiptValidator`, `IConfigService` (01, 08). Whether floors or explorations need server-issued seeds, as HeroCat's dungeons did (decision 57), is #386's call.
 13. **The bot harness is the acceptance test** for any balance change (10). `StateHash` is SHA-256 over the canonical binary state encoding. The golden command log is JSONL in 01's command-log format (decision 60).
@@ -320,7 +325,7 @@ Specs 01, 02 and 07-10 keep their numbers and are rewritten in place. Specs 03-0
 | `00-overview.md` | This file | New game | #341 |
 | `01-architecture-and-data-flow.md` | Layers, commands and events, the idle tick and offline flow, server flows | HeroCat | #388 |
 | `02-domain-model-and-persistence.md` | `GameState` v1, save store, cloud save, server DB | HeroCat | #384 |
-| `03-heroes-and-growth.md` | Hero sheet, stats, classes, statuses, inner life, former lives and traits; levels, synthesis, conversion, promotion, skills, class change | New game (hero model); growth pending #344 | #342, #344 |
+| `03-heroes-and-growth.md` | Hero sheet, stats, classes, statuses, inner life, former lives and traits; levels, synthesis, conversion, promotion, skills, class change | New game | #342, #344 |
 | `04-summons-and-gear.md` | Hero and gear banners, rates, pity, odds disclosure; gear grades, slots, storage, consumables; crafting (P1) | HeroCat summons and collections | #343, #345 |
 | `05-tower-and-battle.md` | Floors, regions, unlocks, the auto-battle sim, mission types, death and revival, side content | HeroCat fish board (retired) | #346 |
 | `06-lobby-and-meta.md` | Lobby and facilities, the manager, research, parties, account level, rankings, quests, shop, inbox, idle time; the P2 multi-master layer | HeroCat economy and daily loop | #347 |
@@ -447,6 +452,17 @@ Owner decision on the seal-trait fiction (#342), numbered after the hero model's
 
 147. **Seal traits come from the hero's own former life.** Owner decision on #342: a seal slot holds a trait from the hero's ordinary former life (a lineage, an upbringing, an old trade), never from another world (DIV-12, 03 section 2.4).
 
+Owner decisions on hero growth (#344), numbered after the seal-trait decision:
+
+148. **A duplicate pull is a full, separate hero.** Owner decision on #344: each copy has its own `HeroUid`; feeding a copy to its twin doubles the stat transfer and merges talent progress (03 section 6.3.6, DIV-33). Telling copies apart is #396.
+149. **A failed stone craft is bounded.** Owner decision on #344: the success rate is published; a failure returns the lower stone and loses the other inputs; after two failures in a row the next attempt succeeds (03 section 6.2.4, DIV-25).
+150. **A hero climbs at most three grades above its base grade.** Owner decision on #344: `PROMOTE_GRADE_SPAN = 3`, so 1★ heroes top out at 4★, 2★ at 5★, 3★ at 6★, and only 4★ and 5★ heroes reach 7★ (03 section 6.2.7, DIV-28). This settles decision 123's open point on whether low grades reach the top. No grade is paid-only (DIV-03): 4★ and 5★ can be pulled free.
+151. **Class change is forward only.** Owner decision on #344: a hero changes only to a child class of the next class tier, never back or sideways (03 section 6.5.1).
+152. **A skill a new class can't use is lost.** Owner decision on #344: on a class change, a skill that can be neither kept nor divided is lost for good, shown in the preview and confirmed first (03 section 6.5.3, DIV-42).
+153. **Gems never skip skill training.** Owner decision on #344 (03 section 6.4.3).
+154. **Dead heroes can be converted.** Owner decision on #344: at `CONVERT_DEAD_YIELD_PCT` (50%), which ends any chance of revival; a dead hero is never a synthesis offering (03 section 6.3.4, DIV-32).
+155. **The 7★ level cap is Lv120** (`LEVEL_MAX`). Owner decision on #344 (03 section 6.1.3, DIV-24).
+
 ### 12.3 Decisions made in the specs/00 rewrite (#341)
 
 Agent defaults, open to the owner's veto in review (`CLAUDE.md` rule 1). Each is easy to change before the spec it touches is written.
@@ -454,7 +470,7 @@ Agent defaults, open to the owner's veto in review (`CLAUDE.md` rule 1). Each is
 130. **Pillar order.** Tower spine, then idle fights with lobby decisions, then heroes as people with real losses, then the deterministic core, honest monetization and live service (section 1). Derived from decisions 123, 126 and 128. HeroCat's pillars 1 and 2 ("always something to do", "many parallel sinks") are retired.
 131. **Spec file map.** Specs 01, 02 and 07-10 keep their numbers. 03-06 are repurposed as heroes and growth, summons and gear, tower and battle, and lobby and meta, each renamed when it is rewritten (section 10). HeroCat's overview moves to `specs/archive/00-overview-herocat.md`, so existing citations still resolve.
 132. **Scope tiers** as in section 2.1, with M0 matching #352. Owning issues may move rows.
-133. **Heroes are individual instances** with a permanent `HeroUid`, not stacked copies, because each hero carries its own grade, level, statuses, inner life and death (section 5.1). Duplicate handling stays with #344.
+133. **Heroes are individual instances** with a permanent `HeroUid`, not stacked copies, because each hero carries its own grade, level, statuses, inner life and death (section 5.1). Duplicate handling: decision 148.
 134. **Away is the same game** (contract 8): parties keep fighting under the same rules while the player is away, deaths included, and the offline report shows every death. 05 and 06 may define a faster, deterministic catch-up that the bots prove equivalent.
 135. **`GEM` replaces `DIAMOND`** as the hard currency's name, matching decision 126. Materials, potions and revive items are items, not currencies (section 5.2).
 
@@ -469,3 +485,16 @@ Agent defaults from specs/03 sections 1-5, open to the owner's veto in review (`
 144. **Claimed former lives are P1**, off in MVP content (03 section 2.6.3).
 145. **The cast's rarity bands map to 1★-5★**, Common 1★ up to Mythic 5★; #391 has the final say (03 section 1.1).
 146. **Low-grade mage concepts take a `CASTER` calling.** They arrive as `NOVICE`; `MAGE` stays summon-only for 3★ and up (03 section 1.4).
+
+### 12.5 Decisions made in hero growth (#344)
+
+Agent defaults from specs/03 section 6, open to the owner's veto in review (`CLAUDE.md` rule 1).
+
+156. **EXP at the cap banks one level, then is wasted**, and the waste is shown (03 section 6.1.5).
+157. **Levelling is automatic.** No `LevelUpHero` command; every surviving fighter gets the full EXP award, and kills pay on a failed floor too (03 sections 6.1.4, 6.1.6, DIV-23).
+158. **A paid promotion never fails.** The only roll is stone crafting; the target must be at its level cap; level and EXP are kept (03 section 6.2, DIV-27).
+159. **M0 promotion is 1★→2★ and 2★→3★, instant**, with stones from floor rewards and the tutorial. Chamber timers (3★ and up) are MVP, can't be cancelled, and gems only skip them (03 sections 6.2.1, 6.2.5).
+160. **Synthesis keeps about half the EXP and a tenth of the stats**, with a per-grade synthesized-stat cap, a small gold cost per offering and a binding preview hash (03 section 6.3, DIV-29, DIV-31, DIV-34).
+161. **One consumption routine** and one eligibility rule for synthesis, conversion and the promotion feeder; consumed heroes must be out of every party and post (03 sections 6.3.1, 6.3.2).
+162. **Skills draw no RNG.** Known skills are capped by slots and all are active; awakening and achievement rewards are shown before they fire (03 section 6.4, DIV-36 to DIV-40).
+163. **Growth waits for the lobby.** Growth commands reject a hero whose party is on an assignment or who is in the Promotion Chamber (03 section 6.4.14). The class tree, gates and costs are seeds, class tier 3 is P1, callings favour a class but former lives never gate one, and a class change may re-place growth points for free (03 section 6.5, DIV-41, DIV-43).
