@@ -275,8 +275,12 @@ namespace HeroCat.Client.Core
 
         public void OnBoss() => _c.Commands?.Send(new AttemptBoss(), AnchorBoss);
 
-        /// <summary>Stage label tap: SCR_STAGE_SELECT is MVP, a no-op in M0 (07 section 4.3).</summary>
-        public void OnStageLabel() { }
+        /// <summary>Stage label tap: opens SCR_STAGE_SELECT (07 sections 4.3 and 4.14). Not during a dungeon run (no stage to pick).</summary>
+        public void OnStageLabel()
+        {
+            if (_c.Router == null || _c.Router.TopFull.Id == ScreenIds.DungeonRun) return;
+            _c.Router.Push(ScreenIds.StageSelect);
+        }
 
         /// <summary>Skill icon tap pushes SCR_ITEM_DETAIL for that skill.</summary>
         public void OnSkillIcon(int slot, ItemDetailVm detail)

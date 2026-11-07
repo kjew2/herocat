@@ -188,7 +188,7 @@ namespace UnityEngine
         public int sortingOrder { get; set; }
         public bool overrideSorting { get; set; }
     }
-    public sealed class CanvasGroup : Behaviour { public float alpha { get; set; } }
+    public sealed class CanvasGroup : Behaviour { public float alpha { get; set; } public bool blocksRaycasts { get; set; } }
     public static class Handheld { public static void Vibrate() { } }
     public enum KeyCode { Escape }
     public static class Input { public static bool GetKeyDown(KeyCode k) => false; }

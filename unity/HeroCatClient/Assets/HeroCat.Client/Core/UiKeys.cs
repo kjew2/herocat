@@ -212,5 +212,39 @@ namespace HeroCat.Client.Core
         };
 
         public const string ResetTitle = "scr.confirm.reset_title", ResetBody = "scr.confirm.reset_body";
+
+        // SCR_QUESTS (07 section 4.15; issue #183)
+        public const string QuestsTitle = "scr.quests.title";
+        public const string QuestsTabDaily = "scr.quests.tab_daily", QuestsTabWeekly = "scr.quests.tab_weekly",
+                            QuestsTabAchievements = "scr.quests.tab_achievements";
+        public const string QuestsDailyProgress = "scr.quests.daily_progress";     // "Daily progress {0} / {1}"
+        public const string QuestsWeeklyProgress = "scr.quests.weekly_progress";   // "Weekly progress {0} / {1}"
+        public const string QuestsBonus = "scr.quests.bonus";                      // "{0} done: +{1}"
+        public const string QuestsProgress = "scr.quests.progress";                // "{0} / {1}"
+        public const string QuestsClaim = "scr.quests.claim", QuestsClaimed = "scr.quests.claimed", QuestsDone = "scr.quests.done",
+                            QuestsGo = "scr.quests.go";
+        public const string QuestsClaimAll = "scr.quests.claim_all";               // "Claim all ({0})"
+        public const string QuestsRungs = "scr.quests.rungs";                      // "{0} / {1} rungs"
+        public const string QuestsExpiresSoon = "scr.quests.expires_soon";
+        public const string QuestsToastClaimed = "scr.quests.toast_claimed";       // "+{0} {1}"
+        public const string QuestsToastReset = "scr.quests.toast_reset";
+
+        public static string QuestsTabKey(QuestKind k) => k switch
+        {
+            QuestKind.DAILY => QuestsTabDaily,
+            QuestKind.WEEKLY => QuestsTabWeekly,
+            _ => QuestsTabAchievements,
+        };
+
+        // SCR_STAGE_SELECT (07 section 4.14; issue #183)
+        public const string StageSelectTitle = "scr.stage_select.title";
+        public const string StageSelectHighest = "scr.stage_select.highest";                   // "Highest cleared: {0}"
+        public const string StageSelectFrontier = "scr.stage_select.frontier";                 // "Frontier: {0}"
+        public const string StageSelectFrontierWalled = "scr.stage_select.frontier_walled";    // "Frontier: {0} (walled)"
+        public const string StageSelectChapter = "scr.stage_select.chapter";                   // "Chapter {0} ({1}-{2})"
+        public const string StageSelectFarming = "scr.stage_select.farming";                   // "Farming: {0}"
+        public const string StageSelectReturn = "scr.stage_select.return";
+        public const string StageSelectChallenge = "scr.stage_select.challenge";
+        public const string StageSelectOfflineNote = "scr.stage_select.offline_note";
     }
 }

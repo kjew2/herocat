@@ -200,6 +200,8 @@ namespace HeroCat.Client.Screens
                 case ScreenIds.Confirm: v = rt.gameObject.AddComponent<ConfirmModal>(); break;
                 case ScreenIds.OfflineReward: v = rt.gameObject.AddComponent<OfflineRewardModal>(); break;
                 case ScreenIds.Error: v = rt.gameObject.AddComponent<ErrorModal>(); break;
+                case ScreenIds.Quests: v = rt.gameObject.AddComponent<QuestsScreen>(); break;
+                case ScreenIds.StageSelect: v = rt.gameObject.AddComponent<StageSelectModal>(); break;
                 default:
                     Destroy(rt.gameObject);
                     return null;

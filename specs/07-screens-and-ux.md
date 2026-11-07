@@ -215,7 +215,7 @@ Sketch values: the walled frontier boss at the day-1 target stage 240 (00 sectio
 | Avatar | `Profile.AvatarId` | tap: push `SCR_PROFILE` |
 | Inbox icon | `Inbox.UnclaimedCount` badge | tap: push `SCR_INBOX`; the count is Runtime's `InboxFlow.BadgeCount` (06 rule 9.5), injected as the snapshot's `PendingInboxCount` (issue #180) |
 | Settings gear | | tap: push `SCR_SETTINGS` |
-| Stage label | snapshot `Stage`, `Chapter`, `SelectedStage` (02 `Combat.Selected`; issue #254) | tap: push `SCR_STAGE_SELECT` (MVP; M0 no-op); while farming a side stage it reads "Farming 235 · frontier 240" (issue #35) |
+| Stage label | snapshot `Stage`, `Chapter`, `SelectedStage` (02 `Combat.Selected`; issue #254) | tap: push `SCR_STAGE_SELECT` (MVP; issue #183), except in a dungeon run; while farming a side stage it reads "Farming 235 · frontier 240" (issue #35) |
 | Kill counter | `Combat.KillsInStage / KILLS_PER_STAGE` | red when `IsWalled` |
 | WALL badge | `Combat.IsWalled` | |
 | Enemy sprite, HP bar | `Combat.EnemyId`, `EnemyIsBoss`, `EnemyHp`, `EnemyMaxHp` | HP bar text "1.2M / 1.7M" |
@@ -540,10 +540,10 @@ Purpose: farm a cleared side stage (an easier stage for `GOLD_GAIN`-tuned kill r
 
 | Element | `StageSelectVm` field or command |
 |---|---|
-| Chapter dropdown | `Chapters[]` (`CHAPTER_WIDTH` groups up to `Progress.HighestCleared`) |
-| Stage chips | `Stages[]`: `Number`, `IsBoss`, `IsFrontier`, `IsSelected`, `Cleared`; tap: `cmd SelectStage(n)` for `n <= Progress.HighestCleared` (02's meaning: highest stage of any kind completed, issue #35); tapping the frontier chip equals Return |
+| Chapter dropdown | `Chapters[]` (`CHAPTER_WIDTH` groups up to the chapter of `max(Progress.HighestCleared, frontier)`, so the frontier chip is always reachable); opens on the chapter of the stage being fought (issue #183) |
+| Stage chips | `Stages[]`: `Number`, `IsBoss`, `IsFrontier`, `IsSelected`, `Cleared`, for the chosen chapter's stages up to the frontier (no chip above it); tap: `cmd SelectStage(n)` for `n <= Progress.HighestCleared` (02's meaning: highest stage of any kind completed, issue #35); tapping the frontier chip equals Return; the modal stays open so the "Farming: n" line confirms the pick |
 | Return to frontier | `cmd SelectStage(null)`; shown while snapshot `SelectedStage != null` |
-| Challenge boss | `cmd AttemptBoss` for the frontier boss only (only when walled) |
+| Challenge boss | `cmd AttemptBoss` for the frontier boss only (only when walled); an accepted attempt closes the modal so the fight is visible (issue #183) |
 
 Rules the modal makes visible: offline gold and EXP use the frontier `Combat.Stage` (06 section 7.1), the Dungeons unlock reads `Progress.HighestCleared` and first-clear diamonds read `Progress.HighestFirstClearBoss`, never the selected stage (06, 03 and 02; issue #35), so a lower stage is never a loophole; the modal says "Rewards for offline time use your highest stage". Events: `StageChanged` (from `SelectStage`), `StageCleared`; the selected stage is read from the snapshot (`SelectedStage`, which mirrors 02 `Combat.Selected`; null = frontier; issue #254), there is no `StageSelected` event (issue #11).
 
@@ -572,9 +572,11 @@ Rules the modal makes visible: offline gold and EXP use the frontier `Combat.Sta
 | Claim | `cmd ClaimQuest(id)`; Claim all: `cmd ClaimAllQuests(tab)` with a summary toast "+140 diamonds". `d_login` pays nothing (login diamonds are auto-granted on rollover, issue #20): its row shows "done" with no Claim button and only counts toward the bonus rows |
 | Achievements tab | one row per ladder showing the lowest unclaimed rung and "3 / 11 rungs" (`Simulation.AchievementRows()`, `ClaimedRungs(ladder)`, 06 section 5.4); a fully claimed ladder drops out |
 
-Events: `QuestCompleted` (row state swap, badge), `QuestClaimed`, `QuestsBulkClaimed` (toast), `DayRolledOver` / `WeekRolledOver` (full refresh; a toast "Missions reset" if the screen is open).
+Events: `QuestCompleted` (row state swap, badge), `QuestClaimed`, `QuestsBulkClaimed` (toast, one "+{n} {currency}" part per currency, comma-joined), `DayRolledOver` / `WeekRolledOver` (full refresh; a toast "Missions reset" if the screen is open, once when both roll together).
 
-States: Locked before its `feature_unlocks` condition (stage 10, after the first boss; issue #45). Empty daily list cannot occur. Forfeit warning: 60 minutes before rollover, rows with `COMPLETED` state show an amber "expires soon" caption (06 Open question 2).
+Rows (issue #183): the bonus rows (`DAILIES_COMPLETED` on Daily, `WEEKLIES_COMPLETED` on Weekly) are drawn only as the bar's chips (tap claims), never as list rows; the bar counts the tab's other rows that are `COMPLETED` or `CLAIMED`. `[Go >]` routes by goal: kills, boss, stage and fish goals to `SCR_MAIN`; summon and collection goals to `SCR_SUMMON`; Training, Party Level and Awakening goals to `SCR_PARTY`; dungeon goals to `SCR_DUNGEONS`; login and bonus goals have no Go.
+
+States: Locked before its `feature_unlocks` condition (stage 10, after the first boss; issue #45). Empty daily list cannot occur. Forfeit warning: `UI_QUEST_EXPIRY_WARN_SEC` (60 minutes) before rollover, rows with `COMPLETED` state show an amber "expires soon" caption (06 Open question 2): Daily rows before the day rollover, Weekly rows before the week rollover (Monday 00:00 UTC), never on Achievements (they never reset). The clock is the sim's virtual server time, the same one that rolls the day (issue #183).
 
 ### 4.16 `SCR_SHOP` (Full, MVP)
 
