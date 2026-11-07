@@ -77,7 +77,7 @@ public sealed class SummonService
 
         await using var c = await _store.OpenAsync(ct).ConfigureAwait(false);
         await using var tx = await c.BeginTransactionAsync(ct).ConfigureAwait(false);
-        int ageGate = await SummonStore.LockAccountAsync(c, tx, player, ct).ConfigureAwait(false)
+        var account = await SummonStore.LockAccountAsync(c, tx, player, ct).ConfigureAwait(false)
             ?? throw ApiException.Of(ErrorCodes.UNAUTHENTICATED, "No account for this token.");
         var pity = await SummonStore.LockPityAsync(c, tx, player, banner, ct).ConfigureAwait(false);
 
@@ -116,7 +116,7 @@ public sealed class SummonService
         else tickets -= cost;
         await ServerEconomyEvents.WriteAsync(c, tx, new[]
         {
-            _events.CurrencyChanged(player, ageGate, charged.ToString(), -cost, charged == Currency.DIAMOND ? diamonds : tickets,
+            _events.CurrencyChanged(player, account,charged.ToString(), -cost, charged == Currency.DIAMOND ? diamonds : tickets,
                                     nameof(CurrencyReason.SUMMON), requestId),
         }, ct).ConfigureAwait(false);
         var body = new SummonPullResponse(

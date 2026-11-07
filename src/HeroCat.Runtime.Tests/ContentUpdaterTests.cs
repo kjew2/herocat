@@ -4,6 +4,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using HeroCat.Runtime.Content;
+using HeroCat.Runtime.Errors;
 using HeroCat.Runtime.Services;
 using HeroCat.Sim.Content;
 using HeroCat.Sim.Content.Dto;
@@ -122,6 +123,28 @@ namespace HeroCat.Runtime.Tests
         }
 
         [Test]
+        public void ACheckDuringTheFailureReport_ReturnsTheStagingTask_NotACompletedOne()   // a race BootFlow's boot Check exposed
+        {
+            var staging = new MemoryContentStaging();
+            staging.Cdn[V] = Bundles.Make(V, corrupt: true, touch: "skills");
+            var u = Updater(staging);
+            using (var entered = new System.Threading.ManualResetEventSlim())
+            using (var gate = new System.Threading.ManualResetEventSlim())
+            {
+                u.Failed += (v, e) => { entered.Set(); gate.Wait(10000); };
+                var first = u.Check(Offer(V));
+                Assert.That(entered.Wait(10000), Is.True);
+                var second = u.Check(Offer(V));   // the version is already ruled out, its report not yet raised
+                Assert.That(second.IsCompleted, Is.False, "a caller awaiting Check must see the report done");
+                gate.Set();
+                Assert.That(second.Wait(10000), Is.True);
+                Assert.That(first.IsCompleted, Is.True);
+            }
+            Assert.That(u.Check(Offer(V)).IsCompleted, Is.True);
+            Assert.That(staging.Downloads, Is.EqualTo(1));
+        }
+
+        [Test]
         public void ADownloadFailure_LeavesTheRunningContent()
         {
             var staging = new MemoryContentStaging();   // the fake CDN has nothing
@@ -129,6 +152,72 @@ namespace HeroCat.Runtime.Tests
             Assert.That(u.Check(Offer(V)).Wait(10000), Is.True);
             Assert.That(u.State, Is.EqualTo(ContentUpdateState.Failed));
             Assert.That(staging.Discarded, Is.EqualTo(new[] { V }));
+        }
+
+        [Test]
+        public void ANetworkFailure_IsNotAVerdict_TheNextConfigRetriesTheVersion()   // issue #316
+        {
+            var log = new List<ContentError>();
+            var staging = new MemoryContentStaging();
+            staging.Cdn[V] = Bundles.Make(V, touch: "skills");
+            var u = Updater(staging, log);
+            var failed = new List<string>();
+            u.Failed += (v, e) => { lock (failed) failed.Add(v); };
+
+            foreach (var kind in new[] { ErrorClass.Offline, ErrorClass.Timeout, ErrorClass.ServerError, ErrorClass.Retryable })
+            {
+                staging.Fault = new ServiceException(kind, "NET_X");
+                Assert.That(u.Check(Offer(V)).Wait(10000), Is.True);
+                Assert.That(u.State, Is.EqualTo(ContentUpdateState.Idle), kind + ": back where it was");
+                Assert.That(u.Version, Is.Null);
+            }
+            Assert.That(failed, Is.Empty, "no content_update_failed for a flaky network");
+            Assert.That(log, Is.Empty);
+            Assert.That(u.LastErrors, Is.Empty);
+            Assert.That(staging.Discarded, Is.EqualTo(new[] { V, V, V, V }), "each partial download is dropped");
+
+            staging.Fault = null;
+            Assert.That(u.Check(Offer(V)).Wait(10000), Is.True);
+            Assert.That(u.State, Is.EqualTo(ContentUpdateState.PendingColdBoot), "the next config refresh stages it");
+            Assert.That(staging.Downloads, Is.EqualTo(5));
+        }
+
+        [Test]
+        public void ANetworkFailure_OnANewerVersion_KeepsTheOneAlreadyPending()   // issue #316
+        {
+            const string newer = "2099.02.01";
+            var staging = new MemoryContentStaging();
+            staging.Cdn[V] = Bundles.Make(V, touch: "skills");
+            var u = Updater(staging);
+            Assert.That(u.Check(Offer(V)).Wait(10000), Is.True);
+            Assert.That(u.State, Is.EqualTo(ContentUpdateState.PendingColdBoot));
+
+            staging.Fault = new ServiceException(ErrorClass.Offline, "NET_OFFLINE");
+            Assert.That(u.Check(Offer(newer)).Wait(10000), Is.True);
+            Assert.That((u.State, u.Version), Is.EqualTo((ContentUpdateState.PendingColdBoot, V)), "SCR_SETTINGS still says Update ready");
+            Assert.That(u.UpdateReady, Is.True);
+        }
+
+        [Test]
+        public void ARejectedFetch_OrACancelledOne_IsJudgedByItsKind()   // issue #316: a 4xx is final, a cancel is not
+        {
+            var staging = new MemoryContentStaging();
+            staging.Cdn[V] = Bundles.Make(V);
+            var u = Updater(staging);
+            using (var cts = new System.Threading.CancellationTokenSource())
+            {
+                cts.Cancel();
+                staging.Fault = new OperationCanceledException(cts.Token);
+                Assert.That(u.Check(Offer(V), cts.Token).Wait(10000), Is.True, "Check never faults");
+                Assert.That(u.State, Is.EqualTo(ContentUpdateState.Idle), "the app went away mid-download; try again next time");
+            }
+
+            staging.Fault = new ServiceException(ErrorClass.Rejected, "HTTP_404", status: 404);
+            Assert.That(u.Check(Offer(V)).Wait(10000), Is.True);
+            Assert.That(u.State, Is.EqualTo(ContentUpdateState.Failed), "a missing CDN file is a broken publish");
+            staging.Fault = null;
+            Assert.That(u.Check(Offer(V)).IsCompleted, Is.True);
+            Assert.That(staging.Downloads, Is.EqualTo(2), "and is not re-downloaded");
         }
 
         [Test]

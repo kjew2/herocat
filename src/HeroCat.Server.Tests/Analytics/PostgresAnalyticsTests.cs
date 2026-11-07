@@ -203,8 +203,20 @@ public sealed class PostgresAnalyticsTests
     {
         var events = _factory.Services.GetRequiredService<ServerEconomyEvents>();
         var player = Guid.NewGuid();
-        var row = events.CurrencyChanged(player, accountAgeGate: 1, "DIAMOND", -300, 340, "SUMMON", "weapon");
-        Assert.Throws<ArgumentException>(() => events.CurrencyChanged(player, 0, "DIAMOND", 1, 1, "BONUS", null));
+        // An account made 3 days and 5 seconds ago: the row's day_index counts days from accounts.created_at (issue #305).
+        await _db.ExecAsync("insert into accounts (player_id, display_name, region, age_gate, created_at) values (@p, 'n', 'US', 1, @t)",
+                            ("p", player), ("t", _clock.GetUtcNow().AddDays(-3).AddSeconds(-5)));
+        EconomyAccount account;
+        await using (var c = await _db.Factory.OpenAsync())
+        {
+            await using var tx = await c.BeginTransactionAsync();
+            account = (await ServerEconomyEvents.AccountAsync(c, tx, player, CancellationToken.None))!;
+            Assert.That(await ServerEconomyEvents.AccountAsync(c, tx, Guid.NewGuid(), CancellationToken.None), Is.Null);
+        }
+        Assert.That(account.AgeGate, Is.EqualTo(1));
+        var row = events.CurrencyChanged(player, account, "DIAMOND", -300, 340, "SUMMON", "weapon");
+        Assert.That(row.DayIndex, Is.EqualTo(3));
+        Assert.Throws<ArgumentException>(() => events.CurrencyChanged(player, account, "DIAMOND", 1, 1, "BONUS", null));
 
         await using (var c = await _db.Factory.OpenAsync())
         {
@@ -222,7 +234,7 @@ public sealed class PostgresAnalyticsTests
         }
         Assert.That(await _db.CountAsync(
             "select count(*) from events where player_id_hash = @h and source = 'server' and age_gate = 1 and name = 'currency_changed' " +
-            "and props->>'reason' = 'SUMMON' and (props->>'delta')::int = -300 and props->>'refId' = 'weapon'",
+            "and props->>'reason' = 'SUMMON' and (props->>'delta')::int = -300 and props->>'refId' = 'weapon' and day_index = 3",
             ("h", AnalyticsEventRules.HashPlayerId(player, "test-salt"))), Is.EqualTo(1));
     }
 

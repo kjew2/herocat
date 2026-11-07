@@ -43,7 +43,7 @@ public sealed class SaveStore
 
     public static async Task<StoredSave?> GetAsync(DbConnection c, DbTransaction? tx, Guid playerId, CancellationToken ct)
     {
-        await using var cmd = c.Command($"select {Columns} from saves where player_id = @p", tx, ("p", playerId));
+        await using var cmd = c.Command("save.get", $"select {Columns} from saves where player_id = @p", tx, ("p", playerId));
         await using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
         if (!await r.ReadAsync(ct).ConfigureAwait(false)) return null;
         return new StoredSave(r.GetGuid(0), r.GetInt64(1), r.GetGuid(2), r.GetInt32(3), r.GetString(4), r.GetString(5), r.GetInt64(6),
@@ -55,21 +55,26 @@ public sealed class SaveStore
     /// <summary>Serialises this player's uploads until the transaction ends.</summary>
     public static async Task LockPlayerAsync(DbConnection c, DbTransaction tx, Guid playerId, CancellationToken ct)
     {
-        await using var cmd = c.Command("select pg_advisory_xact_lock(hashtext('herocat/save'), hashtext(@p))", tx, ("p", playerId.ToString("D")));
+        await using var cmd = c.Command("save.lock_player", "select pg_advisory_xact_lock(hashtext('herocat/save'), hashtext(@p))", tx, ("p", playerId.ToString("D")));
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
-    /// <summary>The device's HMAC key at rest (<c>devices.hmac_key_enc</c>), if the device is this player's.</summary>
+    /// <summary>
+    /// The device's HMAC key at rest (<c>devices.hmac_key_enc</c>), if the device is this player's and logout has not
+    /// released it (<c>devices.released_at</c>, 00 decision 117): a logged-out player's access token, still valid until it
+    /// expires, no longer verifies uploads under the released device's key (issue #322).
+    /// </summary>
     public static async Task<byte[]?> DeviceKeyEncAsync(DbConnection c, DbTransaction tx, Guid playerId, Guid deviceId, CancellationToken ct)
     {
-        await using var cmd = c.Command("select hmac_key_enc from devices where device_id = @d and player_id = @p", tx, ("d", deviceId), ("p", playerId));
+        await using var cmd = c.Command("save.device_key", "select hmac_key_enc from devices where device_id = @d and player_id = @p and released_at is null", tx,
+            ("d", deviceId), ("p", playerId));
         return await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false) as byte[];
     }
 
     /// <summary>The highest <c>saveSeq</c> this device uploaded that the server still knows (the save of record and history).</summary>
     public static async Task<long?> LastSeqOfDeviceAsync(DbConnection c, DbTransaction tx, Guid playerId, Guid deviceId, CancellationToken ct)
     {
-        await using var cmd = c.Command(
+        await using var cmd = c.Command("save.last_seq_of_device", 
             "select max(s) from (select save_seq s from saves where player_id = @p and device_id = @d " +
             "union all select save_seq from save_history where player_id = @p and device_id = @d) x", tx, ("p", playerId), ("d", deviceId));
         return await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false) is long l ? l : null;
@@ -83,7 +88,7 @@ public sealed class SaveStore
     /// </summary>
     public static async Task WriteAsync(DbConnection c, DbTransaction tx, StoredSave s, CancellationToken ct)
     {
-        await using (var up = c.Command(
+        await using (var up = c.Command("save.upsert", 
             "insert into saves (player_id, save_seq, device_id, schema_version, content_version, client_version, last_saved_server_time, " +
             "clock_authoritative, size_bytes, sha256, hmac, hmac_valid, blob_key, etag, progress_score, summary, flags, rollback_pending, " +
             "cmdlog_requested, uploaded_at) values (@p, @seq, @d, @sv, @cv, @clv, @t, @ca, @size, @sha, @hmac, @hv, @key, @etag, @score, " +
@@ -100,7 +105,7 @@ public sealed class SaveStore
             ("flags", s.Flags), ("cmdlog", s.CmdlogRequested), ("now", s.UploadedAt)))
             await up.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
 
-        await using var hist = c.Command(
+        await using var hist = c.Command("save.insert_history", 
             "insert into save_history (player_id, save_seq, device_id, blob_key, sha256, progress_score, summary, flags, uploaded_at) " +
             "values (@p, @seq, @d, @key, @sha, @score, cast(@summary as jsonb), @flags, @now) " +
             "on conflict (player_id, save_seq, device_id) do update set blob_key = excluded.blob_key, " +
@@ -115,7 +120,7 @@ public sealed class SaveStore
     public async Task ClearRollbackAsync(Guid playerId, CancellationToken ct)
     {
         await using var c = await _db.OpenAsync(ct).ConfigureAwait(false);
-        await using var cmd = c.Command("update saves set rollback_pending = false where player_id = @p and rollback_pending", null, ("p", playerId));
+        await using var cmd = c.Command("save.clear_rollback", "update saves set rollback_pending = false where player_id = @p and rollback_pending", null, ("p", playerId));
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
@@ -123,7 +128,7 @@ public sealed class SaveStore
     public async Task<List<SaveHistoryEntryDto>> HistoryAsync(Guid playerId, int limit, CancellationToken ct)
     {
         await using var c = await _db.OpenAsync(ct).ConfigureAwait(false);
-        await using var cmd = c.Command(
+        await using var cmd = c.Command("save.history", 
             "select save_seq, device_id, uploaded_at, summary::text from save_history where player_id = @p " +
             "order by uploaded_at desc, save_seq desc, device_id desc limit @n", null, ("p", playerId), ("n", limit));
         await using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);

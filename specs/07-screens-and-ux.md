@@ -1049,7 +1049,7 @@ Packages and assemblies:
 | `HeroCat.Client` | `Assets/HeroCat.Client/` | `HeroCat.Client.Core`, `HeroCat.Sim`, `HeroCat.Runtime`, `HeroCat.Remote`, `Unity.InputSystem`, `Unity.TextMeshPro`, Addressables | engine references on; `HEROCAT_CHEATS` is a define in Dev build profiles only (17.4) |
 | `HeroCat.Client.Editor` | `Assets/HeroCat.Client/Editor/` | `HeroCat.Client`, `HeroCat.Client.Core` | `includePlatforms: ["Editor"]`; holds `ContentPreBuild` (verifies `content/`, copies it into `StreamingAssets/content` and `Resources/content`, checks the `asset` addresses; 09 sections 3.2 and 10.1, issue #133) and the build-profile menu (17.4) |
 
-Rules: only `Boot/` and `Screens/` hold `MonoBehaviour`s; nothing outside `Boot/GameRoot.cs`, `SessionRunner` and `GameViewModel` holds a `Simulation` reference.
+Rules: only `Boot/` and `Screens/` hold `MonoBehaviour`s; nothing outside `Boot/GameRoot.cs`, `SessionRunner` and `GameViewModel` holds a `Simulation` reference. There is no separate Screens assembly: screens may use Sim content types (rarity, stat and banner enums), and `ClientArchitectureTests` greps `Screens/` for `GameState`, `Simulation` and `HeroCat.Sim.State` (00 decision 120, 01 section 1.2).
 
 ### 17.2 Safe area and screen fit
 

@@ -24,21 +24,21 @@ public sealed class DungeonStore
     /// </summary>
     public static async Task<bool> LockAccountAsync(DbConnection c, DbTransaction tx, Guid player, CancellationToken ct)
     {
-        await using var cmd = c.Command("select 1 from accounts where player_id = @p for no key update", tx, ("p", player));
+        await using var cmd = c.Command("dungeon.lock_account", "select 1 from accounts where player_id = @p for no key update", tx, ("p", player));
         return await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false) != null;
     }
 
     /// <summary>The last uploaded save's <c>BestFloor[kind]</c> (<c>dungeon_progress</c>), 0 when no upload carried it.</summary>
     public static async Task<int> BestFloorAsync(DbConnection c, DbTransaction? tx, Guid player, string kind, CancellationToken ct)
     {
-        await using var cmd = c.Command("select best_floor from dungeon_progress where player_id = @p and kind = @k", tx, ("p", player), ("k", kind));
+        await using var cmd = c.Command("dungeon.best_floor", "select best_floor from dungeon_progress where player_id = @p and kind = @k", tx, ("p", player), ("k", kind));
         return await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false) is int best ? best : 0;
     }
 
     /// <summary>Every kind's best floor as of the last upload that carried <c>Dungeons</c>.</summary>
     public static async Task<Dictionary<string, int>> BestFloorsAsync(DbConnection c, DbTransaction tx, Guid player, CancellationToken ct)
     {
-        await using var cmd = c.Command("select kind, best_floor from dungeon_progress where player_id = @p", tx, ("p", player));
+        await using var cmd = c.Command("dungeon.best_floors", "select kind, best_floor from dungeon_progress where player_id = @p", tx, ("p", player));
         var map = new Dictionary<string, int>(StringComparer.Ordinal);
         await using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
         while (await r.ReadAsync(ct).ConfigureAwait(false)) map[r.GetString(0)] = r.GetInt32(1);
@@ -51,7 +51,7 @@ public sealed class DungeonStore
     {
         foreach (var (kind, floor) in best)
         {
-            await using var cmd = c.Command(
+            await using var cmd = c.Command("dungeon.upsert_best_floors", 
                 "insert into dungeon_progress (player_id, kind, best_floor, save_seq) values (@p, @k, @f, @s) " +
                 "on conflict (player_id, kind) do update set best_floor = excluded.best_floor, save_seq = excluded.save_seq, updated_at = now()", tx,
                 ("p", player), ("k", kind), ("f", floor), ("s", saveSeq));
@@ -62,7 +62,7 @@ public sealed class DungeonStore
     /// <summary>Seeds issued for this kind and day key, expired or not (the daily cap's count, 00 decision 114).</summary>
     public static async Task<int> IssuedForDayAsync(DbConnection c, DbTransaction tx, Guid player, string kind, int dayKey, CancellationToken ct)
     {
-        await using var cmd = c.Command(
+        await using var cmd = c.Command("dungeon.issued_for_day", 
             "select count(*)::int from dungeon_seeds where player_id = @p and kind = @k and day_key = @d", tx,
             ("p", player), ("k", kind), ("d", dayKey));
         return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false));
@@ -71,7 +71,7 @@ public sealed class DungeonStore
     public static async Task InsertAsync(DbConnection c, DbTransaction tx, Guid grantId, Guid player, string requestId, string kind, int floor,
                                          int dayKey, ulong seed, DateTimeOffset issuedAt, DateTimeOffset expiresAt, CancellationToken ct)
     {
-        await using var cmd = c.Command(
+        await using var cmd = c.Command("dungeon.insert_seed", 
             "insert into dungeon_seeds (grant_id, player_id, request_id, kind, floor, day_key, seed, issued_at, expires_at) " +
             "values (@g, @p, @r, @k, @f, @d, @s, @i, @e)", tx,
             ("g", grantId), ("p", player), ("r", requestId), ("k", kind), ("f", floor), ("d", dayKey), ("s", unchecked((long)seed)),
@@ -85,7 +85,7 @@ public sealed class DungeonStore
     {
         var map = new Dictionary<Guid, IssuedSeed>();
         if (grantIds.Count == 0) return map;
-        await using var cmd = c.Command("select grant_id, kind, floor from dungeon_seeds where player_id = @p and grant_id = any(@g)", tx,
+        await using var cmd = c.Command("dungeon.issued", "select grant_id, kind, floor from dungeon_seeds where player_id = @p and grant_id = any(@g)", tx,
                                         ("p", player), ("g", grantIds.ToArray()));
         await using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
         while (await r.ReadAsync(ct).ConfigureAwait(false))
@@ -99,7 +99,7 @@ public sealed class DungeonStore
     /// <summary>The floors of <paramref name="kind"/> among <paramref name="floors"/> that have at least one seed issued to the player.</summary>
     public static async Task<HashSet<int>> FloorsWithSeedAsync(DbConnection c, DbTransaction tx, Guid player, string kind, int[] floors, CancellationToken ct)
     {
-        await using var cmd = c.Command("select distinct floor from dungeon_seeds where player_id = @p and kind = @k and floor = any(@f)", tx,
+        await using var cmd = c.Command("dungeon.floors_with_seed", "select distinct floor from dungeon_seeds where player_id = @p and kind = @k and floor = any(@f)", tx,
                                         ("p", player), ("k", kind), ("f", floors));
         var set = new HashSet<int>();
         await using var r = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -110,7 +110,7 @@ public sealed class DungeonStore
     /// <summary>Fills <c>dungeon_seeds.result</c> (<c>cleared</c> or <c>failed</c>) for one of the player's grants.</summary>
     public static async Task SetResultAsync(DbConnection c, DbTransaction tx, Guid player, Guid grantId, bool cleared, CancellationToken ct)
     {
-        await using var cmd = c.Command("update dungeon_seeds set result = @r where player_id = @p and grant_id = @g", tx,
+        await using var cmd = c.Command("dungeon.set_result", "update dungeon_seeds set result = @r where player_id = @p and grant_id = @g", tx,
                                         ("r", cleared ? "cleared" : "failed"), ("p", player), ("g", grantId));
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }

@@ -66,6 +66,7 @@ public static class ServerHost
         AddCore(builder.Services, builder.Configuration, ServerRole.Api);
         builder.Services.AddHostedService<SigningKeyRotationService>();
         builder.Services.AddControllers();
+        builder.Services.AddSingleton<Health.ReadinessProbe>();
         builder.Services
             .AddAuthFeature()
             .AddProfileFeature()
