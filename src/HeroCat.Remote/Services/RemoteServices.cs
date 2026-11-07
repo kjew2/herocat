@@ -109,7 +109,8 @@ namespace HeroCat.Remote.Services
     /// Local-first cloud save (08 section 9: a save never fails because the network did). Every operation goes to the
     /// local store; <see cref="Write"/> also queues the bytes under a fresh request id, and <see cref="UploadAsync"/> sends
     /// the latest queued copy as <c>PUT /save</c>, re-sending the same copy with the same id until it is accepted.
-    /// TODO(#152): If-Match, X-Save-Meta and the 02 section 9 response; TODO(#153): download and the conflict rule.
+    /// TODO(#152): If-Match, X-Save-Meta, the 02 section 9 response, the download, and the conflict rule through
+    /// Runtime's CloudConflictResolver (issue #153: uploads go through its GatedCloudSaveApi, a 409 calls CheckAsync).
     /// </summary>
     public sealed class CloudSaveStore : ISaveSlotStore
     {

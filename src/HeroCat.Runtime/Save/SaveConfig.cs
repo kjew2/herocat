@@ -16,6 +16,12 @@ namespace HeroCat.Runtime.Save
         /// <summary>Rejected conflict candidates are kept as slot0.conflict-*.sav this long (02 section 2).</summary>
         public const int CONFLICT_KEEP_DAYS = 30;
 
+        /// <summary>
+        /// The conflict modal is raised when the rule's loser has a progressScore more than this fraction above the
+        /// winner's (02 section 9.3).
+        /// </summary>
+        public const double CONFLICT_PROGRESS_MARGIN = 0.10;
+
         /// <summary>Pending.Summon / Pending.Dungeon older than this is cleared on load (02 section 6.4 P17).</summary>
         public const int PENDING_STALE_DAYS = 7;
 
