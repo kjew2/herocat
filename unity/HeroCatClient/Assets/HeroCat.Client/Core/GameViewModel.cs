@@ -155,9 +155,10 @@ namespace HeroCat.Client.Core
         /// </summary>
         public void Refresh()
         {
-            var s = _sim.GetSnapshot();
+            // Runtime's inbox count (Snapshot.PendingInboxCount is Runtime's to set, 01 section 2.7): the HUD badge and pill.
+            var s = _sim.GetSnapshot().WithPendingInboxCount(_runner.Inbox.BadgeCount);
             double now = _now();
-            int newCount = Prefs.NewCount(Banner.WEAPON) + Prefs.NewCount(Banner.SKILL);
+            int newCount = Prefs.NewCount(Banner.WEAPON) + Prefs.NewCount(Banner.SKILL) + Prefs.NewCount(Banner.COMPANION);
             Main.Refresh(_sim, s, now, newCount);
             string top = Router.TopFull.Id;
             if (top == ScreenIds.Party) Party.Refresh(_sim, s);

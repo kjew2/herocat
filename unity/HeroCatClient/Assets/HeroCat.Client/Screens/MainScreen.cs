@@ -92,6 +92,7 @@ namespace HeroCat.Client.Screens
             var rc = Chip("RockCandy", 736, "R", Palette.RockCandy, hud.OnRockCandyChip, out var candy);
             hud.RockCandy.Bind(candy.Sink());
             hud.RockCandyVisible.Bind(new ActiveSink(rc.gameObject));
+            LockedBinding.Bind(hud.RockCandyLock, rc, 176, 0);   // shown but locked before AWAKEN_STAGES[0] (07 section 10 rule 8)
 
             var inbox = UiKit.Button("Inbox", _hud, hud.OnInbox, Palette.PanelRaised);
             UiKit.Place(inbox.GetComponent<RectTransform>(), 852, 4, 112, 112);
@@ -320,8 +321,8 @@ namespace HeroCat.Client.Screens
             c.BossClearable.Bind(new ActionFlagSink(on => border.enabled = on));
             Anchor(CombatVm.AnchorBoss, br);
 
-            Pill("Quests", 640, m.QuestsPill, () => Vm.Context.LockedToast("QUESTS"));
-            Pill("Dungeons", 784, m.DungeonsPill, () => Vm.Context.LockedToast("DUNGEONS"));
+            Pill("Quests", 640, m.QuestsPill, m.OnQuestsPill);         // the tab's route: lock toast before the gate
+            Pill("Dungeons", 784, m.DungeonsPill, m.OnDungeonsPill);
             Pill("Inbox", 928, m.InboxPill, Vm.Hud.OnInbox);
         }
 
@@ -410,11 +411,32 @@ namespace HeroCat.Client.Screens
             _info.gameObject.SetActive(false);
             b.InfoVisible.Bind(new ActiveSink(_info.gameObject));   // after the hide: Bind pushes the current value
 
+            BuildResearchButton();
+
             _discovery = UiKit.Panel("Discovery", _board, Palette.Gold, 0.95f).rectTransform;
             UiKit.Place(_discovery, 240, 200, 720, 200);
             _discoveryText = UiKit.Text("Text", _discovery, UiKit.Title, 0x121212, TextAlignmentOptions.Center, bold: true);
             UiKit.Fill(_discoveryText.rectTransform, 16, 16, 16, 16);
             _discovery.gameObject.SetActive(false);
+        }
+
+        /// <summary>
+        /// The [Research] button (MVP, 07 section 4.3) in the free strip right of the grid, bottom: the Locked state before
+        /// Research unlocks (Awakening rank 1), then the red dot for an affordable node (Badges.ResearchAffordable).
+        /// </summary>
+        void BuildResearchButton()
+        {
+            var m = Vm.Main;
+            var btn = UiKit.Button("Research", _board, m.OnResearch, 0x37474F, UiKit.Micro);
+            var rt = btn.GetComponent<RectTransform>();
+            UiKit.Place(rt, 952, 520, 120, 112);
+            UiKit.LabelOf(btn).text = "Res";   // placeholder glyph (07 section 15.1)
+            LockedBinding.Bind(m.ResearchLock, rt, 72, 0);
+            var dot = UiKit.CirclePanel("Dot", rt, UiKit.C(Palette.Bad));
+            UiKit.Place(dot.rectTransform, 88, 4, 28, 28);
+            m.Badges.ResearchAffordable.Bind(new ActiveSink(dot.gameObject));
+            m.ResearchVisible.Bind(new ActiveSink(btn.gameObject));
+            Anchor("main.research", rt);
         }
 
         RectTransform BoardButton(string name, float y, ButtonState state, UnityEngine.Events.UnityAction tap, string anchor)
@@ -496,10 +518,7 @@ namespace HeroCat.Client.Screens
                 var icon = UiKit.Text("Icon", rt, UiKit.Title, Palette.Text, TextAlignmentOptions.Center);
                 UiKit.Place(icon.rectTransform, 58, 16, 64, 64);
                 icon.text = tab.ToString().Substring(0, 1);   // placeholder icon (07 section 15.1)
-                var lockGlyph = UiKit.Text("Lock", rt, UiKit.Caption, Palette.Muted, TextAlignmentOptions.Center);
-                UiKit.Place(lockGlyph.rectTransform, 120, 8, 48, 40);
-                lockGlyph.text = "\u2298";   // ⊘ placeholder lock: the M0 font has no emoji (07 section 15.1)
-                m.TabLocked[i].Bind(new ActiveSink(lockGlyph.gameObject));
+                LockedBinding.Bind(m.TabLocks[i], rt, 120, 8);   // glyph + greyed; the tap toasts the condition (07 section 3)
                 var dot = UiKit.CirclePanel("Dot", rt, UiKit.C(Palette.Bad));
                 UiKit.Place(dot.rectTransform, 116, 12, 28, 28);
                 m.TabBadges[i].Bind(new ActiveSink(dot.gameObject));
