@@ -318,7 +318,7 @@ namespace HeroCat.Client.Core
         {
             var id = row?.GoScreen;
             if (id == null || _c.Router == null) return;
-            if (id == ScreenIds.Dungeons) { _c.LockedToast("DUNGEONS"); return; }   // TODO(gap: SCR_DUNGEONS client screen): route once it exists
+            if (id == ScreenIds.Dungeons) { _c.LockedToast("DUNGEONS"); return; }   // TODO(#182): route once it exists
             _c.Router.Replace(id);
         }
 

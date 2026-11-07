@@ -67,8 +67,8 @@ namespace HeroCat.Client.Screens
             ButtonBinding.Bind(q.ClaimAll, all);
             Anchor(QuestsVm.AnchorClaimAll, all.GetComponent<RectTransform>());
 
-            // Locked (07 section 3): greyed content, the unlock condition, no interaction. TODO(gap: shared Locked
-            // presentation, #180): a local stand-in until the shared lock card lands.
+            // Locked (07 section 3): greyed content, the unlock condition, no interaction. Whole-screen form; LockedBinding
+            // (#180) is the per-element one.
             var lockText = Line("Locked", ProgressY, UiKit.Title, Palette.Muted, 24, 1032, 96);
             lockText.alignment = TextAlignmentOptions.Center;
             q.LockedText.Bind(new ActionTextSink(t => lockText.text = string.IsNullOrEmpty(t) ? "" : t));
