@@ -11,7 +11,7 @@ Start with `specs/00-overview.md`. It fixes the pitch and pillars, scope tiers, 
 | `specs/00-overview.md` | Pitch and pillars, scope tiers, tech stack, architecture, vocabulary, constants, contracts, milestones, decisions | New game |
 | `specs/01-architecture-and-data-flow.md` | Layers, commands/events, every end-to-end flow, threading, network | HeroCat; rewrite #388 |
 | `specs/02-domain-model-and-persistence.md` | Entities, save schema v1, migrations, local + cloud save, server DB | HeroCat; rewrite #384 |
-| `specs/03-combat-and-progression.md` | Becomes `03-heroes-and-growth.md`: hero sheet, statuses, inner life, levels, synthesis, promotion, skills, classes | HeroCat; rewrite #342, #344 |
+| `specs/03-heroes-and-growth.md` | Hero sheet, stats, classes and roles, former lives and traits, statuses, inner life, the stat pipeline; levels, synthesis, promotion, skills and class change to come | New game (hero model); growth pending #344 |
 | `specs/04-summons-and-collections.md` | Becomes `04-summons-and-gear.md`: hero and gear banners, odds, pity, gear, crafting | HeroCat; rewrite #343, #345 |
 | `specs/05-fish-merge-minigame.md` | Becomes `05-tower-and-battle.md`: floors, auto-battle, missions, death and revival, side content | HeroCat (retired system); rewrite #346 |
 | `specs/06-economy-and-daily-loop.md` | Becomes `06-lobby-and-meta.md`: lobby, facilities, manager, research, parties, account level, quests, shop, idle time | HeroCat; rewrite #347 |
@@ -21,12 +21,13 @@ Start with `specs/00-overview.md`. It fixes the pitch and pillars, scope tiers, 
 | `specs/10-testing-release-and-ops.md` | Test pyramid, bots, CI/CD, store release, KPIs, runbooks, roadmap | HeroCat; update #388 |
 | `specs/11-source-divergences.md` | Every rule where the new game deliberately differs from the source mechanics in `docs/research/` | New game |
 | `specs/archive/00-overview-herocat.md` | HeroCat's overview, kept so existing citations resolve; not a spec | Archived |
+| `specs/archive/03-combat-and-progression-herocat.md` | HeroCat's combat and progression spec, kept so "03 section N" citations in code and tools resolve; not a spec | Archived |
 
 Tools (Python 3.9+, stdlib only unless noted):
 
 | Tool | Status | Does |
 |---|---|---|
-| `tools/power_curve_model.py` | in repo (spec 03 section 8.6, issue #87); `--check` runs in full `check.sh`, report-only until the `S` bands pass | Greedy F2P bot across all power layers; prints the day table, layer shares and 06's economy tables (issue #178); validates the `S` constants 03 and 06 list |
+| `tools/power_curve_model.py` | in repo (archived spec 03 section 8.6, issue #87); `--check` runs in full `check.sh`, report-only until the `S` bands pass | Greedy F2P bot across all power layers; prints the day table, layer shares and 06's economy tables (issue #178); validates the `S` constants 03 and 06 list |
 | `tools/gacha_model.py` | in repo (spec 04 section 14); `--check` and `--cadence` run by `check.sh` (hard gates; two `--cadence` checks report-only, issue #164) | Exact pity distribution and consolidated rates per banner level, collection fill curve, F2P pull cadence per banner and the 04 section 14 `S`-constant checks; the oracle for the server summon test |
 | `tools/fish_model.py` | in repo (spec 05 section 9); run by `check.sh` (hard gate) | Tank and merge throughput, Fish Coin and DPS income per active minute for attentive and lazy policies; `--dungeon-curves` reports the Fish Coin Dungeon share per candidate reward curve (issue #165) |
 | `tools/export_content.py` | `build` / `check` / `gen-dtos` / `diff` / `pull`, table rules, versioning, localization checks and the translator verbs `translator-csv` / `import-translations` / `pseudo` landed (spec 09, issues #121-#123, #128, #132, #213) | `content_src/*.csv` (edited directly, #278; optional one-off Sheet `pull`) -> validated `content/*.json` + `manifest.json` + the Sim's generated DTOs; translator CSV round trip; pseudo-localization |
