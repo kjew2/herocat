@@ -226,7 +226,8 @@ public sealed class PostgresSummonTests
         string rid = b.GetProperty("requestId").GetString()!;
         Assert.That(await _db.CountAsync(
             "select count(*) from events where name = 'currency_changed' and source = 'server' and props->>'refId' = @r and props->>'currency' = 'DIAMOND' " +
-            "and (props->>'delta')::int = -1000 and (props->>'balanceAfter')::int = 1500 and props->>'reason' = 'SUMMON' and ts = @t",
+            "and (props->>'delta')::int = -1000 and (props->>'balanceAfter')::int = 1500 and props->>'reason' = 'SUMMON' and ts = @t " +
+            "and day_index = 0",   // days since accounts.created_at; the guest call made the account at T0 (issue #305)
             ("r", rid), ("t", T0)), Is.EqualTo(1));
 
         // A second pull continues from the server's own state: the collection (isNew, copies) and pity carry over.

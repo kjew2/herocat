@@ -1,7 +1,11 @@
 using System.Text.Json;
 using HeroCat.Runtime.Services;
 using HeroCat.Server.Features.Analytics;
+using HeroCat.Server.Features.Summon;
+using HeroCat.Server.Hosting;
+using FakeClock = HeroCat.Server.Tests.Pipeline.FakeClock;
 using HeroCat.Server.Worker;
+using Microsoft.Extensions.Options;
 using HeroCat.Sim.Economy;
 using NUnit.Framework;
 
@@ -131,5 +135,47 @@ public sealed class AnalyticsUnitTests
         var day = new PartitionedTable("events", "day");
         Assert.That(PartitionMaintenanceService.PartitionEnd(day, "events_p20261231"), Is.EqualTo(DateTimeOffset.Parse("2027-01-01T00:00:00+00:00")));
         Assert.That(PartitionMaintenanceService.PartitionEnd(day, "events_default"), Is.Null);
+    }
+
+    // ---- server-written rows' day_index (issue #305) ----
+
+    static readonly Lazy<IContentSets> Content = new(() => new DirectoryContentSets(Options.Create(new ContentSetOptions())));
+
+    static ServerEconomyEvents ServerEvents(DateTimeOffset now) =>
+        new(Options.Create(new ServerOptions { Env = "test", Analytics = { PlayerIdSalt = "salt" } }), new FakeClock(now), Content.Value);
+
+    [Test]
+    public void Server_day_index_counts_whole_days_since_the_account_was_created()
+    {
+        const int day = 86400;
+        var created = DateTimeOffset.FromUnixTimeSeconds(1_793_600_000);
+        Assert.That(ServerEconomyEvents.DayIndex(created, created, day), Is.Zero);
+        Assert.That(ServerEconomyEvents.DayIndex(created.AddSeconds(day - 1), created, day), Is.Zero);
+        Assert.That(ServerEconomyEvents.DayIndex(created.AddSeconds(day), created, day), Is.EqualTo(1));
+        Assert.That(ServerEconomyEvents.DayIndex(created.AddDays(30).AddHours(5), created, day), Is.EqualTo(30));
+        // Floored like the client's envelope: a ledger clock a second behind the account's created_at is day -1, not 0.
+        Assert.That(ServerEconomyEvents.DayIndex(created.AddSeconds(-1), created, day), Is.EqualTo(-1));
+    }
+
+    [Test]
+    public void Server_currency_changed_carries_the_account_day_index_and_age_gate()
+    {
+        var events = ServerEvents(Now);
+        Assert.That(Content.Value.Active.Constants.DaySeconds, Is.EqualTo(86400), "DAY_SECONDS (00 section 4)");
+
+        var row = events.CurrencyChanged(Player, new EconomyAccount(1, Now.AddDays(-7).AddMinutes(-1)), "DIAMOND", 500, 900, "IAP", "sku");
+        Assert.That(row.DayIndex, Is.EqualTo(7));
+        Assert.That(row.AgeGate, Is.EqualTo(1));
+        Assert.That(row.Source, Is.EqualTo(AnalyticsEventRules.SourceServer));
+        Assert.That(row.Ts, Is.EqualTo(Now));
+        Assert.That(row.SessionId, Is.Null);
+        Assert.That(row.Stage, Is.Null);
+
+        var fresh = events.Row("iap_status", Player, new EconomyAccount(2, Now.AddHours(-23)), new Dictionary<string, object?> { ["status"] = "granted" });
+        Assert.That(fresh.DayIndex, Is.Zero);
+
+        var orphan = events.CurrencyChanged(Player, EconomyAccount.Unknown, "DIAMOND", 1, 1, "MAIL", null);
+        Assert.That(orphan.DayIndex, Is.Null, "no account row, no day");
+        Assert.That(orphan.AgeGate, Is.Zero);
     }
 }

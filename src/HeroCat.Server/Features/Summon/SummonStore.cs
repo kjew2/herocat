@@ -1,5 +1,6 @@
 using System.Data.Common;
 using System.Text;
+using HeroCat.Server.Features.Analytics;
 using HeroCat.Server.Infrastructure.Db;
 using HeroCat.Sim.Content;
 using HeroCat.Sim.State;
@@ -24,14 +25,10 @@ public sealed class SummonStore
     /// <summary>
     /// Locks the player's <c>accounts</c> row for the transaction (<c>for no key update</c>, which ledger inserts do not
     /// wait on), so two pulls of one player never read the same balance even when the Redis lock failed open. Returns
-    /// the account's <c>age_gate</c> (for the pull's economy event), or null when the account does not exist.
+    /// the account's <c>age_gate</c> and <c>created_at</c> (for the pull's economy event), or null when the account does not exist.
     /// </summary>
-    public static async Task<int?> LockAccountAsync(DbConnection c, DbTransaction tx, Guid player, CancellationToken ct)
-    {
-        await using var cmd = c.Command("select age_gate from accounts where player_id = @p for no key update", tx, ("p", player));
-        object? age = await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false);
-        return age is null or DBNull ? null : Convert.ToInt32(age);
-    }
+    public static Task<EconomyAccount?> LockAccountAsync(DbConnection c, DbTransaction tx, Guid player, CancellationToken ct) =>
+        ServerEconomyEvents.AccountAsync(c, tx, player, ct, lockRow: true);
 
     /// <summary>The banner's pity row, created with defaults when absent, locked <c>for update</c>.</summary>
     public static async Task<BannerPityRow> LockPityAsync(DbConnection c, DbTransaction tx, Guid player, Banner banner, CancellationToken ct)
