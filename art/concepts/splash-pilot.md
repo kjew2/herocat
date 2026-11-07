@@ -22,10 +22,10 @@ They overlap on the point that matters most for us: **clean anime faces, a stron
 
 Only the rendering style changes. Everything else is locked, so the comparison is about style and not about pose or outfit.
 
-- **Character:** Yuki as briefed in `companions.md`: long black hair with a white streak, heart-and-cross bow, halo of thorns, frilled black-and-white gothic dress, silver chains and cross accents, frilled black parasol, violet eyes.
+- **Character:** Yuki as briefed in `companions.md`: hime cut with white panels in the side locks, heart-and-cross bow, halo of thorns, gothic jirai kei outfit (white frilled blouse, big collar bow, buckled corset belt, oversized black laced sleeves), stitched plush bunny at her belt, silver chains and cross accents, frilled black parasol, violet eyes. The owner's concepts `yuki_concept_parasol.png` and `yuki_concept_seated.jpg` show the look.
 - **Pose:** standing three-quarter view, body turned slightly to her left and face toward the viewer, calm half-lidded look. Her right hand holds the parasol over her shoulder, with the canopy tilted up and to the right. Hair and ribbons stream to the left.
-- **Framing:** head to mid-thigh. The face sits in the upper third. The whole parasol canopy and the face stay inside the centred 810 x 1440 rp safe zone (`specs/07` section 15.2), so nothing important is cut on a 4:3 or a 20:9 screen.
-- **Scene:** a dim gothic cathedral interior with violet stained glass, out of focus. Violet shadow butterflies around her, a few violet lilies at the bottom edge.
+- **Framing:** head to mid-thigh. The face sits in the upper third. The face and her figure stay inside the centred 810 x 1440 rp safe zone (`specs/07` section 15.2), so nothing important is cut on a 4:3 or a 20:9 screen. **The parasol canopy may run off the top or side edge** (owner, 2026-11-07): fitting the whole canopy in makes her too small and throws off the proportions.
+- **Scene:** a dim gothic cathedral interior with violet stained glass, out of focus. Pale violet butterflies, floating crystal shards and loose ribbons around her, a few white lilies at the bottom edge.
 - **Palette:** black, white and violet, silver metal; no other hue except a variant's own accent rule.
 - **Content level:** the same as the reference (bare shoulders, thigh garter), within `specs/00` decision 105. Every variant shows the same amount of skin so that isn't a variable.
 - **Canvas:** 9:16 portrait, 1080 x 1920 or larger. **No text, logo, frame or UI chips** baked in (the game draws name, rarity and role).
@@ -44,13 +44,22 @@ D is the control: it shows what the artist's current style looks like once it fo
 
 ## 4. Prompts
 
-Each prompt is the shared base plus one style block. They are written for a general text-to-image tool; adjust the syntax for the tool you use. Make 4 images per variant, and keep the seed fixed across variants where the tool allows it.
+Each prompt is the shared base plus one style block. They are written for a general text-to-image tool; adjust the syntax for the tool you use. Keep the seed fixed across variants where the tool allows it.
+
+Generate in two rounds (issue #321):
+
+1. **Round 1:** 1 image per variant (5 images). Drop the variants that are clearly wrong.
+2. **Round 2:** 4 images each for the 2 or 3 survivors, so each gets a fair shot at one clean image.
+
+One image per variant is too few to judge a style, since a single sample can fail by chance (hands, a cropped head). Twenty up front spends most of the tries on styles that are already out.
+
+**Tool for this run:** OpenAI image generation (`gpt-image-2`). It has no seed setting, so variants also differ in pose and face. To hold her design steady, pass `art/exploration/splash_pilot/yuki_design_sheet.png` as the reference image. It holds greyscale crops of the owner's seated concept: face and hair, outfit, bunny, shoes. Passing the full colour concepts also copied their soft, lavender rendering into every variant, which defeats a style comparison. Crops without background or lighting, in greyscale, plus a prompt line saying to copy only the design, keep that down. The concepts are our own art, so this keeps to the rule above. `tools/art/splash_pilot_gen.py` builds the prompts from this file and logs each one to `prompts.txt`. Its portrait size is 2:3 (1024 x 1536), so cover-crop to 9:16 and keep extra margin at the sides for the parasol.
 
 **Base (every variant):**
 
-> Vertical 9:16 full-body-to-mid-thigh anime character illustration for a mobile game summon screen. A young gothic shadow mage woman, long straight black hair with one white streak, blunt bangs, violet eyes, calm half-lidded expression looking at the viewer. Heart-and-cross black bow in her hair, a thin halo of silver thorns behind her head. Frilled black-and-white gothic lolita dress with bare shoulders, corset with a violet heart gem, silver chains and small cross charms, lace thigh-high stocking with a heart garter. Standing three-quarter view, turned slightly to her left, her right hand holding a frilled black-and-white parasol over her shoulder, canopy tilted up and to the right, fully inside the frame. Hair and ribbons streaming to the left. Violet shadow butterflies around her, violet lilies at the bottom edge. Background: dim gothic cathedral interior with violet stained glass, out of focus. Palette black, white, violet, silver. Face in the upper third, character centred with margin on all sides. No text, no logo, no frame, no UI.
+> Vertical 9:16 full-body-to-mid-thigh anime character illustration for a mobile game summon screen. A young gothic shadow mage woman, very long straight black hair in a hime cut with heavy blunt bangs and side locks cut straight at the jaw, white panels in the side locks and white strands through the length, violet-grey eyes with soft red under-eye makeup and a small beauty mark, languid half-lidded expression with lips slightly parted, looking at the viewer. Cross earrings and an ear chain. Heart-and-cross black bow in her hair, a thin halo of silver thorns behind her head. Gothic jirai kei fashion: white frilled sleeveless blouse with bare shoulders and a big black collar bow pinned with a heart gem, lace choker, black high-waisted corset belt with buckled straps, short black frilled skirt with white lace layers, oversized black off-shoulder sleeves laced with white ribbon, a buckled thigh strap with a frilled garter, silver chains and small cross charms. A white plush bunny with stitched X eyes and a heart bow hangs from her belt. Standing three-quarter view, turned slightly to her left, her right hand holding a frilled black-and-white parasol over her shoulder, canopy tilted up and to the right; the canopy may run off the top or right edge. Hair and ribbons streaming to the left. Pale violet butterflies, floating crystal shards and loose ribbons around her, white lilies at the bottom edge. Background: dim gothic cathedral interior with violet stained glass, out of focus. Near-monochrome palette: black, white and silver with lavender-violet light as the only accent. Face in the upper third, character centred with margin on all sides. No text, no logo, no frame, no UI.
 
-**Avoid (every variant):** text, letters, watermark, logo, frame, border, UI elements, extra fingers, malformed hands, cropped parasol, cropped head, multiple characters, other colours.
+**Avoid (every variant):** text, letters, watermark, logo, frame, border, UI elements, extra fingers, malformed hands, cropped head, multiple characters, other colours, bandages, scars or stitches on the skin, barcodes.
 
 **Style blocks:**
 
@@ -67,7 +76,7 @@ Put every candidate through the same test strip on the game's `#121212` backgrou
 | Check | How | Passes when |
 |---|---|---|
 | Splash | Full 1080 x 1920 | It looks like a reward. |
-| Screen trim | Cover-crop to 4:3 and to 20:9 (the reveal scales to cover, `specs/07` section 4.11) | Face and parasol survive both. |
+| Screen trim | Cover-crop to 4:3 and to 20:9 (the reveal scales to cover, `specs/07` section 4.11) | Face and figure survive both; the parasol canopy may crop. |
 | Portrait | Crop to 256 rp | Still clearly Yuki. |
 | Icon | Face crop at 128 rp and at 88 rp | Recognisable from hair, bow and colour alone. |
 | Next to the chibi | The splash beside her 48 px battle chibi | They read as the same character. |
