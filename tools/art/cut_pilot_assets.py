@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Cut stand-in art for the companion art pilot (issue #291), the companions added after it, and the weapon pilot (issue #290) from the artist's references in art/reference/.
 
-These are placeholders until the artist delivers. They are cut from the artist's own prototypes so the pilot can run
+Companion icons, portraits and splashes now come from the owner-approved AI explorations instead
+(tools/art/standins_from_exploration.py, owner 2026-11-07); this script cuts them only with --illustrated. It still
+cuts the battle chibis and the weapon art. These are placeholders until the artist delivers. They are cut from the artist's own prototypes so the pilot can run
 end to end in Unity. Outputs are named by content address (specs/07 section 15.2) and written to
 unity/HeroCatClient/Assets/Resources/Art/<Kind>/:
 
@@ -211,19 +213,23 @@ def save(img, kind, name):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--preview", help="also write <id>_chibi_x8.png previews to this directory")
+    ap.add_argument("--illustrated", action="store_true",
+                    help="also cut the old companion icon, portrait and splash from the artist sheets (replaced by "
+                         "tools/art/standins_from_exploration.py; this would overwrite those)")
     args = ap.parse_args()
     if args.preview:
         os.makedirs(args.preview, exist_ok=True)
     for cid, c in PILOT.items():
         src = Image.open(os.path.join(COMPANION_REF, c["src"])).convert("RGB")
         splash_src = Image.open(os.path.join(COMPANION_REF, c["splash_src"])).convert("RGB") if "splash_src" in c else src
-        x0, y0, x1, y1 = c["splash"]
-        splash = splash_src.crop((x0, y0, x1, y1)).resize(SPLASH, Image.LANCZOS)
-        bx, by, bs = c["bust"]
-        print(save(splash, "Splash", "art_splash_" + cid))
-        print(save(src.crop((bx, by, bx + bs, by + bs)).resize((256, 256), Image.LANCZOS), "Portraits", "portrait_" + cid))
-        cx, cy, r = c["face"]
-        print(save(square(src, cx, cy, r, 128), "Icons", "icon_" + cid))
+        if args.illustrated:  # superseded by tools/art/standins_from_exploration.py (owner, 2026-11-07)
+            x0, y0, x1, y1 = c["splash"]
+            splash = splash_src.crop((x0, y0, x1, y1)).resize(SPLASH, Image.LANCZOS)
+            bx, by, bs = c["bust"]
+            print(save(splash, "Splash", "art_splash_" + cid))
+            print(save(src.crop((bx, by, bx + bs, by + bs)).resize((256, 256), Image.LANCZOS), "Portraits", "portrait_" + cid))
+            cx, cy, r = c["face"]
+            print(save(square(src, cx, cy, r, 128), "Icons", "icon_" + cid))
         chibi = cut_chibi(src, c["chibi"], c["grid"], c.get("clear", ()), c.get("wide_gold", False))
         print(save(chibi, "Pixel", "spr_" + cid), chibi.size)
         if args.preview:

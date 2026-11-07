@@ -2,7 +2,7 @@
 
 Prompts for AI exploration of the Legendary and Mythic companion splashes (`specs/00` decision 108), in the house style picked by the Yuki pilot (`splash-pilot.md`, `specs/07` section 15.3). Character looks come from `companions.md`. If you change a look there, change the prompt here too.
 
-These images are exploration only. They set direction for the artist and never ship (`specs/07` section 15.3, copyright). `tools/art/splash_gen.py` reads this file. Run `python3 tools/art/splash_gen.py lucy astraea --n 2`, and it writes to `art/exploration/splash_batch/` with every prompt logged in `prompts.txt`. Issue #321.
+These images set direction for the artist. The owner's picks are also the in-game **stand-ins** (owner, 2026-11-07), cut by `tools/art/standins_from_exploration.py`. Like every stand-in, the artist's finals replace them before release (`specs/07` section 15.3, copyright). `tools/art/splash_gen.py` reads this file. Run `python3 tools/art/splash_gen.py lucy astraea --n 2`, and it writes to `art/exploration/splash_batch/` with every prompt logged in `prompts.txt`. Issue #321.
 
 ## Rules for every splash
 
