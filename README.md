@@ -11,7 +11,7 @@ Start with `specs/00-overview.md`. It fixes the pitch and pillars, scope tiers, 
 | `specs/00-overview.md` | Pitch and pillars, scope tiers, tech stack, architecture, vocabulary, constants, contracts, milestones, decisions | New game |
 | `specs/01-architecture-and-data-flow.md` | Layers, commands/events, every end-to-end flow, threading, network | HeroCat; rewrite #388 |
 | `specs/02-domain-model-and-persistence.md` | Entities, save schema v1, migrations, local + cloud save, server DB | HeroCat; rewrite #384 |
-| `specs/03-heroes-and-growth.md` | Hero sheet, stats, classes and roles, former lives and traits, statuses, inner life, the stat pipeline; levels, synthesis, promotion, skills and class change to come | New game (hero model); growth pending #344 |
+| `specs/03-heroes-and-growth.md` | Hero sheet, stats, classes and roles, former lives and traits, statuses, inner life, the stat pipeline; levels, promotion, synthesis and conversion, skills and class change | New game |
 | `specs/04-summons-and-collections.md` | Becomes `04-summons-and-gear.md`: hero and gear banners, odds, pity, gear, crafting | HeroCat; rewrite #343, #345 |
 | `specs/05-fish-merge-minigame.md` | Becomes `05-tower-and-battle.md`: floors, auto-battle, missions, death and revival, side content | HeroCat (retired system); rewrite #346 |
 | `specs/06-economy-and-daily-loop.md` | Becomes `06-lobby-and-meta.md`: lobby, facilities, manager, research, parties, account level, quests, shop, idle time | HeroCat; rewrite #347 |
