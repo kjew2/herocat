@@ -13,7 +13,7 @@ The first pass of this spike (merged in #333) mapped a few mechanics onto HeroCa
 - **Fan wikis and reader threads**, from search snippets only (first pass). Used where the webtoon is silent; marked "wiki".
 - Confidence: **clear** = a system window or explicit dialogue states it; **partial** = OCR or context is unclear; **inferred** = shown by events, never stated.
 
-The in-story game is fiction. Nobody has tuned or monetised it, its numbers are story beats, and some rules exist only to serve the plot. Section 9 lists the ones that look plot-only.
+The in-story game is fiction. Nobody has tuned or monetised it, its numbers are story beats, and some rules exist only to serve the plot. Section 13 lists the ones that look plot-only.
 
 ## 2. The game at a glance
 
@@ -163,16 +163,149 @@ The loop, as the story shows it:
 | Account and tutorial | Account name of 2-6 characters. Tutorial quests give fixed rewards. Summon and Synthesis tabs. | 2 | clear |
 | Rankings and community | Masters are ranked by floor reached (world #5 at floor 88; everyone below #5 at floor 79 or lower). Official forum with guides, a fan cafe, a lounge per master. | 5-7, 25, 32, 35 | clear |
 
-<!-- CH61-93 -->
+## 9. Systems introduced in chapters 61-93
+
+These arrive with the floor 16-20 climb, the first multi-party boss raid and the opening of the multi-master layer. Rows that extend an earlier row say so.
+
+### 9.1 Heroes (#342)
+
+| Mechanic | How it works | Ch | Conf |
+|---|---|---|---|
+| Exhaustion | After Berserk ends: all stats -90%. | 76 | clear |
+| Hidden power awakening | A hero's hidden power can trigger in a crisis ("Awakening!"): all stats +1000%. Trigger conditions not explained. | 84 | clear |
+| Seal slots and bloodline traits | Heroes have seal slots ("1/1") that hold graded traits from their former world, e.g. a bloodline trait (B+, Lv3) with psychological-attack resistance +50%, fear resistance, and +20% stats for 60 s when near death. | 93 | clear |
+| Total stat points | The sheet tracks total stat points; after a class change a hero sat at Lv20 with stats totalling 100. A stat is not a damage number: technique scales it. | 70, 85, 88 | clear |
+| Composure + Berserk | Normally exclusive (§3); a hero who has both is rare and valuable, and skills with synergy potential are prized. | 85-86 | clear |
+| Full healing | The lobby heals anything, even chronic illness. | 67 | clear |
+| Duels decide slots | Extends Duels (§8): heroes request a duel for a party slot, the master confirms a "mutually agreed duel" or toggles "permit dueling", the winner takes the slot and the loser drops a party. Leaving the duel stage heals all injuries. | 61-63, 65-66 | clear |
+
+### 9.2 Summoning (#343)
+
+| Mechanic | How it works | Ch | Conf |
+|---|---|---|---|
+| 4★ rate | The advanced summon's 4★ rate is 1%. | 92 | clear |
+| Paid gacha price | One paid pull is quoted at 300 gems, and 1,500 gems "buys at least three 3★+ heroes". Conflicts with the 500 gems of §4: either two banners or a price change. | 81 | clear (conflict) |
+| Five-in-a-row window | A "5 consecutive summons" window appears; a package bought five advanced pulls. | 77, 92 | clear |
+| Free-summon drip | Free summons keep filling the lobby's lowest floor with low grades (20+ waiting); a master who never pays stays short of strong heroes. | 64 | clear |
+| Hero transfer prices | Scouting a trained hero from another master costs 1,000-3,000 gems; a top-1% hero would cost more. | 81, 85 | clear |
+
+### 9.3 Growth (#344)
+
+| Mechanic | How it works | Ch | Conf |
+|---|---|---|---|
+| Promotion to 3★ | Extends Promotion (§5): needs an Intermediate Promotion Stone = Basic Promotion Stone + Basic Spirit Stone, automatic, 91% success. A promotion awakens memories, creates a new illustration, raises level and skill caps and allows a new class. "Four more times" to 7★. | 76-77, 87 | clear |
+| Conversion Chamber | An add-on to the Synthesis Chamber that turns an unwanted hero into materials (one conversion gave 3 Basic Spirit Stones, enough for 3 promotions). Heroes fear it more than synthesis. | 77, 87 | clear |
+| Promotion Chamber Lv2 | Raises synthesis efficiency. | 87 | partial |
+| Synthesis loss | Extends Synthesis (§5): most of the offering is lost (100 STR sacrificed gave +10; the text says "over 40% lost"). A higher-grade offering can pass on traces of technique (a sword style). Level gaps cut the value. With 7★ offerings the transfer is so strong it can confuse the target's own skills. | 77, 86 | partial |
+| Class change | At 3★ and Lv20. Skills at Lv10 may have to be "divided": a maxed sword-and-shield skill became an intermediate sword skill at Lv1, losing shield proficiency, and a stealth skill was lost as a class penalty. Classes seen: Novice, Warrior, Rogue, Weapon Master, Half-Beast, Bandit. A class unlocks advanced skills. | 77, 81, 87-88, 93 | clear |
+| Skill max and evolution | A skill at max level "may evolve into a more advanced skill once conditions are met": basic, then intermediate, then a mastery tier; a calm-mind skill evolves into a higher one. Lv10 was the skill cap at 1★. | 85-88 | clear |
+| Achievement skills | Some skills come only from deeds: one slows bleeding and poison, a dragon-slayer skill adds damage against dragons. Credit goes to the hero who landed the critical blow, not the last hit. Facing one's limits can level a skill twice ("soul levelled up"). | 76, 78 | clear |
+| Drill-created skills | A team drill created a new resistance skill ("Skill created!"). | 66 | clear |
+
+### 9.4 Equipment and crafting (#345)
+
+| Mechanic | How it works | Ch | Conf |
+|---|---|---|---|
+| Top grades | Grades go up to S and beyond, with SS enchants. Items carry notes: exclusive, indestructible, numbered collection entries, maker's brand. Effects include piercing, blessings, physical defence and a self-evolving weapon. | 89-90 | clear |
+| Weapon Storage at max level | Shown at max level holding the collection. | 89 | partial |
+| Artisan growth | A blacksmith hero improves with the number of requests and can then make gear above D+. | 70 | clear |
+| Master crafting | The master's own crafting: choose type (e.g. growth) and method (e.g. casting, with penalties), add graded ingredients, and call up affiliated facilities and workers ("Grade 4 call-up"). 8 difficulty levels; the right sacrifice reveals a hidden ninth, which cuts facility effects by 33%. The run is a timed chain of minigames drawn from 32 types (cube, rhythm, spot-the-difference, jigsaw, hidden objects, password, blocks), with 5 hours for the final round, ending in a grade of success and enchants from B to SS. A crafted weapon could save its owner 3 times. | 89-90 | clear |
+| Disguise ring | An item that fakes stat windows, item info and system logs. It has durability, and its effect weakens once the master passes floor 30. | 88 | partial |
+
+### 9.5 Tower, floors and stakes (#346)
+
+| Mechanic | How it works | Ch | Conf |
+|---|---|---|---|
+| Maze floors | Floor 16 ("investigate the unfamiliar location"): looping identical halls, hidden enemies, and the barrier to the next floor opens only when every enemy is dead. Floors 17-19 are mazes too. | 67-69 | clear |
+| Floor variants | Floor 17 has five variants plus "this account's difficulty level". | 69 | partial |
+| Floor 20 checkpoint | Floor 20 has a fixed stage type with a unique boss. Floor 5 is the first wall many masters fail; fewer than half reach floor 20, and clearing it means "graduating from amateur". | 69, 76 | clear |
+| Multi-party boss raid | Floor 20 needs 3 parties. The master sets the order the parties enter, and later parties join after a condition or a time limit. A one-hero scout party goes first (a habit since floor 16). The run is recorded. | 70 | clear |
+| Unique monsters and immunity | A unique monster is the only one of its kind. The boss resists physical and magic attacks, with an "immune" popup per hit, and has listed moves (scales, claws, tail, minion summons). It berserks at low health. | 71-75 | clear |
+| Objective-gated vulnerability | A field formation lets the master deploy a rear-guard party. Holding an altar triggers a blessing that makes the boss vulnerable; losing the altar ends it and the boss is immune again (win chance below 1% without it). Map objects include a ballista. | 72-75 | clear |
+| Death cascade and memorials | Fear and Panic spread before a wipe ("Party 3 has been annihilated!"). Dead heroes' portraits grey out as "died in battle". Bodies are never recovered. | 74-76 | clear |
+| Checkroom and memory album | A facility that keeps a hero's belongings. The memory album shows a dead hero's illustration and data only if their belongings are in the Checkroom. | 69-70, 77 | clear |
+| Continuous floor plots | Floors 15-20 share one storyline tied to the heroes' home world. | 69 | clear |
+| Replay stones as training | Replay (regenerative) stones and recorded runs are used to train heroes; running out of stones limits training. | 61, 69, 78 | clear |
+| PvP death protection | Until account level 40, heroes killed by other masters come back with much lower stats, level and skills, and the system suggests synthesizing or converting them. | 78 | clear |
+| Roles and formation | Short, mid and long range plus support. A swordsman cannot fill a spear slot: formation matters more than strength. Raids split into a boss team, an add-clearing team and rear support. | 62, 64, 73 | clear |
+
+### 9.6 Master meta and the multi-master layer (#347)
+
+| Mechanic | How it works | Ch | Conf |
+|---|---|---|---|
+| Live master input | When the blessing triggers, the master slides the screen to grant holy power, which enchants the party's weapons: the first live input in combat. | 72 | clear |
+| Hero-proposed lineups | The party leader can propose a new lineup; on acceptance the displaced hero is removed automatically. | 63 | clear |
+| Roster and lodging UI | Remove a hero from a party; reassign lodgings by dragging heroes onto a building blueprint; a "hero's rights" setting. | 61, 64 | clear |
+| Lobby tiers | Floor 1 for newcomers and a waiting list, floor 2 for the main parties, later floor 3 with better food, beds and entertainment. Veterans teach on floor 1. Standing roles: main raid team, a support pool, a temporary standby team for weekday dungeons and tests, one-hero scout parties, and low parties for underperformers. Heroes at risk of synthesis or conversion get no party. | 61, 64, 67, 86-87, 92 | clear |
+| Internal ranks in big lobbies | Large lobbies rank their heroes (1st, 2nd, 3rd...) and tier floors by authority: top five, officers, intermediate, beginner fighters, production workers. | 78, 80, 82 | clear |
+| Account level | Account level = floors cleared (level 40 = 40 floors). Master level 20 gates the multi-master layer. | 77-78 | clear |
+| The multi-master gate | Free, needs master level 20+, and can't be undone (double confirmation). It adds a community, Dispatch, War and Events, and gives the lobby coordinates. It removes the lobby's first-level protection, so other masters can invade. Solo players are told not to open it. | 76, 78 | clear |
+| Invasion defence | The master sets an evacuation route for non-combatants; resident buildings can't be invaded. | 78 | clear |
+| Flying ship | Needed for content outside the lobby. Built from a hull, engine, dimensional core and blueprint, and needs a magic-engineer hero. Other ships request to land; trade requests cost 1,500 gems; carriers hold dozens of ships. | 78-80 | clear |
+| Dimension community | An in-game forum with a recruiting board for level-20+ masters and private comments. | 77 | clear |
+| Dispatch: training service | A master posts a training service; others send heroes (the run seen took 100 heroes for 10 days at 500 gems each, for classless level-20+ heroes, with hero life insurance). The heroes' affiliation moves for the duration. Time runs faster there (about a month inside). On return: "statuses changed". | 77, 80-81, 91 | clear |
+| Trainee ranking and poaching | Trainees are ranked in four tiers; the top three can be scouted as residents, with 1,000-3,000 gems offered to their original master. Trainees are told 80 of 100 will die. A first-place prize item exists; a long duel win streak earned an exemption. | 81, 83, 88, 91 | clear |
+| Vice-master rights | The master can hand master authority to a hero, who can then post, read logs and act in the system; a hero can also take over the manager's duties. | 77-78, 83-84 | clear |
+| Manager limits | Extends Manager NPC (§8): the manager can contact the master only by mail or post, paid for in intervention points measured as time (about 30 minutes left after heavy use). Big lobbies hold enough points to block the 6-month auto-delete for 10 years. The manager also advises: use advanced summons, build the heroes' skills. | 77, 83, 92 | clear |
+| Level cap | The system's max level is 99; 7★ heroes "transcend" it. | 83 | clear |
 
 ## 10. Numbers seen
 
-<!-- NUMBERS -->
+- **Status effects:** Fear -30%, Panic -50%, Despair -80%, Exhaustion -90%, hidden power +1000%, bloodline trait +20% for 60 s near death and +50% psychological resistance.
+- **Summons:** High-Rank 500 gems a pull (or 300, chapter 81); 3 pulls 1,500 gems; equipment 10x 50,000 gold; 4★ rate 1%. Tutorial 500 gems; event 100 gems.
+- **Packages:** 50,000, 65,000 and 90,000 won; 90,000 won buys 5,000 gems plus 100,000 gold or 3 gift cards.
+- **Gem sinks:** forge annex 300, skill book 500, Record 300, research 10 an hour, trade request 1,500, training service 500 per hero, hero transfer 1,000-3,000.
+- **Promotion:** Basic stone 87% from three elemental stones; Intermediate stone 91% from a Basic stone plus a Spirit stone; 3 Spirit stones per conversion.
+- **Levels and EXP:** 1★ level cap Lv10; system max Lv99. EXP to next level: 10, 20, 50, 70, 120 (Lv15), 150 (Lv19). Growth of 4-5 stat points a level. Skill level cap 10 at 1★.
+- **Class change:** at 3★ and Lv20.
+- **Party and lobby:** party of 5; 2 support heroes per facility; floor 20 needs 3 parties; a lobby of 35 heroes (13 privileged).
+- **Time:** gate countdown 10 s; survival 10 minutes; crafting puzzle 3 minutes (5 hours for a master-crafting final round); exploration 48 h with a 3,000 gold allowance; lobby time about 3x real; account deleted after 6 months.
+- **Tower:** spike every 5 floors; new world region every 10 floors; floor 80 enemies Lv108-121 in the thousands; top player at floor 88; fewer than half reach floor 20.
+- **Multi-master layer:** master Lv20 to open it; PvP death protection until account Lv40; training service of 100 heroes for 10 days, 80 of 100 said to die.
+- **Research:** 10 points an hour; Hero Reaction Lv1 = 30 points.
+- **Crafting:** 8 difficulty levels (+1 hidden, -33% facility effect); 32 minigame types.
 
 ## 11. Evidence for the open decisions
 
-<!-- EVIDENCE -->
+### #339 core loop and genre
+
+- **Permadeath.** Absolute in the tower at every grade, with no revive item in 93 chapters. Losses are heavy and routine: 5 of 11 heroes died on floor 1, a floor was cleared after losing 2 of 5, and a whole party was wiped on floor 20. Other permanent losses are the master's choice: synthesis and conversion. The game softens death only in one place, PvP before account level 40, where dead heroes come back weakened. Death feeds other systems: memorials (Checkroom and memory album), morale and stress, heroes refusing combat roles after a wipe, and party reshuffles.
+- **Can low grades reach the top?** Yes, and the story treats it as the point. A born 1★ is the third-ranked hero of a top-five lobby with the Weapon Master class. The route: promotion stone by stone to 7★ (Basic stone, then Intermediate, then rarer items; the last step needs a rare book), class change at 3★/Lv20, skill evolution, achievement skills, and hidden talents or bloodline traits. The brakes: the low 1★ caps (Lv10, skill Lv10), gacha-only classes such as magician, synthesis that eats most low heroes, and a 7★ that "transcends" the system.
+- **Master's control of combat.** Mostly before the fight: lineups, positions on a tactical map (with a facility), gear, potions, the order parties enter a raid and when the rear guard deploys. Heroes choose skills and tactics themselves and can refuse to fight. The first live input appears on floor 20, a one-gesture blessing, and the story promises more control on higher floors.
+- **Tower as the spine.** Yes: everything unlocks by floor (the weekday dungeon at 5; exploration, the Adventure Dungeon and lobby naming at 10; world regions every 10; the multi-master layer by level). Side content (weekday, exploration, replays, training services) feeds the climb.
+
+### #340 monetization and fairness
+
+- **Rates.** Only one is shown: 4★ at 1% on the advanced summon. Free (gold) and paid (gem) summons have different grade bands, and magicians are gacha-only at a very low rate.
+- **Paid tiers.** Gems are scarce for free players (no gems from missions). Spending buys better summons and many conveniences: annexes, research hours, mid-battle skill books, replays, trade, training services and hero transfers. Packages run 50,000-90,000 won.
+- **Rigging, as lore.** Rates and difficulty vary per account, an account's world can run out of high grades, players talk of hidden "conditions" for pulls, and a top player never pulled above 5★ in thousands of pulls. It is the story's villain mechanic: a source of player paranoia, not a model to copy.
+
+### #354 premise
+
+- **Former ordinary lives as a mechanic.** A hero's former job sets their starting aptitudes (hunter, bow; artisans, crafting) and can be faked (heroes lie about being "just a farmer"; others infer it from skills). Experience is data: a gifted swordsman with no record against monsters lost a duel. Promotion returns lost memories, which change behaviour. A home-world bloodline appears as a seal-slot trait. The heroes' home world and its politics run through floors 15-20.
+- **The manager NPC.** The fairy is the master's only channel to the lobby. She relays orders, keeps order by force (instant death, only in self-defence or for disobeyed orders), opens facilities and gives tips and advice. Her actions outside the game cost intervention points, earned while the master plays. Her duties can be handed to a hero, and vice-master rights let heroes act in the system.
 
 ## 12. Gaps
 
-<!-- GAPS -->
+Nothing in chapters 1-93 shows:
+
+- **Rates and pity:** duplicate heroes, a rate table beyond the 4★ 1%, or pity rules (only the vague "conditions").
+- **Master meta:** a master-rank formula beyond floors cleared and account level, guilds, a PvP ladder or how War and Events work, and invasion rules.
+- **Hero values and caps:** numeric morale, stress or loyalty values, lodging capacity per level, and the level caps for 2★-6★ (wiki only).
+- **Items and facilities:** the gold price of a hero summon, the 7★ book recipe, durability and repair rules, enhancement numbers, gear sets, and facility costs beyond the first levels.
+- **Unexplained mechanics:** the Roulette of Fate, the three-part warning scale, hidden-power and third-ability triggers, and the number of seal slots.
+
+Numbers that conflict in the source: the paid pull at 500 vs 300 gems; the training service at 500 vs 300 gems a head; the synthesis loss at "over 40%" vs a 90% example.
+
+## 13. Rules that look plot-only
+
+These serve the story and would need a deliberate decision before going into a game:
+
+- The heroes are real abducted people, and the master doesn't know.
+- Stress suicide.
+- The manager killing heroes for disobedience.
+- The 80% death rate of training services.
+- Per-account rigged rates.
+- A world running out of heroes.
+- Account deletion that kills a lobby.
+- The protagonist's half-master powers: he sees system windows and holds exclusive skill pairs.
