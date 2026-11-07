@@ -471,6 +471,50 @@ namespace HeroCat.Remote.Tests
         }
 
         [Test]
+        public void ConfirmedLogout_Offline_KeepsTheTokens_AndARetryThatLandsClearsThem()   // 00 decision 119
+        {
+            var h = SignedIn();
+            var t = h.Tokens.Load();
+            Assert.That(h.Auth.IsLinked, Is.False, "a guest has no linked provider");
+            h.Handler.Then(FakeFault.Drop);
+
+            Assert.That(h.Auth.TryConfirmedLogoutAsync().GetAwaiter().GetResult(), Is.False);
+            Assert.That(h.CallsTo(AuthRoutes.Logout).Length, Is.EqualTo(1), "one attempt per try; the player decides on a retry");
+            Assert.That(h.Tokens.Load(), Is.EqualTo(t), "still signed in");
+            Assert.That(h.Auth.HasSession, Is.True);
+            Assert.That(h.Server.IsLive(t.RefreshToken), Is.True);
+
+            Assert.That(h.Auth.TryConfirmedLogoutAsync().GetAwaiter().GetResult(), Is.True);
+            Assert.That(h.CallsTo(AuthRoutes.Logout).Length, Is.EqualTo(2));
+            Assert.That(h.Server.IsLive(t.RefreshToken), Is.False);
+            Assert.That(h.Tokens.Load(), Is.Null);
+            Assert.That(h.Auth.HasSession, Is.False);
+        }
+
+        [Test]
+        public void ConfirmedLogout_WithoutASession_SendsNothing()
+        {
+            var h = new Harness();
+            Assert.That(h.Auth.TryConfirmedLogoutAsync().GetAwaiter().GetResult(), Is.True);
+            Assert.That(h.CallsTo(AuthRoutes.Logout), Is.Empty);
+        }
+
+        [Test]
+        public void Linked_IsStoredInTokensJson_AndKeptAcrossARefresh()
+        {
+            var h = SignedIn();
+            Assert.That(h.Tokens.Load().Linked, Is.False, "the guest call stores false");
+            h.Tokens.Save(h.Tokens.Load() with { Linked = true });   // TODO(#196): set by /auth/link and /auth/link-login
+            h.NewAuth();
+            Assert.That(h.Auth.IsLinked, Is.True);
+
+            Assert.That(h.SignIn().Status, Is.EqualTo(SignInStatus.SignedIn));
+            Assert.That(h.CallsTo(AuthRoutes.Refresh).Length, Is.EqualTo(1));
+            Assert.That(h.Tokens.Load().Linked, Is.True);
+            Assert.That(h.Auth.IsLinked, Is.True);
+        }
+
+        [Test]
         public void DeleteAccount_ReturnsGraceUntil_AndClearsTheTokens_OnlyOnSuccess()
         {
             var h = SignedIn();

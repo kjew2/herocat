@@ -84,7 +84,8 @@ namespace HeroCat.Remote.Services
     /// and the server answers the same key again with 204. The cloud save awaits it before each upload. TODO(#196): a
     /// <c>/auth/link-login</c> success registers the key too and should store <c>RegisteredKeyId</c> like the guest call.</item>
     /// <item><b>Logout</b>: one best-effort <c>POST /auth/logout {refreshToken}</c>, then the tokens are cleared whatever
-    /// the answer (the server's 204 also covers an unknown token).</item>
+    /// the answer (the server's 204 also covers an unknown token). An unlinked guest uses
+    /// <see cref="TryConfirmedLogoutAsync"/> instead, which keeps the tokens unless the server confirmed (00 decision 119).</item>
     /// <item><b>Delete</b>: <c>POST /account/delete {}</c>; tokens are cleared only on success.</item>
     /// </list>
     /// Linking (<c>/auth/link</c>, <c>/auth/link-login</c>, <c>/auth/merge</c>) is issue #196. Thread-safe.
@@ -134,6 +135,16 @@ namespace HeroCat.Remote.Services
         public Guid PlayerId => Volatile.Read(ref _tokens)?.PlayerId ?? Guid.Empty;
 
         public bool HasSession => Volatile.Read(ref _tokens)?.HasSession ?? false;
+
+        /// <summary>The session's account has a linked provider (<see cref="AuthTokens.Linked"/>); false without a session.</summary>
+        public bool IsLinked
+        {
+            get
+            {
+                var t = Volatile.Read(ref _tokens);
+                return t != null && t.HasSession && t.Linked;
+            }
+        }
 
         /// <summary>The access token's expiry (unix seconds), 0 when none.</summary>
         public long AccessExpiresAt => Volatile.Read(ref _tokens)?.AccessExpiresAt ?? 0;
@@ -355,16 +366,35 @@ namespace HeroCat.Remote.Services
         public async Task<bool> LogoutAsync(CancellationToken ct = default)
         {
             var t = Volatile.Read(ref _tokens);
-            bool revoked = false;
-            if (t != null && t.HasSession)
-            {
-                var req = ApiRequest.Mutation(HttpMethod.Post, AuthRoutes.Logout, new JObject { ["refreshToken"] = t.RefreshToken },
-                                              ApiRequest.NewRequestId()) with { NoRetry = true };
-                var r = await _client.SendAsync<JToken>(req, ct).ConfigureAwait(false);
-                revoked = r.Ok;
-            }
+            bool revoked = t != null && t.HasSession && await PostLogoutAsync(t, ct).ConfigureAwait(false);
             Clear();
             return revoked;
+        }
+
+        /// <summary>
+        /// 00 decision 119: one <c>POST /auth/logout</c>; the tokens are cleared only on the server's 204 (true). A failure
+        /// keeps them, so the player stays signed in and can retry. True, with nothing sent, when no session is held.
+        /// </summary>
+        public async Task<bool> TryConfirmedLogoutAsync(CancellationToken ct = default)
+        {
+            var t = Volatile.Read(ref _tokens);
+            if (t == null || !t.HasSession)
+            {
+                Clear();
+                return true;
+            }
+            if (!await PostLogoutAsync(t, ct).ConfigureAwait(false)) return false;
+            Clear();   // the family is revoked: a refresh that rotated it meanwhile is unusable too
+            return true;
+        }
+
+        /// <summary>One attempt (no backoff schedule); the refresh token names the family to revoke.</summary>
+        async Task<bool> PostLogoutAsync(AuthTokens t, CancellationToken ct)
+        {
+            var req = ApiRequest.Mutation(HttpMethod.Post, AuthRoutes.Logout, new JObject { ["refreshToken"] = t.RefreshToken },
+                                          ApiRequest.NewRequestId()) with { NoRetry = true };
+            var r = await _client.SendAsync<JToken>(req, ct).ConfigureAwait(false);
+            return r.Ok;
         }
 
         public async Task<long> DeleteAccountAsync(CancellationToken ct = default)

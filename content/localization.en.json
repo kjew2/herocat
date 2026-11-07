@@ -507,6 +507,14 @@
       "text": "Not enough diamonds"
     },
     {
+      "key": "err.logout_offline.body",
+      "text": "Logging out of a guest account needs a connection. You're still signed in. Try again when you're back online."
+    },
+    {
+      "key": "err.logout_offline.title",
+      "text": "Couldn't log out"
+    },
+    {
       "key": "err.logout_unsynced.body",
       "text": "Your latest progress couldn't be saved to the cloud. If you log out now, it stays only on this device."
     },

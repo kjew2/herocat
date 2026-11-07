@@ -54,6 +54,13 @@ namespace HeroCat.Runtime.Account
         bool HasSession { get; }
 
         /// <summary>
+        /// True when the account has a linked platform provider (Apple, Google Play Games), so it can be signed back into
+        /// after a logout (01 section 8.13 step 3). False for a guest with no linked provider, whose logout abandons the
+        /// account (00 decisions 117, 119), and for the Local backend.
+        /// </summary>
+        bool IsLinked { get; }
+
+        /// <summary>
         /// 01 section 8.1 step 3: refresh when a refresh token exists, else create a guest for this device. Never throws
         /// for a failed call (only for <paramref name="ct"/>); safe to call again later, e.g. on reconnecting.
         /// </summary>
@@ -65,6 +72,14 @@ namespace HeroCat.Runtime.Account
         /// <see cref="AccountFlow"/>'s.
         /// </summary>
         Task<bool> LogoutAsync(CancellationToken ct = default);
+
+        /// <summary>
+        /// The unlinked guest's logout (00 decision 119): <c>POST /auth/logout</c>, and the tokens are cleared only when
+        /// the server confirmed it (true). On any failure (offline, timeout, an error answer) it returns false and keeps the
+        /// tokens, so the device stays signed in to the account the server still binds it to. Never throws for a failed
+        /// call (only for <paramref name="ct"/>). True with nothing sent when no session is held.
+        /// </summary>
+        Task<bool> TryConfirmedLogoutAsync(CancellationToken ct = default);
 
         /// <summary>
         /// <c>POST /account/delete</c> (08 section 2.3, 02 section 13.2): starts the GDPR deletion and returns its
@@ -82,10 +97,13 @@ namespace HeroCat.Runtime.Account
     {
         public Guid PlayerId => Guid.Empty;
         public bool HasSession => false;
+        public bool IsLinked => false;
 
         public Task<SignInResult> SignInAsync(CancellationToken ct = default) => Task.FromResult(SignInResult.LocalGuest);
 
         public Task<bool> LogoutAsync(CancellationToken ct = default) => Task.FromResult(true);
+
+        public Task<bool> TryConfirmedLogoutAsync(CancellationToken ct = default) => Task.FromResult(true);
 
         public Task<long> DeleteAccountAsync(CancellationToken ct = default) => Task.FromResult(0L);
 

@@ -283,9 +283,11 @@ namespace HeroCat.Runtime.Tests
             static readonly Guid Player = new Guid("00000000-0000-0000-0000-0000000000a1");
             public Guid PlayerId => Player;
             public bool HasSession => true;
+            public bool IsLinked => false;
             public Task<HeroCat.Runtime.Account.SignInResult> SignInAsync(CancellationToken ct = default) =>
                 Task.FromResult(new HeroCat.Runtime.Account.SignInResult(HeroCat.Runtime.Account.SignInStatus.SignedIn, Player));
             public Task<bool> LogoutAsync(CancellationToken ct = default) => Task.FromResult(true);
+            public Task<bool> TryConfirmedLogoutAsync(CancellationToken ct = default) => Task.FromResult(true);
             public Task<long> DeleteAccountAsync(CancellationToken ct = default) => Task.FromResult(0L);
             public event Action<HeroCat.Runtime.Account.SignInResult> SessionLost { add { } remove { } }
         }
