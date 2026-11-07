@@ -89,7 +89,7 @@ All of them are heroines (`specs/00` decision 104). Store art uses covered varia
 - **Outfit:**
   - a sunburst crown of tall gold rays;
   - a sculpted gilded bodice engraved with a rising sun;
-  - one gilded pauldron with a short white feathered half-cape;
+  - one gilded pauldron, and a pair of large white feathered wings (owner, 2026-11-07);
   - a white war skirt with a high slit and gold hem plates;
   - gilded gauntlets, and greaves that end in strapped sandals.
 - **Signature props:** a spear of solid light taller than she is, and a halo of six floating golden blades fanned behind her shoulders.
@@ -141,7 +141,7 @@ All of them are heroines (`specs/00` decision 104). Store art uses covered varia
   - fingerless gloves, and thigh-high black boots with gold buckles.
 - **Tail:** a crimson scaled tail with an ember glow at the tip. It curls when she is pleased.
 - **Signature prop:** a serrated greatsword as tall as she is, rested on her shoulder. Its edge glows like cooling lava.
-- **Face:** amber eyes with slit pupils, a cocky grin showing one fang, small crimson scale patches on her cheekbones.
+- **Face:** warm tan skin (owner, 2026-11-07), amber eyes with slit pupils, a cocky grin showing one fang, small crimson scale patches on her cheekbones.
 - **Motifs:** embers, cracked magma, dragon scales, gold hardware.
 - **Palette:** Crimson, black and molten orange; gold hardware.
 - **Ability VFX (`vfx_comp_l_03`):** She drags the greatsword through a magma arc; the cut cracks open and erupts under the enemy.
@@ -164,7 +164,7 @@ All of them are heroines (`specs/00` decision 104). Store art uses covered varia
   - a white ruffled blouse slipping off one shoulder, under a laced black corset;
   - a gold-and-teal sash with coin charms, short black fitted breeches, high cuffed black boots.
 - **Signature props:** a cutlass with a gold basket hilt on one hip and a gold spyglass on the other. She flips a gold coin when she's thinking.
-- **Face:** sea-green eyes, a confident smirk, a beauty mark under one eye, gold hoop earrings.
+- **Face:** warm tan skin (owner, 2026-11-07), sea-green eyes, a confident smirk, a beauty mark under one eye, gold hoop earrings.
 - **Motifs:** a compass rose, waves, gold coins, rope and rigging, an open treasure chest.
 - **Palette:** Deep-sea teal, black and gold.
 - **Leave out:** real pirate flags and ship names, and any readable text on maps or coins.
@@ -182,7 +182,7 @@ All of them are heroines (`specs/00` decision 104). Store art uses covered varia
   - a wide plum obi tied in a large bow at the back, with a red braided cord;
   - white tabi, and tall black lacquered sandals.
 - **Tails:** nine fluffy tails, ivory with pink-silver tips, fanned out behind her like a halo. They are her silhouette.
-- **Signature props:** a kagura bell staff (a cluster of gold bells on a red-ribboned handle) and paper lanterns of pale green foxfire orbiting her.
+- **Signature props:** a kagura bell staff (a cluster of gold bells on a red-ribboned handle) and glowing orbs of pale green foxfire orbiting her (orbs, not paper lanterns; owner, 2026-11-07).
 - **Face:** plum eyes with a red eyeliner flick, a gentle sly smile, a small vermilion mark on her forehead.
 - **Motifs:** a torii gate, a mountain shrine, mist, falling leaves, foxfire.
 - **Palette:** Vermilion, ivory and plum; foxfire in pale green.
