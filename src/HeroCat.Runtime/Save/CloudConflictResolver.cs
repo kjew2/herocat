@@ -235,7 +235,7 @@ namespace HeroCat.Runtime.Save
             var remote = TryDecodeRemote(rBytes, rMeta, now, out var rRepairs, out string problem);
             if (remote == null)
             {
-                local.Problems.Add("cloud copy: " + problem);   // TODO(gap: unreadable cloud save) the rule has no row for it
+                local.Problems.Add("cloud copy: " + problem);   // TODO(#320) the rule has no row for it
                 return local;
             }
             ServerEtag = rMeta.Etag;
@@ -301,7 +301,7 @@ namespace HeroCat.Runtime.Save
             catch (ServiceException) { return new ConflictCheck(ConflictCheckKind.KeepLocal); }   // retried at the next check
             long now = _clock.NowServerSeconds;
             var remote = TryDecodeRemote(rBytes, rMeta, now, out _, out _);
-            if (remote == null) return new ConflictCheck(ConflictCheckKind.KeepLocal);   // TODO(gap: unreadable cloud save)
+            if (remote == null) return new ConflictCheck(ConflictCheckKind.KeepLocal);   // TODO(#320)
             if (d.AutoResolved) _analytics.Track(new AnalyticsEvents.CloudAutoresolved(ConflictRule.SideName(d.Winner)));
             ServerEtag = rMeta.Etag;
             if (d.UsesRemote)

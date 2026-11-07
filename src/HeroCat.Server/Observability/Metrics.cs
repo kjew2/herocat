@@ -48,7 +48,7 @@ public static class MetricCatalog
         new(ModerationMetrics.ActionsTotal, MetricKind.Counter, new[] { "action" }, MetricSource.NoEmitterYet, "the action matrix, issue #206"),
         new(IdempotencyMetrics.ReplaysTotal, MetricKind.Counter, new[] { "route" }, MetricSource.Emitted),
         new(DbMetrics.PoolInUse, MetricKind.Gauge, Array.Empty<string>(), MetricSource.Emitted),
-        new(DbMetrics.QueryDurationSeconds, MetricKind.Histogram, new[] { "name" }, MetricSource.NoEmitterYet, "stores do not name their queries yet; TODO(gap: db query names)"),
+        new(DbMetrics.QueryDurationSeconds, MetricKind.Histogram, new[] { "name" }, MetricSource.NoEmitterYet, "stores do not name their queries yet; TODO(#318)"),
         new(LockMetrics.WaitSeconds, MetricKind.Histogram, Array.Empty<string>(), MetricSource.Emitted),
         new(WorkerJobMetrics.DurationSeconds, MetricKind.Histogram, new[] { "job" }, MetricSource.Emitted),
         new(WorkerJobMetrics.FailuresTotal, MetricKind.Counter, new[] { "job" }, MetricSource.Emitted),
@@ -173,7 +173,7 @@ public static class DbMetrics
         return c;
     }
 
-    // TODO(gap: db query names): stores call this once they name their queries.
+    // TODO(#318): stores call this once they name their queries.
     public static void RecordQuery(string name, TimeSpan elapsed) => Query.Record(elapsed.TotalSeconds, new KeyValuePair<string, object?>("name", name));
 }
 

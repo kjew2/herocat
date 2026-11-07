@@ -105,7 +105,7 @@ namespace HeroCat.Client.Boot
             }
         }
 
-        /// <summary>The bundled content (01 section 8.1 step 1). TODO(gap: client content cache wiring): a verified cached newer bundle goes first (ContentCache.LoadPreferred).</summary>
+        /// <summary>The bundled content (01 section 8.1 step 1). TODO(#315): a verified cached newer bundle goes first (ContentCache.LoadPreferred).</summary>
         ContentDb LoadBundledContent()
         {
             if (_content != null) return _content;

@@ -82,8 +82,10 @@ namespace HeroCat.Runtime.Save
     /// <summary>What is on screen when the client asks whether the conflict modal may open (02 section 9.4).</summary>
     public readonly struct ConflictModalContext
     {
-        public ConflictModalContext(bool onMainScreen, bool bossActive, bool revealActive, bool dungeonRunActive, bool otherModalOpen)
+        public ConflictModalContext(bool onMainScreen, bool bossActive, bool revealActive, bool dungeonRunActive, bool otherModalOpen,
+            bool atBoot = false)
         {
+            AtBoot = atBoot;
             OnMainScreen = onMainScreen; BossActive = bossActive; RevealActive = revealActive; DungeonRunActive = dungeonRunActive;
             OtherModalOpen = otherModalOpen;
         }
@@ -94,15 +96,20 @@ namespace HeroCat.Runtime.Save
         public bool RevealActive { get; }
         public bool DungeonRunActive { get; }
         public bool OtherModalOpen { get; }
+
+        /// <summary>The conflict was found at boot, before SCR_MAIN exists (00 decision 118).</summary>
+        public bool AtBoot { get; }
     }
 
     public static class ConflictModalRules
     {
         /// <summary>
-        /// 02 section 9.4: only on SCR_MAIN idle, never during a boss, a reveal, a dungeon run or over another modal. Until
+        /// 02 section 9.4 and 00 decision 118: a boot-time conflict shows before SCR_MAIN (nothing is running yet); a
+        /// mid-session one only on SCR_MAIN idle, never during a boss, a reveal, a dungeon run or over another modal. Until
         /// it shows, the game runs on L and uploads stay suspended (<see cref="CloudConflictResolver.UploadsSuspended"/>).
         /// </summary>
         public static bool CanShow(in ConflictModalContext c) =>
-            c.OnMainScreen && !c.BossActive && !c.RevealActive && !c.DungeonRunActive && !c.OtherModalOpen;
+            c.AtBoot ? !c.OtherModalOpen
+                     : c.OnMainScreen && !c.BossActive && !c.RevealActive && !c.DungeonRunActive && !c.OtherModalOpen;
     }
 }

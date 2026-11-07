@@ -170,7 +170,7 @@ Purpose: account pick on first launch and after logout; skipped when a guest or 
 | Platform buttons | `Auth.LinkOrSignIn(provider)`; only the platform's own provider is shown |
 | Legal links | open in-app browser; `TitleVm.AgeGateRequired` (08 compliance) shows a birth-year picker modal before any sign-in |
 
-States: Loading during the auth round-trip (buttons disabled, spinner on the pressed one). Error inline under the buttons (`err.<code_lower>.*` for 01's auth codes, e.g. `err.provider_already_linked.title`; issues #30, #248). Conflict: when the cloud save and the local save differ, the 02 conflict modal is shown here before `SCR_MAIN` with both saves' stage, Party Level, server time and a `[Keep this device]` / `[Use cloud]` pair.
+States: Loading during the auth round-trip (buttons disabled, spinner on the pressed one). Error inline under the buttons (`err.<code_lower>.*` for 01's auth codes, e.g. `err.provider_already_linked.title`; issues #30, #248). Conflict: when the cloud save and the local save differ, the 02 conflict modal is shown here before `SCR_MAIN` (00 decision 118) with 02 section 9.4's cards and labels: "This device" / "Other device", each with stage, party level, diamonds, total pulls, highest fish and last played, the rule's winner preselected as "Recommended". A conflict found mid-session waits for `SCR_MAIN` idle instead.
 
 ### 4.3 `SCR_MAIN` (Full root, M0)
 

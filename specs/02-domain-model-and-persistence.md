@@ -876,7 +876,7 @@ Why last-writer-wins with a progress override and not a merge: the save is a sin
 ### 9.4 Conflict modal rules (owned here, rendered by 07)
 
 - Two cards, "This device" and "Other device" (device model name from `devices`, 08), each showing: stage, party level, diamonds, total pulls, highest fish, last played (relative time). The rule's winner is preselected and labelled "Recommended".
-- Shown only on `SCR_MAIN` idle: never during a boss, a reveal, a dungeon run or over another modal. Until shown, the game runs on `L` and **does not upload** (uploads are suspended while a conflict is unresolved so the loser is not overwritten by a periodic save).
+- When it shows (00 decision 118): a conflict found at boot shows before `SCR_MAIN` (01 section 8.1 step 4; nothing is running yet); one found mid-session (resume, or a `409` on upload) waits for `SCR_MAIN` idle: never during a boss, a reveal, a dungeon run or over another modal. Until shown, the game runs on `L` and **does not upload** (uploads are suspended while a conflict is unresolved so the loser is not overwritten by a periodic save).
 - `ResolveConflictAsync(chosen, rejected)`: write `chosen` locally, archive `rejected` as `slot0.conflict-<now>.sav` for `CONFLICT_KEEP_DAYS`, upload `chosen` with `If-Match: R.etag`. If that PUT also 409s (a third device), resolve again from the top.
 - Choosing the other device's save replaces the running `Simulation` (the runner is rebuilt; the current session's unsaved progress since `L` was loaded is the price, and the modal says so: "Progress on this device since <time> will be lost").
 - Analytics `cloud_conflict{winnerSide, chosenSide, scoreL, scoreR, secondsApart}`.

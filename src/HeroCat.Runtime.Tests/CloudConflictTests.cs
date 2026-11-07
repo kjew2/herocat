@@ -536,6 +536,11 @@ namespace HeroCat.Runtime.Tests
         public bool Modal_ShownOnlyOnMainIdle(bool main, bool boss, bool reveal, bool dungeon, bool modal) =>
             ConflictModalRules.CanShow(new ConflictModalContext(main, boss, reveal, dungeon, modal));
 
+        [TestCase(false, ExpectedResult = true)]
+        [TestCase(true, ExpectedResult = false)]
+        public bool Modal_AtBoot_ShowsBeforeMain_UnlessAnotherModalIsOpen(bool modal) =>   // 00 decision 118
+            ConflictModalRules.CanShow(new ConflictModalContext(false, false, false, false, modal, atBoot: true));
+
         [Test]
         public void Gate_DropsEveryPutWhileSuspended_ReadsPassThrough()
         {
